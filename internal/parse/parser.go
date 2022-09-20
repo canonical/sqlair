@@ -1,25 +1,33 @@
 package parse
 
 // QueryPart defines a simple interface for all the different parts that
-// compose a ParsedExpr
+// compose a ParsedExpr.
 type QueryPart interface {
-	String() string         // print for debug
-	ToSql() (string, error) // print to sql format
+	// String returns the original string comprising this query part.
+	String() string
+
+	// ToSQL returns the executable SQL resulting from this query part.
+	ToSQL() (string, error)
 }
 
-// Parser defines the SDL parser
+// Parser is used to parse the SQLAir DSL.
 type Parser struct {
-	input         string // statement to be parsed
-	lastParsedPos int    // position of the last parsed chunk
-	pos           int    // current position of the parser
+	// input is the DSL statement to be parted.
+	input string
+
+	// lastParsedPos is the character position of the last parsed part.
+	lastParsedPos int
+
+	// pos is the current character position of the parser.
+	pos int
 }
 
-// NewParser creates a new parser
+// NewParser returns a reference to a new parser.
 func NewParser() *Parser {
 	return &Parser{}
 }
 
-// init initializes the parser
+// init initializes the parser.
 func (p *Parser) init(input string) {
 	p.input = input
 	p.lastParsedPos = 0
