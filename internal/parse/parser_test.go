@@ -1,6 +1,7 @@
 package parse
 
 import (
+	"log"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -45,14 +46,18 @@ func TestRunTable(t *testing.T) {
 	for _, v := range parseTests {
 		p.Parse(v.input)
 		for i, _ := range v.result {
+			var result bool
 			if v.bytef != nil {
-				assert.Equal(t, v.result[i], v.bytef(v.data[i][0]))
+				result = v.bytef(v.data[i][0])
 			}
 			if v.stringf != nil {
-				assert.Equal(t, v.result[i], v.stringf(v.data[i]))
+				result = v.stringf(v.data[i])
 			}
 			if v.stringf0 != nil {
-				assert.Equal(t, v.result[i], v.stringf0())
+				result = v.stringf0()
+			}
+			if v.result[i] != result {
+				log.Printf("Test %#v failed. Expected: '%t', got '%t'\n", v, result, v.result[i])
 			}
 		}
 	}
