@@ -101,10 +101,3 @@ func (p *Parser) skipString(s string) bool {
 	}
 	return false
 }
-
-// isNameByte returns true if the byte passed as parameter is considered to be
-// one that can be part of a name. It returns false otherwise
-func isNameByte(c byte) bool {
-	return 'A' <= c && c <= 'Z' || 'a' <= c && c <= 'z' ||
-		'0' <= c && c <= '9' || c == '_'
-}

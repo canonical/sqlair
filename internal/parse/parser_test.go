@@ -18,10 +18,6 @@ type parseHelperTest struct {
 var p = NewParser()
 
 var parseTests = []parseHelperTest{
-	{bytef: isNameByte, result: []bool{true}, input: "", data: []string{"f"}},
-	{bytef: isNameByte, result: []bool{true}, input: "", data: []string{"0"}},
-	{bytef: isNameByte, result: []bool{true}, input: "", data: []string{"5"}},
-
 	{bytef: p.peekByte, result: []bool{false}, input: "", data: []string{"a"}},
 	{bytef: p.peekByte, result: []bool{false}, input: "b", data: []string{"a"}},
 	{bytef: p.peekByte, result: []bool{true}, input: "a", data: []string{"a"}},
