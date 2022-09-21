@@ -6,21 +6,37 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+type parseHelperTest struct {
+	bytef   func(byte) bool
+	stringf func(string) bool
+	result  bool
+	input   string
+	data    string
+}
+
+var p = NewParser()
+
+var parseTests = []parseHelperTest{
+	{bytef: isNameByte, result: true, input: "", data: "f"},
+	{bytef: isNameByte, result: true, input: "", data: "0"},
+	{bytef: isNameByte, result: true, input: "", data: "5"},
+	{bytef: p.peekByte, result: false, input: "", data: "a"},
+	{bytef: p.peekByte, result: false, input: "b", data: "a"},
+	{bytef: p.peekByte, result: true, input: "a", data: "a"},
+}
+
+func TestRunTable(t *testing.T) {
+	for _, v := range parseTests {
+		p.Parse(v.input)
+		assert.Equal(t, v.result, v.bytef(v.data[0]))
+	}
+}
+
 func TestInit(t *testing.T) {
 	p := NewParser()
 	expr, err := p.Parse("select foo from bar")
 	assert.Equal(t, nil, err)
 	assert.Equal(t, (*ParsedExpr)(nil), expr)
-}
-
-func TestPeekByte(t *testing.T) {
-	p := NewParser()
-	p.Parse("")
-	assert.Equal(t, false, p.peekByte('a'))
-	p.Parse("b")
-	assert.Equal(t, false, p.peekByte('a'))
-	p.Parse("a")
-	assert.Equal(t, true, p.peekByte('a'))
 }
 
 func TestSkipByte(t *testing.T) {
@@ -71,14 +87,4 @@ func TestSkipString(t *testing.T) {
 	p.Parse("hello world")
 	assert.Equal(t, true, p.skipString("hello"))
 	assert.Equal(t, true, p.peekByte(' '))
-}
-
-func TestIsNameByte(t *testing.T) {
-	assert.Equal(t, true, isNameByte('f'))
-	assert.Equal(t, true, isNameByte('0'))
-	assert.Equal(t, true, isNameByte('5'))
-	assert.Equal(t, false, isNameByte('à'))
-	assert.Equal(t, false, isNameByte('\n'))
-	assert.Equal(t, false, isNameByte('\r'))
-	assert.Equal(t, false, isNameByte('\t'))
 }
