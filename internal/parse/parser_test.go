@@ -7,28 +7,58 @@ import (
 )
 
 type parseHelperTest struct {
-	bytef   func(byte) bool
-	stringf func(string) bool
-	result  bool
-	input   string
-	data    string
+	bytef    func(byte) bool
+	stringf  func(string) bool
+	stringf0 func() bool
+	result   []bool
+	input    string
+	data     []string
 }
 
 var p = NewParser()
 
 var parseTests = []parseHelperTest{
-	{bytef: isNameByte, result: true, input: "", data: "f"},
-	{bytef: isNameByte, result: true, input: "", data: "0"},
-	{bytef: isNameByte, result: true, input: "", data: "5"},
-	{bytef: p.peekByte, result: false, input: "", data: "a"},
-	{bytef: p.peekByte, result: false, input: "b", data: "a"},
-	{bytef: p.peekByte, result: true, input: "a", data: "a"},
+	{bytef: isNameByte, result: []bool{true}, input: "", data: []string{"f"}},
+	{bytef: isNameByte, result: []bool{true}, input: "", data: []string{"0"}},
+	{bytef: isNameByte, result: []bool{true}, input: "", data: []string{"5"}},
+
+	{bytef: p.peekByte, result: []bool{false}, input: "", data: []string{"a"}},
+	{bytef: p.peekByte, result: []bool{false}, input: "b", data: []string{"a"}},
+	{bytef: p.peekByte, result: []bool{true}, input: "a", data: []string{"a"}},
+
+	{bytef: p.skipByte, result: []bool{false}, input: "", data: []string{"a"}},
+	{bytef: p.skipByte, result: []bool{false}, input: "abc", data: []string{"b"}},
+	{bytef: p.skipByte, result: []bool{true, true}, input: "abc", data: []string{"a", "b"}},
+
+	{bytef: p.skipByteFind, result: []bool{false}, input: "", data: []string{"a"}},
+	{bytef: p.skipByteFind, result: []bool{false, true, true}, input: "abcde", data: []string{"x", "b", "c"}},
+	{bytef: p.skipByteFind, result: []bool{true, false}, input: "abcde ", data: []string{" ", " "}},
+
+	{stringf0: p.skipSpaces, result: []bool{false}, input: "", data: []string{}},
+	{stringf0: p.skipSpaces, result: []bool{false}, input: "abc    d", data: []string{}},
+	{stringf0: p.skipSpaces, result: []bool{true}, input: "     abcd", data: []string{}},
+	{stringf0: p.skipSpaces, result: []bool{true}, input: "  \t  abcd", data: []string{}},
+	{stringf0: p.skipSpaces, result: []bool{false}, input: "\t  abcd", data: []string{}},
+
+	{stringf: p.skipString, result: []bool{false}, input: "", data: []string{"a"}},
+	{stringf: p.skipString, result: []bool{true, true}, input: "helloworld", data: []string{"hElLo", "w"}},
+	{stringf: p.skipString, result: []bool{true, true}, input: "hello world", data: []string{"hello", " "}},
 }
 
 func TestRunTable(t *testing.T) {
 	for _, v := range parseTests {
 		p.Parse(v.input)
-		assert.Equal(t, v.result, v.bytef(v.data[0]))
+		for i, _ := range v.result {
+			if v.bytef != nil {
+				assert.Equal(t, v.result[i], v.bytef(v.data[i][0]))
+			}
+			if v.stringf != nil {
+				assert.Equal(t, v.result[i], v.stringf(v.data[i]))
+			}
+			if v.stringf0 != nil {
+				assert.Equal(t, v.result[i], v.stringf0())
+			}
+		}
 	}
 }
 
@@ -37,54 +67,4 @@ func TestInit(t *testing.T) {
 	expr, err := p.Parse("select foo from bar")
 	assert.Equal(t, nil, err)
 	assert.Equal(t, (*ParsedExpr)(nil), expr)
-}
-
-func TestSkipByte(t *testing.T) {
-	p := NewParser()
-	p.Parse("")
-	assert.Equal(t, false, p.skipByte('a'))
-	p.Parse("abc")
-	assert.Equal(t, false, p.skipByte('b'))
-	p.Parse("abc")
-	assert.Equal(t, true, p.skipByte('a'))
-	assert.Equal(t, true, p.peekByte('b'))
-}
-
-func TestSkipByteFind(t *testing.T) {
-	p := NewParser()
-	p.Parse("")
-	assert.Equal(t, false, p.skipByteFind('a'))
-	p.Parse("abcde")
-	assert.Equal(t, false, p.skipByteFind('x'))
-	assert.Equal(t, true, p.skipByteFind('b'))
-	assert.Equal(t, true, p.peekByte('c'))
-	p.Parse("abcde ")
-	assert.Equal(t, true, p.skipByteFind(' '))
-	assert.Equal(t, false, p.skipByteFind(' '))
-}
-
-func TestSkipSpaces(t *testing.T) {
-	p := NewParser()
-	p.Parse("")
-	assert.Equal(t, false, p.skipSpaces())
-	p.Parse("abc    d")
-	assert.Equal(t, false, p.skipSpaces())
-	p.Parse("     abcd")
-	assert.Equal(t, true, p.skipSpaces())
-	assert.Equal(t, true, p.peekByte('a'))
-	p.Parse("  \t  abcd")
-	assert.Equal(t, true, p.skipSpaces())
-	assert.Equal(t, true, p.peekByte('\t'))
-}
-
-func TestSkipString(t *testing.T) {
-	p := NewParser()
-	p.Parse("")
-	assert.Equal(t, false, p.skipString("a"))
-	p.Parse("helloworld")
-	assert.Equal(t, true, p.skipString("hElLo"))
-	assert.Equal(t, true, p.peekByte('w'))
-	p.Parse("hello world")
-	assert.Equal(t, true, p.skipString("hello"))
-	assert.Equal(t, true, p.peekByte(' '))
 }
