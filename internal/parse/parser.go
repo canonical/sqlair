@@ -171,92 +171,70 @@ func (p *Parser) parseIdentifier() (string, bool) {
 	return p.input[mark:i], true
 }
 
-// This parses a qualified expression. It will not parse unqualified names
-func (p *Parser) parseQualifiedExpression() (qualifiedExpression, bool) {
+// This parses a qualified expression. It will not parse unqualified names.
+// The first string returned is the part preceeding the '.'. If there is no '.'
+// then then the second string is empty, otherwise it is the string immidiatly
+// following the '.'.
+func (p *Parser) parseQualifiedExpression() (string, string, bool) {
 	cp := p.save()
-	var qe qualifiedExpression
+	var left string
+	var right string
 	p.skipSpaces()
 	if id, ok := p.parseIdentifier(); ok {
-		qe.qualifier = id
+		left = id
 		if p.skipByte('.') {
 			if id, ok := p.parseIdentifier(); ok {
-				qe.name = id
+				right = id
 				// We have parsed a full qualified expression
-				return qe, true
+				return left, right, true
 			}
+		} else {
+			return left, "", true
 		}
 	}
 	cp.restore()
-	return qe, false
-}
-
-func (p *Parser) parseGoType() (goType, bool) {
-	var gt goType
-
-	// It could be a qulaified or unqualified expression
-	if qe, ok := p.parseQualifiedExpression(); ok {
-		gt = goType{qe}
-	} else if id, ok := p.parseIdentifier(); ok {
-		gt = goType{qualifiedExpression{id, ""}}
-	} else {
-		return gt, false
-	}
-	return gt, true
-}
-
-func (p *Parser) parseSQLColumn() (column, bool) {
-	var c column
-
-	// It could be a qulaified or unqualified expression
-	if qe, ok := p.parseQualifiedExpression(); ok {
-		c = column{qe}
-	} else if id, ok := p.parseIdentifier(); ok {
-		c = column{qualifiedExpression{"", id}}
-	} else {
-		return c, false
-	}
-	return c, true
+	return left, right, false
 }
 
 func (p *Parser) parseOutputExpression() (*OutputPart, bool, error) {
 	cp := p.save()
 	var err error
-	var op OutputPart
+
+	var tableName string
+	var colName string
+	var typeName string
+	var tagName string
+	var ok bool
 
 	p.skipSpaces()
 
 	// Case 1: The expression has only one part e.g. "&Person".
 
 	if p.skipByte('&') {
-		if gt, ok := p.parseGoType(); ok {
-			op.GoType = gt
-		} else {
+		typeName, tagName, ok = p.parseQualifiedExpression()
+		if !ok {
 			err = fmt.Errorf("malformed output expression")
 		}
 
 		// Case 2: The expression contains an AS e.g. "p.col1 AS &Person".
+	} else if left, right, ok := p.parseQualifiedExpression(); ok {
 
-	} else if c, ok := p.parseSQLColumn(); ok {
-		var columns []column
-		columns = append(columns, c)
-		p.skipSpaces()
-		for p.skipByte(',') {
-			p.skipSpaces()
-			if c, ok := p.parseSQLColumn(); ok {
-				columns = append(columns, c)
-				p.skipSpaces()
-			} else {
-				err = fmt.Errorf("unexpected comma")
-				break
-			}
+		// If the column has no qualifing table it will be in 'right' but
+		// otherwise in 'left'
+		if right == "" {
+			colName = left
+		} else {
+			tableName = left
+			colName = right
 		}
-		op.Columns = columns[0] // Remove [0] when columns becomes multiple
+
+		p.skipSpaces()
+
 		if err != nil && p.skipString("AS") {
 			p.skipSpaces()
 			if p.skipByte('&') {
-				if gt, ok := p.parseGoType(); ok {
-					op.GoType = gt
-				} else {
+				typeName, tagName, ok = p.parseQualifiedExpression()
+				if !ok {
 					err = fmt.Errorf("malformed output expression")
 				}
 			} else {
@@ -271,27 +249,27 @@ func (p *Parser) parseOutputExpression() (*OutputPart, bool, error) {
 		return nil, false, nil
 	}
 
-	return &op, true, err
+	op, err := NewOutputPart(tableName, colName, typeName, tagName)
+	return op, true, err
 }
 
 func (p *Parser) parseInputExpression() (*InputPart, bool, error) {
 	cp := p.save()
-	var ie InputPart
 	var err error
+	var typeName string
+	var tagName string
+	var ok bool
 
 	p.skipSpaces()
 	if p.skipByte('$') {
-		if gt, ok := p.parseGoType(); ok {
-			if gt.TagName() == "" {
-				err = fmt.Errorf("no qualifier in input expression")
-			}
-			ie = InputPart{gt}
-		} else {
+		typeName, tagName, ok = p.parseQualifiedExpression()
+		if !ok {
 			err = fmt.Errorf("malformed input type")
 		}
 	} else {
 		cp.restore()
 		return nil, false, nil
 	}
-	return &ie, true, err
+	ip, err := NewInputPart(typeName, tagName)
+	return ip, true, err
 }
