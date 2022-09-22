@@ -2,16 +2,6 @@ package parse
 
 import "strings"
 
-// QueryPart defines a simple interface for all the different parts that
-// compose a ParsedExpr.
-type QueryPart interface {
-	// String returns the original string comprising this query part.
-	String() string
-
-	// ToSQL returns the executable SQL resulting from this query part.
-	ToSQL() (string, error)
-}
-
 // Parser is used to parse the SQLAir DSL.
 type Parser struct {
 	// input is the DSL statement to be parted.
@@ -51,7 +41,7 @@ func (p *Parser) Parse(input string) (*ParsedExpr, error) {
 //
 // [stringPart outputPart stringPart inputPart]
 type ParsedExpr struct {
-	queryParts []QueryPart
+	queryParts []queryPart
 }
 
 // peekByte returns true if the current byte
