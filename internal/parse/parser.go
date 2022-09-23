@@ -44,25 +44,73 @@ func (p *Parser) init(input string) {
 	p.pos = 0
 }
 
+// could call it ASTBuilder
+type parseTracker struct {
+	lastParsedPos int
+	posBeforePart int
+	qparts        []QueryPart
+}
+
+// advance moves the parser's index forward
+// by one element.
+func (p *Parser) advance() bool {
+	p.skipSpaces()
+	if p.pos == len(p.input) {
+		return false
+	}
+	p.pos++
+	return true
+}
+
+// This may make more sense as a method of parseTracker
+func (pt *parseTracker) add(p *Parser, part QueryPart) {
+	if pt.lastParsedPos != pt.posBeforePart {
+		passTPart := NewPTPart(p.input[pt.lastParsedPos:pt.posBeforePart])
+		pt.qparts = append(pt.qparts, passTPart)
+	}
+	if part != nil {
+		pt.qparts = append(pt.qparts, part)
+	}
+	pt.lastParsedPos = p.pos
+	pt.posBeforePart = p.pos
+}
+
 func (p *Parser) Parse(input string) (*ParsedExpr, error) {
 	p.init(input)
-	var qps []QueryPart
+	var pt parseTracker
 
-	op, ok, err := p.parseOutputExpression()
-	if err != nil {
-		return nil, err
-	} else if ok {
-		qps = append(qps, op)
+	for {
+		p.skipSpaces()
+
+		pt.posBeforePart = p.pos
+		op, ok, err := p.parseOutputExpression()
+		if err != nil {
+			return nil, err
+		} else if ok {
+			pt.add(p, op)
+			// This needs updateing in case another part is parsed in this
+			// iteration.
+		}
+		ip, ok, err := p.parseInputExpression()
+		if err != nil {
+			return nil, err
+		} else if ok {
+			pt.add(p, ip)
+		}
+		sp, ok, err := p.parseStringLiteral()
+		if err != nil {
+			return nil, err
+		} else if ok {
+			pt.add(p, sp)
+		}
+
+		if !p.advance() {
+			break
+		}
 	}
-
-	ip, ok, err := p.parseInputExpression()
-	if err != nil {
-		return nil, err
-	} else if ok {
-		qps = append(qps, ip)
-	}
-
-	return &ParsedExpr{qps}, nil
+	// Add the rest of the input to the parser
+	pt.add(p, nil)
+	return &ParsedExpr{pt.qparts}, nil
 }
 
 // ParsedExpr represents a parsed expression.
@@ -76,6 +124,18 @@ func (p *Parser) Parse(input string) (*ParsedExpr, error) {
 // [stringPart outputPart stringPart inputPart]
 type ParsedExpr struct {
 	queryParts []QueryPart
+}
+
+func (pe *ParsedExpr) String() string {
+	out := "ParsedExpr["
+	for i, p := range pe.queryParts {
+		if i > 0 {
+			out = out + " "
+		}
+		out = out + p.String()
+	}
+	out = out + "]"
+	return out
 }
 
 // ====== Parser Helper Functions ======
@@ -146,10 +206,11 @@ func isNameByte(c byte) bool {
 
 // ====== Parser Functions ======
 // These functions attempt to parse some construct, they return a bool and that
-// construct, if they can't parse they return false, restore the parser and leave
-// the default value in the other return type
+// construct, if they n't parse they return false, restore the parser and leave
+// the default value in  other return type
 
 func (p *Parser) parseIdentifier() (string, bool) {
+	p.skipSpaces()
 	if p.pos >= len(p.input) {
 		return "", false
 	}
@@ -230,7 +291,7 @@ func (p *Parser) parseOutputExpression() (*OutputPart, bool, error) {
 
 		p.skipSpaces()
 
-		if err != nil && p.skipString("AS") {
+		if p.skipString("AS") {
 			p.skipSpaces()
 			if p.skipByte('&') {
 				typeName, tagName, ok = p.parseQualifiedExpression()
@@ -239,6 +300,7 @@ func (p *Parser) parseOutputExpression() (*OutputPart, bool, error) {
 				}
 			} else {
 				cp.restore()
+				return nil, false, nil
 			}
 		} else {
 			cp.restore()
@@ -272,4 +334,33 @@ func (p *Parser) parseInputExpression() (*InputPart, bool, error) {
 	}
 	ip, err := NewInputPart(typeName, tagName)
 	return ip, true, err
+}
+
+func (p *Parser) parseStringLiteral() (*PassthroughPart, bool, error) {
+	cp := p.save()
+	p.skipSpaces()
+
+	var part *PassthroughPart
+	var err error
+
+	if p.pos < len(p.input) {
+		c := p.input[p.pos]
+		if c == '"' || c == '\'' {
+			p.skipByte(c)
+			if !p.skipByteFind(c) {
+				// Reached end of string
+				// and didn't find the closing quote
+				part = NewPTPart(p.input[cp.pos:])
+				err = fmt.Errorf("missing right quote in string literal")
+			}
+			part = NewPTPart(p.input[cp.pos:p.pos])
+		} else {
+			cp.restore()
+			return nil, false, err
+		}
+	} else {
+		cp.restore()
+		return nil, false, err
+	}
+	return part, true, err
 }
