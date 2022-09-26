@@ -272,10 +272,42 @@ func (p *Parser) parseFullName(isColumnName bool) (FullName, bool) {
 	return fn, false
 }
 
+func (p *Parser) parseColumns() ([]FullName, bool) {
+	var cols []FullName
+
+	p.skipSpaces()
+
+	if col, ok := p.parseFullName(true); ok {
+		cols = append(cols, col)
+	} else if p.skipByte('(') {
+		col, ok := p.parseFullName(true)
+		cols = append(cols, col)
+		p.skipSpaces()
+		// If the column names are not formated in a recognisable way give
+		// up trying to parse
+		if !ok {
+			return cols, false
+		}
+		for p.skipByte(',') {
+			p.skipSpaces()
+			col, ok := p.parseFullName(true)
+			p.skipSpaces()
+			if !ok {
+				return cols, false
+			}
+			cols = append(cols, col)
+		}
+		p.skipSpaces()
+		p.skipByte(')')
+	}
+	p.skipSpaces()
+	return cols, true
+}
+
 func (p *Parser) parseOutputExpression() (*OutputPart, bool, error) {
 	cp := p.save()
 	var err error
-	var col FullName
+	var cols []FullName
 	var goType FullName
 	var ok bool
 
@@ -287,15 +319,10 @@ func (p *Parser) parseOutputExpression() (*OutputPart, bool, error) {
 		if !ok {
 			err = fmt.Errorf("malformed output expression")
 		}
-		// col here is empty, this could be replaced by the empty list when we
-		// startparsing outputTypes as lists
-		return &OutputPart{col, goType}, true, err
-	}
+		return &OutputPart{cols, goType}, true, err
 
-	// Case 2: The expression contains an AS e.g. "p.col1 AS &Person".
-	if col, ok := p.parseFullName(true); ok {
-		p.skipSpaces()
-
+		// Case 2: The expression contains an AS e.g. "p.col1 AS &Person".
+	} else if cols, ok := p.parseColumns(); ok {
 		if p.skipString("AS") {
 			p.skipSpaces()
 			if p.skipByte('&') {
@@ -303,7 +330,7 @@ func (p *Parser) parseOutputExpression() (*OutputPart, bool, error) {
 				if !ok {
 					err = fmt.Errorf("malformed output expression")
 				}
-				return &OutputPart{col, goType}, true, err
+				return &OutputPart{cols, goType}, true, err
 
 			}
 		}

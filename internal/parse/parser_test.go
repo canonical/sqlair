@@ -223,7 +223,7 @@ func TestRound(t *testing.T) {
 		{
 			"SELECT (a.district, a.street) AS &Address.* FROM address AS a WHERE p.name = 'Fred'",
 			"ParsedExpr[BypassPart[SELECT ] " +
-				"outputPart[tableColumn[a.district] tableColumn[a.street] typeField[Address.*]] " +
+				"OutputPart[Source:a.district a.street Target:Address.*] " +
 				"BypassPart[ FROM address AS a WHERE p.name = ] BypassPart['Fred']]",
 			[]any{&Address{}},
 			[]any{&Address{}},
@@ -244,7 +244,7 @@ func TestRound(t *testing.T) {
 			"ParsedExpr[BypassPart[SELECT ] " +
 				"OutputPart[Source:p.* Target:Person.*] " +
 				"BypassPart[, ] " +
-				"outputPart[tableColumn[a.district] tableColumn[a.street] typeField[Address.*]] " +
+				"OutputPart[Source:a.district a.street Target:Address.*] " +
 				"BypassPart[, (5+7), (col1 * col2) as calculated_value FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] " +
 				"BypassPart['Fred']]",
 			[]any{&Person{}, &Address{}},
@@ -258,7 +258,7 @@ func TestRound(t *testing.T) {
 			"ParsedExpr[BypassPart[SELECT ] " +
 				"OutputPart[Source:p.* Target:Person.*] " +
 				"BypassPart[, ] " +
-				"outputPart[tableColumn[a.district] tableColumn[a.street] typeField[Address.*]] " +
+				"OutputPart[Source:a.district a.street Target:Address.*] " +
 				"BypassPart[ FROM person AS p JOIN address AS a ON p .address_id = a.id WHERE p.name = ] " +
 				"BypassPart['Fred']]",
 			[]any{&Person{}, &Address{}},
@@ -272,7 +272,7 @@ func TestRound(t *testing.T) {
 			"ParsedExpr[BypassPart[SELECT ] " +
 				"OutputPart[Source:p.* Target:Person.*] " +
 				"BypassPart[, ] " +
-				"outputPart[tableColumn[a.district] tableColumn[a.street] typeField[Address.*]] " +
+				"OutputPart[Source:a.district a.street Target:Address.*] " +
 				"BypassPart[ FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name in (select name from table where table.n = ] " +
 				"InputPart[Person.name] " +
 				"BypassPart[)]]",
@@ -288,13 +288,13 @@ func TestRound(t *testing.T) {
 				"FROM person WHERE p.name in " +
 				"(select name from table where table.n = $Person.name)",
 			"ParsedExpr[BypassPart[SELECT ] OutputPart[Source:p.* Target:Person.*] " +
-				"BypassPart[, ] outputPart[tableColumn[a.district] tableColumn[a.street] typeField[Address.*]] " +
+				"BypassPart[, ] OutputPart[Source:a.district a.street Target:Address.*] " +
 				"BypassPart[ FROM person WHERE p.name in (select name from table where table.n = ] " +
 				"InputPart[Person.name] " +
 				"BypassPart[) UNION SELECT ] " +
 				"OutputPart[Source:p.* Target:Person.*] " +
 				"BypassPart[, ] " +
-				"outputPart[tableColumn[a.district] tableColumn[a.street] typeField[Address.*]] " +
+				"OutputPart[Source:a.district a.street Target:Address.*] " +
 				"BypassPart[ FROM person WHERE p.name in (select name from table where table.n = ] " +
 				"InputPart[Person.name] " +
 				"BypassPart[)]]",
@@ -311,7 +311,7 @@ func TestRound(t *testing.T) {
 				"BypassPart[, ] " +
 				"OutputPart[Source:m.* Target:Manager.*] " +
 				"BypassPart[ FROM person AS p JOIN person AS m ON p.manager_id = m.id WHERE p.name = ] " +
-				"BypassPart[ 'Fred']]",
+				"BypassPart['Fred']]",
 			[]any{&Person{}, &Manager{}},
 			[]any{&Person{}, &Manager{}},
 			"SELECT p.* , m.*  FROM person AS p JOIN person AS m ON p.manager_id = m.id WHERE p.name =  'Fred'",
@@ -321,9 +321,9 @@ func TestRound(t *testing.T) {
 		//		"FROM person JOIN address ON person.address_id = address.id " +
 		//		"WHERE person.name = 'Fred'",
 		//	"ParsedExpr[BypassPart[SELECT ] " +
-		//		"outputPart[tableColumn[person.*] tableColumn[address.district] typeField[M.*]] " +
+		//		"OutputPart[Source:person.* address.district Target:M.*] " +
 		//		"BypassPart[ FROM person JOIN address ON person.address_id = address.id WHERE person.name = ] " +
-		//		"BypassPart[ 'Fred' ]]",
+		//		"BypassPart['Fred' ]]",
 		//	[]any{&M{}},
 		//	[]any{&M{}},
 		//},
@@ -340,7 +340,7 @@ func TestRound(t *testing.T) {
 			"SELECT person.*, address.district FROM person JOIN address " +
 				"ON person.address_id = address.id WHERE person.name = 'Fred'",
 			"ParsedExpr[BypassPart[SELECT person.*, address.district FROM person JOIN address ON person.address_id = address.id WHERE person.name = ] " +
-				"BypassPart[ 'Fred']]",
+				"BypassPart['Fred']]",
 			[]any{},
 			[]any{},
 			"SELECT person.*, address.district FROM person JOIN address ON person.address_id = address.id WHERE person.name =  'Fred'",
@@ -357,9 +357,9 @@ func TestRound(t *testing.T) {
 				"FROM person AS p JOIN address AS a ON p.address_id = a.id " +
 				"WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
 			"ParsedExpr[BypassPart[SELECT ] " +
-				"OutputPart[Source:p.* Target:Person.] " +
+				"OutputPart[Source:p.* Target:Person] " +
 				"BypassPart[, ] " +
-				"OutputPart[Source:a.District Target:District.] " +
+				"OutputPart[Source:a.District Target:District] " +
 				"BypassPart[ FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] " +
 				"InputPart[Person.name] " +
 				"BypassPart[ AND p.address_id = ] " +
@@ -374,9 +374,9 @@ func TestRound(t *testing.T) {
 				"ON p.address_id = $Address.ID " +
 				"WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
 			"ParsedExpr[BypassPart[SELECT ] " +
-				"OutputPart[Source:p.* Target:Person.] " +
+				"OutputPart[Source:p.* Target:Person] " +
 				"BypassPart[, ] " +
-				"OutputPart[Source:a.District Target:District.] " +
+				"OutputPart[Source:a.District Target:District] " +
 				"BypassPart[ FROM person AS p INNER JOIN address AS a ON p.address_id = ] " +
 				"InputPart[Address.ID] " +
 				"BypassPart[ WHERE p.name = ] " +

@@ -40,12 +40,19 @@ func (p *InputPart) ToSQL() string {
 
 // OutputPart represents an expression to be used as output in our SDL.
 type OutputPart struct {
-	Source FullName
+	Source []FullName
 	Target FullName
 }
 
 func (p *OutputPart) String() string {
-	return "OutputPart[Source:" + p.Source.String() + " Target:" + p.Target.String() + "]"
+	var colString string
+	for _, col := range p.Source {
+		colString = colString + col.String() + " "
+	}
+	if len(colString) >= 2 {
+		colString = colString[:len(colString)-1]
+	}
+	return "OutputPart[Source:" + colString + " Target:" + p.Target.String() + "]"
 }
 
 func (p *OutputPart) ToSQL() string {
