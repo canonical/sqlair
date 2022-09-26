@@ -15,24 +15,23 @@ type FullName struct {
 	Prefix, Name string
 }
 
+func (fn FullName) String() string {
+	if fn.Prefix == "" {
+		return fn.Prefix
+	} else if fn.Name == "" {
+		return fn.Name
+	}
+	return fn.Prefix + "." + fn.Name
+}
+
 // InputPart represents a named parameter that will be send to the database
 // while performing the query.
 type InputPart struct {
 	FullName
 }
 
-// NewInputPart is a constructor that returns a pointer to an InputPart.
-func NewInputPart(typeName string, tagName string) (*InputPart, error) {
-	return &InputPart{
-		FullName{
-			Prefix: typeName,
-			Name:   tagName,
-		},
-	}, nil
-}
-
 func (p *InputPart) String() string {
-	return ""
+	return "InputPart[" + p.FullName.String() + "]"
 }
 
 func (p *InputPart) ToSQL() string {
@@ -45,21 +44,8 @@ type OutputPart struct {
 	Target FullName
 }
 
-// NewOutputPart is a constructor that returns a pointer to an OutputPart.
-func NewOutputPart(tableName string, colName string,
-	typeName string, tagName string) (*OutputPart, error) {
-	return &OutputPart{
-		FullName{Prefix: tableName,
-			Name: colName,
-		},
-		FullName{Prefix: typeName,
-			Name: tagName,
-		},
-	}, nil
-}
-
 func (p *OutputPart) String() string {
-	return ""
+	return "OutputPart[Source:" + p.Source.String() + " Target:" + p.Target.String() + "]"
 }
 
 func (p *OutputPart) ToSQL() string {
@@ -73,7 +59,7 @@ type BypassPart struct {
 }
 
 func (p *BypassPart) String() string {
-	return ""
+	return "BypassPart[" + p.Chunk + "]"
 }
 
 func (p *BypassPart) ToSQL() string {
