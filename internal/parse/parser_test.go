@@ -42,7 +42,7 @@ var parseTests = []parseHelperTest{
 
 func TestRunTable(t *testing.T) {
 	for _, v := range parseTests {
-		p.Parse(v.input)
+		p.init(v.input)
 		for i, _ := range v.result {
 			var result bool
 			if v.bytef != nil {

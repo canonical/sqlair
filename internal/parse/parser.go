@@ -7,8 +7,18 @@ import (
 
 // Parser defines the SDL parser
 type Parser struct {
-	input string // statement to be parsed
-	pos   int    // current position of the parser
+	input string
+	pos   int
+}
+
+// AF: Do we need this?
+func NewParser() *Parser {
+	return &Parser{}
+}
+
+func (p *Parser) init(input string) {
+	p.input = input
+	p.pos = 0
 }
 
 // A checkpoint model for restoring the parser to the state it was
@@ -16,10 +26,8 @@ type Parser struct {
 // not at a higher level since we don't keep track of the parts in
 // the checkpoint
 type checkpoint struct {
-	// A pointer to the parser
 	parser *Parser
-	// Info to restore the parser
-	pos int
+	pos    int
 }
 
 func (p *Parser) save() *checkpoint {
@@ -33,19 +41,7 @@ func (cp *checkpoint) restore() {
 	cp.parser.pos = cp.pos
 }
 
-// NewParser creates a new parser
-func NewParser() *Parser {
-	return &Parser{}
-}
-
-// init initializes the parser
-func (p *Parser) init(input string) {
-	p.input = input
-	p.pos = 0
-}
-
-// advance moves the parser's index forward
-// by one element.
+// Advance moves the parser's index forward by one element.
 func (p *Parser) advance() bool {
 	p.skipSpaces()
 	if p.pos == len(p.input) {
@@ -53,74 +49,6 @@ func (p *Parser) advance() bool {
 	}
 	p.pos++
 	return true
-}
-
-// A struct for keeping track of the parts of the input parsed so far.
-// The vars could possibly do with better names.
-
-//			  		 lastParsedPos         posBeforePart
-//	                       |                     |
-//	                       |                     |
-//
-// [PTPart      ][OutPart][PTPart               ][InputPart ]
-// SELECT col1,   &Person   FROM t WHERE t.id =   $Person.ID
-type parsedExprBuilder struct {
-	// The position of Parser.pos when we last finished parsing a part
-	lastParsedPos int
-	// The position of Parser.pos just before we started parsing the last part
-	posBeforePart int
-	qParts        []queryPart
-}
-
-// Add the parsed part to the parsedExprBuilder along with the BypassPart
-// that streaches from the end of the last previously in qParts to the
-// beginning of this part.
-func (peb *parsedExprBuilder) add(p *Parser, part queryPart) {
-	if peb.lastParsedPos != peb.posBeforePart {
-		peb.qParts = append(peb.qParts,
-			&BypassPart{p.input[peb.lastParsedPos:peb.posBeforePart]})
-	}
-	if part != nil {
-		peb.qParts = append(peb.qParts, part)
-	}
-	peb.lastParsedPos = p.pos
-	peb.posBeforePart = p.pos
-}
-
-func (p *Parser) Parse(input string) (*ParsedExpr, error) {
-	p.init(input)
-	var peb parsedExprBuilder
-
-	for {
-		p.skipSpaces()
-
-		peb.posBeforePart = p.pos
-		op, ok, err := p.parseOutputExpression()
-		if err != nil {
-			return nil, err
-		} else if ok {
-			peb.add(p, op)
-		}
-		ip, ok, err := p.parseInputExpression()
-		if err != nil {
-			return nil, err
-		} else if ok {
-			peb.add(p, ip)
-		}
-		sp, ok, err := p.parseStringLiteral()
-		if err != nil {
-			return nil, err
-		} else if ok {
-			peb.add(p, sp)
-		}
-
-		if !p.advance() {
-			break
-		}
-	}
-	// Add the rest of the input to the parser
-	peb.add(p, nil)
-	return &ParsedExpr{peb.qParts}, nil
 }
 
 // ParsedExpr represents a parsed expression.
@@ -146,6 +74,75 @@ func (pe *ParsedExpr) String() string {
 	}
 	out = out + "]"
 	return out
+}
+
+// A struct for keeping track of the parts parsed so far.
+type parsedExprBuilder struct {
+	// The position of Parser.pos when we last finished parsing a part.
+	prevPart int
+	// The position of Parser.pos just before we started parsing the last part.
+	partStart int
+	parts     []queryPart
+}
+
+// Add the parsed part to the parsedExprBuilder along with the BypassPart
+// that streaches from the end of the last previously in parts to the
+// beginning of this part.
+func (peb *parsedExprBuilder) add(p *Parser, part queryPart) {
+
+	// Add the string between the previous I/O part and the current part.
+	if peb.prevPart != peb.partStart {
+		peb.parts = append(peb.parts,
+			&BypassPart{p.input[peb.prevPart:peb.partStart]})
+	}
+
+	if part != nil {
+		peb.parts = append(peb.parts, part)
+	}
+
+	// Save this position at the end of the part.
+	peb.prevPart = p.pos
+	// Ensure that partStart !< prevPart.
+	peb.partStart = p.pos
+}
+
+func (p *Parser) Parse(input string) (*ParsedExpr, error) {
+	p.init(input)
+	var peb parsedExprBuilder
+
+	for {
+		p.skipSpaces()
+
+		peb.partStart = p.pos
+
+		op, ok, err := p.parseOutputExpression()
+		if err != nil {
+			return nil, err
+		} else if ok {
+			peb.add(p, op)
+		}
+
+		ip, ok, err := p.parseInputExpression()
+		if err != nil {
+			return nil, err
+		} else if ok {
+			peb.add(p, ip)
+		}
+
+		sp, ok, err := p.parseStringLiteral()
+		if err != nil {
+			return nil, err
+		} else if ok {
+			peb.add(p, sp)
+		}
+
+		if !p.advance() {
+			break
+		}
+	}
+	// Add any remaining uparsed string input to the parser
+	peb.add(p, nil)
+	return &ParsedExpr{peb.parts}, nil
 }
 
 // ====== Parser Helper Functions ======
@@ -228,7 +225,8 @@ func (p *Parser) parseIdentifier() (string, bool) {
 		p.pos++
 		return "*", true
 	}
-	mark := p.pos
+
+	idStart := p.pos
 	if !isNameByte(p.input[p.pos]) {
 		return "", false
 	}
@@ -239,7 +237,7 @@ func (p *Parser) parseIdentifier() (string, bool) {
 		}
 	}
 	p.pos = i
-	return p.input[mark:i], true
+	return p.input[idStart:i], true
 }
 
 // Parses a column name or a Go type name. If parsing a Go type name then
@@ -272,6 +270,7 @@ func (p *Parser) parseFullName(isColumnName bool) (FullName, bool) {
 	return fn, false
 }
 
+// This parses columns in the SQL query of the form table.colname. If there is more than one column
 func (p *Parser) parseColumns() ([]FullName, bool) {
 	var cols []FullName
 
