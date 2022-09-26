@@ -44,13 +44,6 @@ func (p *Parser) init(input string) {
 	p.pos = 0
 }
 
-// could call it ASTBuilder
-type parseTracker struct {
-	lastParsedPos int
-	posBeforePart int
-	qparts        []QueryPart
-}
-
 // advance moves the parser's index forward
 // by one element.
 func (p *Parser) advance() bool {
@@ -62,46 +55,63 @@ func (p *Parser) advance() bool {
 	return true
 }
 
-// This may make more sense as a method of parseTracker
-func (pt *parseTracker) add(p *Parser, part QueryPart) {
-	if pt.lastParsedPos != pt.posBeforePart {
-		passTPart := NewPTPart(p.input[pt.lastParsedPos:pt.posBeforePart])
-		pt.qparts = append(pt.qparts, passTPart)
+// A struct for keeping track of the parts of the input parsed so far.
+// The vars could possibly do with better names.
+
+//			  		 lastParsedPos         posBeforePart
+//	                       |                     |
+//	                       |                     |
+//
+// [PTPart      ][OutPart][PTPart               ][InputPart ]
+// SELECT col1,   &Person   FROM t WHERE t.id =   $Person.ID
+type parsedExprBuilder struct {
+	// The position of Parser.pos when we last finished parsing a part
+	lastParsedPos int
+	// The position of Parser.pos just before we started parsing the last part
+	posBeforePart int
+	qParts        []queryPart
+}
+
+// Add the parsed part to the parsedExprBuilder along with the BypassPart
+// that streaches from the end of the last previously in qParts to the
+// beginning of this part.
+func (peb *parsedExprBuilder) add(p *Parser, part queryPart) {
+	if peb.lastParsedPos != peb.posBeforePart {
+		peb.qParts = append(peb.qParts,
+			&BypassPart{p.input[peb.lastParsedPos:peb.posBeforePart]})
 	}
 	if part != nil {
-		pt.qparts = append(pt.qparts, part)
+		peb.qParts = append(peb.qParts, part)
 	}
-	pt.lastParsedPos = p.pos
-	pt.posBeforePart = p.pos
+	peb.lastParsedPos = p.pos
+	peb.posBeforePart = p.pos
 }
 
 func (p *Parser) Parse(input string) (*ParsedExpr, error) {
 	p.init(input)
-	var pt parseTracker
+	var peb parsedExprBuilder
 
 	for {
 		p.skipSpaces()
 
-		pt.posBeforePart = p.pos
+		peb.posBeforePart = p.pos
 		op, ok, err := p.parseOutputExpression()
 		if err != nil {
 			return nil, err
 		} else if ok {
-			pt.add(p, op)
-			// This needs updateing in case another part is parsed in this
-			// iteration.
+			peb.add(p, op)
 		}
 		ip, ok, err := p.parseInputExpression()
 		if err != nil {
 			return nil, err
 		} else if ok {
-			pt.add(p, ip)
+			peb.add(p, ip)
 		}
 		sp, ok, err := p.parseStringLiteral()
 		if err != nil {
 			return nil, err
 		} else if ok {
-			pt.add(p, sp)
+			peb.add(p, sp)
 		}
 
 		if !p.advance() {
@@ -109,12 +119,12 @@ func (p *Parser) Parse(input string) (*ParsedExpr, error) {
 		}
 	}
 	// Add the rest of the input to the parser
-	pt.add(p, nil)
-	return &ParsedExpr{pt.qparts}, nil
+	peb.add(p, nil)
+	return &ParsedExpr{peb.qParts}, nil
 }
 
 // ParsedExpr represents a parsed expression.
-// It has a representation of the original SQL statement in terms of QueryParts
+// It has a representation of the original SQL statement in terms of queryParts
 // A SQL statement like this:
 //
 // Select p.* as &Person.* from person where p.name = $Boss.Name
@@ -123,7 +133,7 @@ func (p *Parser) Parse(input string) (*ParsedExpr, error) {
 //
 // [stringPart outputPart stringPart inputPart]
 type ParsedExpr struct {
-	queryParts []QueryPart
+	queryParts []queryPart
 }
 
 func (pe *ParsedExpr) String() string {
@@ -232,99 +242,85 @@ func (p *Parser) parseIdentifier() (string, bool) {
 	return p.input[mark:i], true
 }
 
-// This parses a qualified expression. It will not parse unqualified names.
-// The first string returned is the part preceeding the '.'. If there is no '.'
-// then then the second string is empty, otherwise it is the string immidiatly
-// following the '.'.
-func (p *Parser) parseQualifiedExpression() (string, string, bool) {
+// Parses a column name or a Go type name. If parsing a Go type name then
+// struct name is in FullName.Prefix and the field name (if extant) is in
+// FullName.Name.
+// When parsing a column the table name (if extant) is in FullName.Prefix and
+// the column name is in FullName.Name func (p *Parser)
+func (p *Parser) parseFullName(isColumnName bool) (FullName, bool) {
 	cp := p.save()
-	var left string
-	var right string
+	var fn FullName
 	p.skipSpaces()
 	if id, ok := p.parseIdentifier(); ok {
-		left = id
+		fn.Prefix = id
 		if p.skipByte('.') {
 			if id, ok := p.parseIdentifier(); ok {
-				right = id
-				// We have parsed a full qualified expression
-				return left, right, true
+				fn.Name = id
+				return fn, true
 			}
 		} else {
-			return left, "", true
+			// A column name specified without a table prefix is a name not a
+			// prefix
+			if isColumnName {
+				fn.Name = fn.Prefix
+				fn.Prefix = ""
+			}
+			return fn, true
 		}
 	}
 	cp.restore()
-	return left, right, false
+	return fn, false
 }
 
 func (p *Parser) parseOutputExpression() (*OutputPart, bool, error) {
 	cp := p.save()
 	var err error
-
-	var tableName string
-	var colName string
-	var typeName string
-	var tagName string
+	var col FullName
+	var goType FullName
 	var ok bool
 
 	p.skipSpaces()
 
 	// Case 1: The expression has only one part e.g. "&Person".
-
 	if p.skipByte('&') {
-		typeName, tagName, ok = p.parseQualifiedExpression()
+		goType, ok = p.parseFullName(false)
 		if !ok {
 			err = fmt.Errorf("malformed output expression")
 		}
+		// col here is empty, this could be replaced by the empty list when we
+		// startparsing outputTypes as lists
+		return &OutputPart{col, goType}, true, err
+	}
 
-		// Case 2: The expression contains an AS e.g. "p.col1 AS &Person".
-	} else if left, right, ok := p.parseQualifiedExpression(); ok {
-
-		// If the column has no qualifing table it will be in 'right' but
-		// otherwise in 'left'
-		if right == "" {
-			colName = left
-		} else {
-			tableName = left
-			colName = right
-		}
-
+	// Case 2: The expression contains an AS e.g. "p.col1 AS &Person".
+	if col, ok := p.parseFullName(true); ok {
 		p.skipSpaces()
 
 		if p.skipString("AS") {
 			p.skipSpaces()
 			if p.skipByte('&') {
-				typeName, tagName, ok = p.parseQualifiedExpression()
+				goType, ok = p.parseFullName(false)
 				if !ok {
 					err = fmt.Errorf("malformed output expression")
 				}
-			} else {
-				cp.restore()
-				return nil, false, nil
-			}
-		} else {
-			cp.restore()
-			return nil, false, nil
-		}
-	} else {
-		cp.restore()
-		return nil, false, nil
-	}
+				return &OutputPart{col, goType}, true, err
 
-	op, err := NewOutputPart(tableName, colName, typeName, tagName)
-	return op, true, err
+			}
+		}
+	}
+	cp.restore()
+	return nil, false, nil
 }
 
 func (p *Parser) parseInputExpression() (*InputPart, bool, error) {
 	cp := p.save()
 	var err error
-	var typeName string
-	var tagName string
+	var fn FullName
 	var ok bool
 
 	p.skipSpaces()
 	if p.skipByte('$') {
-		typeName, tagName, ok = p.parseQualifiedExpression()
+		fn, ok = p.parseFullName(false)
 		if !ok {
 			err = fmt.Errorf("malformed input type")
 		}
@@ -332,15 +328,13 @@ func (p *Parser) parseInputExpression() (*InputPart, bool, error) {
 		cp.restore()
 		return nil, false, nil
 	}
-	ip, err := NewInputPart(typeName, tagName)
-	return ip, true, err
+	return &InputPart{fn}, true, err
 }
 
-func (p *Parser) parseStringLiteral() (*PassthroughPart, bool, error) {
+func (p *Parser) parseStringLiteral() (*BypassPart, bool, error) {
 	cp := p.save()
 	p.skipSpaces()
 
-	var part *PassthroughPart
 	var err error
 
 	if p.pos < len(p.input) {
@@ -348,19 +342,13 @@ func (p *Parser) parseStringLiteral() (*PassthroughPart, bool, error) {
 		if c == '"' || c == '\'' {
 			p.skipByte(c)
 			if !p.skipByteFind(c) {
-				// Reached end of string
-				// and didn't find the closing quote
-				part = NewPTPart(p.input[cp.pos:])
+				// Reached end of string and didn't find the closing quote
 				err = fmt.Errorf("missing right quote in string literal")
 			}
-			part = NewPTPart(p.input[cp.pos:p.pos])
-		} else {
-			cp.restore()
-			return nil, false, err
+			return &BypassPart{p.input[cp.pos:p.pos]}, true, err
 		}
-	} else {
-		cp.restore()
-		return nil, false, err
 	}
-	return part, true, err
+
+	cp.restore()
+	return nil, false, err
 }
