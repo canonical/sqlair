@@ -17,9 +17,9 @@ type FullName struct {
 
 func (fn FullName) String() string {
 	if fn.Prefix == "" {
-		return fn.Prefix
-	} else if fn.Name == "" {
 		return fn.Name
+	} else if fn.Name == "" {
+		return fn.Prefix
 	}
 	return fn.Prefix + "." + fn.Name
 }
