@@ -21,16 +21,6 @@ type InputPart struct {
 	FullName
 }
 
-// NewInputPart is a constructor that returns a pointer to an InputPart.
-func NewInputPart(typeName string, tagName string) (*InputPart, error) {
-	return &InputPart{
-		FullName{
-			Prefix: typeName,
-			Name:   tagName,
-		},
-	}, nil
-}
-
 func (p *InputPart) String() string {
 	return ""
 }
@@ -43,19 +33,6 @@ func (p *InputPart) ToSQL() string {
 type OutputPart struct {
 	Source FullName
 	Target FullName
-}
-
-// NewOutputPart is a constructor that returns a pointer to an OutputPart.
-func NewOutputPart(tableName string, colName string,
-	typeName string, tagName string) (*OutputPart, error) {
-	return &OutputPart{
-		FullName{Prefix: tableName,
-			Name: colName,
-		},
-		FullName{Prefix: typeName,
-			Name: tagName,
-		},
-	}, nil
 }
 
 func (p *OutputPart) String() string {
