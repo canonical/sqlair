@@ -11,7 +11,7 @@ type Parser struct {
 	pos   int
 }
 
-// AF: Do we need this?
+// NewParser returns a pointer to a Parser
 func NewParser() *Parser {
 	return &Parser{}
 }
@@ -106,6 +106,8 @@ func (peb *parsedExprBuilder) add(p *Parser, part queryPart) {
 	peb.partStart = p.pos
 }
 
+// Parse takes an input string and discovers the input and output parts. It
+// returns a pointer to a ParsedExpr
 func (p *Parser) Parse(input string) (*ParsedExpr, error) {
 	p.init(input)
 	var peb parsedExprBuilder
@@ -144,9 +146,6 @@ func (p *Parser) Parse(input string) (*ParsedExpr, error) {
 	peb.add(p, nil)
 	return &ParsedExpr{peb.parts}, nil
 }
-
-// ====== Parser Helper Functions ======
-// These return only boolean values
 
 // peekByte returns true if the current byte
 // equals the one passed as parameter.
@@ -211,7 +210,6 @@ func isNameByte(c byte) bool {
 		'0' <= c && c <= '9' || c == '_'
 }
 
-// ====== Parser Functions ======
 // These functions attempt to parse some construct, they return a bool and that
 // construct, if they n't parse they return false, restore the parser and leave
 // the default value in  other return type
@@ -270,20 +268,25 @@ func (p *Parser) parseFullName(isColumnName bool) (FullName, bool) {
 	return fn, false
 }
 
-// This parses columns in the SQL query of the form table.colname. If there is more than one column
+// This parses columns in the SQL query of the form "table.colname". If there
+// is more than one column then the columns must be bracketed together, e.g.
+// "(col1, col2) AS Person".
 func (p *Parser) parseColumns() ([]FullName, bool) {
 	var cols []FullName
 
 	p.skipSpaces()
 
+	// Case 1: A single column.
 	if col, ok := p.parseFullName(true); ok {
 		cols = append(cols, col)
+
+		// Case 2: Multiple columns.
 	} else if p.skipByte('(') {
 		col, ok := p.parseFullName(true)
 		cols = append(cols, col)
 		p.skipSpaces()
-		// If the column names are not formated in a recognisable way give
-		// up trying to parse
+		// If the column names are not formated in a recognisable way then give
+		// up trying to parse.
 		if !ok {
 			return cols, false
 		}

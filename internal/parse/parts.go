@@ -11,6 +11,11 @@ type queryPart interface {
 	ToSQL() string
 }
 
+// FullName represents a name made up of two parts delimited by a full stop
+// '.'. It is used as a representation for Go types in input and output
+// expressions where Prefix is a struct name and Name and is the field name. It
+// is also used to represent columns where Prefix is the table name and Name is
+// the column title.
 type FullName struct {
 	Prefix, Name string
 }
