@@ -11,6 +11,7 @@ type queryPart interface {
 	ToSQL() string
 }
 
+// FullName represents a table column or a Go type identifier.
 type FullName struct {
 	Prefix, Name string
 }
@@ -21,10 +22,13 @@ type InputPart struct {
 	FullName
 }
 
+// String returns a textual representation of the InputPart meant for debugging
+// purposes.
 func (p *InputPart) String() string {
 	return ""
 }
 
+// ToSQL returns a string with the SQL translation for the InputPart.
 func (p *InputPart) ToSQL() string {
 	return ""
 }
@@ -35,10 +39,13 @@ type OutputPart struct {
 	Target FullName
 }
 
+// String returns a textual representation of the OutputPart meant for debugging
+// purposes.
 func (p *OutputPart) String() string {
 	return ""
 }
 
+// ToSQL returns a string with the SQL translation for the OutputPart.
 func (p *OutputPart) ToSQL() string {
 	return ""
 }
@@ -49,10 +56,13 @@ type BypassPart struct {
 	Chunk string
 }
 
+// String returns a textual representation of the BypassPart meant for debugging
+// purposes.
 func (p *BypassPart) String() string {
 	return ""
 }
 
+// ToSQL returns a string with the SQL translation for the BypassPart.
 func (p *BypassPart) ToSQL() string {
 	return ""
 }
