@@ -5,23 +5,33 @@ import (
 	"strings"
 )
 
-// Parser defines the SDL parser
+// Parser defines the SDL parser.
 type Parser struct {
-	input string // statement to be parsed
-	pos   int    // current position of the parser
+	input string
+	pos   int
 }
 
-// A checkpoint model for restoring the parser to the state it was
-// We only use a checkpoint within an attempted parsing of an part,
-// not at a higher level since we don't keep track of the parts in
-// the checkpoint
+// NewParser returns a pointer to a Parser.
+func NewParser() *Parser {
+	return &Parser{}
+}
+
+// init resets the state of the parser and sets the input string.
+func (p *Parser) init(input string) {
+	p.input = input
+	p.pos = 0
+}
+
+// A checkpoint model for restoring the parser to the state it was We only use a
+// checkpoint within an attempted parsing of an part, not at a higher level
+// since we don't keep track of the parts in the checkpoint.
 type checkpoint struct {
-	// A pointer to the parser
 	parser *Parser
-	// Info to restore the parser
-	pos int
+	pos    int
 }
 
+// save takes a snapshot of the state of the parser and returns a pointer to a
+// checkpoint that represents it.
 func (p *Parser) save() *checkpoint {
 	return &checkpoint{
 		parser: p,
@@ -29,23 +39,20 @@ func (p *Parser) save() *checkpoint {
 	}
 }
 
+// restore sets the internal state of the parser to the values stored in the
+// checkpoint.
 func (cp *checkpoint) restore() {
 	cp.parser.pos = cp.pos
 }
 
-// NewParser creates a new parser
-func NewParser() *Parser {
-	return &Parser{}
-}
+type idClass int
 
-// init initializes the parser
-func (p *Parser) init(input string) {
-	p.input = input
-	p.pos = 0
-}
+const (
+	columnId idClass = iota
+	typeId
+)
 
-// advance moves the parser's index forward
-// by one element.
+// advance moves the parser's index forward by one element.
 func (p *Parser) advance() bool {
 	p.skipSpaces()
 	if p.pos == len(p.input) {
@@ -55,75 +62,7 @@ func (p *Parser) advance() bool {
 	return true
 }
 
-// A struct for keeping track of the parts of the input parsed so far.
-// The vars could possibly do with better names.
-
-//			  		 lastParsedPos         posBeforePart
-//	                       |                     |
-//	                       |                     |
-//
-// [PTPart      ][OutPart][PTPart               ][InputPart ]
-// SELECT col1,   &Person   FROM t WHERE t.id =   $Person.ID
-type parsedExprBuilder struct {
-	// The position of Parser.pos when we last finished parsing a part
-	lastParsedPos int
-	// The position of Parser.pos just before we started parsing the last part
-	posBeforePart int
-	qParts        []queryPart
-}
-
-// Add the parsed part to the parsedExprBuilder along with the BypassPart
-// that streaches from the end of the last previously in qParts to the
-// beginning of this part.
-func (peb *parsedExprBuilder) add(p *Parser, part queryPart) {
-	if peb.lastParsedPos != peb.posBeforePart {
-		peb.qParts = append(peb.qParts,
-			&BypassPart{p.input[peb.lastParsedPos:peb.posBeforePart]})
-	}
-	if part != nil {
-		peb.qParts = append(peb.qParts, part)
-	}
-	peb.lastParsedPos = p.pos
-	peb.posBeforePart = p.pos
-}
-
-func (p *Parser) Parse(input string) (*ParsedExpr, error) {
-	p.init(input)
-	var peb parsedExprBuilder
-
-	for {
-		p.skipSpaces()
-
-		peb.posBeforePart = p.pos
-		op, ok, err := p.parseOutputExpression()
-		if err != nil {
-			return nil, err
-		} else if ok {
-			peb.add(p, op)
-		}
-		ip, ok, err := p.parseInputExpression()
-		if err != nil {
-			return nil, err
-		} else if ok {
-			peb.add(p, ip)
-		}
-		sp, ok, err := p.parseStringLiteral()
-		if err != nil {
-			return nil, err
-		} else if ok {
-			peb.add(p, sp)
-		}
-
-		if !p.advance() {
-			break
-		}
-	}
-	// Add the rest of the input to the parser
-	peb.add(p, nil)
-	return &ParsedExpr{peb.qParts}, nil
-}
-
-// ParsedExpr represents a parsed expression.
+// ParsedExpr is the AST representation of an SDL statement.
 // It has a representation of the original SQL statement in terms of queryParts
 // A SQL statement like this:
 //
@@ -136,6 +75,8 @@ type ParsedExpr struct {
 	queryParts []queryPart
 }
 
+// String returns a textual representation of the AST contained in the
+// ParsedExpr for debugging purposes.
 func (pe *ParsedExpr) String() string {
 	out := "ParsedExpr["
 	for i, p := range pe.queryParts {
@@ -148,17 +89,83 @@ func (pe *ParsedExpr) String() string {
 	return out
 }
 
-// ====== Parser Helper Functions ======
-// These return only boolean values
+// A struct for keeping track of the parts parsed so far.
+type parsedExprBuilder struct {
+	// The position of Parser.pos when we last finished parsing a part.
+	prevPart int
+	// The position of Parser.pos just before we started parsing the last part.
+	partStart int
+	parts     []queryPart
+}
 
-// peekByte returns true if the current byte
-// equals the one passed as parameter.
+// add pushes the parsed part to the parsedExprBuilder along with the BypassPart
+// that streaches from the end of the last previously in parts to the beginning
+// of this part.
+func (peb *parsedExprBuilder) add(p *Parser, part queryPart) {
+	// Add the string between the previous I/O part and the current part.
+	if peb.prevPart != peb.partStart {
+		peb.parts = append(peb.parts,
+			&BypassPart{p.input[peb.prevPart:peb.partStart]})
+	}
+
+	if part != nil {
+		peb.parts = append(peb.parts, part)
+	}
+
+	// Save this position at the end of the part.
+	peb.prevPart = p.pos
+	// Ensure that partStart !< prevPart.
+	peb.partStart = p.pos
+}
+
+// Parse takes an input string and discovers the input and output parts. It
+// returns a pointer to a ParsedExpr.
+func (p *Parser) Parse(input string) (*ParsedExpr, error) {
+	p.init(input)
+	var peb parsedExprBuilder
+
+	for {
+		p.skipSpaces()
+
+		peb.partStart = p.pos
+
+		op, ok, err := p.parseOutputExpression()
+		if err != nil {
+			return nil, err
+		} else if ok {
+			peb.add(p, op)
+		}
+
+		ip, ok, err := p.parseInputExpression()
+		if err != nil {
+			return nil, err
+		} else if ok {
+			peb.add(p, ip)
+		}
+
+		sp, ok, err := p.parseStringLiteral()
+		if err != nil {
+			return nil, err
+		} else if ok {
+			peb.add(p, sp)
+		}
+
+		if !p.advance() {
+			break
+		}
+	}
+	// Add any remaining uparsed string input to the parser
+	peb.add(p, nil)
+	return &ParsedExpr{peb.parts}, nil
+}
+
+// peekByte returns true if the current byte equals the one passed as parameter.
 func (p *Parser) peekByte(b byte) bool {
 	return p.pos < len(p.input) && p.input[p.pos] == b
 }
 
-// skipByte jumps over the current byte if it matches
-// the byte passed as a parameter. Returns true in that case, false otherwise.
+// skipByte jumps over the current byte if it matches the byte passed as a
+// parameter. Returns true in that case, false otherwise.
 func (p *Parser) skipByte(b byte) bool {
 	if p.pos < len(p.input) && p.input[p.pos] == b {
 		p.pos++
@@ -214,7 +221,6 @@ func isNameByte(c byte) bool {
 		'0' <= c && c <= '9' || c == '_'
 }
 
-// ====== Parser Functions ======
 // These functions attempt to parse some construct, they return a bool and that
 // construct, if they n't parse they return false, restore the parser and leave
 // the default value in  other return type
@@ -228,7 +234,8 @@ func (p *Parser) parseIdentifier() (string, bool) {
 		p.pos++
 		return "*", true
 	}
-	mark := p.pos
+
+	idStart := p.pos
 	if !isNameByte(p.input[p.pos]) {
 		return "", false
 	}
@@ -239,7 +246,7 @@ func (p *Parser) parseIdentifier() (string, bool) {
 		}
 	}
 	p.pos = i
-	return p.input[mark:i], true
+	return p.input[idStart:i], true
 }
 
 // Parses a column name or a Go type name. If parsing a Go type name then
@@ -247,7 +254,7 @@ func (p *Parser) parseIdentifier() (string, bool) {
 // FullName.Name.
 // When parsing a column the table name (if extant) is in FullName.Prefix and
 // the column name is in FullName.Name func (p *Parser)
-func (p *Parser) parseFullName(isColumnName bool) (FullName, bool) {
+func (p *Parser) parseFullName(idc idClass) (FullName, bool) {
 	cp := p.save()
 	var fn FullName
 	p.skipSpaces()
@@ -261,7 +268,7 @@ func (p *Parser) parseFullName(isColumnName bool) (FullName, bool) {
 		} else {
 			// A column name specified without a table prefix is a name not a
 			// prefix
-			if isColumnName {
+			if idc == columnId {
 				fn.Name = fn.Prefix
 				fn.Prefix = ""
 			}
@@ -272,10 +279,50 @@ func (p *Parser) parseFullName(isColumnName bool) (FullName, bool) {
 	return fn, false
 }
 
+// parseColumns parses text in the SQL query of the form "table.colname". If
+// there is more than one column then the columns must be bracketed together,
+// e.g.  "(col1, col2) AS Person".
+func (p *Parser) parseColumns() ([]FullName, bool) {
+	var cols []FullName
+
+	p.skipSpaces()
+
+	// Case 1: A single column.
+	if col, ok := p.parseFullName(columnId); ok {
+		cols = append(cols, col)
+
+		// Case 2: Multiple columns.
+	} else if p.skipByte('(') {
+		col, ok := p.parseFullName(columnId)
+		cols = append(cols, col)
+		p.skipSpaces()
+		// If the column names are not formated in a recognisable way then give
+		// up trying to parse.
+		if !ok {
+			return cols, false
+		}
+		for p.skipByte(',') {
+			p.skipSpaces()
+			col, ok := p.parseFullName(columnId)
+			p.skipSpaces()
+			if !ok {
+				return cols, false
+			}
+			cols = append(cols, col)
+		}
+		p.skipSpaces()
+		p.skipByte(')')
+	}
+	p.skipSpaces()
+	return cols, true
+}
+
+// parseOutputExpression parses an SDL output holder to be filled with values
+// from the executed query.
 func (p *Parser) parseOutputExpression() (*OutputPart, bool, error) {
 	cp := p.save()
 	var err error
-	var col FullName
+	var cols []FullName
 	var goType FullName
 	var ok bool
 
@@ -283,27 +330,22 @@ func (p *Parser) parseOutputExpression() (*OutputPart, bool, error) {
 
 	// Case 1: The expression has only one part e.g. "&Person".
 	if p.skipByte('&') {
-		goType, ok = p.parseFullName(false)
+		goType, ok = p.parseFullName(typeId)
 		if !ok {
 			err = fmt.Errorf("malformed output expression")
 		}
-		// col here is empty, this could be replaced by the empty list when we
-		// startparsing outputTypes as lists
-		return &OutputPart{col, goType}, true, err
-	}
+		return &OutputPart{cols, goType}, true, err
 
-	// Case 2: The expression contains an AS e.g. "p.col1 AS &Person".
-	if col, ok := p.parseFullName(true); ok {
-		p.skipSpaces()
-
+		// Case 2: The expression contains an AS e.g. "p.col1 AS &Person".
+	} else if cols, ok := p.parseColumns(); ok {
 		if p.skipString("AS") {
 			p.skipSpaces()
 			if p.skipByte('&') {
-				goType, ok = p.parseFullName(false)
+				goType, ok = p.parseFullName(typeId)
 				if !ok {
 					err = fmt.Errorf("malformed output expression")
 				}
-				return &OutputPart{col, goType}, true, err
+				return &OutputPart{cols, goType}, true, err
 
 			}
 		}
@@ -312,6 +354,8 @@ func (p *Parser) parseOutputExpression() (*OutputPart, bool, error) {
 	return nil, false, nil
 }
 
+// parseInputExpression parses an SDL input go-defined type to be used as a
+// query argument.
 func (p *Parser) parseInputExpression() (*InputPart, bool, error) {
 	cp := p.save()
 	var err error
@@ -320,7 +364,7 @@ func (p *Parser) parseInputExpression() (*InputPart, bool, error) {
 
 	p.skipSpaces()
 	if p.skipByte('$') {
-		fn, ok = p.parseFullName(false)
+		fn, ok = p.parseFullName(typeId)
 		if !ok {
 			err = fmt.Errorf("malformed input type")
 		}
@@ -331,6 +375,8 @@ func (p *Parser) parseInputExpression() (*InputPart, bool, error) {
 	return &InputPart{fn}, true, err
 }
 
+// parseInputExpression parses an SDL input go-defined type to be used as a
+// query argument.
 func (p *Parser) parseStringLiteral() (*BypassPart, bool, error) {
 	cp := p.save()
 	p.skipSpaces()
