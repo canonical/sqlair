@@ -470,7 +470,7 @@ func TestBadFormatInput(t *testing.T) {
 	sql := "select foo from t where x = $.id"
 	parser := NewParser()
 	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("no qualifier in input expression"), err)
+	assert.Equal(t, fmt.Errorf("malformed input type"), err)
 }
 
 // Detect bad input DSL pieces
@@ -478,7 +478,7 @@ func TestBadFormatInputV2(t *testing.T) {
 	sql := "select foo from t where x = $Address."
 	parser := NewParser()
 	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("expecting identifier after 'Address.'"), err)
+	assert.Equal(t, fmt.Errorf("malformed input type"), err)
 }
 
 // Detect bad output DSL pieces
