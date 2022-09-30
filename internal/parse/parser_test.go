@@ -1,8 +1,11 @@
 package parse
 
 import (
+	"fmt"
 	"log"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 type parseHelperTest struct {
@@ -429,9 +432,67 @@ func TestRound(t *testing.T) {
 	parser := NewParser()
 	for i, test := range tests {
 		var parsedExpr *ParsedExpr
-		if parsedExpr, _ = parser.Parse(test.input); parsedExpr.String() !=
-			test.expectedParsed {
+		var err error
+		if parsedExpr, err = parser.Parse(test.input); err != nil {
+			t.Errorf("Test %d Failed (Parse): input: %s\nexpected: %s\nerr: %s\n", i, test.input, test.expectedParsed, err)
+		} else if parsedExpr.String() != test.expectedParsed {
 			t.Errorf("Test %d Failed (Parse): input: %s\nexpected: %s\nactual:   %s\n", i, test.input, test.expectedParsed, parsedExpr.String())
 		}
 	}
+}
+
+// We return a proper error when we find an unbound string literal
+func TestUnfinishedStringLiteral(t *testing.T) {
+	sql := "select foo from t where x = 'dddd"
+	parser := NewParser()
+	_, err := parser.Parse(sql)
+	assert.Equal(t, fmt.Errorf("missing right quote in string literal"), err)
+}
+
+func TestUnfinishedStringLiteralV2(t *testing.T) {
+	sql := "select foo from t where x = \"dddd"
+	parser := NewParser()
+	_, err := parser.Parse(sql)
+	assert.Equal(t, fmt.Errorf("missing right quote in string literal"), err)
+}
+
+// We require to end the string literal with the proper quote depending
+// on the opening one.
+func TestUnfinishedStringLiteralV3(t *testing.T) {
+	sql := "select foo from t where x = \"dddd'"
+	parser := NewParser()
+	_, err := parser.Parse(sql)
+	assert.Equal(t, fmt.Errorf("missing right quote in string literal"), err)
+}
+
+// Detect bad input DSL pieces
+func TestBadFormatInput(t *testing.T) {
+	sql := "select foo from t where x = $.id"
+	parser := NewParser()
+	_, err := parser.Parse(sql)
+	assert.Equal(t, fmt.Errorf("no qualifier in input expression"), err)
+}
+
+// Detect bad input DSL pieces
+func TestBadFormatInputV2(t *testing.T) {
+	sql := "select foo from t where x = $Address."
+	parser := NewParser()
+	_, err := parser.Parse(sql)
+	assert.Equal(t, fmt.Errorf("expecting identifier after 'Address.'"), err)
+}
+
+// Detect bad output DSL pieces
+func TestBadFormatOutput(t *testing.T) {
+	sql := "select foo as && from t"
+	parser := NewParser()
+	_, err := parser.Parse(sql)
+	assert.Equal(t, fmt.Errorf("malformed output expression"), err)
+}
+
+// Detect bad output DSL pieces
+func TestBadFormatOutputV2(t *testing.T) {
+	sql := "select foo as &.bar from t"
+	parser := NewParser()
+	_, err := parser.Parse(sql)
+	assert.Equal(t, fmt.Errorf("malformed output expression"), err)
 }
