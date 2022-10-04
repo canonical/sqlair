@@ -434,9 +434,9 @@ func TestRound(t *testing.T) {
 		var parsedExpr *ParsedExpr
 		var err error
 		if parsedExpr, err = parser.Parse(test.input); err != nil {
-			t.Errorf("Test %d Failed (Parse): input: %s\nexpected: %s\nerr: %s\n", i, test.input, test.expectedParsed, err)
+			t.Errorf("test %d failed (Parse): input: %s\nexpected: %s\nerr: %s\n", i, test.input, test.expectedParsed, err)
 		} else if parsedExpr.String() != test.expectedParsed {
-			t.Errorf("Test %d Failed (Parse): input: %s\nexpected: %s\nactual:   %s\n", i, test.input, test.expectedParsed, parsedExpr.String())
+			t.Errorf("test %d failed (Parse): input: %s\nexpected: %s\nactual:   %s\n", i, test.input, test.expectedParsed, parsedExpr.String())
 		}
 	}
 }
