@@ -131,21 +131,21 @@ func (p *Parser) Parse(input string) (*ParsedExpr, error) {
 
 		op, ok, err := p.parseOutputExpression()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("parser error: %s", err)
 		} else if ok {
 			peb.add(p, op)
 		}
 
 		ip, ok, err := p.parseInputExpression()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("parser error: %s", err)
 		} else if ok {
 			peb.add(p, ip)
 		}
 
 		sp, ok, err := p.parseStringLiteral()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("parser error: %s", err)
 		} else if ok {
 			peb.add(p, sp)
 		}
