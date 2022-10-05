@@ -21,7 +21,7 @@ func (p *Parser) init(input string) {
 	p.pos = 0
 }
 
-// A checkpoint model for restoring the parser to the state it was We only use a
+// A checkpoint model for restoring the parser to a saved state. We only use a
 // checkpoint within an attempted parsing of an part, not at a higher level
 // since we don't keep track of the parts in the checkpoint.
 type checkpoint struct {
@@ -81,18 +81,20 @@ func (pe *ParsedExpr) String() string {
 	return out
 }
 
-// A struct for keeping track of the parts parsed so far.
+// parsedExprBuilder keeps track of the parts parsed so far.
 type parsedExprBuilder struct {
-	// The position of Parser.pos when we last finished parsing a part.
+	// prevPart is the position of Parser.pos when we last finished parsing a
+	// part.
 	prevPart int
-	// The position of Parser.pos just before we started parsing the last part.
+	// partStart is the position of Parser.pos just before we started parsing
+	// the current part. We should maintain partStart >= prevPart.
 	partStart int
 	parts     []queryPart
 }
 
 // add pushes the parsed part to the parsedExprBuilder along with the BypassPart
-// that streaches from the end of the last previously in parts to the beginning
-// of this part.
+// that streaches from the end of the previous part to the beginning of this
+// part.
 func (peb *parsedExprBuilder) add(p *Parser, part queryPart) {
 	// Add the string between the previous I/O part and the current part.
 	if peb.prevPart != peb.partStart {
@@ -106,12 +108,12 @@ func (peb *parsedExprBuilder) add(p *Parser, part queryPart) {
 
 	// Save this position at the end of the part.
 	peb.prevPart = p.pos
-	// Ensure that partStart !< prevPart.
+	// Ensure that partStart >= prevPart.
 	peb.partStart = p.pos
 }
 
-// Parse takes an input string and discovers the input and output parts. It
-// returns a pointer to a ParsedExpr.
+// Parse takes an input string and parses the input and output parts. It returns
+// a pointer to a ParsedExpr.
 func (p *Parser) Parse(input string) (*ParsedExpr, error) {
 	p.init(input)
 	var peb parsedExprBuilder

@@ -61,23 +61,6 @@ func TestRunTable(t *testing.T) {
 	}
 }
 
-// func TestInit(t *testing.T) {
-// 	p := NewParser()
-// 	expr, err := p.Parse("select foo from bar")
-// 	assert.Equal(t, nil, err)
-// 	assert.Equal(t, (*ParsedExpr)(nil), expr)
-// }
-//
-// func TestOutputParser(t *testing.T) {
-// 	var expr *ParsedExpr
-//
-// 	p := NewParser()
-//
-// 	expr, err := p.Parse("Select &Person From")
-// 	assert.Equal(t, nil, err)
-// 	assert.Equal(t, "", expr.String()) // Finish this
-// }
-
 type Address struct {
 	ID int `db:"id"`
 }
