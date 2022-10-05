@@ -1,7 +1,6 @@
 package parse
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -44,13 +43,6 @@ func (p *Parser) save() *checkpoint {
 func (cp *checkpoint) restore() {
 	cp.parser.pos = cp.pos
 }
-
-type idClass int
-
-const (
-	columnId idClass = iota
-	typeId
-)
 
 // advance moves the parser's index forward by one element.
 func (p *Parser) advance() bool {
@@ -129,27 +121,6 @@ func (p *Parser) Parse(input string) (*ParsedExpr, error) {
 
 		peb.partStart = p.pos
 
-		op, ok, err := p.parseOutputExpression()
-		if err != nil {
-			return nil, fmt.Errorf("parser error: %s", err)
-		} else if ok {
-			peb.add(p, op)
-		}
-
-		ip, ok, err := p.parseInputExpression()
-		if err != nil {
-			return nil, fmt.Errorf("parser error: %s", err)
-		} else if ok {
-			peb.add(p, ip)
-		}
-
-		sp, ok, err := p.parseStringLiteral()
-		if err != nil {
-			return nil, fmt.Errorf("parser error: %s", err)
-		} else if ok {
-			peb.add(p, sp)
-		}
-
 		if !p.advance() {
 			break
 		}
@@ -219,182 +190,4 @@ func (p *Parser) skipString(s string) bool {
 func isNameByte(c byte) bool {
 	return 'A' <= c && c <= 'Z' || 'a' <= c && c <= 'z' ||
 		'0' <= c && c <= '9' || c == '_'
-}
-
-// These functions attempt to parse some construct, they return a bool and that
-// construct, if they n't parse they return false, restore the parser and leave
-// the default value in  other return type
-
-func (p *Parser) parseIdentifier() (string, bool) {
-	p.skipSpaces()
-	if p.pos >= len(p.input) {
-		return "", false
-	}
-	if p.peekByte('*') {
-		p.pos++
-		return "*", true
-	}
-
-	idStart := p.pos
-	if !isNameByte(p.input[p.pos]) {
-		return "", false
-	}
-	var i int
-	for i = p.pos; i < len(p.input); i++ {
-		if !isNameByte(p.input[i]) {
-			break
-		}
-	}
-	p.pos = i
-	return p.input[idStart:i], true
-}
-
-// Parses a column name or a Go type name. If parsing a Go type name then
-// struct name is in FullName.Prefix and the field name (if extant) is in
-// FullName.Name.
-// When parsing a column the table name (if extant) is in FullName.Prefix and
-// the column name is in FullName.Name func (p *Parser)
-func (p *Parser) parseFullName(idc idClass) (FullName, bool) {
-	cp := p.save()
-	var fn FullName
-	p.skipSpaces()
-	if id, ok := p.parseIdentifier(); ok {
-		fn.Prefix = id
-		if p.skipByte('.') {
-			if id, ok := p.parseIdentifier(); ok {
-				fn.Name = id
-				return fn, true
-			}
-		} else {
-			// A column name specified without a table prefix is a name not a
-			// prefix
-			if idc == columnId {
-				fn.Name = fn.Prefix
-				fn.Prefix = ""
-			}
-			return fn, true
-		}
-	}
-	cp.restore()
-	return fn, false
-}
-
-// parseColumns parses text in the SQL query of the form "table.colname". If
-// there is more than one column then the columns must be bracketed together,
-// e.g.  "(col1, col2) AS Person".
-func (p *Parser) parseColumns() ([]FullName, bool) {
-	var cols []FullName
-
-	p.skipSpaces()
-
-	// Case 1: A single column.
-	if col, ok := p.parseFullName(columnId); ok {
-		cols = append(cols, col)
-
-		// Case 2: Multiple columns.
-	} else if p.skipByte('(') {
-		col, ok := p.parseFullName(columnId)
-		cols = append(cols, col)
-		p.skipSpaces()
-		// If the column names are not formated in a recognisable way then give
-		// up trying to parse.
-		if !ok {
-			return cols, false
-		}
-		for p.skipByte(',') {
-			p.skipSpaces()
-			col, ok := p.parseFullName(columnId)
-			p.skipSpaces()
-			if !ok {
-				return cols, false
-			}
-			cols = append(cols, col)
-		}
-		p.skipSpaces()
-		p.skipByte(')')
-	}
-	p.skipSpaces()
-	return cols, true
-}
-
-// parseOutputExpression parses an SDL output holder to be filled with values
-// from the executed query.
-func (p *Parser) parseOutputExpression() (*OutputPart, bool, error) {
-	cp := p.save()
-	var err error
-	var cols []FullName
-	var goType FullName
-	var ok bool
-
-	p.skipSpaces()
-
-	// Case 1: The expression has only one part e.g. "&Person".
-	if p.skipByte('&') {
-		goType, ok = p.parseFullName(typeId)
-		if !ok {
-			err = fmt.Errorf("malformed output expression")
-		}
-		return &OutputPart{cols, goType}, true, err
-
-		// Case 2: The expression contains an AS e.g. "p.col1 AS &Person".
-	} else if cols, ok := p.parseColumns(); ok {
-		if p.skipString("AS") {
-			p.skipSpaces()
-			if p.skipByte('&') {
-				goType, ok = p.parseFullName(typeId)
-				if !ok {
-					err = fmt.Errorf("malformed output expression")
-				}
-				return &OutputPart{cols, goType}, true, err
-
-			}
-		}
-	}
-	cp.restore()
-	return nil, false, nil
-}
-
-// parseInputExpression parses an SDL input go-defined type to be used as a
-// query argument.
-func (p *Parser) parseInputExpression() (*InputPart, bool, error) {
-	cp := p.save()
-	var err error
-	var fn FullName
-	var ok bool
-
-	p.skipSpaces()
-	if p.skipByte('$') {
-		fn, ok = p.parseFullName(typeId)
-		if !ok {
-			err = fmt.Errorf("malformed input type")
-		}
-	} else {
-		cp.restore()
-		return nil, false, nil
-	}
-	return &InputPart{fn}, true, err
-}
-
-// parseInputExpression parses an SDL input go-defined type to be used as a
-// query argument.
-func (p *Parser) parseStringLiteral() (*BypassPart, bool, error) {
-	cp := p.save()
-	p.skipSpaces()
-
-	var err error
-
-	if p.pos < len(p.input) {
-		c := p.input[p.pos]
-		if c == '"' || c == '\'' {
-			p.skipByte(c)
-			if !p.skipByteFind(c) {
-				// Reached end of string and didn't find the closing quote
-				err = fmt.Errorf("missing right quote in string literal")
-			}
-			return &BypassPart{p.input[cp.pos:p.pos]}, true, err
-		}
-	}
-
-	cp.restore()
-	return nil, false, err
 }
