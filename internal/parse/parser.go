@@ -93,7 +93,7 @@ type parsedExprBuilder struct {
 }
 
 // add pushes the parsed part to the parsedExprBuilder along with the BypassPart
-// that streaches from the end of the previous part to the beginning of this
+// that stretches from the end of the previous part to the beginning of this
 // part.
 func (peb *parsedExprBuilder) add(p *Parser, part queryPart) {
 	// Add the string between the previous I/O part and the current part.
