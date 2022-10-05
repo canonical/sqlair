@@ -127,7 +127,7 @@ func (p *Parser) Parse(input string) (*ParsedExpr, error) {
 			break
 		}
 	}
-	// Add any remaining uparsed string input to the parser
+	// Add any remaining unparsed string input to the parser
 	peb.add(p, nil)
 	return &ParsedExpr{peb.parts}, nil
 }
