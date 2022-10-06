@@ -117,12 +117,9 @@ func (peb *parsedExprBuilder) add(p *Parser, part queryPart) {
 func (p *Parser) Parse(input string) (*ParsedExpr, error) {
 	p.init(input)
 	var peb parsedExprBuilder
-
 	for {
 		p.skipSpaces()
-
 		peb.partStart = p.pos
-
 		if !p.advance() {
 			break
 		}

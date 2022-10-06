@@ -22,5 +22,5 @@ func (p *BypassPart) String() string {
 }
 
 func (p *BypassPart) ToSQL() string {
-	return ""
+	return p.Chunk
 }
