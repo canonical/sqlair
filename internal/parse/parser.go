@@ -54,7 +54,7 @@ func (p *Parser) advance() bool {
 	return true
 }
 
-// ParsedExpr is the AST representation of a statement.
+// ParsedExpr is the AST representation of an SQL expression.
 // It has a representation of the original SQL statement in terms of queryParts
 // A SQL statement like this:
 //
