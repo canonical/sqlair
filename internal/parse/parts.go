@@ -19,7 +19,7 @@ type FullName struct {
 // InputPart represents a named parameter that will be sent to the database
 // while performing the query.
 type InputPart struct {
-	FullName
+	Source FullName
 }
 
 // String returns a textual representation of the InputPart meant for debugging

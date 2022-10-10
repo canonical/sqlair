@@ -14,8 +14,8 @@ func TestInputPart(t *testing.T) {
 		},
 	}
 	assert.NotEqual(t, nil, i)
-	assert.Equal(t, "mytype", i.Prefix)
-	assert.Equal(t, "mytag", i.Name)
+	assert.Equal(t, "mytype", i.Source.Prefix)
+	assert.Equal(t, "mytag", i.Source.Name)
 }
 
 func TestOutputPart(t *testing.T) {
