@@ -1,2 +1,8 @@
-# sqlair
-Friendly type mapping for SQL databases
+# SQLAir
+
+Friendly type mapping for SQL databases.
+
+## Contributing
+
+See our [code and contribution guidelines](CONTRIBUTING.md)
+

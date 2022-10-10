@@ -11,7 +11,41 @@ type queryPart interface {
 	ToSQL() string
 }
 
-// BypassPart represents a part of the SDL that we want to pass to the
+// FullName represents a table column or a Go type identifier.
+type FullName struct {
+	Prefix, Name string
+}
+
+// InputPart represents a named parameter that will be sent to the database
+// while performing the query.
+type InputPart struct {
+	Source FullName
+}
+
+func (p *InputPart) String() string {
+	return ""
+}
+
+func (p *InputPart) ToSQL() string {
+	return ""
+}
+
+// OutputPart represents a named target output variable in the SQL expression,
+// as well as the source table and column where it will be read from.
+type OutputPart struct {
+	Source FullName
+	Target FullName
+}
+
+func (p *OutputPart) String() string {
+	return ""
+}
+
+func (p *OutputPart) ToSQL() string {
+	return ""
+}
+
+// BypassPart represents a part of the expression that we want to pass to the
 // backend database verbatim.
 type BypassPart struct {
 	Chunk string
