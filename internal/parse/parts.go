@@ -30,7 +30,8 @@ func (p *InputPart) ToSQL() string {
 	return ""
 }
 
-// OutputPart represents an expression to be used as output in our SDL.
+// OutputPart represents a named target output variable in the SQL expression,
+// as well as the source table and column where it will be read from.
 type OutputPart struct {
 	Source FullName
 	Target FullName
@@ -44,7 +45,7 @@ func (p *OutputPart) ToSQL() string {
 	return ""
 }
 
-// BypassPart represents a part of the SDL that we want to pass to the
+// BypassPart represents a part of the expression that we want to pass to the
 // backend database verbatim.
 type BypassPart struct {
 	Chunk string
