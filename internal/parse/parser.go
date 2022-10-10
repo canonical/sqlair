@@ -4,7 +4,7 @@ import (
 	"strings"
 )
 
-// Parser defines the SDL parser.
+// Parser defines the expression parser.
 type Parser struct {
 	input string
 	pos   int
@@ -21,8 +21,8 @@ func (p *Parser) init(input string) {
 	p.pos = 0
 }
 
-// A checkpoint model for restoring the parser to a saved state. We only use a
-// checkpoint within an attempted parsing of an part, not at a higher level
+// A checkpoint struct for saving parser state to restore later. We only use
+// a checkpoint within an attempted parsing of an part, not at a higher level
 // since we don't keep track of the parts in the checkpoint.
 type checkpoint struct {
 	parser *Parser
@@ -54,7 +54,7 @@ func (p *Parser) advance() bool {
 	return true
 }
 
-// ParsedExpr is the AST representation of an SDL statement.
+// ParsedExpr is the AST representation of a statement.
 // It has a representation of the original SQL statement in terms of queryParts
 // A SQL statement like this:
 //
@@ -62,7 +62,7 @@ func (p *Parser) advance() bool {
 //
 // would be represented as:
 //
-// [stringPart outputPart stringPart inputPart]
+// [BypassPart OutputPart BypassPart InputPart]
 type ParsedExpr struct {
 	queryParts []queryPart
 }
@@ -81,13 +81,14 @@ func (pe *ParsedExpr) String() string {
 	return out
 }
 
-// parsedExprBuilder keeps track of the parts parsed so far.
+// parsedExprBuilder keeps track of the parts parsed so far, along with
+// information for parsing the BypassPart between input/output parts.
 type parsedExprBuilder struct {
 	// prevPart is the position of Parser.pos when we last finished parsing a
 	// part.
 	prevPart int
 	// partStart is the position of Parser.pos just before we started parsing
-	// the current part. We should maintain partStart >= prevPart.
+	// the current part. We maintain partStart >= prevPart.
 	partStart int
 	parts     []queryPart
 }
@@ -124,7 +125,7 @@ func (p *Parser) Parse(input string) (*ParsedExpr, error) {
 			break
 		}
 	}
-	// Add any remaining unparsed string input to the parser
+	// Add any remaining unparsed string input to the parser.
 	peb.add(p, nil)
 	return &ParsedExpr{peb.parts}, nil
 }
