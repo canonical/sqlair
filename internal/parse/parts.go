@@ -16,7 +16,7 @@ type FullName struct {
 	Prefix, Name string
 }
 
-// InputPart represents a named parameter that will be send to the database
+// InputPart represents a named parameter that will be sent to the database
 // while performing the query.
 type InputPart struct {
 	FullName
