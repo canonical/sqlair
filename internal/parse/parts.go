@@ -22,8 +22,6 @@ type InputPart struct {
 	Source FullName
 }
 
-// String returns a textual representation of the InputPart meant for debugging
-// purposes.
 func (p *InputPart) String() string {
 	return ""
 }
@@ -39,8 +37,6 @@ type OutputPart struct {
 	Target FullName
 }
 
-// String returns a textual representation of the OutputPart meant for debugging
-// purposes.
 func (p *OutputPart) String() string {
 	return ""
 }
@@ -56,8 +52,6 @@ type BypassPart struct {
 	Chunk string
 }
 
-// String returns a textual representation of the BypassPart meant for debugging
-// purposes.
 func (p *BypassPart) String() string {
 	return ""
 }
