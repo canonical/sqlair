@@ -26,7 +26,6 @@ func (p *InputPart) String() string {
 	return ""
 }
 
-// ToSQL returns a string with the SQL translation for the InputPart.
 func (p *InputPart) ToSQL() string {
 	return ""
 }
@@ -41,7 +40,6 @@ func (p *OutputPart) String() string {
 	return ""
 }
 
-// ToSQL returns a string with the SQL translation for the OutputPart.
 func (p *OutputPart) ToSQL() string {
 	return ""
 }
@@ -56,7 +54,6 @@ func (p *BypassPart) String() string {
 	return ""
 }
 
-// ToSQL returns a string with the SQL translation for the BypassPart.
 func (p *BypassPart) ToSQL() string {
 	return ""
 }
