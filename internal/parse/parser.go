@@ -44,7 +44,6 @@ func (cp *checkpoint) restore() {
 
 // advance moves the parser's index forward by one element.
 func (p *Parser) advance() bool {
-	p.skipSpaces()
 	if p.pos == len(p.input) {
 		return false
 	}
@@ -117,7 +116,6 @@ func (p *Parser) Parse(input string) (*ParsedExpr, error) {
 	p.init(input)
 	var peb parsedExprBuilder
 	for {
-		p.skipSpaces()
 		peb.partStart = p.pos
 		if !p.advance() {
 			break
