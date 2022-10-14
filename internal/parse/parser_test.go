@@ -6,17 +6,6 @@ import (
 	"github.com/canonical/sqlair/internal/parse"
 )
 
-type parseHelperTest struct {
-	bytef    func(byte) bool
-	stringf  func(string) bool
-	stringf0 func() bool
-	result   []bool
-	input    string
-	data     []string
-}
-
-var p = parse.NewParser()
-
 type Address struct {
 	ID int `db:"id"`
 }
