@@ -1,14 +1,15 @@
-package parse
+package parse_test
 
 import (
 	"testing"
 
+	"github.com/canonical/sqlair/internal/parse"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestInputPart(t *testing.T) {
-	i := InputPart{
-		FullName{
+	i := parse.InputPart{
+		parse.FullName{
 			Prefix: "mytype",
 			Name:   "mytag",
 		},
@@ -20,11 +21,11 @@ func TestInputPart(t *testing.T) {
 
 func TestOutputPart(t *testing.T) {
 	// Fully specified part
-	p := OutputPart{FullName{
+	p := parse.OutputPart{parse.FullName{
 		Prefix: "mytable",
 		Name:   "mycolumn",
 	},
-		FullName{
+		parse.FullName{
 			Prefix: "mytype",
 			Name:   "mytag",
 		},

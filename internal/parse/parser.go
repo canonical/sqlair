@@ -1,57 +1,137 @@
 package parse
 
-import "strings"
+import (
+	"log"
+	"strings"
+	"testing"
+)
 
-// Parser is used to parse the SQLAir DSL.
 type Parser struct {
-	// input is the DSL statement to be parted.
 	input string
-
-	// lastParsedPos is the character position of the last parsed part.
-	lastParsedPos int
-
-	// pos is the current character position of the parser.
-	pos int
+	pos   int
+	// prevPart is the value of pos when we last finished parsing a part.
+	prevPart int
+	// partStart is the value of pos just before we started parsing the part
+	// under pos. We maintain partStart >= prevPart.
+	partStart int
+	parts     []queryPart
 }
 
-// NewParser returns a reference to a new parser.
 func NewParser() *Parser {
 	return &Parser{}
 }
 
-// init initializes the parser.
+// init resets the state of the parser and sets the input string.
 func (p *Parser) init(input string) {
 	p.input = input
-	p.lastParsedPos = 0
 	p.pos = 0
+	p.prevPart = 0
+	p.partStart = 0
+	p.parts = []queryPart{}
 }
 
-func (p *Parser) Parse(input string) (*ParsedExpr, error) {
-	p.init(input)
-	return nil, nil
+// A checkpoint struct for saving parser state to restore later. We only use
+// a checkpoint within an attempted parsing of an part, not at a higher level
+// since we don't keep track of the parts in the checkpoint.
+type checkpoint struct {
+	parser    *Parser
+	pos       int
+	prevPart  int
+	partStart int
+	parts     []queryPart
 }
 
-// ParsedExpr represents a parsed expression.
-// It has a representation of the original SQL statement in terms of QueryParts
+// save takes a snapshot of the state of the parser and returns a pointer to a
+// checkpoint that represents it.
+func (p *Parser) save() *checkpoint {
+	return &checkpoint{
+		parser:    p,
+		pos:       p.pos,
+		prevPart:  p.prevPart,
+		partStart: p.partStart,
+		parts:     p.parts,
+	}
+}
+
+// restore sets the internal state of the parser to the values stored in the
+// checkpoint.
+func (cp *checkpoint) restore() {
+	cp.parser.pos = cp.pos
+	cp.parser.prevPart = cp.prevPart
+	cp.parser.partStart = cp.partStart
+	cp.parser.parts = cp.parts
+}
+
+// ParsedExpr is the AST representation of an SQL expression.
+// It has a representation of the original SQL statement in terms of queryParts
 // A SQL statement like this:
 //
 // Select p.* as &Person.* from person where p.name = $Boss.Name
 //
 // would be represented as:
 //
-// [stringPart outputPart stringPart inputPart]
+// [BypassPart OutputPart BypassPart InputPart]
 type ParsedExpr struct {
 	queryParts []queryPart
 }
 
-// peekByte returns true if the current byte
-// equals the one passed as parameter.
+// String returns a textual representation of the AST contained in the
+// ParsedExpr for debugging purposes.
+func (pe *ParsedExpr) String() string {
+	out := "ParsedExpr["
+	for i, p := range pe.queryParts {
+		if i > 0 {
+			out = out + " "
+		}
+		out = out + p.String()
+	}
+	out = out + "]"
+	return out
+}
+
+// add pushes the parsed part to the parsedExprBuilder along with the BypassPart
+// that stretches from the end of the previous part to the beginning of this
+// part.
+func (p *Parser) add(part queryPart) {
+	// Add the string between the previous I/O part and the current part.
+	if p.prevPart != p.partStart {
+		p.parts = append(p.parts,
+			&BypassPart{p.input[p.prevPart:p.partStart]})
+	}
+
+	if part != nil {
+		p.parts = append(p.parts, part)
+	}
+
+	// Save this position at the end of the part.
+	p.prevPart = p.pos
+	// Ensure that partStart >= prevPart.
+	p.partStart = p.pos
+}
+
+// Parse takes an input string and parses the input and output parts. It returns
+// a pointer to a ParsedExpr.
+func (p *Parser) Parse(input string) (*ParsedExpr, error) {
+	p.init(input)
+	for {
+		p.partStart = p.pos
+		if p.pos == len(p.input) {
+			break
+		}
+		p.pos++
+	}
+	// Add any remaining unparsed string input to the parser.
+	p.add(nil)
+	return &ParsedExpr{p.parts}, nil
+}
+
+// peekByte returns true if the current byte equals the one passed as parameter.
 func (p *Parser) peekByte(b byte) bool {
 	return p.pos < len(p.input) && p.input[p.pos] == b
 }
 
-// skipByte jumps over the current byte if it matches
-// the byte passed as a parameter. Returns true in that case, false otherwise.
+// skipByte jumps over the current byte if it matches the byte passed as a
+// parameter. Returns true in that case, false otherwise.
 func (p *Parser) skipByte(b byte) bool {
 	if p.pos < len(p.input) && p.input[p.pos] == b {
 		p.pos++
@@ -98,4 +178,66 @@ func (p *Parser) skipString(s string) bool {
 		return true
 	}
 	return false
+}
+
+// isNameByte returns true if the byte passed as parameter is considered to be
+// one that can be part of a name. It returns false otherwise
+func isNameByte(c byte) bool {
+	return 'A' <= c && c <= 'Z' || 'a' <= c && c <= 'z' ||
+		'0' <= c && c <= '9' || c == '_'
+}
+
+type parseHelperTest struct {
+	bytef    func(byte) bool
+	stringf  func(string) bool
+	stringf0 func() bool
+	result   []bool
+	input    string
+	data     []string
+}
+
+func TestRunTable(t *testing.T) {
+	var p = NewParser()
+	var parseTests = []parseHelperTest{
+
+		{bytef: p.peekByte, result: []bool{false}, input: "", data: []string{"a"}},
+		{bytef: p.peekByte, result: []bool{false}, input: "b", data: []string{"a"}},
+		{bytef: p.peekByte, result: []bool{true}, input: "a", data: []string{"a"}},
+
+		{bytef: p.skipByte, result: []bool{false}, input: "", data: []string{"a"}},
+		{bytef: p.skipByte, result: []bool{false}, input: "abc", data: []string{"b"}},
+		{bytef: p.skipByte, result: []bool{true, true}, input: "abc", data: []string{"a", "b"}},
+
+		{bytef: p.skipByteFind, result: []bool{false}, input: "", data: []string{"a"}},
+		{bytef: p.skipByteFind, result: []bool{false, true, true}, input: "abcde", data: []string{"x", "b", "c"}},
+		{bytef: p.skipByteFind, result: []bool{true, false}, input: "abcde ", data: []string{" ", " "}},
+
+		{stringf0: p.skipSpaces, result: []bool{false}, input: "", data: []string{}},
+		{stringf0: p.skipSpaces, result: []bool{false}, input: "abc    d", data: []string{}},
+		{stringf0: p.skipSpaces, result: []bool{true}, input: "     abcd", data: []string{}},
+		{stringf0: p.skipSpaces, result: []bool{true}, input: "  \t  abcd", data: []string{}},
+		{stringf0: p.skipSpaces, result: []bool{false}, input: "\t  abcd", data: []string{}},
+
+		{stringf: p.skipString, result: []bool{false}, input: "", data: []string{"a"}},
+		{stringf: p.skipString, result: []bool{true, true}, input: "helloworld", data: []string{"hElLo", "w"}},
+		{stringf: p.skipString, result: []bool{true, true}, input: "hello world", data: []string{"hello", " "}},
+	}
+	for _, v := range parseTests {
+		p.Parse(v.input)
+		for i, _ := range v.result {
+			var result bool
+			if v.bytef != nil {
+				result = v.bytef(v.data[i][0])
+			}
+			if v.stringf != nil {
+				result = v.stringf(v.data[i])
+			}
+			if v.stringf0 != nil {
+				result = v.stringf0()
+			}
+			if v.result[i] != result {
+				log.Printf("Test %#v failed. Expected: '%t', got '%t'\n", v, result, v.result[i])
+			}
+		}
+	}
 }

@@ -52,9 +52,9 @@ type BypassPart struct {
 }
 
 func (p *BypassPart) String() string {
-	return ""
+	return "BypassPart[" + p.Chunk + "]"
 }
 
 func (p *BypassPart) ToSQL() string {
-	return ""
+	return p.Chunk
 }
