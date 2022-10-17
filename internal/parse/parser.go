@@ -9,6 +9,12 @@ import (
 type Parser struct {
 	input string
 	pos   int
+	// prevPart is the value of pos when we last finished parsing a part.
+	prevPart int
+	// partStart is the value of pos just before we started parsing the part
+	// under pos. We maintain partStart >= prevPart.
+	partStart int
+	parts     []queryPart
 }
 
 func NewParser() *Parser {
@@ -19,22 +25,31 @@ func NewParser() *Parser {
 func (p *Parser) init(input string) {
 	p.input = input
 	p.pos = 0
+	p.prevPart = 0
+	p.partStart = 0
+	p.parts = []queryPart{}
 }
 
 // A checkpoint struct for saving parser state to restore later. We only use
 // a checkpoint within an attempted parsing of an part, not at a higher level
 // since we don't keep track of the parts in the checkpoint.
 type checkpoint struct {
-	parser *Parser
-	pos    int
+	parser    *Parser
+	pos       int
+	prevPart  int
+	partStart int
+	parts     []queryPart
 }
 
 // save takes a snapshot of the state of the parser and returns a pointer to a
 // checkpoint that represents it.
 func (p *Parser) save() *checkpoint {
 	return &checkpoint{
-		parser: p,
-		pos:    p.pos,
+		parser:    p,
+		pos:       p.pos,
+		prevPart:  p.prevPart,
+		partStart: p.partStart,
+		parts:     p.parts,
 	}
 }
 
@@ -42,6 +57,9 @@ func (p *Parser) save() *checkpoint {
 // checkpoint.
 func (cp *checkpoint) restore() {
 	cp.parser.pos = cp.pos
+	cp.parser.prevPart = cp.prevPart
+	cp.parser.partStart = cp.partStart
+	cp.parser.parts = cp.parts
 }
 
 // ParsedExpr is the AST representation of an SQL expression.
@@ -71,53 +89,40 @@ func (pe *ParsedExpr) String() string {
 	return out
 }
 
-// parsedExprBuilder keeps track of the parts parsed so far, along with
-// information for parsing the BypassPart between input/output parts.
-type parsedExprBuilder struct {
-	// prevPart is the position of Parser.pos when we last finished parsing a
-	// part.
-	prevPart int
-	// partStart is the position of Parser.pos just before we started parsing
-	// the current part. We maintain partStart >= prevPart.
-	partStart int
-	parts     []queryPart
-}
-
 // add pushes the parsed part to the parsedExprBuilder along with the BypassPart
 // that stretches from the end of the previous part to the beginning of this
 // part.
-func (peb *parsedExprBuilder) add(p *Parser, part queryPart) {
+func (p *Parser) add(part queryPart) {
 	// Add the string between the previous I/O part and the current part.
-	if peb.prevPart != peb.partStart {
-		peb.parts = append(peb.parts,
-			&BypassPart{p.input[peb.prevPart:peb.partStart]})
+	if p.prevPart != p.partStart {
+		p.parts = append(p.parts,
+			&BypassPart{p.input[p.prevPart:p.partStart]})
 	}
 
 	if part != nil {
-		peb.parts = append(peb.parts, part)
+		p.parts = append(p.parts, part)
 	}
 
 	// Save this position at the end of the part.
-	peb.prevPart = p.pos
+	p.prevPart = p.pos
 	// Ensure that partStart >= prevPart.
-	peb.partStart = p.pos
+	p.partStart = p.pos
 }
 
 // Parse takes an input string and parses the input and output parts. It returns
 // a pointer to a ParsedExpr.
 func (p *Parser) Parse(input string) (*ParsedExpr, error) {
 	p.init(input)
-	var peb parsedExprBuilder
 	for {
-		peb.partStart = p.pos
+		p.partStart = p.pos
 		if p.pos == len(p.input) {
 			break
 		}
 		p.pos++
 	}
 	// Add any remaining unparsed string input to the parser.
-	peb.add(p, nil)
-	return &ParsedExpr{peb.parts}, nil
+	p.add(nil)
+	return &ParsedExpr{p.parts}, nil
 }
 
 // peekByte returns true if the current byte equals the one passed as parameter.
