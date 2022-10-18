@@ -1,9 +1,8 @@
 package parse
 
 import (
-	"log"
+	"fmt"
 	"strings"
-	"testing"
 )
 
 type Parser struct {
@@ -62,6 +61,13 @@ func (cp *checkpoint) restore() {
 	cp.parser.parts = cp.parts
 }
 
+type idClass int
+
+const (
+	columnId idClass = iota
+	typeId
+)
+
 // ParsedExpr is the AST representation of an SQL expression.
 // It has a representation of the original SQL statement in terms of queryParts
 // A SQL statement like this:
@@ -113,14 +119,28 @@ func (p *Parser) add(part queryPart) {
 // a pointer to a ParsedExpr.
 func (p *Parser) Parse(input string) (*ParsedExpr, error) {
 	p.init(input)
+
 	for {
 		p.partStart = p.pos
-		if p.pos == len(p.input) {
+
+		if ip, ok, err := p.parseInputExpression(); err != nil {
+			return nil, fmt.Errorf("parser error: %s", err)
+		} else if ok {
+			p.add(ip)
+
+		} else if sp, ok, err := p.parseStringLiteral(); err != nil {
+			return nil, fmt.Errorf("parser error: %s", err)
+		} else if ok {
+			p.add(sp)
+
+		} else if p.pos == len(p.input) {
 			break
+		} else {
+			p.pos++
 		}
-		p.pos++
 	}
-	// Add any remaining unparsed string input to the parser.
+	// Add any remaining uparsed string input to the parser
+
 	p.add(nil)
 	return &ParsedExpr{p.parts}, nil
 }
@@ -187,57 +207,143 @@ func isNameByte(c byte) bool {
 		'0' <= c && c <= '9' || c == '_'
 }
 
-type parseHelperTest struct {
-	bytef    func(byte) bool
-	stringf  func(string) bool
-	stringf0 func() bool
-	result   []bool
-	input    string
-	data     []string
-}
+// These functions attempt to parse some construct, they return a bool and that
+// construct, if they n't parse they return false, restore the parser and leave
+// the default value in  other return type
 
-func TestRunTable(t *testing.T) {
-	var p = NewParser()
-	var parseTests = []parseHelperTest{
-
-		{bytef: p.peekByte, result: []bool{false}, input: "", data: []string{"a"}},
-		{bytef: p.peekByte, result: []bool{false}, input: "b", data: []string{"a"}},
-		{bytef: p.peekByte, result: []bool{true}, input: "a", data: []string{"a"}},
-
-		{bytef: p.skipByte, result: []bool{false}, input: "", data: []string{"a"}},
-		{bytef: p.skipByte, result: []bool{false}, input: "abc", data: []string{"b"}},
-		{bytef: p.skipByte, result: []bool{true, true}, input: "abc", data: []string{"a", "b"}},
-
-		{bytef: p.skipByteFind, result: []bool{false}, input: "", data: []string{"a"}},
-		{bytef: p.skipByteFind, result: []bool{false, true, true}, input: "abcde", data: []string{"x", "b", "c"}},
-		{bytef: p.skipByteFind, result: []bool{true, false}, input: "abcde ", data: []string{" ", " "}},
-
-		{stringf0: p.skipSpaces, result: []bool{false}, input: "", data: []string{}},
-		{stringf0: p.skipSpaces, result: []bool{false}, input: "abc    d", data: []string{}},
-		{stringf0: p.skipSpaces, result: []bool{true}, input: "     abcd", data: []string{}},
-		{stringf0: p.skipSpaces, result: []bool{true}, input: "  \t  abcd", data: []string{}},
-		{stringf0: p.skipSpaces, result: []bool{false}, input: "\t  abcd", data: []string{}},
-
-		{stringf: p.skipString, result: []bool{false}, input: "", data: []string{"a"}},
-		{stringf: p.skipString, result: []bool{true, true}, input: "helloworld", data: []string{"hElLo", "w"}},
-		{stringf: p.skipString, result: []bool{true, true}, input: "hello world", data: []string{"hello", " "}},
+func (p *Parser) parseIdentifier() (string, bool) {
+	p.skipSpaces()
+	if p.pos >= len(p.input) {
+		return "", false
 	}
-	for _, v := range parseTests {
-		p.Parse(v.input)
-		for i, _ := range v.result {
-			var result bool
-			if v.bytef != nil {
-				result = v.bytef(v.data[i][0])
-			}
-			if v.stringf != nil {
-				result = v.stringf(v.data[i])
-			}
-			if v.stringf0 != nil {
-				result = v.stringf0()
-			}
-			if v.result[i] != result {
-				log.Printf("Test %#v failed. Expected: '%t', got '%t'\n", v, result, v.result[i])
-			}
+	if p.peekByte('*') {
+		p.pos++
+		return "*", true
+	}
+
+	idStart := p.pos
+	if !isNameByte(p.input[p.pos]) {
+		return "", false
+	}
+	var i int
+	for i = p.pos; i < len(p.input); i++ {
+		if !isNameByte(p.input[i]) {
+			break
 		}
 	}
+	p.pos = i
+	return p.input[idStart:i], true
+}
+
+// Parses a column name or a Go type name. If parsing a Go type name then
+// struct name is in FullName.Prefix and the field name (if extant) is in
+// FullName.Name.
+// When parsing a column the table name (if extant) is in FullName.Prefix and
+// the column name is in FullName.Name func (p *Parser)
+func (p *Parser) parseFullName(idc idClass) (FullName, bool) {
+	cp := p.save()
+	var fn FullName
+	p.skipSpaces()
+	if id, ok := p.parseIdentifier(); ok {
+		fn.Prefix = id
+		if p.skipByte('.') {
+			if id, ok := p.parseIdentifier(); ok {
+				fn.Name = id
+				return fn, true
+			}
+		} else {
+			// A column name specified without a table prefix is a name not a
+			// prefix
+			if idc == columnId {
+				fn.Name = fn.Prefix
+				fn.Prefix = ""
+			}
+			return fn, true
+		}
+	}
+	cp.restore()
+	return fn, false
+}
+
+// parseColumns parses text in the SQL query of the form "table.colname". If
+// there is more than one column then the columns must be bracketed together,
+// e.g.  "(col1, col2) AS Person".
+func (p *Parser) parseColumns() ([]FullName, bool) {
+	var cols []FullName
+
+	p.skipSpaces()
+
+	// Case 1: A single column.
+	if col, ok := p.parseFullName(columnId); ok {
+		cols = append(cols, col)
+
+		// Case 2: Multiple columns.
+	} else if p.skipByte('(') {
+		col, ok := p.parseFullName(columnId)
+		cols = append(cols, col)
+		p.skipSpaces()
+		// If the column names are not formated in a recognisable way then give
+		// up trying to parse.
+		if !ok {
+			return cols, false
+		}
+		for p.skipByte(',') {
+			p.skipSpaces()
+			col, ok := p.parseFullName(columnId)
+			p.skipSpaces()
+			if !ok {
+				return cols, false
+			}
+			cols = append(cols, col)
+		}
+		p.skipSpaces()
+		p.skipByte(')')
+	}
+	p.skipSpaces()
+	return cols, true
+}
+
+// parseInputExpression parses an SDL input go-defined type to be used as a
+// query argument.
+func (p *Parser) parseInputExpression() (*InputPart, bool, error) {
+	cp := p.save()
+	var err error
+	var fn FullName
+	var ok bool
+
+	p.skipSpaces()
+	if p.skipByte('$') {
+		fn, ok = p.parseFullName(typeId)
+		if !ok {
+			err = fmt.Errorf("malformed input type")
+		}
+		p.skipSpaces()
+		return &InputPart{fn}, true, err
+	}
+	cp.restore()
+	return nil, false, nil
+}
+
+// parseInputExpression parses an SDL input go-defined type to be used as a
+// query argument.
+func (p *Parser) parseStringLiteral() (*BypassPart, bool, error) {
+	cp := p.save()
+	p.skipSpaces()
+
+	var err error
+
+	if p.pos < len(p.input) {
+		c := p.input[p.pos]
+		if c == '"' || c == '\'' {
+			p.skipByte(c)
+			if !p.skipByteFind(c) {
+				// Reached end of string and didn't find the closing quote
+				err = fmt.Errorf("missing right quote in string literal")
+			}
+			return &BypassPart{p.input[cp.pos:p.pos]}, true, err
+		}
+	}
+
+	cp.restore()
+	return nil, false, err
 }

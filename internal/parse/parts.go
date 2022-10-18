@@ -16,6 +16,15 @@ type FullName struct {
 	Prefix, Name string
 }
 
+func (fn FullName) String() string {
+	if fn.Prefix == "" {
+		return fn.Name
+	} else if fn.Name == "" {
+		return fn.Prefix
+	}
+	return fn.Prefix + "." + fn.Name
+}
+
 // InputPart represents a named parameter that will be sent to the database
 // while performing the query.
 type InputPart struct {
@@ -23,7 +32,7 @@ type InputPart struct {
 }
 
 func (p *InputPart) String() string {
-	return ""
+	return "InputPart[" + p.Source.String() + "]"
 }
 
 func (p *InputPart) ToSQL() string {
@@ -33,12 +42,19 @@ func (p *InputPart) ToSQL() string {
 // OutputPart represents a named target output variable in the SQL expression,
 // as well as the source table and column where it will be read from.
 type OutputPart struct {
-	Source FullName
+	Source []FullName
 	Target FullName
 }
 
 func (p *OutputPart) String() string {
-	return ""
+	var colString string
+	for _, col := range p.Source {
+		colString = colString + col.String() + " "
+	}
+	if len(colString) >= 2 {
+		colString = colString[:len(colString)-1]
+	}
+	return "OutputPart[Source:" + colString + " Target:" + p.Target.String() + "]"
 }
 
 func (p *OutputPart) ToSQL() string {
