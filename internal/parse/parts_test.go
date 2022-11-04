@@ -27,14 +27,15 @@ func TestOutputPart(t *testing.T) {
 				Prefix: "mytable",
 				Name:   "mycolumn",
 			}},
-		parse.FullName{
-			Prefix: "mytype",
-			Name:   "mytag",
-		},
+		[]parse.FullName{
+			parse.FullName{
+				Prefix: "mytype",
+				Name:   "mytag",
+			}},
 	}
 	assert.NotEqual(t, nil, p)
 	assert.Equal(t, "mytable", p.Source[0].Prefix)
 	assert.Equal(t, "mycolumn", p.Source[0].Name)
-	assert.Equal(t, "mytype", p.Target.Prefix)
-	assert.Equal(t, "mytag", p.Target.Name)
+	assert.Equal(t, "mytype", p.Target[0].Prefix)
+	assert.Equal(t, "mytag", p.Target[0].Name)
 }

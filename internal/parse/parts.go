@@ -43,18 +43,25 @@ func (p *InputPart) ToSQL() string {
 // as well as the source table and column where it will be read from.
 type OutputPart struct {
 	Source []FullName
-	Target FullName
+	Target []FullName
 }
 
 func (p *OutputPart) String() string {
-	var colString string
+	var sourceString string
 	for _, col := range p.Source {
-		colString = colString + col.String() + " "
+		sourceString = sourceString + col.String() + " "
 	}
-	if len(colString) >= 2 {
-		colString = colString[:len(colString)-1]
+	if len(sourceString) >= 2 {
+		sourceString = sourceString[:len(sourceString)-1]
 	}
-	return "OutputPart[Source:" + colString + " Target:" + p.Target.String() + "]"
+	var targetString string
+	for _, obj := range p.Target {
+		targetString = targetString + obj.String() + " "
+	}
+	if len(targetString) >= 2 {
+		targetString = targetString[:len(targetString)-1]
+	}
+	return "OutputPart[Source:" + sourceString + " Target:" + targetString + "]"
 }
 
 func (p *OutputPart) ToSQL() string {
