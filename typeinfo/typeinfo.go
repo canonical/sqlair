@@ -8,7 +8,20 @@ import (
 )
 
 var cmutex sync.RWMutex
-var cache = make(map[reflect.Type]Info)
+var cache = make(map[string]Info)
+
+// Return the Info of a type name passed as parameter
+// Returns error if the type has not been reflected yet.
+func GetInfoFromName(typeName string) (Info, error) {
+	cmutex.RLock()
+	info, found := cache[typeName]
+	cmutex.RUnlock()
+	if found {
+		return info, nil
+	} else {
+		return info, fmt.Errorf("unknown type")
+	}
+}
 
 // Reflect will return the Info of a given type,
 // generating and caching as required.
@@ -20,8 +33,10 @@ func GetTypeInfo(value any) (Info, error) {
 	v := reflect.ValueOf(value)
 	v = reflect.Indirect(v)
 
+	tname := v.Type().Name()
+
 	cmutex.RLock()
-	info, found := cache[v.Type()]
+	info, found := cache[tname]
 	cmutex.RUnlock()
 	if found {
 		return info, nil
@@ -35,7 +50,7 @@ func GetTypeInfo(value any) (Info, error) {
 	// Do not cache for "M" types
 	if !(info.Type.Kind() == reflect.Map && info.Type.Name() == "M") {
 		cmutex.Lock()
-		cache[v.Type()] = info
+		cache[tname] = info
 		cmutex.Unlock()
 	}
 
