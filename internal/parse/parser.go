@@ -1,6 +1,7 @@
 package parse
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 )
@@ -84,15 +85,16 @@ type ParsedExpr struct {
 // String returns a textual representation of the AST contained in the
 // ParsedExpr for debugging purposes.
 func (pe *ParsedExpr) String() string {
-	out := "ParsedExpr["
+	var out bytes.Buffer
+	out.WriteString("ParsedExpr[")
 	for i, p := range pe.queryParts {
 		if i > 0 {
-			out = out + " "
+			out.WriteString(" ")
 		}
-		out = out + p.String()
+		out.WriteString(p.String())
 	}
-	out = out + "]"
-	return out
+	out.WriteString("]")
+	return out.String()
 }
 
 // add pushes the parsed part to the parsedExprBuilder along with the BypassPart

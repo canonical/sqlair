@@ -1,5 +1,7 @@
 package parse
 
+import "fmt"
+
 // A queryPart represents a section of a parsed SQL statement, which forms
 // a complete query when processed together with its surrounding parts, in
 // their correct order.
@@ -32,7 +34,7 @@ type InputPart struct {
 }
 
 func (p *InputPart) String() string {
-	return "InputPart[" + p.Source.String() + "]"
+	return fmt.Sprintf("InputPart[%+v]", p.Source)
 }
 
 func (p *InputPart) ToSQL() string {
@@ -47,21 +49,7 @@ type OutputPart struct {
 }
 
 func (p *OutputPart) String() string {
-	var sourceString string
-	for _, col := range p.Source {
-		sourceString = sourceString + col.String() + " "
-	}
-	if len(sourceString) >= 2 {
-		sourceString = sourceString[:len(sourceString)-1]
-	}
-	var targetString string
-	for _, obj := range p.Target {
-		targetString = targetString + obj.String() + " "
-	}
-	if len(targetString) >= 2 {
-		targetString = targetString[:len(targetString)-1]
-	}
-	return "OutputPart[Source:" + sourceString + " Target:" + targetString + "]"
+	return fmt.Sprintf("OutputPart[%+v %+v]", p.Source, p.Target)
 }
 
 func (p *OutputPart) ToSQL() string {

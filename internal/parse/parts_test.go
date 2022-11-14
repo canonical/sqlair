@@ -22,16 +22,14 @@ func TestInputPart(t *testing.T) {
 func TestOutputPart(t *testing.T) {
 	// Fully specified part
 	p := parse.OutputPart{
-		[]parse.FullName{
-			parse.FullName{
-				Prefix: "mytable",
-				Name:   "mycolumn",
-			}},
-		[]parse.FullName{
-			parse.FullName{
-				Prefix: "mytype",
-				Name:   "mytag",
-			}},
+		[]parse.FullName{{
+			Prefix: "mytable",
+			Name:   "mycolumn",
+		}},
+		[]parse.FullName{{
+			Prefix: "mytype",
+			Name:   "mytag",
+		}},
 	}
 	assert.NotEqual(t, nil, p)
 	assert.Equal(t, "mytable", p.Source[0].Prefix)
