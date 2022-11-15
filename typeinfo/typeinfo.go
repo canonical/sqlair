@@ -12,7 +12,7 @@ var cache = make(map[string]Info)
 
 // Return the Info of a type name passed as parameter
 // Returns error if the type has not been reflected yet.
-func GetInfoFromName(typeName string) (Info, error) {
+func InfoFromName(typeName string) (Info, error) {
 	cacheMutex.RLock()
 	info, found := cache[typeName]
 	cacheMutex.RUnlock()

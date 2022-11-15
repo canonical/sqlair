@@ -112,7 +112,7 @@ func TestReflectBadTagError(t *testing.T) {
 	assert.Error(t, fmt.Errorf(`unexpected tag value "bad-juju"`), err)
 }
 
-func TestGetInfoFromName(t *testing.T) {
+func TestInfoFromName(t *testing.T) {
 	type sometype struct {
 		ID int64 `db:"id"`
 	}
@@ -120,24 +120,24 @@ func TestGetInfoFromName(t *testing.T) {
 	var somet sometype
 
 	{
-		_, err := GetInfoFromName("float64")
+		_, err := InfoFromName("float64")
 		assert.Equal(t, fmt.Errorf("unknown type"), err)
 	}
 	{
-		_, err := GetInfoFromName("sometype")
+		_, err := InfoFromName("sometype")
 		assert.Equal(t, fmt.Errorf("unknown type"), err)
 	}
 	{
 		info, err := GetTypeInfo(somet)
 		assert.Nil(t, err)
-		ifn, err2 := GetInfoFromName("sometype")
+		ifn, err2 := InfoFromName("sometype")
 		assert.Nil(t, err2)
 		assert.Equal(t, info, ifn)
 	}
 	{
 		info, err := GetTypeInfo(f)
 		assert.Nil(t, err)
-		ifn, err2 := GetInfoFromName("float64")
+		ifn, err2 := InfoFromName("float64")
 		assert.Nil(t, err2)
 		assert.Equal(t, info, ifn)
 	}
