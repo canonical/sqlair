@@ -7,15 +7,15 @@ import (
 	"sync"
 )
 
-var cmutex sync.RWMutex
+var cacheMutex sync.RWMutex
 var cache = make(map[string]Info)
 
 // Return the Info of a type name passed as parameter
 // Returns error if the type has not been reflected yet.
 func GetInfoFromName(typeName string) (Info, error) {
-	cmutex.RLock()
+	cacheMutex.RLock()
 	info, found := cache[typeName]
-	cmutex.RUnlock()
+	cacheMutex.RUnlock()
 	if found {
 		return info, nil
 	} else {
@@ -35,9 +35,9 @@ func GetTypeInfo(value any) (Info, error) {
 
 	tname := v.Type().Name()
 
-	cmutex.RLock()
+	cacheMutex.RLock()
 	info, found := cache[tname]
-	cmutex.RUnlock()
+	cacheMutex.RUnlock()
 	if found {
 		return info, nil
 	}
@@ -49,9 +49,9 @@ func GetTypeInfo(value any) (Info, error) {
 
 	// Do not cache for "M" types
 	if !(info.Type.Kind() == reflect.Map && info.Type.Name() == "M") {
-		cmutex.Lock()
+		cacheMutex.Lock()
 		cache[tname] = info
-		cmutex.Unlock()
+		cacheMutex.Unlock()
 	}
 
 	return info, nil
