@@ -19,7 +19,7 @@ type Field struct {
 	OmitEmpty bool
 }
 
-// Struct represents reflected information about a struct type.
+// Info represents reflected information about a struct type.
 type Info struct {
 	Type reflect.Type
 
