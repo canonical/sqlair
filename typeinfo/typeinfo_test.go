@@ -41,8 +41,8 @@ func TestReflectM(t *testing.T) {
 	info, err := GetTypeInfo(mymap)
 	assert.Nil(t, err)
 
-	assert.Len(t, info.TagsToFields, 2)
-	foo, ok := info.TagsToFields["foo"]
+	assert.Len(t, info.TagToField, 2)
+	foo, ok := info.TagToField["foo"]
 	assert.True(t, ok)
 	assert.Equal(t, "foo", foo.Name)
 }
@@ -66,14 +66,14 @@ func TestReflectStruct(t *testing.T) {
 	assert.Equal(t, reflect.Struct, info.Type.Kind())
 	assert.Equal(t, "something", info.Type.Name())
 
-	assert.Len(t, info.TagsToFields, 2)
+	assert.Len(t, info.TagToField, 2)
 
-	id, ok := info.TagsToFields["id"]
+	id, ok := info.TagToField["id"]
 	assert.True(t, ok)
 	assert.Equal(t, "ID", id.Name)
 	assert.False(t, id.OmitEmpty)
 
-	name, ok := info.TagsToFields["name"]
+	name, ok := info.TagToField["name"]
 	assert.True(t, ok)
 	assert.Equal(t, "Name", name.Name)
 	assert.True(t, name.OmitEmpty)
