@@ -24,7 +24,7 @@ type Info struct {
 	Type reflect.Type
 
 	// TagsToFields  maps "db" tags to struct fields.
-	// Sqlair does not care about fields without a "db" tag.
+	// SQLAir does not care about fields without a "db" tag.
 	TagsToFields map[string]Field
 
 	// FieldsToTags maps field names to tags

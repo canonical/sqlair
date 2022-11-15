@@ -58,7 +58,7 @@ func GetTypeInfo(value any) (Info, error) {
 }
 
 // generate produces and returns reflection information for the input
-// reflect.Value that is specifically required for Sqlair operation.
+// reflect.Value that is specifically required for SQLAir operation.
 func generate(value reflect.Value) (Info, error) {
 	// Dereference the pointer if it is one.
 	value = reflect.Indirect(value)
@@ -96,7 +96,7 @@ func generate(value reflect.Value) (Info, error) {
 		typ := value.Type()
 		for i := 0; i < typ.NumField(); i++ {
 			field := typ.Field(i)
-			// Fields without a "db" tag are outside of Sqlair's remit.
+			// Fields without a "db" tag are outside of SQLAir's remit.
 			tag := field.Tag.Get("db")
 			if tag == "" {
 				continue
