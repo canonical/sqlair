@@ -2,8 +2,14 @@ package parse
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"strings"
+)
+
+var (
+	MissingRightQuoteErr  = errors.New("missing right quote in string literal")
+	MalformedInputTypeErr = errors.New("malformed input type")
 )
 
 type Parser struct {
@@ -126,18 +132,19 @@ func (p *Parser) Parse(input string) (*ParsedExpr, error) {
 		p.partStart = p.pos
 
 		if ip, ok, err := p.parseInputExpression(); err != nil {
-			return nil, fmt.Errorf("parser error: %s", err)
+			return nil, fmt.Errorf("cannot parse expression: %w", err)
 		} else if ok {
 			p.add(ip)
 
 		} else if sp, ok, err := p.parseStringLiteral(); err != nil {
-			return nil, fmt.Errorf("parser error: %s", err)
+			return nil, fmt.Errorf("cannot parse expression: %w", err)
 		} else if ok {
 			p.add(sp)
 
 		} else if p.pos == len(p.input) {
 			break
 		} else {
+			// If nothing above can be parsed we advance the parser.
 			p.pos++
 		}
 	}
@@ -209,23 +216,11 @@ func isNameByte(c byte) bool {
 		'0' <= c && c <= '9' || c == '_'
 }
 
-// These functions attempt to parse some construct, they return a bool and that
-// construct, if they n't parse they return false, restore the parser and leave
-// the default value in  other return type
-
-func (p *Parser) parseIdentifier() (string, bool) {
-	p.skipSpaces()
-	if p.pos >= len(p.input) {
-		return "", false
-	}
-	if p.peekByte('*') {
-		p.pos++
-		return "*", true
-	}
-
-	idStart := p.pos
+// skipName returns false if the parser is not on a name. Otherwise it advances
+// the parser until it is on the first non name byte and returns true.
+func (p *Parser) skipName() bool {
 	if !isNameByte(p.input[p.pos]) {
-		return "", false
+		return false
 	}
 	var i int
 	for i = p.pos; i < len(p.input); i++ {
@@ -234,14 +229,30 @@ func (p *Parser) parseIdentifier() (string, bool) {
 		}
 	}
 	p.pos = i
-	return p.input[idStart:i], true
+	return true
 }
 
-// Parses a column name or a Go type name. If parsing a Go type name then
-// struct name is in FullName.Prefix and the field name (if extant) is in
-// FullName.Name.
-// When parsing a column the table name (if extant) is in FullName.Prefix and
-// the column name is in FullName.Name func (p *Parser)
+// These functions attempt to parse some construct, they return a bool and that
+// construct, if they n't parse they return false, restore the parser and leave
+// the default value in  other return type
+
+func (p *Parser) parseIdentifier() (string, bool) {
+	if p.pos >= len(p.input) {
+		return "", false
+	}
+	if p.skipByte('*') {
+		return "*", true
+	}
+
+	idStart := p.pos
+	if p.skipName() {
+		return p.input[idStart:p.pos], true
+	}
+	return "", false
+}
+
+// parseFullName parses a column name or Go field name, optionally dot-prefixed by
+// its table or type name respectively.
 func (p *Parser) parseFullName(idc idClass) (FullName, bool) {
 	cp := p.save()
 	var fn FullName
@@ -267,44 +278,6 @@ func (p *Parser) parseFullName(idc idClass) (FullName, bool) {
 	return fn, false
 }
 
-// parseColumns parses text in the SQL query of the form "table.colname". If
-// there is more than one column then the columns must be bracketed together,
-// e.g.  "(col1, col2) AS Person".
-func (p *Parser) parseColumns() ([]FullName, bool) {
-	var cols []FullName
-
-	p.skipSpaces()
-
-	// Case 1: A single column.
-	if col, ok := p.parseFullName(columnId); ok {
-		cols = append(cols, col)
-
-		// Case 2: Multiple columns.
-	} else if p.skipByte('(') {
-		col, ok := p.parseFullName(columnId)
-		cols = append(cols, col)
-		p.skipSpaces()
-		// If the column names are not formated in a recognisable way then give
-		// up trying to parse.
-		if !ok {
-			return cols, false
-		}
-		for p.skipByte(',') {
-			p.skipSpaces()
-			col, ok := p.parseFullName(columnId)
-			p.skipSpaces()
-			if !ok {
-				return cols, false
-			}
-			cols = append(cols, col)
-		}
-		p.skipSpaces()
-		p.skipByte(')')
-	}
-	p.skipSpaces()
-	return cols, true
-}
-
 // parseInputExpression parses an SDL input go-defined type to be used as a
 // query argument.
 func (p *Parser) parseInputExpression() (*InputPart, bool, error) {
@@ -317,7 +290,7 @@ func (p *Parser) parseInputExpression() (*InputPart, bool, error) {
 	if p.skipByte('$') {
 		fn, ok = p.parseFullName(typeId)
 		if !ok {
-			err = fmt.Errorf("malformed input type")
+			err = MalformedInputTypeErr
 		}
 		p.skipSpaces()
 		return &InputPart{fn}, true, err
@@ -330,7 +303,6 @@ func (p *Parser) parseInputExpression() (*InputPart, bool, error) {
 // query argument.
 func (p *Parser) parseStringLiteral() (*BypassPart, bool, error) {
 	cp := p.save()
-	p.skipSpaces()
 
 	var err error
 
@@ -340,7 +312,7 @@ func (p *Parser) parseStringLiteral() (*BypassPart, bool, error) {
 			p.skipByte(c)
 			if !p.skipByteFind(c) {
 				// Reached end of string and didn't find the closing quote
-				err = fmt.Errorf("missing right quote in string literal")
+				err = MissingRightQuoteErr
 			}
 			return &BypassPart{p.input[cp.pos:p.pos]}, true, err
 		}

@@ -1,7 +1,7 @@
 package parse_test
 
 import (
-	"fmt"
+	"errors"
 	"testing"
 
 	"github.com/canonical/sqlair/internal/parse"
@@ -42,8 +42,8 @@ func TestRound(t *testing.T) {
 		},
 		{
 			"select p.* as &Person.*, '&notAnOutputExpresion.*' as literal from t",
-			"ParsedExpr[BypassPart[select p.* as &Person.*,] " +
-				"BypassPart[ '&notAnOutputExpresion.*'] " +
+			"ParsedExpr[BypassPart[select p.* as &Person.*, ] " +
+				"BypassPart['&notAnOutputExpresion.*'] " +
 				"BypassPart[ as literal from t]]",
 		},
 		{
@@ -67,52 +67,52 @@ func TestRound(t *testing.T) {
 		},
 		{
 			"select foo, bar, &Person.ID from table where foo = 'xx'",
-			"ParsedExpr[BypassPart[select foo, bar, &Person.ID from table where foo =] " +
-				"BypassPart[ 'xx']]",
+			"ParsedExpr[BypassPart[select foo, bar, &Person.ID from table where foo = ] " +
+				"BypassPart['xx']]",
 		},
 		{
 			"select foo, &Person.ID, bar, baz, &Manager.Name from table where foo = 'xx'",
-			"ParsedExpr[BypassPart[select foo, &Person.ID, bar, baz, &Manager.Name from table where foo =] " +
-				"BypassPart[ 'xx']]",
+			"ParsedExpr[BypassPart[select foo, &Person.ID, bar, baz, &Manager.Name from table where foo = ] " +
+				"BypassPart['xx']]",
 		},
 		{
 			"SELECT * AS &Person.* FROM person WHERE name = 'Fred'",
-			"ParsedExpr[BypassPart[SELECT * AS &Person.* FROM person WHERE name =] " +
-				"BypassPart[ 'Fred']]",
+			"ParsedExpr[BypassPart[SELECT * AS &Person.* FROM person WHERE name = ] " +
+				"BypassPart['Fred']]",
 		},
 		{
 			"SELECT &Person.* FROM person WHERE name = 'Fred'",
-			"ParsedExpr[BypassPart[SELECT &Person.* FROM person WHERE name =] " +
-				"BypassPart[ 'Fred']]",
+			"ParsedExpr[BypassPart[SELECT &Person.* FROM person WHERE name = ] " +
+				"BypassPart['Fred']]",
 		},
 		{
 			"SELECT * AS &Person.*, a.* as &Address.* FROM person, address a WHERE name = 'Fred'",
-			"ParsedExpr[BypassPart[SELECT * AS &Person.*, a.* as &Address.* FROM person, address a WHERE name =] " +
-				"BypassPart[ 'Fred']]",
+			"ParsedExpr[BypassPart[SELECT * AS &Person.*, a.* as &Address.* FROM person, address a WHERE name = ] " +
+				"BypassPart['Fred']]",
 		},
 		{
 			"SELECT (a.district, a.street) AS &Address.* FROM address AS a WHERE p.name = 'Fred'",
-			"ParsedExpr[BypassPart[SELECT (a.district, a.street) AS &Address.* FROM address AS a WHERE p.name =] BypassPart[ 'Fred']]",
+			"ParsedExpr[BypassPart[SELECT (a.district, a.street) AS &Address.* FROM address AS a WHERE p.name = ] BypassPart['Fred']]",
 		},
 		{
 			"SELECT 1 FROM person WHERE p.name = 'Fred'",
-			"ParsedExpr[BypassPart[SELECT 1 FROM person WHERE p.name =] " +
-				"BypassPart[ 'Fred']]",
+			"ParsedExpr[BypassPart[SELECT 1 FROM person WHERE p.name = ] " +
+				"BypassPart['Fred']]",
 		},
 		{
 			"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.*, " +
 				"(5+7), (col1 * col2) as calculated_value FROM person AS p " +
 				"JOIN address AS a ON p.address_id = a.id WHERE p.name = 'Fred'",
-			"ParsedExpr[BypassPart[SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.*, (5+7), (col1 * col2) as calculated_value FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name =] " +
-				"BypassPart[ 'Fred']]",
+			"ParsedExpr[BypassPart[SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.*, (5+7), (col1 * col2) as calculated_value FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] " +
+				"BypassPart['Fred']]",
 		},
 		{
 			"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* " +
 				"FROM person AS p JOIN address AS a ON p .address_id = a.id " +
 				"WHERE p.name = 'Fred'",
 			"ParsedExpr[BypassPart[SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.*" +
-				" FROM person AS p JOIN address AS a ON p .address_id = a.id WHERE p.name =] " +
-				"BypassPart[ 'Fred']]",
+				" FROM person AS p JOIN address AS a ON p .address_id = a.id WHERE p.name = ] " +
+				"BypassPart['Fred']]",
 		},
 		{
 			"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* " +
@@ -144,14 +144,14 @@ func TestRound(t *testing.T) {
 				"FROM person AS p JOIN person AS m " +
 				"ON p.manager_id = m.id WHERE p.name = 'Fred'",
 			"ParsedExpr[BypassPart[SELECT p.* AS &Person.*, m.* AS &Manager.* " +
-				"FROM person AS p JOIN person AS m ON p.manager_id = m.id WHERE p.name =] " +
-				"BypassPart[ 'Fred']]",
+				"FROM person AS p JOIN person AS m ON p.manager_id = m.id WHERE p.name = ] " +
+				"BypassPart['Fred']]",
 		},
 		{
 			"SELECT person.*, address.district FROM person JOIN address " +
 				"ON person.address_id = address.id WHERE person.name = 'Fred'",
-			"ParsedExpr[BypassPart[SELECT person.*, address.district FROM person JOIN address ON person.address_id = address.id WHERE person.name =] " +
-				"BypassPart[ 'Fred']]",
+			"ParsedExpr[BypassPart[SELECT person.*, address.district FROM person JOIN address ON person.address_id = address.id WHERE person.name = ] " +
+				"BypassPart['Fred']]",
 		},
 		{
 			"SELECT p FROM person WHERE p.name = $Person.name",
@@ -224,14 +224,20 @@ func TestUnfinishedStringLiteral(t *testing.T) {
 	sql := "select foo from t where x = 'dddd"
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("parser error: missing right quote in string literal"), err)
+	targetErr := parse.MissingRightQuoteErr
+	if !errors.Is(err, targetErr) {
+		t.Errorf("wrong error: got message: %v\n expected: %v", err, targetErr)
+	}
 }
 
 func TestUnfinishedStringLiteralV2(t *testing.T) {
 	sql := "select foo from t where x = \"dddd"
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("parser error: missing right quote in string literal"), err)
+	targetErr := parse.MissingRightQuoteErr
+	if !errors.Is(err, targetErr) {
+		t.Errorf("wrong error: got message: %v\n expected: %v", err, targetErr)
+	}
 }
 
 // We require to end the string literal with the proper quote depending
@@ -240,7 +246,10 @@ func TestUnfinishedStringLiteralV3(t *testing.T) {
 	sql := "select foo from t where x = \"dddd'"
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("parser error: missing right quote in string literal"), err)
+	targetErr := parse.MissingRightQuoteErr
+	if !errors.Is(err, targetErr) {
+		t.Errorf("wrong error: got message: %v\n expected: %v", err, targetErr)
+	}
 }
 
 // Properly parsing empty string literal
@@ -256,7 +265,10 @@ func TestBadEscaped(t *testing.T) {
 	sql := "select foo from t where x = 'O'Donnell'"
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("parser error: missing right quote in string literal"), err)
+	targetErr := parse.MissingRightQuoteErr
+	if !errors.Is(err, targetErr) {
+		t.Errorf("wrong error: got message: %v\n expected: %v", err, targetErr)
+	}
 }
 
 // Detect bad input DSL pieces
@@ -264,7 +276,10 @@ func TestBadFormatInput(t *testing.T) {
 	sql := "select foo from t where x = $.id"
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("parser error: malformed input type"), err)
+	targetErr := parse.MalformedInputTypeErr
+	if !errors.Is(err, targetErr) {
+		t.Errorf("wrong error: got message: %v\n expected: %v", err, targetErr)
+	}
 }
 
 // Detect bad input DSL pieces
@@ -272,7 +287,10 @@ func TestBadFormatInputV2(t *testing.T) {
 	sql := "select foo from t where x = $Address."
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("parser error: malformed input type"), err)
+	targetErr := parse.MalformedInputTypeErr
+	if !errors.Is(err, targetErr) {
+		t.Errorf("wrong error: got message: %v\n expected: %v", err, targetErr)
+	}
 }
 
 // Detect bad input DSL pieces
@@ -280,7 +298,10 @@ func TestBadFormatInputV3(t *testing.T) {
 	sql := "select foo from t where x = $"
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("parser error: malformed input type"), err)
+	targetErr := parse.MalformedInputTypeErr
+	if !errors.Is(err, targetErr) {
+		t.Errorf("wrong error: got message: %v\n expected: %v", err, targetErr)
+	}
 }
 
 // Detect bad input DSL pieces
@@ -288,7 +309,10 @@ func TestBadFormatInputV4(t *testing.T) {
 	sql := "select foo from t where x = $$Address"
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("parser error: malformed input type"), err)
+	targetErr := parse.MalformedInputTypeErr
+	if !errors.Is(err, targetErr) {
+		t.Errorf("wrong error: got message: %v\n expected: %v", err, targetErr)
+	}
 }
 
 // Detect bad input DSL pieces
@@ -296,7 +320,10 @@ func TestBadFormatInputV5(t *testing.T) {
 	sql := "select foo from t where x = $```"
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("parser error: malformed input type"), err)
+	targetErr := parse.MalformedInputTypeErr
+	if !errors.Is(err, targetErr) {
+		t.Errorf("wrong error: got message: %v\n expected: %v", err, targetErr)
+	}
 }
 
 // Detect bad input DSL pieces
@@ -304,7 +331,10 @@ func TestBadFormatInputV6(t *testing.T) {
 	sql := "select foo from t where x = $.."
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("parser error: malformed input type"), err)
+	targetErr := parse.MalformedInputTypeErr
+	if !errors.Is(err, targetErr) {
+		t.Errorf("wrong error: got message: %v\n expected: %v", err, targetErr)
+	}
 }
 
 // Detect bad input DSL pieces
@@ -312,5 +342,8 @@ func TestBadFormatInputV7(t *testing.T) {
 	sql := "select foo from t where x = $."
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("parser error: malformed input type"), err)
+	targetErr := parse.MalformedInputTypeErr
+	if !errors.Is(err, targetErr) {
+		t.Errorf("wrong error: got message: %v\n expected: %v", err, targetErr)
+	}
 }
