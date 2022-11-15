@@ -86,12 +86,16 @@ func TestReflectSimpleTypes(t *testing.T) {
 
 	{
 		info, err := GetTypeInfo(i)
-		assert.NotEqual(t, info, Info{})
+		assert.Equal(t, info.Type.Name(), "int")
+		assert.Equal(t, len(info.TagToField), 0)
+		assert.Equal(t, len(info.FieldToTag), 0)
 		assert.Nil(t, err)
 	}
 	{
 		info, err := GetTypeInfo(s)
-		assert.NotEqual(t, info, Info{})
+		assert.Equal(t, info.Type.Name(), "string")
+		assert.Equal(t, len(info.TagToField), 0)
+		assert.Equal(t, len(info.FieldToTag), 0)
 		assert.Nil(t, err)
 	}
 	{
