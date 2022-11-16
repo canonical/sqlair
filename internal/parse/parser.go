@@ -219,17 +219,14 @@ func isNameByte(c byte) bool {
 // skipName returns false if the parser is not on a name. Otherwise it advances
 // the parser until it is on the first non name byte and returns true.
 func (p *Parser) skipName() bool {
-	if !isNameByte(p.input[p.pos]) {
+	if p.pos >= len(p.input) {
 		return false
 	}
-	var i int
-	for i = p.pos; i < len(p.input); i++ {
-		if !isNameByte(p.input[i]) {
-			break
-		}
+	start := p.pos
+	for p.pos < len(p.input) && isNameByte(p.input[p.pos]) {
+		p.pos++
 	}
-	p.pos = i
-	return true
+	return p.pos > start
 }
 
 // These functions attempt to parse some construct, they return a bool and that
