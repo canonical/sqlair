@@ -1,7 +1,7 @@
 package parse_test
 
 import (
-	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/canonical/sqlair/internal/parse"
@@ -224,20 +224,14 @@ func TestUnfinishedStringLiteral(t *testing.T) {
 	sql := "select foo from t where x = 'dddd"
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	targetErr := parse.MissingRightQuoteErr
-	if !errors.Is(err, targetErr) {
-		t.Errorf("wrong error: got message: %v\n expected: %v", err, targetErr)
-	}
+	assert.Equal(t, fmt.Errorf("cannot parse expression: missing right quote in string literal"), err)
 }
 
 func TestUnfinishedStringLiteralV2(t *testing.T) {
 	sql := "select foo from t where x = \"dddd"
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	targetErr := parse.MissingRightQuoteErr
-	if !errors.Is(err, targetErr) {
-		t.Errorf("wrong error: got message: %v\n expected: %v", err, targetErr)
-	}
+	assert.Equal(t, fmt.Errorf("cannot parse expression: missing right quote in string literal"), err)
 }
 
 // We require to end the string literal with the proper quote depending
@@ -246,10 +240,7 @@ func TestUnfinishedStringLiteralV3(t *testing.T) {
 	sql := "select foo from t where x = \"dddd'"
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	targetErr := parse.MissingRightQuoteErr
-	if !errors.Is(err, targetErr) {
-		t.Errorf("wrong error: got message: %v\n expected: %v", err, targetErr)
-	}
+	assert.Equal(t, fmt.Errorf("cannot parse expression: missing right quote in string literal"), err)
 }
 
 // Properly parsing empty string literal
@@ -265,10 +256,7 @@ func TestBadEscaped(t *testing.T) {
 	sql := "select foo from t where x = 'O'Donnell'"
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	targetErr := parse.MissingRightQuoteErr
-	if !errors.Is(err, targetErr) {
-		t.Errorf("wrong error: got message: %v\n expected: %v", err, targetErr)
-	}
+	assert.Equal(t, fmt.Errorf("cannot parse expression: missing right quote in string literal"), err)
 }
 
 // Detect bad input DSL pieces
@@ -276,10 +264,7 @@ func TestBadFormatInput(t *testing.T) {
 	sql := "select foo from t where x = $.id"
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	targetErr := parse.MalformedInputTypeErr
-	if !errors.Is(err, targetErr) {
-		t.Errorf("wrong error: got message: %v\n expected: %v", err, targetErr)
-	}
+	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
 }
 
 // Detect bad input DSL pieces
@@ -287,10 +272,7 @@ func TestBadFormatInputV2(t *testing.T) {
 	sql := "select foo from t where x = $Address."
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	targetErr := parse.MalformedInputTypeErr
-	if !errors.Is(err, targetErr) {
-		t.Errorf("wrong error: got message: %v\n expected: %v", err, targetErr)
-	}
+	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
 }
 
 // Detect bad input DSL pieces
@@ -298,10 +280,7 @@ func TestBadFormatInputV3(t *testing.T) {
 	sql := "select foo from t where x = $"
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	targetErr := parse.MalformedInputTypeErr
-	if !errors.Is(err, targetErr) {
-		t.Errorf("wrong error: got message: %v\n expected: %v", err, targetErr)
-	}
+	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
 }
 
 // Detect bad input DSL pieces
@@ -309,10 +288,7 @@ func TestBadFormatInputV4(t *testing.T) {
 	sql := "select foo from t where x = $$Address"
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	targetErr := parse.MalformedInputTypeErr
-	if !errors.Is(err, targetErr) {
-		t.Errorf("wrong error: got message: %v\n expected: %v", err, targetErr)
-	}
+	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
 }
 
 // Detect bad input DSL pieces
@@ -320,10 +296,7 @@ func TestBadFormatInputV5(t *testing.T) {
 	sql := "select foo from t where x = $```"
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	targetErr := parse.MalformedInputTypeErr
-	if !errors.Is(err, targetErr) {
-		t.Errorf("wrong error: got message: %v\n expected: %v", err, targetErr)
-	}
+	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
 }
 
 // Detect bad input DSL pieces
@@ -331,10 +304,7 @@ func TestBadFormatInputV6(t *testing.T) {
 	sql := "select foo from t where x = $.."
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	targetErr := parse.MalformedInputTypeErr
-	if !errors.Is(err, targetErr) {
-		t.Errorf("wrong error: got message: %v\n expected: %v", err, targetErr)
-	}
+	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
 }
 
 // Detect bad input DSL pieces
@@ -342,8 +312,5 @@ func TestBadFormatInputV7(t *testing.T) {
 	sql := "select foo from t where x = $."
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	targetErr := parse.MalformedInputTypeErr
-	if !errors.Is(err, targetErr) {
-		t.Errorf("wrong error: got message: %v\n expected: %v", err, targetErr)
-	}
+	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
 }

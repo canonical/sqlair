@@ -2,14 +2,8 @@ package parse
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"strings"
-)
-
-var (
-	MissingRightQuoteErr  = errors.New("missing right quote in string literal")
-	MalformedInputTypeErr = errors.New("malformed input type")
 )
 
 type Parser struct {
@@ -125,19 +119,24 @@ func (p *Parser) add(part queryPart) {
 
 // Parse takes an input string and parses the input and output parts. It returns
 // a pointer to a ParsedExpr.
-func (p *Parser) Parse(input string) (*ParsedExpr, error) {
+func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("cannot parse expression: %s", err)
+		}
+	}()
 	p.init(input)
 
 	for {
 		p.partStart = p.pos
 
 		if ip, ok, err := p.parseInputExpression(); err != nil {
-			return nil, fmt.Errorf("cannot parse expression: %w", err)
+			return nil, err
 		} else if ok {
 			p.add(ip)
 
 		} else if sp, ok, err := p.parseStringLiteral(); err != nil {
-			return nil, fmt.Errorf("cannot parse expression: %w", err)
+			return nil, err
 		} else if ok {
 			p.add(sp)
 
@@ -287,7 +286,7 @@ func (p *Parser) parseInputExpression() (*InputPart, bool, error) {
 	if p.skipByte('$') {
 		fn, ok = p.parseFullName(typeId)
 		if !ok {
-			err = MalformedInputTypeErr
+			err = fmt.Errorf("malformed input type")
 		}
 		p.skipSpaces()
 		return &InputPart{fn}, true, err
@@ -309,7 +308,7 @@ func (p *Parser) parseStringLiteral() (*BypassPart, bool, error) {
 			p.skipByte(c)
 			if !p.skipByteFind(c) {
 				// Reached end of string and didn't find the closing quote
-				err = MissingRightQuoteErr
+				err = fmt.Errorf("missing right quote in string literal")
 			}
 			return &BypassPart{p.input[cp.pos:p.pos]}, true, err
 		}
