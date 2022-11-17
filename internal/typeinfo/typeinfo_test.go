@@ -40,11 +40,7 @@ func TestReflectM(t *testing.T) {
 
 	info, err := GetTypeInfo(mymap)
 	assert.Nil(t, err)
-
-	assert.Len(t, info.TagToField, 2)
-	foo, ok := info.TagToField["foo"]
-	assert.True(t, ok)
-	assert.Equal(t, "foo", foo.Name)
+	assert.Equal(t, "M", info.Type.Name())
 }
 
 func TestReflectStruct(t *testing.T) {

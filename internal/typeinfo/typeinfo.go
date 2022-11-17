@@ -47,12 +47,9 @@ func GetTypeInfo(value any) (Info, error) {
 		return Info{}, err
 	}
 
-	// Do not cache for "M" types
-	if !(info.Type.Kind() == reflect.Map && info.Type.Name() == "M") {
-		cacheMutex.Lock()
-		cache[tname] = info
-		cacheMutex.Unlock()
-	}
+	cacheMutex.Lock()
+	cache[tname] = info
+	cacheMutex.Unlock()
 
 	return info, nil
 }
@@ -66,10 +63,8 @@ func generate(value reflect.Value) (Info, error) {
 	// Reflection information is generated for structs, typeinfo.M
 	// and plain types only.
 	if value.Kind() != reflect.Struct {
-		if value.Kind() == reflect.Map {
-			if value.Type().Name() != "M" {
-				return Info{}, fmt.Errorf("Can't reflect map type")
-			}
+		if value.Kind() == reflect.Map && value.Type().Name() != "M" {
+			return Info{}, fmt.Errorf("Can't reflect map type")
 		} else {
 			return Info{Type: value.Type()}, nil
 		}
@@ -78,44 +73,32 @@ func generate(value reflect.Value) (Info, error) {
 	info := Info{
 		TagToField: make(map[string]Field),
 		FieldToTag: make(map[string]string),
-		Type:         value.Type(),
+		Type:       value.Type(),
 	}
 
-	switch value.Kind() {
-	case reflect.Map:
-		for _, key := range value.MapKeys() {
-			info.TagToField[key.String()] = Field{
-				Name:      key.String(),
-				OmitEmpty: false,
-				Type:      reflect.TypeOf(value.MapIndex(key).Interface()),
-			}
+	// If we reach this point, this is a reflect.Struct:
+	typ := value.Type()
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		// Fields without a "db" tag are outside of SQLAir's remit.
+		tag := field.Tag.Get("db")
+		if tag == "" {
+			continue
 		}
-
-		return info, nil
-	case reflect.Struct:
-		typ := value.Type()
-		for i := 0; i < typ.NumField(); i++ {
-			field := typ.Field(i)
-			// Fields without a "db" tag are outside of SQLAir's remit.
-			tag := field.Tag.Get("db")
-			if tag == "" {
-				continue
-			}
-			tag, omitEmpty, err := parseTag(tag)
-			if err != nil {
-				return Info{}, err
-			}
-			info.TagToField[tag] = Field{
-				Name:      field.Name,
-				Index:     i,
-				OmitEmpty: omitEmpty,
-				Type:      reflect.TypeOf(value.Field(i).Interface()),
-			}
-			info.FieldToTag[field.Name] = tag
+		tag, omitEmpty, err := parseTag(tag)
+		if err != nil {
+			return Info{}, err
 		}
-
-		return info, nil
+		info.TagToField[tag] = Field{
+			Name:      field.Name,
+			Index:     i,
+			OmitEmpty: omitEmpty,
+			Type:      reflect.TypeOf(value.Field(i).Interface()),
+		}
+		info.FieldToTag[field.Name] = tag
 	}
+
+	return info, nil
 
 	return info, nil
 }
