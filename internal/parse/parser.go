@@ -290,7 +290,6 @@ func (p *Parser) parseFullName(idc idClass) (FullName, bool) {
 // parseInputExpression parses an input expression of the form $Type.name.
 func (p *Parser) parseInputExpression() (*InputPart, bool, error) {
 	cp := p.save()
-	var err error
 	var fn FullName
 	var ok bool
 
@@ -311,8 +310,6 @@ func (p *Parser) parseInputExpression() (*InputPart, bool, error) {
 func (p *Parser) parseStringLiteral() (*BypassPart, bool, error) {
 	cp := p.save()
 
-	var err error
-
 	if p.pos < len(p.input) {
 		c := p.input[p.pos]
 		if c == '"' || c == '\'' {
@@ -326,5 +323,5 @@ func (p *Parser) parseStringLiteral() (*BypassPart, bool, error) {
 	}
 
 	cp.restore()
-	return nil, false, err
+	return nil, false, nil
 }
