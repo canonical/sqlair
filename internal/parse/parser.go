@@ -147,7 +147,7 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 			p.pos++
 		}
 	}
-	// Add any remaining uparsed string input to the parser
+	// Add any remaining unparsed string input to the parser.
 
 	p.add(nil)
 	return &ParsedExpr{p.parts}, nil
@@ -274,8 +274,7 @@ func (p *Parser) parseFullName(idc idClass) (FullName, bool) {
 	return fn, false
 }
 
-// parseInputExpression parses an SDL input go-defined type to be used as a
-// query argument.
+// parseInputExpression parses an input expression of the form $Type.name.
 func (p *Parser) parseInputExpression() (*InputPart, bool, error) {
 	cp := p.save()
 	var err error
@@ -286,17 +285,16 @@ func (p *Parser) parseInputExpression() (*InputPart, bool, error) {
 	if p.skipByte('$') {
 		fn, ok = p.parseFullName(typeId)
 		if !ok {
-			err = fmt.Errorf("malformed input type")
+			return nil, true, fmt.Errorf("malformed input type")
 		}
 		p.skipSpaces()
-		return &InputPart{fn}, true, err
+		return &InputPart{fn}, true, nil
 	}
 	cp.restore()
 	return nil, false, nil
 }
 
-// parseInputExpression parses an SDL input go-defined type to be used as a
-// query argument.
+// parseStringLiteral parses quoted expressions and ignores their content.
 func (p *Parser) parseStringLiteral() (*BypassPart, bool, error) {
 	cp := p.save()
 
@@ -308,9 +306,9 @@ func (p *Parser) parseStringLiteral() (*BypassPart, bool, error) {
 			p.skipByte(c)
 			if !p.skipByteFind(c) {
 				// Reached end of string and didn't find the closing quote
-				err = fmt.Errorf("missing right quote in string literal")
+				return nil, true, fmt.Errorf("missing right quote in string literal")
 			}
-			return &BypassPart{p.input[cp.pos:p.pos]}, true, err
+			return &BypassPart{p.input[cp.pos:p.pos]}, true, nil
 		}
 	}
 
