@@ -228,10 +228,23 @@ func (p *Parser) skipName() bool {
 	return p.pos > start
 }
 
-// These functions attempt to parse some construct, they return a bool and that
-// construct, if they n't parse they return false, restore the parser and leave
-// the default value in  other return type
+// Functions with the prefix parse attempt to parse some construct. They return
+// the construct, and an error and/or a bool that indicates if the the construct
+// was sucessfully parsed.
+//
+// An error is only returned if the construct being parsed is supposed to be an
+// IO expression. If it is possibly something else then a bool containing false
+// is returned.
+// Return cases:
+//  - bool == true, err == nil
+//		The construct was sucessfully parsed
+//  - bool == true, err != nil
+//		The construct was recognised but was not correctly formatted
+//  - bool == false
+//		The constrct was not the one we are looking for
 
+// parseIdentifier parses either a name made up only of nameBytes or an
+// asterisk.
 func (p *Parser) parseIdentifier() (string, bool) {
 	if p.pos >= len(p.input) {
 		return "", false
