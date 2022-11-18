@@ -148,7 +148,6 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 		}
 	}
 	// Add any remaining unparsed string input to the parser.
-
 	p.add(nil)
 	return &ParsedExpr{p.parts}, nil
 }
