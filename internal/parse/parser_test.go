@@ -264,7 +264,7 @@ func TestBadFormatInput(t *testing.T) {
 	sql := "select foo from t where x = $.id"
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
+	assert.Equal(t, fmt.Errorf("cannot parse expression: expected a full name"), err)
 }
 
 // Detect bad input DSL pieces
@@ -272,7 +272,7 @@ func TestBadFormatInputV2(t *testing.T) {
 	sql := "select foo from t where x = $Address."
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
+	assert.Equal(t, fmt.Errorf("cannot parse expression: expected a full name"), err)
 }
 
 // Detect bad input DSL pieces
@@ -280,7 +280,7 @@ func TestBadFormatInputV3(t *testing.T) {
 	sql := "select foo from t where x = $"
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
+	assert.Equal(t, fmt.Errorf("cannot parse expression: expected a full name"), err)
 }
 
 // Detect bad input DSL pieces
@@ -288,7 +288,7 @@ func TestBadFormatInputV4(t *testing.T) {
 	sql := "select foo from t where x = $$Address"
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
+	assert.Equal(t, fmt.Errorf("cannot parse expression: expected a full name"), err)
 }
 
 // Detect bad input DSL pieces
@@ -296,7 +296,7 @@ func TestBadFormatInputV5(t *testing.T) {
 	sql := "select foo from t where x = $```"
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
+	assert.Equal(t, fmt.Errorf("cannot parse expression: expected a full name"), err)
 }
 
 // Detect bad input DSL pieces
@@ -304,7 +304,7 @@ func TestBadFormatInputV6(t *testing.T) {
 	sql := "select foo from t where x = $.."
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
+	assert.Equal(t, fmt.Errorf("cannot parse expression: expected a full name"), err)
 }
 
 // Detect bad input DSL pieces
@@ -312,5 +312,5 @@ func TestBadFormatInputV7(t *testing.T) {
 	sql := "select foo from t where x = $."
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
+	assert.Equal(t, fmt.Errorf("cannot parse expression: expected a full name"), err)
 }

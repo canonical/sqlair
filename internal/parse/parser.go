@@ -130,15 +130,15 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 	for {
 		p.partStart = p.pos
 
-		if ip, ok, err := p.parseInputExpression(); err != nil {
-			return nil, err
-		} else if ok {
+		if ip, err := p.parseInputExpression(); err == nil {
 			p.add(ip)
-
-		} else if sp, ok, err := p.parseStringLiteral(); err != nil {
+		} else if err != errNoInputExpr {
 			return nil, err
-		} else if ok {
+
+		} else if sp, err := p.parseStringLiteral(); err == nil {
 			p.add(sp)
+		} else if err != errNoLiteral {
+			return nil, err
 
 		} else if p.pos == len(p.input) {
 			break
@@ -240,37 +240,40 @@ func (p *Parser) skipName() bool {
 //  - bool == true, err != nil
 //		The construct was recognised but was not correctly formatted
 //  - bool == false
-//		The constrct was not the one we are looking for
+//		The construct was not the one we are looking for
+
+var errNoIdentifier = fmt.Errorf("expected an identifier")
 
 // parseIdentifier parses either a name made up only of nameBytes or an
 // asterisk.
-func (p *Parser) parseIdentifier() (string, bool) {
-	if p.pos >= len(p.input) {
-		return "", false
-	}
+func (p *Parser) parseIdentifier() (string, error) {
 	if p.skipByte('*') {
-		return "*", true
+		return "*", nil
 	}
 
 	idStart := p.pos
 	if p.skipName() {
-		return p.input[idStart:p.pos], true
+		return p.input[idStart:p.pos], nil
 	}
-	return "", false
+	return "", errNoIdentifier
 }
+
+var errNoFullName = fmt.Errorf("expected a full name")
 
 // parseFullName parses a column name or Go field name, optionally dot-prefixed by
 // its table or type name respectively.
-func (p *Parser) parseFullName(idc idClass) (FullName, bool) {
+func (p *Parser) parseFullName(idc idClass) (FullName, error) {
 	cp := p.save()
 	var fn FullName
 	p.skipSpaces()
-	if id, ok := p.parseIdentifier(); ok {
+	if id, err := p.parseIdentifier(); err == nil {
 		fn.Prefix = id
 		if p.skipByte('.') {
-			if id, ok := p.parseIdentifier(); ok {
+			if id, err := p.parseIdentifier(); err == nil {
 				fn.Name = id
-				return fn, true
+				return fn, nil
+			} else if err != errNoIdentifier {
+				return fn, err
 			}
 		} else {
 			// A column name specified without a table prefix is a name not a
@@ -279,34 +282,40 @@ func (p *Parser) parseFullName(idc idClass) (FullName, bool) {
 				fn.Name = fn.Prefix
 				fn.Prefix = ""
 			}
-			return fn, true
+			return fn, nil
 		}
+	} else if err != errNoIdentifier {
+		return fn, err
 	}
 	cp.restore()
-	return fn, false
+	return fn, errNoFullName
 }
 
+var errNoInputExpr = fmt.Errorf("expected an input expression")
+
 // parseInputExpression parses an input expression of the form $Type.name.
-func (p *Parser) parseInputExpression() (*InputPart, bool, error) {
+func (p *Parser) parseInputExpression() (*InputPart, error) {
 	cp := p.save()
 	var fn FullName
-	var ok bool
+	var err error
 
 	p.skipSpaces()
 	if p.skipByte('$') {
-		fn, ok = p.parseFullName(typeId)
-		if !ok {
-			return nil, true, fmt.Errorf("malformed input type")
+		fn, err = p.parseFullName(typeId)
+		if err != nil {
+			return nil, err
 		}
 		p.skipSpaces()
-		return &InputPart{fn}, true, nil
+		return &InputPart{fn}, nil
 	}
 	cp.restore()
-	return nil, false, nil
+	return nil, errNoInputExpr
 }
 
+var errNoLiteral = fmt.Errorf("expected a literal string")
+
 // parseStringLiteral parses quoted expressions and ignores their content.
-func (p *Parser) parseStringLiteral() (*BypassPart, bool, error) {
+func (p *Parser) parseStringLiteral() (*BypassPart, error) {
 	cp := p.save()
 
 	if p.pos < len(p.input) {
@@ -316,12 +325,12 @@ func (p *Parser) parseStringLiteral() (*BypassPart, bool, error) {
 			// TODO Handle escaping
 			if !p.skipByteFind(c) {
 				// Reached end of string and didn't find the closing quote
-				return nil, true, fmt.Errorf("missing right quote in string literal")
+				return nil, fmt.Errorf("missing right quote in string literal")
 			}
-			return &BypassPart{p.input[cp.pos:p.pos]}, true, nil
+			return &BypassPart{p.input[cp.pos:p.pos]}, nil
 		}
 	}
 
 	cp.restore()
-	return nil, false, nil
+	return nil, errNoLiteral
 }
