@@ -314,6 +314,7 @@ func (p *Parser) parseStringLiteral() (*BypassPart, bool, error) {
 		c := p.input[p.pos]
 		if c == '"' || c == '\'' {
 			p.skipByte(c)
+			// TODO Handle escaping
 			if !p.skipByteFind(c) {
 				// Reached end of string and didn't find the closing quote
 				return nil, true, fmt.Errorf("missing right quote in string literal")
