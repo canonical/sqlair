@@ -130,15 +130,15 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 	for {
 		p.partStart = p.pos
 
-		if ip, err := p.parseInputExpression(); err == nil {
+		if ip, ok, err := p.parseInputExpression(); err != nil {
+			return nil, err
+		} else if ok {
 			p.add(ip)
-		} else if err != errNoInputExpr {
-			return nil, err
 
-		} else if sp, err := p.parseStringLiteral(); err == nil {
-			p.add(sp)
-		} else if err != errNoLiteral {
+		} else if sp, ok, err := p.parseStringLiteral(); err != nil {
 			return nil, err
+		} else if ok {
+			p.add(sp)
 
 		} else if p.pos == len(p.input) {
 			break
@@ -228,41 +228,43 @@ func (p *Parser) skipName() bool {
 }
 
 // Functions with the prefix parse attempt to parse some construct. They return
-// the construct, and an error. If the err is nil the construct was sucessfully
-// parsed.
-
-var errNoIdentifier = fmt.Errorf("expected an identifier")
+// the construct, and an error and/or a bool that indicates if the the construct
+// was successfully parsed.
+//
+// Return cases:
+//  - bool == true, err == nil
+//		The construct was sucessfully parsed
+//  - bool == false, err != nil
+//		The construct was recognised but was not correctly formatted
+//  - bool == false, err == nil
+//		The construct was not the one we are looking for
 
 // parseIdentifier parses either a name made up only of nameBytes or an
 // asterisk.
-func (p *Parser) parseIdentifier() (string, error) {
+func (p *Parser) parseIdentifier() (string, bool) {
 	if p.skipByte('*') {
-		return "*", nil
+		return "*", true
 	}
 
 	idStart := p.pos
 	if p.skipName() {
-		return p.input[idStart:p.pos], nil
+		return p.input[idStart:p.pos], true
 	}
-	return "", errNoIdentifier
+	return "", false
 }
-
-var errNoFullName = fmt.Errorf("expected a full name")
 
 // parseFullName parses a column name or Go field name, optionally dot-prefixed by
 // its table or type name respectively.
-func (p *Parser) parseFullName(idc idClass) (FullName, error) {
+func (p *Parser) parseFullName(idc idClass) (FullName, bool) {
 	cp := p.save()
 	var fn FullName
 	p.skipSpaces()
-	if id, err := p.parseIdentifier(); err == nil {
+	if id, ok := p.parseIdentifier(); ok {
 		fn.Prefix = id
 		if p.skipByte('.') {
-			if id, err := p.parseIdentifier(); err == nil {
+			if id, ok := p.parseIdentifier(); ok {
 				fn.Name = id
-				return fn, nil
-			} else if err != errNoIdentifier {
-				return fn, err
+				return fn, true
 			}
 		} else {
 			// A column name specified without a table prefix is a name not a
@@ -271,40 +273,34 @@ func (p *Parser) parseFullName(idc idClass) (FullName, error) {
 				fn.Name = fn.Prefix
 				fn.Prefix = ""
 			}
-			return fn, nil
+			return fn, true
 		}
-	} else if err != errNoIdentifier {
-		return fn, err
 	}
 	cp.restore()
-	return fn, errNoFullName
+	return fn, false
 }
 
-var errNoInputExpr = fmt.Errorf("expected an input expression")
-
 // parseInputExpression parses an input expression of the form $Type.name.
-func (p *Parser) parseInputExpression() (*InputPart, error) {
+func (p *Parser) parseInputExpression() (*InputPart, bool, error) {
 	cp := p.save()
 	var fn FullName
-	var err error
+	var ok bool
 
 	p.skipSpaces()
 	if p.skipByte('$') {
-		fn, err = p.parseFullName(typeId)
-		if err != nil {
-			return nil, err
+		fn, ok = p.parseFullName(typeId)
+		if !ok {
+			return nil, false, fmt.Errorf("malformed input type")
 		}
 		p.skipSpaces()
-		return &InputPart{fn}, nil
+		return &InputPart{fn}, true, nil
 	}
 	cp.restore()
-	return nil, errNoInputExpr
+	return nil, false, nil
 }
 
-var errNoLiteral = fmt.Errorf("expected a literal string")
-
 // parseStringLiteral parses quoted expressions and ignores their content.
-func (p *Parser) parseStringLiteral() (*BypassPart, error) {
+func (p *Parser) parseStringLiteral() (*BypassPart, bool, error) {
 	cp := p.save()
 
 	if p.pos < len(p.input) {
@@ -314,12 +310,12 @@ func (p *Parser) parseStringLiteral() (*BypassPart, error) {
 			// TODO Handle escaping
 			if !p.skipByteFind(c) {
 				// Reached end of string and didn't find the closing quote
-				return nil, fmt.Errorf("missing right quote in string literal")
+				return nil, false, fmt.Errorf("missing right quote in string literal")
 			}
-			return &BypassPart{p.input[cp.pos:p.pos]}, nil
+			return &BypassPart{p.input[cp.pos:p.pos]}, true, nil
 		}
 	}
 
 	cp.restore()
-	return nil, errNoLiteral
+	return nil, false, nil
 }

@@ -22,11 +22,11 @@ func TestInputPart(t *testing.T) {
 func TestOutputPart(t *testing.T) {
 	// Fully specified part
 	p := parse.OutputPart{
-		[]parse.FullName{{
+		Source: []parse.FullName{{
 			Prefix: "mytable",
 			Name:   "mycolumn",
 		}},
-		[]parse.FullName{{
+		Target: []parse.FullName{{
 			Prefix: "mytype",
 			Name:   "mytag",
 		}},
