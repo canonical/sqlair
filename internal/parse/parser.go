@@ -228,19 +228,8 @@ func (p *Parser) skipName() bool {
 }
 
 // Functions with the prefix parse attempt to parse some construct. They return
-// the construct, and an error and/or a bool that indicates if the the construct
-// was sucessfully parsed.
-//
-// An error is only returned if the construct being parsed is supposed to be an
-// IO expression. If it is possibly something else then a bool containing false
-// is returned.
-// Return cases:
-//  - bool == true, err == nil
-//		The construct was sucessfully parsed
-//  - bool == true, err != nil
-//		The construct was recognised but was not correctly formatted
-//  - bool == false
-//		The construct was not the one we are looking for
+// the construct, and an error. If the err is nil the construct was sucessfully
+// parsed.
 
 var errNoIdentifier = fmt.Errorf("expected an identifier")
 
