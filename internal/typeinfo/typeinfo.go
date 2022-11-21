@@ -8,7 +8,7 @@ import (
 )
 
 var cacheMutex sync.RWMutex
-var cache = make(map[string]Info)
+var cache = make(map[reflect.Type]Info)
 
 // Reflect will return the Info of a given type,
 // generating and caching as required.
@@ -20,10 +20,8 @@ func GetTypeInfo(value any) (Info, error) {
 	v := reflect.ValueOf(value)
 	v = reflect.Indirect(v)
 
-	tname := v.Type().Name()
-
 	cacheMutex.RLock()
-	info, found := cache[tname]
+	info, found := cache[v.Type()]
 	cacheMutex.RUnlock()
 	if found {
 		return info, nil
@@ -35,7 +33,7 @@ func GetTypeInfo(value any) (Info, error) {
 	}
 
 	cacheMutex.Lock()
-	cache[tname] = info
+	cache[v.Type()] = info
 	cacheMutex.Unlock()
 
 	return info, nil
