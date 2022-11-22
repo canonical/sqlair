@@ -210,7 +210,7 @@ func (p *Parser) skipString(s string) bool {
 }
 
 // isNameByte returns true if the byte passed as parameter is considered to be
-// one that can be part of a name. It returns false otherwise
+// one that can be part of a name. It returns false otherwise.
 func isNameByte(c byte) bool {
 	return 'A' <= c && c <= 'Z' || 'a' <= c && c <= 'z' ||
 		'0' <= c && c <= '9' || c == '_'
@@ -269,7 +269,7 @@ func (p *Parser) parseFullName(idc idClass) (FullName, bool) {
 			}
 		} else {
 			// A column name specified without a table prefix is a name not a
-			// prefix
+			// prefix.
 			if idc == columnId {
 				fn.Name = fn.Prefix
 				fn.Prefix = ""
@@ -308,7 +308,7 @@ func (p *Parser) parseStringLiteral() (*BypassPart, bool, error) {
 			p.skipByte(c)
 			// TODO Handle escaping
 			if !p.skipByteFind(c) {
-				// Reached end of string and didn't find the closing quote
+				// Reached end of string and didn't find the closing quote.
 				return nil, false, fmt.Errorf("missing right quote in string literal")
 			}
 			return &BypassPart{p.input[cp.pos:p.pos]}, true, nil
