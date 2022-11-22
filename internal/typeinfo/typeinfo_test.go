@@ -72,22 +72,22 @@ func TestReflectNonStructType(t *testing.T) {
 
 	{
 		info, err := GetTypeInfo(i)
-		assert.Equal(t, fmt.Errorf("cannot reflect type"), err)
+		assert.Equal(t, fmt.Errorf("can only reflect struct type"), err)
 		assert.Equal(t, &Info{}, info)
 	}
 	{
 		info, err := GetTypeInfo(s)
-		assert.Equal(t, fmt.Errorf("cannot reflect type"), err)
+		assert.Equal(t, fmt.Errorf("can only reflect struct type"), err)
 		assert.Equal(t, &Info{}, info)
 	}
 	{
 		info, err := GetTypeInfo(mymap)
-		assert.Equal(t, fmt.Errorf("cannot reflect type"), err)
+		assert.Equal(t, fmt.Errorf("can only reflect struct type"), err)
 		assert.Equal(t, info, &Info{})
 	}
 	{
 		info, err := GetTypeInfo(myM)
-		assert.Equal(t, fmt.Errorf("cannot reflect type"), err)
+		assert.Equal(t, fmt.Errorf("can only reflect struct type"), err)
 		assert.Equal(t, &Info{}, info)
 	}
 }

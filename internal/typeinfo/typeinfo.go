@@ -43,12 +43,12 @@ func GetTypeInfo(value any) (*Info, error) {
 // generate produces and returns reflection information for the input
 // reflect.Value that is specifically required for SQLAir operation.
 func generate(value reflect.Value) (*Info, error) {
-	// Dereference the pointer if it is one.
+	// Dereference the value if it is a pointer.
 	value = reflect.Indirect(value)
 
-	// Reflection information is only generated for structs
+	// Reflection information is only generated for structs.
 	if value.Kind() != reflect.Struct {
-		return &Info{}, fmt.Errorf("cannot reflect type")
+		return &Info{}, fmt.Errorf("can only reflect struct type")
 	}
 
 	info := Info{

@@ -11,7 +11,7 @@ type Field struct {
 	// Name is the name of the struct field.
 	Name string
 
-	// Index of this field in the structure
+	// Index of this field in the structure.
 	Index int
 
 	// OmitEmpty is true when "omitempty" is
