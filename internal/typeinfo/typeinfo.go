@@ -14,7 +14,7 @@ var cache = make(map[reflect.Type]*Info)
 // generating and caching as required.
 func GetTypeInfo(value any) (*Info, error) {
 	if value == (any)(nil) {
-		return &Info{}, fmt.Errorf("Can not reflect nil value")
+		return &Info{}, fmt.Errorf("cannot reflect nil value")
 	}
 
 	v := reflect.ValueOf(value)
@@ -49,7 +49,7 @@ func generate(value reflect.Value) (*Info, error) {
 	// and plain types only.
 	if value.Kind() != reflect.Struct {
 		if value.Kind() == reflect.Map && value.Type().Name() != "M" {
-			return &Info{}, fmt.Errorf("Can't reflect map type")
+			return &Info{}, fmt.Errorf("cannot reflect map type")
 		} else {
 			return &Info{Type: value.Type()}, nil
 		}
