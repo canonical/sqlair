@@ -8,13 +8,13 @@ import (
 )
 
 var cacheMutex sync.RWMutex
-var cache = make(map[reflect.Type]Info)
+var cache = make(map[reflect.Type]*Info)
 
 // Reflect will return the Info of a given type,
 // generating and caching as required.
-func GetTypeInfo(value any) (Info, error) {
+func GetTypeInfo(value any) (*Info, error) {
 	if value == (any)(nil) {
-		return Info{}, fmt.Errorf("Can not reflect nil value")
+		return &Info{}, fmt.Errorf("Can not reflect nil value")
 	}
 
 	v := reflect.ValueOf(value)
@@ -29,7 +29,7 @@ func GetTypeInfo(value any) (Info, error) {
 
 	info, err := generate(v)
 	if err != nil {
-		return Info{}, err
+		return &Info{}, err
 	}
 
 	cacheMutex.Lock()
@@ -41,7 +41,7 @@ func GetTypeInfo(value any) (Info, error) {
 
 // generate produces and returns reflection information for the input
 // reflect.Value that is specifically required for SQLAir operation.
-func generate(value reflect.Value) (Info, error) {
+func generate(value reflect.Value) (*Info, error) {
 	// Dereference the pointer if it is one.
 	value = reflect.Indirect(value)
 
@@ -49,9 +49,9 @@ func generate(value reflect.Value) (Info, error) {
 	// and plain types only.
 	if value.Kind() != reflect.Struct {
 		if value.Kind() == reflect.Map && value.Type().Name() != "M" {
-			return Info{}, fmt.Errorf("Can't reflect map type")
+			return &Info{}, fmt.Errorf("Can't reflect map type")
 		} else {
-			return Info{Type: value.Type()}, nil
+			return &Info{Type: value.Type()}, nil
 		}
 	}
 
@@ -72,7 +72,7 @@ func generate(value reflect.Value) (Info, error) {
 		}
 		tag, omitEmpty, err := parseTag(tag)
 		if err != nil {
-			return Info{}, err
+			return &Info{}, err
 		}
 		info.TagToField[tag] = Field{
 			Name:      field.Name,
@@ -83,9 +83,7 @@ func generate(value reflect.Value) (Info, error) {
 		info.FieldToTag[field.Name] = tag
 	}
 
-	return info, nil
-
-	return info, nil
+	return &info, nil
 }
 
 // parseTag parses the input tag string and returns its

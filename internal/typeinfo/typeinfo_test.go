@@ -96,7 +96,7 @@ func TestReflectSimpleTypes(t *testing.T) {
 	}
 	{
 		info, err := GetTypeInfo(mymap)
-		assert.Equal(t, info, Info{})
+		assert.Equal(t, info, &Info{})
 		assert.Equal(t, err, fmt.Errorf("Can't reflect map type"))
 	}
 }
