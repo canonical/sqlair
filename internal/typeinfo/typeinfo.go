@@ -45,14 +45,9 @@ func generate(value reflect.Value) (*Info, error) {
 	// Dereference the pointer if it is one.
 	value = reflect.Indirect(value)
 
-	// Reflection information is generated for structs, typeinfo.M
-	// and plain types only.
+	// Reflection information is only generated for structs
 	if value.Kind() != reflect.Struct {
-		if value.Kind() == reflect.Map && value.Type().Name() != "M" {
-			return &Info{}, fmt.Errorf("cannot reflect map type")
-		} else {
-			return &Info{Type: value.Type()}, nil
-		}
+		return &Info{}, fmt.Errorf("cannot reflect type")
 	}
 
 	info := Info{
@@ -61,7 +56,6 @@ func generate(value reflect.Value) (*Info, error) {
 		Type:       value.Type(),
 	}
 
-	// If we reach this point, this is a reflect.Struct:
 	typ := value.Type()
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)

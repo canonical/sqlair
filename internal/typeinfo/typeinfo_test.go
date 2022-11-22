@@ -10,37 +10,26 @@ import (
 )
 
 func TestReflectSimpleConcurrent(t *testing.T) {
-	var num int64
-
+	type mystruct struct{}
+	var st mystruct
 	wg := sync.WaitGroup{}
 
 	// Set up some concurrent access.
 	for i := 0; i < 5; i++ {
 		wg.Add(1)
 		go func() {
-			_, _ = GetTypeInfo(num)
+			_, _ = GetTypeInfo(st)
 			wg.Done()
 		}()
 	}
 
-	info, err := GetTypeInfo(num)
+	info, err := GetTypeInfo(st)
 	assert.Nil(t, err)
 
-	assert.Equal(t, reflect.Int64, info.Type.Kind())
-	assert.Equal(t, "int64", info.Type.Name())
+	assert.Equal(t, reflect.Struct, info.Type.Kind())
+	assert.Equal(t, "mystruct", info.Type.Name())
 
 	wg.Wait()
-}
-
-func TestReflectM(t *testing.T) {
-	var mymap M
-	mymap = make(M)
-	mymap["foo"] = 7
-	mymap["bar"] = "baz"
-
-	info, err := GetTypeInfo(mymap)
-	assert.Nil(t, err)
-	assert.Equal(t, "M", info.Type.Name())
 }
 
 func TestReflectStruct(t *testing.T) {
@@ -75,29 +64,31 @@ func TestReflectStruct(t *testing.T) {
 	assert.True(t, name.OmitEmpty)
 }
 
-func TestReflectSimpleTypes(t *testing.T) {
+func TestReflectNonStructType(t *testing.T) {
 	var i int
 	var s string
 	var mymap map[string]string
+	var myM M
 
 	{
 		info, err := GetTypeInfo(i)
-		assert.Equal(t, info.Type.Name(), "int")
-		assert.Len(t, info.TagToField, 0)
-		assert.Len(t, info.FieldToTag, 0)
-		assert.Nil(t, err)
+		assert.Equal(t, fmt.Errorf("cannot reflect type"), err)
+		assert.Equal(t, &Info{}, info)
 	}
 	{
 		info, err := GetTypeInfo(s)
-		assert.Equal(t, info.Type.Name(), "string")
-		assert.Len(t, info.TagToField, 0)
-		assert.Len(t, info.FieldToTag, 0)
-		assert.Nil(t, err)
+		assert.Equal(t, fmt.Errorf("cannot reflect type"), err)
+		assert.Equal(t, &Info{}, info)
 	}
 	{
 		info, err := GetTypeInfo(mymap)
+		assert.Equal(t, fmt.Errorf("cannot reflect type"), err)
 		assert.Equal(t, info, &Info{})
-		assert.Equal(t, err, fmt.Errorf("cannot reflect map type"))
+	}
+	{
+		info, err := GetTypeInfo(myM)
+		assert.Equal(t, fmt.Errorf("cannot reflect type"), err)
+		assert.Equal(t, &Info{}, info)
 	}
 }
 
