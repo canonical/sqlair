@@ -93,5 +93,8 @@ func parseTag(tag string) (string, bool, error) {
 		omitEmpty = true
 	}
 
+	if len(options[0]) == 0 {
+		return "", false, fmt.Errorf("empty db tag")
+	}
 	return options[0], omitEmpty, nil
 }

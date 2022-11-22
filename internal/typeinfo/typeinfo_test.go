@@ -93,12 +93,29 @@ func TestReflectNonStructType(t *testing.T) {
 }
 
 func TestReflectBadTagError(t *testing.T) {
-	type something struct {
-		ID int64 `db:"id,bad-juju"`
+	{
+		type s1 struct {
+			ID int64 `db:"id,bad-juju"`
+		}
+		ss := s1{ID: 99}
+		_, err := GetTypeInfo(ss)
+		assert.Error(t, fmt.Errorf(`unexpected tag value "bad-juju"`), err)
 	}
 
-	s := something{ID: 99}
-
-	_, err := GetTypeInfo(s)
-	assert.Error(t, fmt.Errorf(`unexpected tag value "bad-juju"`), err)
+	{
+		type s2 struct {
+			ID int64 `db:","`
+		}
+		ss2 := s2{ID: 99}
+		_, err := GetTypeInfo(ss2)
+		assert.Equal(t, fmt.Errorf(`unexpected tag value ""`), err)
+	}
+	{
+		type s3 struct {
+			ID int64 `db:",omitempty"`
+		}
+		ss3 := s3{ID: 99}
+		_, err := GetTypeInfo(ss3)
+		assert.Equal(t, fmt.Errorf(`empty db tag`), err)
+	}
 }
