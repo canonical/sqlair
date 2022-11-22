@@ -3,6 +3,7 @@ package typeinfo
 import (
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 	"sync"
 )
@@ -80,21 +81,33 @@ func generate(value reflect.Value) (*Info, error) {
 	return &info, nil
 }
 
+var validColNameRx = regexp.MustCompile(`^([a-zA-Z_])+([a-zA-Z_0-9])*$`)
+
 // parseTag parses the input tag string and returns its
 // name and whether it contains the "omitempty" option.
 func parseTag(tag string) (string, bool, error) {
 	options := strings.Split(tag, ",")
 
 	var omitEmpty bool
-	if len(options) > 1 {
+	// Refuse to parse if there are more than 2 items.
+	if len(options) > 2 {
+		return "", false, fmt.Errorf("too many options in 'db' tag")
+	}
+	if len(options) == 2 {
 		if strings.ToLower(options[1]) != "omitempty" {
 			return "", false, fmt.Errorf("unexpected tag value %q", options[1])
 		}
 		omitEmpty = true
 	}
 
-	if len(options[0]) == 0 {
+	name := options[0]
+	if len(name) == 0 {
 		return "", false, fmt.Errorf("empty db tag")
 	}
-	return options[0], omitEmpty, nil
+
+	if !validColNameRx.MatchString(name) {
+		return "", false, fmt.Errorf("invalid column name in 'db' tag")
+	}
+
+	return name, omitEmpty, nil
 }

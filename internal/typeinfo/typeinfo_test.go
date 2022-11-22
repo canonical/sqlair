@@ -101,7 +101,6 @@ func TestReflectBadTagError(t *testing.T) {
 		_, err := GetTypeInfo(ss)
 		assert.Error(t, fmt.Errorf(`unexpected tag value "bad-juju"`), err)
 	}
-
 	{
 		type s2 struct {
 			ID int64 `db:","`
@@ -117,5 +116,46 @@ func TestReflectBadTagError(t *testing.T) {
 		ss3 := s3{ID: 99}
 		_, err := GetTypeInfo(ss3)
 		assert.Equal(t, fmt.Errorf(`empty db tag`), err)
+	}
+	{
+		type s4 struct {
+			ID int64 `db:"id,omitempty,ddd"`
+		}
+		ss4 := s4{ID: 99}
+		_, err := GetTypeInfo(ss4)
+		assert.Equal(t, fmt.Errorf(`too many options in 'db' tag`), err)
+	}
+
+	{
+		// Create one-field structs with invalid tags.
+		bad_tags := []string{"5id", "+id", "-id", "id/col", "id$$", "id|2005"}
+		for _, tag := range bad_tags {
+			st_typ := reflect.StructOf(
+				[]reflect.StructField{{
+					Name: "Field",
+					Type: reflect.TypeOf(0),
+					Tag:  reflect.StructTag(`db:"` + tag + `"`),
+				}})
+			st_elem := reflect.New(st_typ).Elem()
+			info, err := GetTypeInfo(st_elem.Interface())
+			assert.Equal(t, &Info{}, info)
+			assert.Equal(t, fmt.Errorf(`invalid column name in 'db' tag`), err)
+		}
+	}
+	{
+		// Create one-field structs with valid tags.
+		good_tags := []string{"id_", "id5", "_i_d_55", "id_2002", "IdENT99"}
+		for _, tag := range good_tags {
+			st_typ := reflect.StructOf(
+				[]reflect.StructField{{
+					Name: "Field",
+					Type: reflect.TypeOf(0),
+					Tag:  reflect.StructTag(`db:"` + tag + `"`),
+				}})
+			st_elem := reflect.New(st_typ).Elem()
+			info, err := GetTypeInfo(st_elem.Interface())
+			assert.NotEqual(t, &Info{}, info)
+			assert.Nil(t, err)
+		}
 	}
 }
