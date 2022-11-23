@@ -99,7 +99,7 @@ func TestReflectBadTagError(t *testing.T) {
 		}
 		ss := s1{ID: 99}
 		_, err := GetTypeInfo(ss)
-		assert.Error(t, fmt.Errorf(`unexpected tag value "bad-juju"`), err)
+		assert.Equal(t, fmt.Errorf(`unexpected tag value "bad-juju"`), err)
 	}
 	{
 		type s2 struct {
