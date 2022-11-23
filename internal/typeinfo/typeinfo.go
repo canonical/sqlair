@@ -81,6 +81,8 @@ func generate(value reflect.Value) (*Info, error) {
 	return &info, nil
 }
 
+// This expression should be aligned with the bytes we allow in isNameByte in
+// the parser.
 var validColNameRx = regexp.MustCompile(`^([a-zA-Z_])+([a-zA-Z_0-9])*$`)
 
 // parseTag parses the input tag string and returns its
