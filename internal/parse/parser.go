@@ -134,20 +134,22 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 			return nil, err
 		} else if ok {
 			p.add(ip)
+			continue
 		}
 
 		if sp, ok, err := p.parseStringLiteral(); err != nil {
 			return nil, err
 		} else if ok {
 			p.add(sp)
+			continue
 		}
 
 		if p.pos == len(p.input) {
 			break
-		} else {
-			// If nothing above can be parsed we advance the parser.
-			p.pos++
 		}
+
+		// If nothing above can be parsed we advance the parser.
+		p.pos++
 	}
 	// Add any remaining unparsed string input to the parser.
 	p.add(nil)
