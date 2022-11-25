@@ -1,5 +1,7 @@
 package parse
 
+import "fmt"
+
 // A queryPart represents a section of a parsed SQL statement, which forms
 // a complete query when processed together with its surrounding parts, in
 // their correct order.
@@ -16,6 +18,15 @@ type FullName struct {
 	Prefix, Name string
 }
 
+func (fn FullName) String() string {
+	if fn.Prefix == "" {
+		return fn.Name
+	} else if fn.Name == "" {
+		return fn.Prefix
+	}
+	return fn.Prefix + "." + fn.Name
+}
+
 // InputPart represents a named parameter that will be sent to the database
 // while performing the query.
 type InputPart struct {
@@ -23,7 +34,7 @@ type InputPart struct {
 }
 
 func (p *InputPart) String() string {
-	return ""
+	return fmt.Sprintf("InputPart[%+v]", p.Source)
 }
 
 func (p *InputPart) ToSQL() string {
@@ -33,12 +44,12 @@ func (p *InputPart) ToSQL() string {
 // OutputPart represents a named target output variable in the SQL expression,
 // as well as the source table and column where it will be read from.
 type OutputPart struct {
-	Source FullName
-	Target FullName
+	Source []FullName
+	Target []FullName
 }
 
 func (p *OutputPart) String() string {
-	return ""
+	return fmt.Sprintf("OutputPart[%+v %+v]", p.Source, p.Target)
 }
 
 func (p *OutputPart) ToSQL() string {
