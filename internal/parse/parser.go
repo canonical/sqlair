@@ -203,14 +203,14 @@ func (p *Parser) skipString(s string) bool {
 	return false
 }
 
-// isNameByte returns true if the byte c can be part of a name. It returns false
-// otherwise.
+// isNameByte returns true if the given byte can be part of a name. It returns
+// false otherwise.
 func isNameByte(c byte) bool {
 	return 'A' <= c && c <= 'Z' || 'a' <= c && c <= 'z' ||
 		'0' <= c && c <= '9' || c == '_'
 }
 
-// isNameInitialByte returns true if the byte c can appear at the start of a
+// isNameInitialByte returns true if the given byte can appear at the start of a
 // name. It returns false otherwise.
 func isInitialNameByte(c byte) bool {
 	return 'A' <= c && c <= 'Z' || 'a' <= c && c <= 'z' || c == '_'
