@@ -48,7 +48,7 @@ func generate(value reflect.Value) (*Info, error) {
 
 	// Reflection information is only generated for structs.
 	if value.Kind() != reflect.Struct {
-		return &Info{}, fmt.Errorf("can only reflect struct type")
+		return &Info{}, fmt.Errorf("cannot reflect type %q, only struct", value.Kind())
 	}
 
 	info := Info{
@@ -67,7 +67,7 @@ func generate(value reflect.Value) (*Info, error) {
 		}
 		tag, omitEmpty, err := parseTag(tag)
 		if err != nil {
-			return &Info{}, err
+			return &Info{}, fmt.Errorf("cannot parse tag for field %s.%s: %s", typ.Name(), field.Name, err)
 		}
 		info.TagToField[tag] = Field{
 			Name:      field.Name,
@@ -93,7 +93,7 @@ func parseTag(tag string) (string, bool, error) {
 	var omitEmpty bool
 	// Refuse to parse if there are more than 2 items.
 	if len(options) > 2 {
-		return "", false, fmt.Errorf("too many options in 'db' tag")
+		return "", false, fmt.Errorf("too many options in 'db' tag: %s", strings.Join(options, ", "))
 	}
 	if len(options) == 2 {
 		if strings.ToLower(options[1]) != "omitempty" {
@@ -108,7 +108,7 @@ func parseTag(tag string) (string, bool, error) {
 	}
 
 	if !validColNameRx.MatchString(name) {
-		return "", false, fmt.Errorf("invalid column name in 'db' tag")
+		return "", false, fmt.Errorf("invalid column name in 'db' tag: %q", name)
 	}
 
 	return name, omitEmpty, nil
