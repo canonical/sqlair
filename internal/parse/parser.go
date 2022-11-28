@@ -62,13 +62,6 @@ func (cp *checkpoint) restore() {
 	cp.parser.parts = cp.parts
 }
 
-type idClass int
-
-const (
-	columnId idClass = iota
-	typeId
-)
-
 // ParsedExpr is the AST representation of an SQL expression.
 // It has a representation of the original SQL statement in terms of queryParts
 // A SQL statement like this:
@@ -250,51 +243,67 @@ func (p *Parser) parseIdentifier() (string, bool) {
 		return "*", true
 	}
 
-	idStart := p.pos
+// parseIdentifier parses either a name made up only of nameBytes (or an
+// asterisk if asteriskF=allowAsterisk)
+func (p *Parser) parseIdentifier(asteriskF asteriskFlag) (string, bool) {
+	if asteriskF == allowAsterisk {
+		if p.skipByte('*') {
+			return "*", true
+		}
+	}
+	mark := p.pos
 	if p.skipName() {
-		return p.input[idStart:p.pos], true
+		return p.input[mark:p.pos], true
 	}
 	return "", false
 }
 
-// parseFullName parses a column name or Go field name, optionally dot-prefixed by
-// its table or type name respectively.
-func (p *Parser) parseFullName(idc idClass) (FullName, bool) {
+// parseGoObject parses a source or target go object of the form Prefix.Name
+// where the type is the Prefix and the field is the Name (this applies to maps
+// and structs).
+func (p *Parser) parseGoObject() (FullName, bool, error) {
 	cp := p.save()
 	var fn FullName
-	if id, ok := p.parseIdentifier(); ok {
-		fn.Prefix = id
+	if id, ok := p.parseIdentifier(disallowAsterisk); ok {
 		if p.skipByte('.') {
-			if id, ok := p.parseIdentifier(); ok {
-				fn.Name = id
-				return fn, true
+			if idField, ok := p.parseIdentifier(allowAsterisk); ok {
+				return FullName{Prefix: id, Name: idField}, true, nil
 			}
-		} else {
-			// A column name specified without a table prefix is a name not a
-			// prefix.
-			if idc == columnId {
-				fn.Name = fn.Prefix
-				fn.Prefix = ""
-			}
-			return fn, true
+			return fn, false, fmt.Errorf("invalid identifier near char %d", p.pos)
 		}
+		return fn, false, fmt.Errorf("go object near char %d not qualified", p.pos)
 	}
 	cp.restore()
-	return fn, false
+	return fn, false, nil
+}
+
+// asteriskCount returns the number of FullNames in the argument with a asterisk in
+// the Name field.
+func asteriskCount(fns []FullName) int {
+	s := 0
+	for _, fn := range fns {
+		if fn.Name == "*" {
+			s++
+		}
+	}
+	return s
 }
 
 // parseInputExpression parses an input expression of the form $Type.name.
-func (p *Parser) parseInputExpression() (*InputPart, bool, error) {
+func (p *Parser) parseInputExpression() (ip *InputPart, ok bool, err error) {
 	cp := p.save()
-	var fn FullName
-	var ok bool
 
 	if p.skipByte('$') {
-		fn, ok = p.parseFullName(typeId)
-		if !ok {
-			return nil, false, fmt.Errorf("malformed input type")
+		var fn FullName
+		if fn, ok, err = p.parseGoObject(); ok {
+			if fn.Name == "*" {
+				return nil, false, fmt.Errorf("asterisk not allowed "+
+					"in expression near %d", p.pos)
+			}
+			return &InputPart{fn}, true, nil
+		} else if err != nil {
+			return nil, false, err
 		}
-		return &InputPart{fn}, true, nil
 	}
 	cp.restore()
 	return nil, false, nil
