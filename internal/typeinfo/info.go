@@ -23,10 +23,12 @@ type Field struct {
 type Info struct {
 	Type reflect.Type
 
-	// SQLAir does not care about fields without a "db" tag.
+	// Relate tag names to fields.
 	TagToField map[string]Field
 
+	// Relate field names to tags.
 	FieldToTag map[string]string
 }
 
+// SQLAir's specific map type.
 type M map[string]any
