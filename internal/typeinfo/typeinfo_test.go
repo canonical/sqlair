@@ -68,7 +68,6 @@ func TestReflectNonStructType(t *testing.T) {
 	var i int
 	var s string
 	var mymap map[string]string
-	var myM M
 
 	{
 		info, err := TypeInfo(i)
@@ -84,11 +83,6 @@ func TestReflectNonStructType(t *testing.T) {
 		info, err := TypeInfo(mymap)
 		assert.Equal(t, fmt.Errorf(`cannot reflect type "map", only struct`), err)
 		assert.Equal(t, info, &Info{})
-	}
-	{
-		info, err := TypeInfo(myM)
-		assert.Equal(t, fmt.Errorf(`cannot reflect type "map", only struct`), err)
-		assert.Equal(t, &Info{}, info)
 	}
 }
 

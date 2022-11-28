@@ -29,6 +29,3 @@ type Info struct {
 	// Relate field names to tags.
 	FieldToTag map[string]string
 }
-
-// SQLAir's specific map type.
-type M map[string]any
