@@ -119,6 +119,7 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 			err = fmt.Errorf("cannot parse expression: %s", err)
 		}
 	}()
+
 	p.init(input)
 	for {
 		p.partStart = p.pos
