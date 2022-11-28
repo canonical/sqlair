@@ -13,7 +13,7 @@ var cache = make(map[reflect.Type]*Info)
 
 // Reflect will return the Info of a given type,
 // generating and caching as required.
-func GetTypeInfo(value any) (*Info, error) {
+func TypeInfo(value any) (*Info, error) {
 	if value == (any)(nil) {
 		return &Info{}, fmt.Errorf("cannot reflect nil value")
 	}

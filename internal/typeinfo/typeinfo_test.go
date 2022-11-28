@@ -18,12 +18,12 @@ func TestReflectSimpleConcurrent(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		wg.Add(1)
 		go func() {
-			_, _ = GetTypeInfo(st)
+			_, _ = TypeInfo(st)
 			wg.Done()
 		}()
 	}
 
-	info, err := GetTypeInfo(st)
+	info, err := TypeInfo(st)
 	assert.Nil(t, err)
 
 	assert.Equal(t, reflect.Struct, info.Type.Kind())
@@ -45,7 +45,7 @@ func TestReflectStruct(t *testing.T) {
 		NotInDB: "doesn't matter",
 	}
 
-	info, err := GetTypeInfo(s)
+	info, err := TypeInfo(s)
 	assert.Nil(t, err)
 
 	assert.Equal(t, reflect.Struct, info.Type.Kind())
@@ -71,22 +71,22 @@ func TestReflectNonStructType(t *testing.T) {
 	var myM M
 
 	{
-		info, err := GetTypeInfo(i)
+		info, err := TypeInfo(i)
 		assert.Equal(t, fmt.Errorf(`cannot reflect type "int", only struct`), err)
 		assert.Equal(t, &Info{}, info)
 	}
 	{
-		info, err := GetTypeInfo(s)
+		info, err := TypeInfo(s)
 		assert.Equal(t, fmt.Errorf(`cannot reflect type "string", only struct`), err)
 		assert.Equal(t, &Info{}, info)
 	}
 	{
-		info, err := GetTypeInfo(mymap)
+		info, err := TypeInfo(mymap)
 		assert.Equal(t, fmt.Errorf(`cannot reflect type "map", only struct`), err)
 		assert.Equal(t, info, &Info{})
 	}
 	{
-		info, err := GetTypeInfo(myM)
+		info, err := TypeInfo(myM)
 		assert.Equal(t, fmt.Errorf(`cannot reflect type "map", only struct`), err)
 		assert.Equal(t, &Info{}, info)
 	}
@@ -98,7 +98,7 @@ func TestReflectBadTagError(t *testing.T) {
 			ID int64 `db:"id,bad-juju"`
 		}
 		ss := s1{ID: 99}
-		_, err := GetTypeInfo(ss)
+		_, err := TypeInfo(ss)
 		assert.Equal(t, fmt.Errorf(`cannot parse tag for field s1.ID: unexpected tag value "bad-juju"`), err)
 	}
 	{
@@ -106,7 +106,7 @@ func TestReflectBadTagError(t *testing.T) {
 			ID int64 `db:","`
 		}
 		ss2 := s2{ID: 99}
-		_, err := GetTypeInfo(ss2)
+		_, err := TypeInfo(ss2)
 		assert.Equal(t, fmt.Errorf(`cannot parse tag for field s2.ID: unexpected tag value ""`), err)
 	}
 	{
@@ -114,7 +114,7 @@ func TestReflectBadTagError(t *testing.T) {
 			ID int64 `db:",omitempty"`
 		}
 		ss3 := s3{ID: 99}
-		_, err := GetTypeInfo(ss3)
+		_, err := TypeInfo(ss3)
 		assert.Equal(t, fmt.Errorf(`cannot parse tag for field s3.ID: empty db tag`), err)
 	}
 	{
@@ -122,7 +122,7 @@ func TestReflectBadTagError(t *testing.T) {
 			ID int64 `db:"id,omitempty,ddd"`
 		}
 		ss4 := s4{ID: 99}
-		_, err := GetTypeInfo(ss4)
+		_, err := TypeInfo(ss4)
 		assert.Equal(t,
 			fmt.Errorf(`cannot parse tag for field s4.ID: too many options in 'db' tag: id, omitempty, ddd`),
 			err)
@@ -139,7 +139,7 @@ func TestReflectBadTagError(t *testing.T) {
 					Tag:  reflect.StructTag(`db:"` + tag + `"`),
 				}})
 			st_elem := reflect.New(st_typ).Elem()
-			info, err := GetTypeInfo(st_elem.Interface())
+			info, err := TypeInfo(st_elem.Interface())
 			assert.Equal(t, &Info{}, info)
 			assert.Equal(t,
 				fmt.Errorf(`cannot parse tag for field .Field: invalid column name in 'db' tag: "%s"`, tag),
@@ -157,7 +157,7 @@ func TestReflectBadTagError(t *testing.T) {
 					Tag:  reflect.StructTag(`db:"` + tag + `"`),
 				}})
 			st_elem := reflect.New(st_typ).Elem()
-			info, err := GetTypeInfo(st_elem.Interface())
+			info, err := TypeInfo(st_elem.Interface())
 			assert.NotEqual(t, &Info{}, info)
 			assert.Nil(t, err)
 		}
