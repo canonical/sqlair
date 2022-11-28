@@ -65,7 +65,7 @@ func (cp *checkpoint) restore() {
 // ParsedExpr is the AST representation of an SQL expression. The AST is made up
 // of QueryParts. For example, a SQL statement like this:
 //
-// Select p.* as &Person.* from person where p.name = $Boss.Name
+// Select p.* as &Person.* from person where p.name = $Boss.col_name
 //
 // would be represented as:
 //
