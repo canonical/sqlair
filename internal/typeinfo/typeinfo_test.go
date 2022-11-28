@@ -27,7 +27,7 @@ func TestReflectSimpleConcurrent(t *testing.T) {
 	assert.Nil(t, err)
 
 	assert.Equal(t, reflect.Struct, info.Type.Kind())
-	assert.Equal(t, "mystruct", info.Type.Name())
+	assert.Equal(t, reflect.TypeOf(st), info.Type)
 
 	wg.Wait()
 }
@@ -49,7 +49,7 @@ func TestReflectStruct(t *testing.T) {
 	assert.Nil(t, err)
 
 	assert.Equal(t, reflect.Struct, info.Type.Kind())
-	assert.Equal(t, "something", info.Type.Name())
+	assert.Equal(t, reflect.TypeOf(s), info.Type)
 
 	assert.Len(t, info.TagToField, 2)
 
