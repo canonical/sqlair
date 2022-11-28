@@ -250,3 +250,19 @@ func TestBadFormatInputV2(t *testing.T) {
 	_, err := parser.Parse(sql)
 	assert.Equal(t, fmt.Errorf("cannot parse expression: go object near char 36 not qualified"), err)
 }
+
+// Detect bad input expressions
+func TestBadFormatInputV3(t *testing.T) {
+	sql := "SELECT foo FROM t WHERE x = $Address.&d"
+	parser := parse.NewParser()
+	_, err := parser.Parse(sql)
+	assert.Equal(t, fmt.Errorf("cannot parse expression: invalid identifier near char 37"), err)
+}
+
+// Detect bad input expressions
+func TestBadFormatInputV4(t *testing.T) {
+	sql := "SELECT foo FROM t WHERE x = $Address.-"
+	parser := parse.NewParser()
+	_, err := parser.Parse(sql)
+	assert.Equal(t, fmt.Errorf("cannot parse expression: invalid identifier near char 37"), err)
+}
