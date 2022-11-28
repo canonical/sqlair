@@ -2,10 +2,10 @@ package parse
 
 import "fmt"
 
-// A queryPart represents a section of a parsed SQL statement, which forms
+// A QueryPart represents a section of a parsed SQL statement, which forms
 // a complete query when processed together with its surrounding parts, in
 // their correct order.
-type queryPart interface {
+type QueryPart interface {
 	// String returns the part's representation for debugging purposes.
 	String() string
 
