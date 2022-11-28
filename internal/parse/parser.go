@@ -236,12 +236,12 @@ func (p *Parser) skipName() bool {
 //  - bool == false, err == nil
 //		The construct was not the one we are looking for
 
-// parseIdentifier parses either a name made up only of nameBytes or an
-// asterisk.
-func (p *Parser) parseIdentifier() (string, bool) {
-	if p.skipByte('*') {
-		return "*", true
-	}
+type asteriskFlag int
+
+const (
+	allowAsterisk asteriskFlag = iota
+	disallowAsterisk
+)
 
 // parseIdentifier parses either a name made up only of nameBytes (or an
 // asterisk if asteriskF=allowAsterisk)
@@ -275,18 +275,6 @@ func (p *Parser) parseGoObject() (FullName, bool, error) {
 	}
 	cp.restore()
 	return fn, false, nil
-}
-
-// asteriskCount returns the number of FullNames in the argument with a asterisk in
-// the Name field.
-func asteriskCount(fns []FullName) int {
-	s := 0
-	for _, fn := range fns {
-		if fn.Name == "*" {
-			s++
-		}
-	}
-	return s
 }
 
 // parseInputExpression parses an input expression of the form $Type.name.

@@ -157,19 +157,23 @@ func TestRound(t *testing.T) {
 			"BypassPart[ AND p.address_id = ] " +
 			"InputPart[Person.address_id]]",
 	}, {
-		"SELECT p.*, a.district " +
-			"FROM person AS p JOIN address AS a ON p.address_id = a.id " +
-			"WHERE p.name = $Person.*",
-		"ParsedExpr[BypassPart[SELECT p.*, a.district FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] " +
-			"InputPart[Person.*]]",
-	}, {
 		"INSERT INTO person (name) VALUES $Person.name",
 		"ParsedExpr[BypassPart[INSERT INTO person (name) VALUES ] " +
 			"InputPart[Person.name]]",
 	}, {
-		"INSERT INTO person VALUES $Person.*",
-		"ParsedExpr[BypassPart[INSERT INTO person VALUES ] " +
-			"InputPart[Person.*]]",
+		"SELECT $ FROM moneytable",
+		"ParsedExpr[BypassPart[SELECT $ FROM moneytable]]",
+	}, {
+		"SELECT foo FROM data$",
+		"ParsedExpr[BypassPart[SELECT foo FROM data$]]",
+	}, {
+		"SELECT dollerrow$ FROM moneytable",
+		"ParsedExpr[BypassPart[SELECT dollerrow$ FROM moneytable]]",
+	}, {
+		"SELECT p.*, a.district " +
+			"FROM person AS p WHERE p.name=$Person.name",
+		"ParsedExpr[BypassPart[SELECT p.*, a.district FROM person AS p WHERE p.name=] " +
+			"InputPart[Person.name]]",
 	}, {
 		"UPDATE person SET person.address_id = $Address.ID " +
 			"WHERE person.id = $Person.ID",
@@ -232,57 +236,17 @@ func TestBadEscaped(t *testing.T) {
 }
 
 // Detect bad input DSL pieces
-func TestBadFormatInput(t *testing.T) {
-	sql := "SELECT foo FROM t WHERE x = $.id"
-	parser := parse.NewParser()
-	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
-}
-
-// Detect bad input DSL pieces
-func TestBadFormatInputV2(t *testing.T) {
+func TestBadFormatInputV1(t *testing.T) {
 	sql := "SELECT foo FROM t WHERE x = $Address."
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
+	assert.Equal(t, fmt.Errorf("cannot parse expression: invalid identifier near char 37"), err)
 }
 
-// Detect bad input DSL pieces
-func TestBadFormatInputV3(t *testing.T) {
-	sql := "SELECT foo FROM t WHERE x = $"
+// Detect bad input expressions
+func TestBadFormatInputV2(t *testing.T) {
+	sql := "SELECT foo FROM t WHERE x = $Address"
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
-}
-
-// Detect bad input DSL pieces
-func TestBadFormatInputV4(t *testing.T) {
-	sql := "SELECT foo FROM t WHERE x = $$Address"
-	parser := parse.NewParser()
-	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
-}
-
-// Detect bad input DSL pieces
-func TestBadFormatInputV5(t *testing.T) {
-	sql := "SELECT foo FROM t WHERE x = $```"
-	parser := parse.NewParser()
-	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
-}
-
-// Detect bad input DSL pieces
-func TestBadFormatInputV6(t *testing.T) {
-	sql := "SELECT foo FROM t WHERE x = $.."
-	parser := parse.NewParser()
-	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
-}
-
-// Detect bad input DSL pieces
-func TestBadFormatInputV7(t *testing.T) {
-	sql := "SELECT foo FROM t WHERE x = $."
-	parser := parse.NewParser()
-	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
+	assert.Equal(t, fmt.Errorf("cannot parse expression: go object near char 36 not qualified"), err)
 }
