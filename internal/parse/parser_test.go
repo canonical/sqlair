@@ -1,12 +1,15 @@
 package parse_test
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/canonical/sqlair/internal/parse"
-	"github.com/stretchr/testify/assert"
+	. "gopkg.in/check.v1"
 )
+
+type ParserSuite struct{}
+
+var _ = Suite(&ParserSuite{})
 
 type Address struct {
 	ID int `db:"id"`
@@ -182,94 +185,69 @@ var tests = []struct {
 		"InputPart[Person.ID]]",
 }}
 
-func TestRound(t *testing.T) {
+func (s *ParserSuite) TestRound(c *C) {
 	parser := parse.NewParser()
 	for i, test := range tests {
 		var parsedExpr *parse.ParsedExpr
 		var err error
 		if parsedExpr, err = parser.Parse(test.input); err != nil {
-			t.Errorf("test %d failed (Parse): input: %s\nexpected: %s\nerr: %s\n", i, test.input, test.expectedParsed, err)
+			c.Errorf("test %d failed (Parse): input: %s\nexpected: %s\nerr: %s\n", i, test.input, test.expectedParsed, err)
 		} else if parsedExpr.String() != test.expectedParsed {
-			t.Errorf("test %d failed (Parse): input: %s\nexpected: %s\nactual:   %s\n", i, test.input, test.expectedParsed, parsedExpr.String())
+			c.Errorf("test %d failed (Parse): input: %s\nexpected: %s\nactual:   %s\n", i, test.input, test.expectedParsed, parsedExpr.String())
 		}
 	}
 }
 
 // We return a proper error when we find an unbound string literal
-func TestUnfinishedStringLiteral(t *testing.T) {
-	var testTable = []struct {
-		name string
-		sql  string
-		err  string
-	}{{
-		"missing right single quote",
+func (s *ParserSuite) TestUnfinishedStringLiteral(c *C) {
+	testList := []string{
 		"SELECT foo FROM t WHERE x = 'dddd",
-		"cannot parse expression: missing right quote in string literal",
-	}, {
-		"missing right double quote",
 		"SELECT foo FROM t WHERE x = \"dddd",
-		"cannot parse expression: missing right quote in string literal",
-	}, {
-		"quote missmatch",
 		"SELECT foo FROM t WHERE x = \"dddd'",
-		"cannot parse expression: missing right quote in string literal",
-	}}
+	}
 
-	for _, test := range testTable {
+	for _, sql := range testList {
 		parser := parse.NewParser()
-		res, err := parser.Parse(test.sql)
-		t.Log(test.name)
-		assert.Equal(t, test.err, err.Error())
-		assert.Equal(t, (*parse.ParsedExpr)(nil), res)
+		expr, err := parser.Parse(sql)
+		c.Assert(err, ErrorMatches, "cannot parse expression: missing right quote in string literal")
+		c.Assert(expr, IsNil)
 	}
 }
 
 // Properly parsing empty string literal
-func TestEmptyStringLiteral(t *testing.T) {
+func (s *ParserSuite) TestEmptyStringLiteral(c *C) {
 	sql := "SELECT foo FROM t WHERE x = ''"
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	assert.Equal(t, nil, err)
+	c.Assert(err, IsNil)
 }
 
 // Detect bad escaped string literal
-func TestBadEscaped(t *testing.T) {
+func (s *ParserSuite) TestBadEscaped(c *C) {
 	sql := "SELECT foo FROM t WHERE x = 'O'Donnell'"
 	parser := parse.NewParser()
 	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("cannot parse expression: missing right quote in string literal"), err)
+	c.Assert(err, ErrorMatches, "cannot parse expression: missing right quote in string literal")
 }
 
-func TestBadFormatInput(t *testing.T) {
-	var testTable = []struct {
-		name string
-		sql  string
-		err  string
-	}{{
-		"missing field name",
+func (s *ParserSuite) TestBadFormatInput(c *C) {
+	testListInvalidId := []string{
 		"SELECT foo FROM t WHERE x = $Address.",
-		"cannot parse expression: invalid identifier near char 37",
-	}, {
-		"object not qualified",
-		"SELECT foo FROM t WHERE x = $Address",
-		"cannot parse expression: go object near char 36 not qualified",
-	}, {
-		"field name bad syntax",
 		"SELECT foo FROM t WHERE x = $Address.&d",
-		"cannot parse expression: invalid identifier near char 37",
-	}, {
-		"bad field name",
 		"SELECT foo FROM t WHERE x = $Address.-",
-		"cannot parse expression: invalid identifier near char 37",
-	}}
-
-	for _, test := range testTable {
-		parser := parse.NewParser()
-		res, err := parser.Parse(test.sql)
-		t.Log(test.name)
-		assert.Equal(t, test.err, err.Error())
-		assert.Equal(t, (*parse.ParsedExpr)(nil), res)
 	}
+
+	for _, sql := range testListInvalidId {
+		parser := parse.NewParser()
+		expr, err := parser.Parse(sql)
+		c.Assert(err, ErrorMatches, "cannot parse expression: invalid identifier near char 37")
+		c.Assert(expr, IsNil)
+	}
+
+	sql := "SELECT foo FROM t WHERE x = $Address"
+	parser := parse.NewParser()
+	_, err := parser.Parse(sql)
+	c.Assert(err, ErrorMatches, "cannot parse expression: go object near char 36 not qualified")
 }
 
 func FuzzParser(f *testing.F) {
