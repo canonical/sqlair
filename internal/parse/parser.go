@@ -244,7 +244,8 @@ const (
 )
 
 // parseIdentifier parses either a name made up only of nameBytes (or an
-// asterisk if asteriskF=allowAsterisk)
+// asterisk if asteriskF=allowAsterisk). On success it returns the parsed string
+// and true. Otherwise, it returns the empty string and false.
 func (p *Parser) parseIdentifier(asteriskF asteriskFlag) (string, bool) {
 	if asteriskF == allowAsterisk {
 		if p.skipByte('*') {
@@ -260,14 +261,16 @@ func (p *Parser) parseIdentifier(asteriskF asteriskFlag) (string, bool) {
 
 // parseGoObject parses a source or target go object of the form Prefix.Name
 // where the type is the Prefix and the field is the Name (this applies to maps
-// and structs).
+// and structs). On sccuess it returns the parsed FullName, true and nil.
+// If it cannot parse the Go object it returns false. If the construct was
+// recognised as a Go object there will be an error. Otherwise err=nil.
 func (p *Parser) parseGoObject() (FullName, bool, error) {
 	cp := p.save()
 	var fn FullName
 	if id, ok := p.parseIdentifier(disallowAsterisk); ok {
 		if p.skipByte('.') {
 			if idField, ok := p.parseIdentifier(allowAsterisk); ok {
-				return FullName{Prefix: id, Name: idField}, true, nil
+				return FullName{id, idField}, true, nil
 			}
 			return fn, false, fmt.Errorf("invalid identifier near char %d", p.pos)
 		}
