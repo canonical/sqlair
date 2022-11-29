@@ -65,24 +65,26 @@ func TestReflectStruct(t *testing.T) {
 }
 
 func TestReflectNonStructType(t *testing.T) {
-	var i int
-	var s string
-	var mymap map[string]string
+	type tagErrorTest struct {
+		value any
+		err   error
+	}
 
-	{
-		info, err := TypeInfo(i)
-		assert.Equal(t, fmt.Errorf(`cannot reflect type "int", only struct`), err)
+	var tagErrorTable = []tagErrorTest{{
+		value: int(0),
+		err:   fmt.Errorf(`cannot reflect type "int", only struct`),
+	}, {
+		value: string(""),
+		err:   fmt.Errorf(`cannot reflect type "string", only struct`),
+	}, {
+		value: map[string]string{},
+		err:   fmt.Errorf(`cannot reflect type "map", only struct`),
+	}}
+
+	for _, test := range tagErrorTable {
+		info, err := TypeInfo(test.value)
+		assert.Equal(t, test.err, err)
 		assert.Equal(t, &Info{}, info)
-	}
-	{
-		info, err := TypeInfo(s)
-		assert.Equal(t, fmt.Errorf(`cannot reflect type "string", only struct`), err)
-		assert.Equal(t, &Info{}, info)
-	}
-	{
-		info, err := TypeInfo(mymap)
-		assert.Equal(t, fmt.Errorf(`cannot reflect type "map", only struct`), err)
-		assert.Equal(t, info, &Info{})
 	}
 }
 
