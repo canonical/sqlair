@@ -87,73 +87,95 @@ func TestReflectNonStructType(t *testing.T) {
 }
 
 func TestReflectBadTagError(t *testing.T) {
-	{
-		type s1 struct {
-			ID int64 `db:"id,bad-juju"`
-		}
-		ss := s1{ID: 99}
-		_, err := TypeInfo(ss)
-		assert.Equal(t, fmt.Errorf(`cannot parse tag for field s1.ID: unexpected tag value "bad-juju"`), err)
-	}
-	{
-		type s2 struct {
-			ID int64 `db:","`
-		}
-		ss2 := s2{ID: 99}
-		_, err := TypeInfo(ss2)
-		assert.Equal(t, fmt.Errorf(`cannot parse tag for field s2.ID: unexpected tag value ""`), err)
-	}
-	{
-		type s3 struct {
-			ID int64 `db:",omitempty"`
-		}
-		ss3 := s3{ID: 99}
-		_, err := TypeInfo(ss3)
-		assert.Equal(t, fmt.Errorf(`cannot parse tag for field s3.ID: empty db tag`), err)
-	}
-	{
-		type s4 struct {
-			ID int64 `db:"id,omitempty,ddd"`
-		}
-		ss4 := s4{ID: 99}
-		_, err := TypeInfo(ss4)
-		assert.Equal(t,
-			fmt.Errorf(`cannot parse tag for field s4.ID: too many options in 'db' tag: id, omitempty, ddd`),
-			err)
+	type tagErrorTest struct {
+		value any
+		err   error
 	}
 
-	{
-		// Create one-field structs with invalid tags.
-		bad_tags := []string{"5id", "+id", "-id", "id/col", "id$$", "id|2005"}
-		for _, tag := range bad_tags {
-			st_typ := reflect.StructOf(
-				[]reflect.StructField{{
-					Name: "Field",
-					Type: reflect.TypeOf(0),
-					Tag:  reflect.StructTag(`db:"` + tag + `"`),
-				}})
-			st_elem := reflect.New(st_typ).Elem()
-			info, err := TypeInfo(st_elem.Interface())
-			assert.Equal(t, &Info{}, info)
-			assert.Equal(t,
-				fmt.Errorf(`cannot parse tag for field .Field: invalid column name in 'db' tag: "%s"`, tag),
-				err)
-		}
-	}
-	{
-		// Create one-field structs with valid tags.
-		good_tags := []string{"id_", "id5", "_i_d_55", "id_2002", "IdENT99"}
-		for _, tag := range good_tags {
-			st_typ := reflect.StructOf(
-				[]reflect.StructField{{
-					Name: "Field",
-					Type: reflect.TypeOf(0),
-					Tag:  reflect.StructTag(`db:"` + tag + `"`),
-				}})
-			st_elem := reflect.New(st_typ).Elem()
-			info, err := TypeInfo(st_elem.Interface())
-			assert.NotEqual(t, &Info{}, info)
-			assert.Nil(t, err)
-		}
+	var tagErrorTable = []tagErrorTest{{
+		value: &struct {
+			ID int64 `db:"id,bad-juju"`
+		}{99},
+		err: fmt.Errorf(`cannot parse tag for field .ID: unexpected tag value "bad-juju"`),
+	}, {
+		value: &struct {
+			ID int64 `db:","`
+		}{99},
+		err: fmt.Errorf(`cannot parse tag for field .ID: unexpected tag value ""`),
+	}, {
+		value: &struct {
+			ID int64 `db:",omitempty"`
+		}{99},
+		err: fmt.Errorf(`cannot parse tag for field .ID: empty db tag`),
+	}, {
+		value: &struct {
+			ID int64 `db:"id,omitempty,ddd"`
+		}{99},
+		err: fmt.Errorf(`cannot parse tag for field .ID: too many options in 'db' tag: id, omitempty, ddd`),
+	}, {
+		value: &struct {
+			ID int64 `db:"5id"`
+		}{99},
+		err: fmt.Errorf(`cannot parse tag for field .ID: invalid column name in 'db' tag: "5id"`),
+	}, {
+		value: &struct {
+			ID int64 `db:"+id"`
+		}{99},
+		err: fmt.Errorf(`cannot parse tag for field .ID: invalid column name in 'db' tag: "+id"`),
+	}, {
+		value: &struct {
+			ID int64 `db:"-id"`
+		}{99},
+		err: fmt.Errorf(`cannot parse tag for field .ID: invalid column name in 'db' tag: "-id"`),
+	}, {
+		value: &struct {
+			ID int64 `db:"id/col"`
+		}{99},
+		err: fmt.Errorf(`cannot parse tag for field .ID: invalid column name in 'db' tag: "id/col"`),
+	}, {
+		value: &struct {
+			ID int64 `db:"id$$"`
+		}{99},
+		err: fmt.Errorf(`cannot parse tag for field .ID: invalid column name in 'db' tag: "id$$"`),
+	}, {
+		value: &struct {
+			ID int64 `db:"id|2005"`
+		}{99},
+		err: fmt.Errorf(`cannot parse tag for field .ID: invalid column name in 'db' tag: "id|2005"`),
+	}, {
+		value: &struct {
+			ID int64 `db:"id|2005"`
+		}{99},
+		err: fmt.Errorf(`cannot parse tag for field .ID: invalid column name in 'db' tag: "id|2005"`),
+	}, {
+		value: &struct {
+			ID int64 `db:"id_"`
+		}{99},
+		err: nil,
+	}, {
+		value: &struct {
+			ID int64 `db:"id5"`
+		}{99},
+		err: nil,
+	}, {
+		value: &struct {
+			ID int64 `db:"_i_d_55"`
+		}{99},
+		err: nil,
+	}, {
+		value: &struct {
+			ID int64 `db:"id_2002"`
+		}{99},
+		err: nil,
+	}, {
+		value: &struct {
+			ID int64 `db:"IdENT99"`
+		}{99},
+		err: nil,
+	}}
+
+	for _, test := range tagErrorTable {
+		_, err := TypeInfo(test.value)
+		assert.Equal(t, test.err, err)
 	}
 }
