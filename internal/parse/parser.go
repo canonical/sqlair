@@ -281,12 +281,11 @@ func (p *Parser) parseGoObject() (FullName, bool, error) {
 }
 
 // parseInputExpression parses an input expression of the form $Type.name.
-func (p *Parser) parseInputExpression() (ip *InputPart, ok bool, err error) {
+func (p *Parser) parseInputExpression() (*InputPart, bool, error) {
 	cp := p.save()
 
 	if p.skipByte('$') {
-		var fn FullName
-		if fn, ok, err = p.parseGoObject(); ok {
+		if fn, ok, err := p.parseGoObject(); ok {
 			if fn.Name == "*" {
 				return nil, false, fmt.Errorf("asterisk not allowed "+
 					"in expression near %d", p.pos)
