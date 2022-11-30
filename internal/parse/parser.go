@@ -266,18 +266,19 @@ func (p *Parser) parseIdentifier(asteriskF asteriskFlag) (string, bool) {
 // returned. Otherwise the error is nil.
 func (p *Parser) parseGoObject() (FullName, bool, error) {
 	cp := p.save()
-	var fn FullName
 	if id, ok := p.parseIdentifier(disallowAsterisk); ok {
 		if p.skipByte('.') {
 			if idField, ok := p.parseIdentifier(allowAsterisk); ok {
 				return FullName{id, idField}, true, nil
 			}
-			return fn, false, fmt.Errorf("invalid identifier near char %d", p.pos)
+			return FullName{}, false,
+				fmt.Errorf("invalid identifier near char %d", p.pos)
 		}
-		return fn, false, fmt.Errorf("go object near char %d not qualified", p.pos)
+		return FullName{}, false,
+			fmt.Errorf("go object near char %d not qualified", p.pos)
 	}
 	cp.restore()
-	return fn, false, nil
+	return FullName{}, false, nil
 }
 
 // parseInputExpression parses an input expression of the form $Type.name.
