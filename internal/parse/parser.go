@@ -236,22 +236,22 @@ func (p *Parser) skipName() bool {
 //  - bool == false, err == nil
 //		The construct was not the one we are looking for
 
-type asteriskFlag int
-
-const (
-	allowAsterisk asteriskFlag = iota
-	disallowAsterisk
-)
-
-// parseIdentifier parses a name made up of only nameBytes, or alternatively a
-// single asterisk if `allowAsterisk` is passed. On success it returns the
-// parsed string and true. Otherwise, it returns the empty string and false.
-func (p *Parser) parseIdentifier(asteriskF asteriskFlag) (string, bool) {
+// parseIdentifierAsterisk parses a name made up of only nameBytes or of a
+// single asterisk. On success it returns the parsed string and true. Otherwise,
+// it returns the empty string and false.
+func (p *Parser) parseIdentifierAsterisk(string, bool) {
 	if asteriskF == allowAsterisk {
 		if p.skipByte('*') {
 			return "*", true
 		}
 	}
+	return p.parseIdentifier()
+}
+
+// parseIdentifier parses a name made up of only nameBytes. On success it
+// returns the parsed string and true. Otherwise, it returns the empty string
+// and false.
+func (p *Parser) parseIdentifier() (string, bool) {
 	mark := p.pos
 	if p.skipName() {
 		return p.input[mark:p.pos], true
@@ -259,16 +259,15 @@ func (p *Parser) parseIdentifier(asteriskF asteriskFlag) (string, bool) {
 	return "", false
 }
 
-// parseGoObject parses a source or target go object of the form Prefix.Name
-// where the type is the Prefix and the field is the Name (this applies to maps
-// and structs). On success it returns the parsed FullName, true and nil. If a
-// Go object is found, but not formatted correctly, false and an error are
-// returned. Otherwise the error is nil.
-func (p *Parser) parseGoObject() (FullName, bool, error) {
+// parseGoTarget parses a go type name qualified by a tag name (or asterisk) of
+// the form "TypeName.col_name". On success it returns the parsed FullName, true
+// and nil. If a target is found, but not formatted correctly, false and an
+// error are returned. Otherwise the error is nil.
+func (p *Parser) parseGoTarget() (FullName, bool, error) {
 	cp := p.save()
-	if id, ok := p.parseIdentifier(disallowAsterisk); ok {
+	if id, ok := p.parseIdentifier(); ok {
 		if p.skipByte('.') {
-			if idField, ok := p.parseIdentifier(allowAsterisk); ok {
+			if idField, ok := p.parseIdentifierAsterisk(); ok {
 				return FullName{id, idField}, true, nil
 			}
 			return FullName{}, false,
@@ -286,7 +285,7 @@ func (p *Parser) parseInputExpression() (*InputPart, bool, error) {
 	cp := p.save()
 
 	if p.skipByte('$') {
-		if fn, ok, err := p.parseGoObject(); ok {
+		if fn, ok, err := p.parseGoTarget(); ok {
 			if fn.Name == "*" {
 				return nil, false, fmt.Errorf("asterisk not allowed "+
 					"in expression near %d", p.pos)
