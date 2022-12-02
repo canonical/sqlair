@@ -70,15 +70,19 @@ func TestReflectNonStructType(t *testing.T) {
 		err   error
 	}
 
+	type mymap map[int]int
 	var tagErrorTable = []tagErrorTest{{
+		value: mymap{},
+		err:   fmt.Errorf(`internal error: attempted to obtain struct information for something that is not a struct: typeinfo.mymap.`),
+	}, {
 		value: int(0),
-		err:   fmt.Errorf(`cannot reflect type "int", only struct`),
+		err:   fmt.Errorf(`internal error: attempted to obtain struct information for something that is not a struct: int.`),
 	}, {
 		value: string(""),
-		err:   fmt.Errorf(`cannot reflect type "string", only struct`),
+		err:   fmt.Errorf(`internal error: attempted to obtain struct information for something that is not a struct: string.`),
 	}, {
 		value: map[string]string{},
-		err:   fmt.Errorf(`cannot reflect type "map", only struct`),
+		err:   fmt.Errorf(`internal error: attempted to obtain struct information for something that is not a struct: map[string]string.`),
 	}}
 
 	for _, test := range tagErrorTable {
