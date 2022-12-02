@@ -102,12 +102,12 @@ func TestReflectBadTagError(t *testing.T) {
 		value: struct {
 			ID int64 `db:"id,bad-juju"`
 		}{99},
-		err: fmt.Errorf(`cannot parse tag for field .ID: unexpected tag value "bad-juju"`),
+		err: fmt.Errorf(`cannot parse tag for field .ID: unsupported flag "bad-juju" in tag "id,bad-juju"`),
 	}, {
 		value: struct {
 			ID int64 `db:","`
 		}{99},
-		err: fmt.Errorf(`cannot parse tag for field .ID: unexpected tag value ""`),
+		err: fmt.Errorf(`cannot parse tag for field .ID: unsupported flag "" in tag ","`),
 	}, {
 		value: struct {
 			ID int64 `db:",omitempty"`
@@ -117,7 +117,7 @@ func TestReflectBadTagError(t *testing.T) {
 		value: struct {
 			ID int64 `db:"id,omitempty,ddd"`
 		}{99},
-		err: fmt.Errorf(`cannot parse tag for field .ID: too many options in 'db' tag: id, omitempty, ddd`),
+		err: fmt.Errorf(`cannot parse tag for field .ID: unsupported flag "ddd" in tag "id,omitempty,ddd"`),
 	}, {
 		value: struct {
 			ID int64 `db:"5id"`

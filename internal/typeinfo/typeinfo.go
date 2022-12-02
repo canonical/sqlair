@@ -87,15 +87,14 @@ func parseTag(tag string) (string, bool, error) {
 	options := strings.Split(tag, ",")
 
 	var omitEmpty bool
-	// Refuse to parse if there are more than 2 items.
-	if len(options) > 2 {
-		return "", false, fmt.Errorf("too many options in 'db' tag: %s", strings.Join(options, ", "))
-	}
-	if len(options) == 2 {
-		if strings.ToLower(options[1]) != "omitempty" {
-			return "", false, fmt.Errorf("unexpected tag value %q", options[1])
+	if len(options) > 1 {
+		for _, flag := range options[1:] {
+			if flag == "omitempty" {
+				omitEmpty = true
+			} else {
+				return "", omitEmpty, fmt.Errorf("unsupported flag %q in tag %q", flag, tag)
+			}
 		}
-		omitEmpty = true
 	}
 
 	name := options[0]
