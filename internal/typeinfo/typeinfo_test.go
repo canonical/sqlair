@@ -84,7 +84,7 @@ func TestReflectNonStructType(t *testing.T) {
 	for _, test := range tagErrorTable {
 		info, err := TypeInfo(test.value)
 		assert.Equal(t, test.err, err)
-		assert.Equal(t, &Info{}, info)
+		assert.Equal(t, (*Info)(nil), info)
 	}
 }
 

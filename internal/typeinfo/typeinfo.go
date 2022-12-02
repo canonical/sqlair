@@ -15,7 +15,7 @@ var cache = make(map[reflect.Type]*Info)
 // generating and caching as required.
 func TypeInfo(value any) (*Info, error) {
 	if value == (any)(nil) {
-		return &Info{}, fmt.Errorf("cannot reflect nil value")
+		return nil, fmt.Errorf("cannot reflect nil value")
 	}
 
 	v := reflect.ValueOf(value)
@@ -30,7 +30,7 @@ func TypeInfo(value any) (*Info, error) {
 
 	info, err := generate(v)
 	if err != nil {
-		return &Info{}, err
+		return nil, err
 	}
 
 	cacheMutex.Lock()
@@ -48,7 +48,7 @@ func generate(value reflect.Value) (*Info, error) {
 
 	// Reflection information is only generated for structs.
 	if value.Kind() != reflect.Struct {
-		return &Info{}, fmt.Errorf("cannot reflect type %q, only struct", value.Kind())
+		return nil, fmt.Errorf("cannot reflect type %q, only struct", value.Kind())
 	}
 
 	info := Info{
@@ -67,7 +67,7 @@ func generate(value reflect.Value) (*Info, error) {
 		}
 		tag, omitEmpty, err := parseTag(tag)
 		if err != nil {
-			return &Info{}, fmt.Errorf("cannot parse tag for field %s.%s: %s", typ.Name(), field.Name, err)
+			return nil, fmt.Errorf("cannot parse tag for field %s.%s: %s", typ.Name(), field.Name, err)
 		}
 		info.TagToField[tag] = Field{
 			Name:      field.Name,
