@@ -21,7 +21,6 @@ func (s *PartsSuite) TestInputPart(c *C) {
 			Name:   "mytag",
 		},
 	}
-	c.Assert(i, Not(IsNil))
 	c.Assert("mytype", Equals, i.Source.Prefix)
 	c.Assert("mytag", Equals, i.Source.Name)
 }
@@ -32,7 +31,6 @@ func (s *PartsSuite) TestOutputPart(c *C) {
 		[]parse.FullName{{"mytable", "mycolumn"}},
 		[]parse.FullName{{"mytype", "mytag"}},
 	}
-	c.Assert(p, Not(IsNil))
 	c.Assert("mytable", Equals, p.Source[0].Prefix)
 	c.Assert("mycolumn", Equals, p.Source[0].Name)
 	c.Assert("mytype", Equals, p.Target[0].Prefix)
