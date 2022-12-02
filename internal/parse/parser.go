@@ -239,11 +239,9 @@ func (p *Parser) skipName() bool {
 // parseIdentifierAsterisk parses a name made up of only nameBytes or of a
 // single asterisk. On success it returns the parsed string and true. Otherwise,
 // it returns the empty string and false.
-func (p *Parser) parseIdentifierAsterisk(string, bool) {
-	if asteriskF == allowAsterisk {
-		if p.skipByte('*') {
-			return "*", true
-		}
+func (p *Parser) parseIdentifierAsterisk() (string, bool) {
+	if p.skipByte('*') {
+		return "*", true
 	}
 	return p.parseIdentifier()
 }
