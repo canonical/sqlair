@@ -19,7 +19,6 @@ func TypeInfo(value any) (*Info, error) {
 	}
 
 	v := reflect.ValueOf(value)
-	v = reflect.Indirect(v)
 
 	cacheMutex.RLock()
 	info, found := cache[v.Type()]
@@ -43,9 +42,6 @@ func TypeInfo(value any) (*Info, error) {
 // generate produces and returns reflection information for the input
 // reflect.Value that is specifically required for SQLAir operation.
 func generate(value reflect.Value) (*Info, error) {
-	// Dereference the value if it is a pointer.
-	value = reflect.Indirect(value)
-
 	// Reflection information is only generated for structs.
 	if value.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("cannot reflect type %q, only struct", value.Kind())

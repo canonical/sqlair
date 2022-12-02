@@ -95,82 +95,82 @@ func TestReflectBadTagError(t *testing.T) {
 	}
 
 	var tagErrorTable = []tagErrorTest{{
-		value: &struct {
+		value: struct {
 			ID int64 `db:"id,bad-juju"`
 		}{99},
 		err: fmt.Errorf(`cannot parse tag for field .ID: unexpected tag value "bad-juju"`),
 	}, {
-		value: &struct {
+		value: struct {
 			ID int64 `db:","`
 		}{99},
 		err: fmt.Errorf(`cannot parse tag for field .ID: unexpected tag value ""`),
 	}, {
-		value: &struct {
+		value: struct {
 			ID int64 `db:",omitempty"`
 		}{99},
 		err: fmt.Errorf(`cannot parse tag for field .ID: empty db tag`),
 	}, {
-		value: &struct {
+		value: struct {
 			ID int64 `db:"id,omitempty,ddd"`
 		}{99},
 		err: fmt.Errorf(`cannot parse tag for field .ID: too many options in 'db' tag: id, omitempty, ddd`),
 	}, {
-		value: &struct {
+		value: struct {
 			ID int64 `db:"5id"`
 		}{99},
 		err: fmt.Errorf(`cannot parse tag for field .ID: invalid column name in 'db' tag: "5id"`),
 	}, {
-		value: &struct {
+		value: struct {
 			ID int64 `db:"+id"`
 		}{99},
 		err: fmt.Errorf(`cannot parse tag for field .ID: invalid column name in 'db' tag: "+id"`),
 	}, {
-		value: &struct {
+		value: struct {
 			ID int64 `db:"-id"`
 		}{99},
 		err: fmt.Errorf(`cannot parse tag for field .ID: invalid column name in 'db' tag: "-id"`),
 	}, {
-		value: &struct {
+		value: struct {
 			ID int64 `db:"id/col"`
 		}{99},
 		err: fmt.Errorf(`cannot parse tag for field .ID: invalid column name in 'db' tag: "id/col"`),
 	}, {
-		value: &struct {
+		value: struct {
 			ID int64 `db:"id$$"`
 		}{99},
 		err: fmt.Errorf(`cannot parse tag for field .ID: invalid column name in 'db' tag: "id$$"`),
 	}, {
-		value: &struct {
+		value: struct {
 			ID int64 `db:"id|2005"`
 		}{99},
 		err: fmt.Errorf(`cannot parse tag for field .ID: invalid column name in 'db' tag: "id|2005"`),
 	}, {
-		value: &struct {
+		value: struct {
 			ID int64 `db:"id|2005"`
 		}{99},
 		err: fmt.Errorf(`cannot parse tag for field .ID: invalid column name in 'db' tag: "id|2005"`),
 	}, {
-		value: &struct {
+		value: struct {
 			ID int64 `db:"id_"`
 		}{99},
 		err: nil,
 	}, {
-		value: &struct {
+		value: struct {
 			ID int64 `db:"id5"`
 		}{99},
 		err: nil,
 	}, {
-		value: &struct {
+		value: struct {
 			ID int64 `db:"_i_d_55"`
 		}{99},
 		err: nil,
 	}, {
-		value: &struct {
+		value: struct {
 			ID int64 `db:"id_2002"`
 		}{99},
 		err: nil,
 	}, {
-		value: &struct {
+		value: struct {
 			ID int64 `db:"IdENT99"`
 		}{99},
 		err: nil,
