@@ -200,21 +200,19 @@ func TestUnfinishedStringLiteral(t *testing.T) {
 		name string
 		sql  string
 		err  string
-	}{
-		{
-			"missing right single quote",
-			"SELECT foo FROM t WHERE x = 'dddd",
-			"cannot parse expression: missing right quote in string literal",
-		}, {
-			"missing right double quote",
-			"SELECT foo FROM t WHERE x = \"dddd",
-			"cannot parse expression: missing right quote in string literal",
-		}, {
-			"quote missmatch",
-			"SELECT foo FROM t WHERE x = \"dddd'",
-			"cannot parse expression: missing right quote in string literal",
-		},
-	}
+	}{{
+		"missing right single quote",
+		"SELECT foo FROM t WHERE x = 'dddd",
+		"cannot parse expression: missing right quote in string literal",
+	}, {
+		"missing right double quote",
+		"SELECT foo FROM t WHERE x = \"dddd",
+		"cannot parse expression: missing right quote in string literal",
+	}, {
+		"quote missmatch",
+		"SELECT foo FROM t WHERE x = \"dddd'",
+		"cannot parse expression: missing right quote in string literal",
+	}}
 
 	for _, test := range testTable {
 		parser := parse.NewParser()
@@ -246,25 +244,23 @@ func TestBadFormatInput(t *testing.T) {
 		name string
 		sql  string
 		err  string
-	}{
-		{
-			"missing field name",
-			"SELECT foo FROM t WHERE x = $Address.",
-			"cannot parse expression: invalid identifier near char 37",
-		}, {
-			"object not qualified",
-			"SELECT foo FROM t WHERE x = $Address",
-			"cannot parse expression: go object near char 36 not qualified",
-		}, {
-			"field name bad syntax",
-			"SELECT foo FROM t WHERE x = $Address.&d",
-			"cannot parse expression: invalid identifier near char 37",
-		}, {
-			"bad field name",
-			"SELECT foo FROM t WHERE x = $Address.-",
-			"cannot parse expression: invalid identifier near char 37",
-		},
-	}
+	}{{
+		"missing field name",
+		"SELECT foo FROM t WHERE x = $Address.",
+		"cannot parse expression: invalid identifier near char 37",
+	}, {
+		"object not qualified",
+		"SELECT foo FROM t WHERE x = $Address",
+		"cannot parse expression: go object near char 36 not qualified",
+	}, {
+		"field name bad syntax",
+		"SELECT foo FROM t WHERE x = $Address.&d",
+		"cannot parse expression: invalid identifier near char 37",
+	}, {
+		"bad field name",
+		"SELECT foo FROM t WHERE x = $Address.-",
+		"cannot parse expression: invalid identifier near char 37",
+	}}
 
 	for _, test := range testTable {
 		parser := parse.NewParser()

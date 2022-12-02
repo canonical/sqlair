@@ -257,11 +257,11 @@ func (p *Parser) parseIdentifier() (string, bool) {
 	return "", false
 }
 
-// parseGoTarget parses a go type name qualified by a tag name (or asterisk) of
-// the form "TypeName.col_name". On success it returns the parsed FullName, true
-// and nil. If a target is found, but not formatted correctly, false and an
-// error are returned. Otherwise the error is nil.
-func (p *Parser) parseGoTarget() (FullName, bool, error) {
+// parseGoFullName parses a Go type name qualified by a tag name (or asterisk)
+// of the form "TypeName.col_name". On success it returns the parsed FullName,
+// true and nil. If a Go full name is found, but not formatted correctly, false
+// and an error are returned. Otherwise the error is nil.
+func (p *Parser) parseGoFullName() (FullName, bool, error) {
 	cp := p.save()
 	if id, ok := p.parseIdentifier(); ok {
 		if p.skipByte('.') {
@@ -283,7 +283,7 @@ func (p *Parser) parseInputExpression() (*InputPart, bool, error) {
 	cp := p.save()
 
 	if p.skipByte('$') {
-		if fn, ok, err := p.parseGoTarget(); ok {
+		if fn, ok, err := p.parseGoFullName(); ok {
 			if fn.Name == "*" {
 				return nil, false, fmt.Errorf("asterisk not allowed "+
 					"in expression near %d", p.pos)
