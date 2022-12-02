@@ -157,19 +157,23 @@ func TestRound(t *testing.T) {
 			"BypassPart[ AND p.address_id = ] " +
 			"InputPart[Person.address_id]]",
 	}, {
-		"SELECT p.*, a.district " +
-			"FROM person AS p JOIN address AS a ON p.address_id = a.id " +
-			"WHERE p.name = $Person.*",
-		"ParsedExpr[BypassPart[SELECT p.*, a.district FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] " +
-			"InputPart[Person.*]]",
-	}, {
 		"INSERT INTO person (name) VALUES $Person.name",
 		"ParsedExpr[BypassPart[INSERT INTO person (name) VALUES ] " +
 			"InputPart[Person.name]]",
 	}, {
-		"INSERT INTO person VALUES $Person.*",
-		"ParsedExpr[BypassPart[INSERT INTO person VALUES ] " +
-			"InputPart[Person.*]]",
+		"SELECT $ FROM moneytable",
+		"ParsedExpr[BypassPart[SELECT $ FROM moneytable]]",
+	}, {
+		"SELECT foo FROM data$",
+		"ParsedExpr[BypassPart[SELECT foo FROM data$]]",
+	}, {
+		"SELECT dollerrow$ FROM moneytable",
+		"ParsedExpr[BypassPart[SELECT dollerrow$ FROM moneytable]]",
+	}, {
+		"SELECT p.*, a.district " +
+			"FROM person AS p WHERE p.name=$Person.name",
+		"ParsedExpr[BypassPart[SELECT p.*, a.district FROM person AS p WHERE p.name=] " +
+			"InputPart[Person.name]]",
 	}, {
 		"UPDATE person SET person.address_id = $Address.ID " +
 			"WHERE person.id = $Person.ID",
@@ -191,28 +195,32 @@ func TestRound(t *testing.T) {
 	}
 }
 
-// We return a proper error when we find an unbound string literal
 func TestUnfinishedStringLiteral(t *testing.T) {
-	sql := "SELECT foo FROM t WHERE x = 'dddd"
-	parser := parse.NewParser()
-	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("cannot parse expression: missing right quote in string literal"), err)
-}
+	var testTable = []struct {
+		name string
+		sql  string
+		err  string
+	}{{
+		"missing right single quote",
+		"SELECT foo FROM t WHERE x = 'dddd",
+		"cannot parse expression: missing right quote in string literal",
+	}, {
+		"missing right double quote",
+		"SELECT foo FROM t WHERE x = \"dddd",
+		"cannot parse expression: missing right quote in string literal",
+	}, {
+		"quote missmatch",
+		"SELECT foo FROM t WHERE x = \"dddd'",
+		"cannot parse expression: missing right quote in string literal",
+	}}
 
-func TestUnfinishedStringLiteralV2(t *testing.T) {
-	sql := "SELECT foo FROM t WHERE x = \"dddd"
-	parser := parse.NewParser()
-	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("cannot parse expression: missing right quote in string literal"), err)
-}
-
-// We require to end the string literal with the proper quote depending
-// on the opening one.
-func TestUnfinishedStringLiteralV3(t *testing.T) {
-	sql := "SELECT foo FROM t WHERE x = \"dddd'"
-	parser := parse.NewParser()
-	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("cannot parse expression: missing right quote in string literal"), err)
+	for _, test := range testTable {
+		parser := parse.NewParser()
+		res, err := parser.Parse(test.sql)
+		t.Log(test.name)
+		assert.Equal(t, test.err, err.Error())
+		assert.Equal(t, (*parse.ParsedExpr)(nil), res)
+	}
 }
 
 // Properly parsing empty string literal
@@ -231,58 +239,34 @@ func TestBadEscaped(t *testing.T) {
 	assert.Equal(t, fmt.Errorf("cannot parse expression: missing right quote in string literal"), err)
 }
 
-// Detect bad input DSL pieces
 func TestBadFormatInput(t *testing.T) {
-	sql := "SELECT foo FROM t WHERE x = $.id"
-	parser := parse.NewParser()
-	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
-}
+	var testTable = []struct {
+		name string
+		sql  string
+		err  string
+	}{{
+		"missing field name",
+		"SELECT foo FROM t WHERE x = $Address.",
+		"cannot parse expression: invalid identifier near char 37",
+	}, {
+		"object not qualified",
+		"SELECT foo FROM t WHERE x = $Address",
+		"cannot parse expression: go object near char 36 not qualified",
+	}, {
+		"field name bad syntax",
+		"SELECT foo FROM t WHERE x = $Address.&d",
+		"cannot parse expression: invalid identifier near char 37",
+	}, {
+		"bad field name",
+		"SELECT foo FROM t WHERE x = $Address.-",
+		"cannot parse expression: invalid identifier near char 37",
+	}}
 
-// Detect bad input DSL pieces
-func TestBadFormatInputV2(t *testing.T) {
-	sql := "SELECT foo FROM t WHERE x = $Address."
-	parser := parse.NewParser()
-	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
-}
-
-// Detect bad input DSL pieces
-func TestBadFormatInputV3(t *testing.T) {
-	sql := "SELECT foo FROM t WHERE x = $"
-	parser := parse.NewParser()
-	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
-}
-
-// Detect bad input DSL pieces
-func TestBadFormatInputV4(t *testing.T) {
-	sql := "SELECT foo FROM t WHERE x = $$Address"
-	parser := parse.NewParser()
-	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
-}
-
-// Detect bad input DSL pieces
-func TestBadFormatInputV5(t *testing.T) {
-	sql := "SELECT foo FROM t WHERE x = $```"
-	parser := parse.NewParser()
-	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
-}
-
-// Detect bad input DSL pieces
-func TestBadFormatInputV6(t *testing.T) {
-	sql := "SELECT foo FROM t WHERE x = $.."
-	parser := parse.NewParser()
-	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
-}
-
-// Detect bad input DSL pieces
-func TestBadFormatInputV7(t *testing.T) {
-	sql := "SELECT foo FROM t WHERE x = $."
-	parser := parse.NewParser()
-	_, err := parser.Parse(sql)
-	assert.Equal(t, fmt.Errorf("cannot parse expression: malformed input type"), err)
+	for _, test := range testTable {
+		parser := parse.NewParser()
+		res, err := parser.Parse(test.sql)
+		t.Log(test.name)
+		assert.Equal(t, test.err, err.Error())
+		assert.Equal(t, (*parse.ParsedExpr)(nil), res)
+	}
 }

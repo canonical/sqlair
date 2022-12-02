@@ -62,13 +62,6 @@ func (cp *checkpoint) restore() {
 	cp.parser.parts = cp.parts
 }
 
-type idClass int
-
-const (
-	columnId idClass = iota
-	typeId
-)
-
 // ParsedExpr is the AST representation of an SQL expression.
 // It has a representation of the original SQL statement in terms of queryParts
 // A SQL statement like this:
@@ -243,58 +236,62 @@ func (p *Parser) skipName() bool {
 //  - bool == false, err == nil
 //		The construct was not the one we are looking for
 
-// parseIdentifier parses either a name made up only of nameBytes or an
-// asterisk.
-func (p *Parser) parseIdentifier() (string, bool) {
+// parseIdentifierAsterisk parses a name made up of only nameBytes or of a
+// single asterisk. On success it returns the parsed string and true. Otherwise,
+// it returns the empty string and false.
+func (p *Parser) parseIdentifierAsterisk() (string, bool) {
 	if p.skipByte('*') {
 		return "*", true
 	}
+	return p.parseIdentifier()
+}
 
-	idStart := p.pos
+// parseIdentifier parses a name made up of only nameBytes. On success it
+// returns the parsed string and true. Otherwise, it returns the empty string
+// and false.
+func (p *Parser) parseIdentifier() (string, bool) {
+	mark := p.pos
 	if p.skipName() {
-		return p.input[idStart:p.pos], true
+		return p.input[mark:p.pos], true
 	}
 	return "", false
 }
 
-// parseFullName parses a column name or Go field name, optionally dot-prefixed by
-// its table or type name respectively.
-func (p *Parser) parseFullName(idc idClass) (FullName, bool) {
+// parseGoFullName parses a Go type name qualified by a tag name (or asterisk)
+// of the form "TypeName.col_name". On success it returns the parsed FullName,
+// true and nil. If a Go full name is found, but not formatted correctly, false
+// and an error are returned. Otherwise the error is nil.
+func (p *Parser) parseGoFullName() (FullName, bool, error) {
 	cp := p.save()
-	var fn FullName
 	if id, ok := p.parseIdentifier(); ok {
-		fn.Prefix = id
 		if p.skipByte('.') {
-			if id, ok := p.parseIdentifier(); ok {
-				fn.Name = id
-				return fn, true
+			if idField, ok := p.parseIdentifierAsterisk(); ok {
+				return FullName{id, idField}, true, nil
 			}
-		} else {
-			// A column name specified without a table prefix is a name not a
-			// prefix.
-			if idc == columnId {
-				fn.Name = fn.Prefix
-				fn.Prefix = ""
-			}
-			return fn, true
+			return FullName{}, false,
+				fmt.Errorf("invalid identifier near char %d", p.pos)
 		}
+		return FullName{}, false,
+			fmt.Errorf("go object near char %d not qualified", p.pos)
 	}
 	cp.restore()
-	return fn, false
+	return FullName{}, false, nil
 }
 
 // parseInputExpression parses an input expression of the form $Type.name.
 func (p *Parser) parseInputExpression() (*InputPart, bool, error) {
 	cp := p.save()
-	var fn FullName
-	var ok bool
 
 	if p.skipByte('$') {
-		fn, ok = p.parseFullName(typeId)
-		if !ok {
-			return nil, false, fmt.Errorf("malformed input type")
+		if fn, ok, err := p.parseGoFullName(); ok {
+			if fn.Name == "*" {
+				return nil, false, fmt.Errorf("asterisk not allowed "+
+					"in expression near %d", p.pos)
+			}
+			return &InputPart{fn}, true, nil
+		} else if err != nil {
+			return nil, false, err
 		}
-		return &InputPart{fn}, true, nil
 	}
 	cp.restore()
 	return nil, false, nil
