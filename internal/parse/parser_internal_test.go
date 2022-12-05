@@ -42,7 +42,7 @@ func TestRunTable(t *testing.T) {
 		{stringf0: p.skipName, result: []bool{false}, input: " hi", data: []string{}},
 		{stringf0: p.skipName, result: []bool{false}, input: "*", data: []string{}},
 		{stringf0: p.skipName, result: []bool{true}, input: "hello", data: []string{}},
-		{stringf0: p.skipName, result: []bool{true}, input: "2d3d", data: []string{}},
+		{stringf0: p.skipName, result: []bool{false}, input: "2d3d", data: []string{}},
 	}
 	for _, v := range parseTests {
 		// Reset the input.
