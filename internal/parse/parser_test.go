@@ -195,6 +195,7 @@ func TestRound(t *testing.T) {
 	}
 }
 
+// We return a proper error when we find an unbound string literal
 func TestUnfinishedStringLiteral(t *testing.T) {
 	var testTable = []struct {
 		name string
