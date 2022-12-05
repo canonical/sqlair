@@ -122,24 +122,24 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 	for {
 		p.partStart = p.pos
 
-		if op, ok, err := p.parseOutputExpression(); err != nil {
+		if out, ok, err := p.parseOutputExpression(); err != nil {
 			return nil, err
 		} else if ok {
-			p.add(op)
+			p.add(out)
 			continue
 		}
 
-		if ip, ok, err := p.parseInputExpression(); err != nil {
+		if in, ok, err := p.parseInputExpression(); err != nil {
 			return nil, err
 		} else if ok {
-			p.add(ip)
+			p.add(in)
 			continue
 		}
 
-		if sp, ok, err := p.parseStringLiteral(); err != nil {
+		if bypass, ok, err := p.parseStringLiteral(); err != nil {
 			return nil, err
 		} else if ok {
-			p.add(sp)
+			p.add(bypass)
 			continue
 		}
 
@@ -397,7 +397,7 @@ func starCount(fns []FullName) int {
 
 // parseOutputExpression parses all output expressions. The ampersand must be
 // preceded by a space and followed by a name byte.
-func (p *Parser) parseOutputExpression() (op *OutputPart, ok bool, err error) {
+func (p *Parser) parseOutputExpression() (out *OutputPart, ok bool, err error) {
 	cp := p.save()
 	var cols []FullName
 	var targets []FullName
