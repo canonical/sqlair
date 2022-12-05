@@ -361,7 +361,6 @@ func (p *Parser) parseColumns() ([]FullName, bool) {
 // targets are not parsed.
 func (p *Parser) parseTargets() ([]FullName, bool, error) {
 	cp := p.save()
-	var targets []FullName
 
 	// An '&' must be preceded by a space and succeeded by a name or opening
 	// bracket.
@@ -374,7 +373,7 @@ func (p *Parser) parseTargets() ([]FullName, bool, error) {
 			// Case 2: Multiple targets e.g. &(Person.name, Person.id)
 		} else if targets, ok, err := p.parseList((*Parser).parseGoFullName); ok {
 			if starCount(targets) > 1 {
-				return targets, false, fmt.Errorf("more than one asterisk in expression near char %d", p.pos)
+				return []FullName{}, false, fmt.Errorf("more than one asterisk in expression near char %d", p.pos)
 			}
 			return targets, true, nil
 		} else if err != nil {
@@ -382,7 +381,7 @@ func (p *Parser) parseTargets() ([]FullName, bool, error) {
 		}
 	}
 	cp.restore()
-	return targets, false, nil
+	return []FullName{}, false, nil
 }
 
 // starCount returns the number of FullNames in the argument with a asterisk in
