@@ -319,9 +319,9 @@ func (p *Parser) parseList(parseFn func(p *Parser) (FullName, bool, error)) ([]F
 				objs = append(objs, obj)
 				p.skipSpaces()
 			} else if err != nil {
-				return []FullName{}, false, err
+				return nil, false, err
 			} else {
-				return []FullName{}, false, fmt.Errorf("invalid identifier near char %d", p.pos)
+				return nil, false, fmt.Errorf("invalid identifier near char %d", p.pos)
 			}
 			p.skipSpaces()
 			if p.skipByte(')') {
@@ -330,10 +330,10 @@ func (p *Parser) parseList(parseFn func(p *Parser) (FullName, bool, error)) ([]F
 			nextItem = p.skipByte(',')
 			p.skipSpaces()
 		}
-		return []FullName{}, false, fmt.Errorf("missing closing parentheses for char %d", parenPos)
+		return nil, false, fmt.Errorf("missing closing parentheses for char %d", parenPos)
 	}
 	cp.restore()
-	return []FullName{}, false, nil
+	return nil, false, nil
 }
 
 // parseColumns parses text in the SQL query of the form "table.colname". If
@@ -351,7 +351,7 @@ func (p *Parser) parseColumns() ([]FullName, bool) {
 		return cols, true
 	}
 	cp.restore()
-	return []FullName{}, false
+	return nil, false
 }
 
 // parseTargets parses the part of the output expression following the
@@ -368,19 +368,19 @@ func (p *Parser) parseTargets() ([]FullName, bool, error) {
 		if target, ok, err := p.parseGoFullName(); ok {
 			return []FullName{target}, true, nil
 		} else if err != nil {
-			return []FullName{}, false, err
+			return nil, false, err
 			// Case 2: Multiple targets e.g. &(Person.name, Person.id)
 		} else if targets, ok, err := p.parseList((*Parser).parseGoFullName); ok {
 			if starCount(targets) > 1 {
-				return []FullName{}, false, fmt.Errorf("more than one asterisk in expression near char %d", p.pos)
+				return nil, false, fmt.Errorf("more than one asterisk in expression near char %d", p.pos)
 			}
 			return targets, true, nil
 		} else if err != nil {
-			return []FullName{}, false, err
+			return nil, false, err
 		}
 	}
 	cp.restore()
-	return []FullName{}, false, nil
+	return nil, false, nil
 }
 
 // starCount returns the number of FullNames in the argument with a asterisk in
