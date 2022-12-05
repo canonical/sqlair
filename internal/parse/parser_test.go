@@ -33,53 +33,95 @@ func TestRound(t *testing.T) {
 		expectedParsed string
 	}{{
 		"SELECT p.* AS &Person.*",
-		"ParsedExpr[BypassPart[SELECT p.* AS &Person.*]]",
+		"ParsedExpr[BypassPart[SELECT] OutputPart[[p.*] [Person.*]]]",
 	}, {
 		"SELECT p.* AS&Person.*",
 		"ParsedExpr[BypassPart[SELECT p.* AS&Person.*]]",
 	}, {
 		"SELECT p.* AS &Person.*, '&notAnOutputExpresion.*' AS literal FROM t",
-		"ParsedExpr[BypassPart[SELECT p.* AS &Person.*, ] " +
+		"ParsedExpr[BypassPart[SELECT] " +
+			"OutputPart[[p.*] [Person.*]] " +
+			"BypassPart[, ] " +
 			"BypassPart['&notAnOutputExpresion.*'] " +
 			"BypassPart[ AS literal FROM t]]",
 	}, {
 		"SELECT * AS &Person.* FROM t",
-		"ParsedExpr[BypassPart[SELECT * AS &Person.* FROM t]]",
+		"ParsedExpr[BypassPart[SELECT] " +
+			"OutputPart[[*] [Person.*]] " +
+			"BypassPart[ FROM t]]",
 	}, {
-		"SELECT foo, bar FROM table WHERE foo = $Person.ID",
+		"SELECT foo, bar FROM table WHERE foo = $Person.id",
 		"ParsedExpr[BypassPart[SELECT foo, bar FROM table WHERE foo = ] " +
-			"InputPart[Person.ID]]",
+			"InputPart[Person.id]]",
 	}, {
-		"SELECT &Person FROM table WHERE foo = $Address.ID",
-		"ParsedExpr[BypassPart[SELECT &Person FROM table WHERE foo = ] " +
-			"InputPart[Address.ID]]",
+		"SELECT &Person.* FROM table WHERE foo = $Address.id",
+		"ParsedExpr[BypassPart[SELECT] OutputPart[[] [Person.*]] " +
+			"BypassPart[ FROM table WHERE foo = ] " +
+			"InputPart[Address.id]]",
 	}, {
-		"SELECT &Person.* FROM table WHERE foo = $Address.ID",
-		"ParsedExpr[BypassPart[SELECT &Person.* FROM table WHERE foo = ] " +
-			"InputPart[Address.ID]]",
+		"SELECT &Person.* FROM table WHERE foo = $Address.id",
+		"ParsedExpr[BypassPart[SELECT] " +
+			"OutputPart[[] [Person.*]] " +
+			"BypassPart[ FROM table WHERE foo = ] " +
+			"InputPart[Address.id]]",
 	}, {
-		"SELECT foo, bar, &Person.ID FROM table WHERE foo = 'xx'",
-		"ParsedExpr[BypassPart[SELECT foo, bar, &Person.ID FROM table WHERE foo = ] " +
+		"SELECT foo, bar, &Person.id FROM table WHERE foo = 'xx'",
+		"ParsedExpr[BypassPart[SELECT foo, bar,] " +
+			"OutputPart[[] [Person.id]] " +
+			"BypassPart[ FROM table WHERE foo = ] " +
 			"BypassPart['xx']]",
 	}, {
-		"SELECT foo, &Person.ID, bar, baz, &Manager.Name FROM table WHERE foo = 'xx'",
-		"ParsedExpr[BypassPart[SELECT foo, &Person.ID, bar, baz, &Manager.Name FROM table WHERE foo = ] " +
+		"SELECT foo, &Person.id, bar, baz, &Manager.name FROM table WHERE foo = 'xx'",
+		"ParsedExpr[BypassPart[SELECT foo,] " +
+			"OutputPart[[] [Person.id]] " +
+			"BypassPart[, bar, baz,] " +
+			"OutputPart[[] [Manager.name]] " +
+			"BypassPart[ FROM table WHERE foo = ] " +
 			"BypassPart['xx']]",
 	}, {
 		"SELECT * AS &Person.* FROM person WHERE name = 'Fred'",
-		"ParsedExpr[BypassPart[SELECT * AS &Person.* FROM person WHERE name = ] " +
+		"ParsedExpr[BypassPart[SELECT] " +
+			"OutputPart[[*] [Person.*]] " +
+			"BypassPart[ FROM person WHERE name = ] " +
 			"BypassPart['Fred']]",
 	}, {
 		"SELECT &Person.* FROM person WHERE name = 'Fred'",
-		"ParsedExpr[BypassPart[SELECT &Person.* FROM person WHERE name = ] " +
+		"ParsedExpr[BypassPart[SELECT] " +
+			"OutputPart[[] [Person.*]] " +
+			"BypassPart[ FROM person WHERE name = ] " +
 			"BypassPart['Fred']]",
 	}, {
 		"SELECT * AS &Person.*, a.* AS &Address.* FROM person, address a WHERE name = 'Fred'",
-		"ParsedExpr[BypassPart[SELECT * AS &Person.*, a.* AS &Address.* FROM person, address a WHERE name = ] " +
+		"ParsedExpr[BypassPart[SELECT] " +
+			"OutputPart[[*] [Person.*]] " +
+			"BypassPart[,] " +
+			"OutputPart[[a.*] [Address.*]] " +
+			"BypassPart[ FROM person, address a WHERE name = ] " +
 			"BypassPart['Fred']]",
 	}, {
+		"SELECT (a.district, a.street) AS &(Address.district, Address.street) FROM address AS a",
+		"ParsedExpr[BypassPart[SELECT] " +
+			"OutputPart[[a.district a.street] [Address.district Address.street]] " +
+			"BypassPart[ FROM address AS a]]",
+	}, {
+		"SELECT (a.district, a.street) AS &(Address.district, Address.street), " +
+			"a.id AS &Person.id FROM address AS a",
+		"ParsedExpr[BypassPart[SELECT] " +
+			"OutputPart[[a.district a.street] [Address.district Address.street]] " +
+			"BypassPart[,] OutputPart[[a.id] [Person.id]] " +
+			"BypassPart[ FROM address AS a]]",
+	}, {
+		"SELECT (a.district, a.street) AS &(Address.district, Address.street), " +
+			"&Person.* FROM address AS a",
+		"ParsedExpr[BypassPart[SELECT] " +
+			"OutputPart[[a.district a.street] [Address.district Address.street]] " +
+			"BypassPart[,] OutputPart[[] [Person.*]] " +
+			"BypassPart[ FROM address AS a]]",
+	}, {
 		"SELECT (a.district, a.street) AS &Address.* FROM address AS a WHERE p.name = 'Fred'",
-		"ParsedExpr[BypassPart[SELECT (a.district, a.street) AS &Address.* FROM address AS a WHERE p.name = ] BypassPart['Fred']]",
+		"ParsedExpr[BypassPart[SELECT] " +
+			"OutputPart[[a.district a.street] [Address.*]] " +
+			"BypassPart[ FROM address AS a WHERE p.name = ] BypassPart['Fred']]",
 	}, {
 		"SELECT 1 FROM person WHERE p.name = 'Fred'",
 		"ParsedExpr[BypassPart[SELECT 1 FROM person WHERE p.name = ] " +
@@ -88,44 +130,87 @@ func TestRound(t *testing.T) {
 		"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.*, " +
 			"(5+7), (col1 * col2) AS calculated_value FROM person AS p " +
 			"JOIN address AS a ON p.address_id = a.id WHERE p.name = 'Fred'",
-		"ParsedExpr[BypassPart[SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.*, (5+7), (col1 * col2) AS calculated_value FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] " +
+		"ParsedExpr[BypassPart[SELECT] " +
+			"OutputPart[[p.*] [Person.*]] " +
+			"BypassPart[,] " +
+			"OutputPart[[a.district a.street] [Address.*]] " +
+			"BypassPart[, (5+7), (col1 * col2) AS calculated_value FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] " +
 			"BypassPart['Fred']]",
 	}, {
 		"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* " +
 			"FROM person AS p JOIN address AS a ON p .address_id = a.id " +
 			"WHERE p.name = 'Fred'",
-		"ParsedExpr[BypassPart[SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.*" +
-			" FROM person AS p JOIN address AS a ON p .address_id = a.id WHERE p.name = ] " +
+		"ParsedExpr[BypassPart[SELECT] " +
+			"OutputPart[[p.*] [Person.*]] " +
+			"BypassPart[,] " +
+			"OutputPart[[a.district a.street] [Address.*]] " +
+			"BypassPart[ FROM person AS p JOIN address AS a ON p .address_id = a.id WHERE p.name = ] " +
 			"BypassPart['Fred']]",
 	}, {
 		"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* " +
 			"FROM person AS p JOIN address AS a ON p.address_id = a.id " +
-			"WHERE p.name in (SELECT name FROM table WHERE table.n = $Person.name)",
-		"ParsedExpr[BypassPart[SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* " +
-			"FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name in (SELECT name FROM table WHERE table.n = ] " +
+			"WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name)",
+		"ParsedExpr[BypassPart[SELECT] " +
+			"OutputPart[[p.*] [Person.*]] " +
+			"BypassPart[,] " +
+			"OutputPart[[a.district a.street] [Address.*]] " +
+			"BypassPart[ FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name IN (SELECT name FROM table WHERE table.n = ] " +
 			"InputPart[Person.name] " +
 			"BypassPart[)]]",
 	}, {
 		"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* " +
-			"FROM person WHERE p.name in (SELECT name FROM table " +
+			"FROM person WHERE p.name IN (SELECT name FROM table " +
 			"WHERE table.n = $Person.name) UNION " +
 			"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* " +
-			"FROM person WHERE p.name in " +
+			"FROM person WHERE p.name IN " +
 			"(SELECT name FROM table WHERE table.n = $Person.name)",
-		"ParsedExpr[BypassPart[SELECT p.* AS &Person.*, " +
-			"(a.district, a.street) AS &Address.* " +
-			"FROM person WHERE p.name in (SELECT name FROM table WHERE table.n = ] " +
+		"ParsedExpr[BypassPart[SELECT] OutputPart[[p.*] [Person.*]] " +
+			"BypassPart[,] OutputPart[[a.district a.street] [Address.*]] " +
+			"BypassPart[ FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = ] " +
 			"InputPart[Person.name] " +
-			"BypassPart[) UNION SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* " +
-			"FROM person WHERE p.name in (SELECT name FROM table WHERE table.n = ] " +
+			"BypassPart[) UNION SELECT] " +
+			"OutputPart[[p.*] [Person.*]] " +
+			"BypassPart[,] " +
+			"OutputPart[[a.district a.street] [Address.*]] " +
+			"BypassPart[ FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = ] " +
 			"InputPart[Person.name] " +
 			"BypassPart[)]]",
+	}, {
+		"SELECT p.* AS &Person.*, a.district AS &District.* " +
+			"FROM person AS p JOIN address AS a ON p.address_id = a.id " +
+			"WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
+		"ParsedExpr[BypassPart[SELECT] " +
+			"OutputPart[[p.*] [Person.*]] " +
+			"BypassPart[,] " +
+			"OutputPart[[a.district] [District.*]] " +
+			"BypassPart[ FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] " +
+			"InputPart[Person.name] " +
+			"BypassPart[ AND p.address_id = ] " +
+			"InputPart[Person.address_id]]",
+	}, {
+		"SELECT p.* AS &Person.*, a.district AS &District.* " +
+			"FROM person AS p INNER JOIN address AS a " +
+			"ON p.address_id = $Address.id " +
+			"WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
+		"ParsedExpr[BypassPart[SELECT] " +
+			"OutputPart[[p.*] [Person.*]] " +
+			"BypassPart[,] " +
+			"OutputPart[[a.district] [District.*]] " +
+			"BypassPart[ FROM person AS p INNER JOIN address AS a ON p.address_id = ] " +
+			"InputPart[Address.id] " +
+			"BypassPart[ WHERE p.name = ] " +
+			"InputPart[Person.name] " +
+			"BypassPart[ AND p.address_id = ] " +
+			"InputPart[Person.address_id]]",
 	}, {
 		"SELECT p.* AS &Person.*, m.* AS &Manager.* " +
 			"FROM person AS p JOIN person AS m " +
 			"ON p.manager_id = m.id WHERE p.name = 'Fred'",
-		"ParsedExpr[BypassPart[SELECT p.* AS &Person.*, m.* AS &Manager.* " +
-			"FROM person AS p JOIN person AS m ON p.manager_id = m.id WHERE p.name = ] " +
+		"ParsedExpr[BypassPart[SELECT] " +
+			"OutputPart[[p.*] [Person.*]] " +
+			"BypassPart[,] " +
+			"OutputPart[[m.*] [Manager.*]] " +
+			"BypassPart[ FROM person AS p JOIN person AS m ON p.manager_id = m.id WHERE p.name = ] " +
 			"BypassPart['Fred']]",
 	}, {
 		"SELECT person.*, address.district FROM person JOIN address " +
@@ -135,27 +220,6 @@ func TestRound(t *testing.T) {
 	}, {
 		"SELECT p FROM person WHERE p.name = $Person.name",
 		"ParsedExpr[BypassPart[SELECT p FROM person WHERE p.name = ] InputPart[Person.name]]",
-	}, {
-		"SELECT p.* AS &Person, a.District AS &District " +
-			"FROM person AS p JOIN address AS a ON p.address_id = a.id " +
-			"WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
-		"ParsedExpr[BypassPart[SELECT p.* AS &Person, a.District AS &District " +
-			"FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] " +
-			"InputPart[Person.name] " +
-			"BypassPart[ AND p.address_id = ] " +
-			"InputPart[Person.address_id]]",
-	}, {
-		"SELECT p.* AS &Person, a.District AS &District " +
-			"FROM person AS p INNER JOIN address AS a " +
-			"ON p.address_id = $Address.ID " +
-			"WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
-		"ParsedExpr[BypassPart[SELECT p.* AS &Person, a.District AS &District " +
-			"FROM person AS p INNER JOIN address AS a ON p.address_id = ] " +
-			"InputPart[Address.ID] " +
-			"BypassPart[ WHERE p.name = ] " +
-			"InputPart[Person.name] " +
-			"BypassPart[ AND p.address_id = ] " +
-			"InputPart[Person.address_id]]",
 	}, {
 		"INSERT INTO person (name) VALUES $Person.name",
 		"ParsedExpr[BypassPart[INSERT INTO person (name) VALUES ] " +
@@ -175,12 +239,12 @@ func TestRound(t *testing.T) {
 		"ParsedExpr[BypassPart[SELECT p.*, a.district FROM person AS p WHERE p.name=] " +
 			"InputPart[Person.name]]",
 	}, {
-		"UPDATE person SET person.address_id = $Address.ID " +
-			"WHERE person.id = $Person.ID",
+		"UPDATE person SET person.address_id = $Address.id " +
+			"WHERE person.id = $Person.id",
 		"ParsedExpr[BypassPart[UPDATE person SET person.address_id = ] " +
-			"InputPart[Address.ID] " +
+			"InputPart[Address.id] " +
 			"BypassPart[ WHERE person.id = ] " +
-			"InputPart[Person.ID]]",
+			"InputPart[Person.id]]",
 	}}
 
 	parser := parse.NewParser()
