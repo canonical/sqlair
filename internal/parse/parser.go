@@ -269,7 +269,7 @@ func (p *Parser) parseIdentifier() (string, bool) {
 func (p *Parser) parseColumn() (FullName, bool, error) {
 	cp := p.save()
 	if id, ok := p.parseIdentifierAsterisk(); ok {
-		if p.skipByte('.') {
+		if id != "*" && p.skipByte('.') {
 			if idCol, ok := p.parseIdentifierAsterisk(); ok {
 				return FullName{Prefix: id, Name: idCol}, true, nil
 			}
