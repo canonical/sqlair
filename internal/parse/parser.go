@@ -419,21 +419,11 @@ func (p *Parser) parseOutputExpression() (op *OutputPart, ok bool, err error) {
 				numTargets := len(targets)
 				// If the target is not * then check there are equal columns
 				// and targets.
-				if !(numTargets == 1 && targets[0].Name == "*") {
-					if numCols != numTargets {
-						return nil, false, fmt.Errorf("number of cols = %d "+
-							"but number of targets = %d in expression near %d",
-							numCols, numTargets, p.pos)
-					}
-				}
-
-				// If the target is not M check that there are not mixed *
-				// and regular columns.
-				if targets[0].Prefix != "M" && numCols > 1 &&
-					starCount(cols) >= 1 {
-					return nil, false, fmt.Errorf("cannot mix asterisk "+
-						"and explicit columns in expression near %d",
-						p.pos)
+				if !(numTargets == 1 && targets[0].Name == "*") &&
+					numCols != numTargets {
+					return nil, false, fmt.Errorf("number of cols = %d "+
+						"but number of targets = %d in expression near %d",
+						numCols, numTargets, p.pos)
 				}
 
 				return &OutputPart{cols, targets}, true, nil
