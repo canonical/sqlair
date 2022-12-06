@@ -1,6 +1,9 @@
 package parse
 
-import "fmt"
+import (
+	"bytes"
+	"fmt"
+)
 
 // A QueryPart represents a section of a parsed SQL statement, which forms
 // a complete query when processed together with its surrounding parts, in
@@ -10,7 +13,7 @@ type QueryPart interface {
 	String() string
 
 	// ToSQL returns the SQL representation of the part.
-	ToSQL() string
+	ToSQL([]string) string
 }
 
 // FullName represents a table column or a Go type identifier.
@@ -37,8 +40,8 @@ func (p *InputPart) String() string {
 	return fmt.Sprintf("InputPart[%+v]", p.Source)
 }
 
-func (p *InputPart) ToSQL() string {
-	return ""
+func (p *InputPart) ToSQL(cs []string) string {
+	return "?"
 }
 
 // OutputPart represents a named target output variable in the SQL expression,
@@ -52,8 +55,16 @@ func (p *OutputPart) String() string {
 	return fmt.Sprintf("OutputPart[%+v %+v]", p.Source, p.Target)
 }
 
-func (p *OutputPart) ToSQL() string {
-	return ""
+func (p *OutputPart) ToSQL(cs []string) string {
+	var out bytes.Buffer
+	out.WriteString(" ")
+	for i, c := range cs {
+		if i > 0 {
+			out.WriteString(", ")
+		}
+		out.WriteString(c)
+	}
+	return out.String()
 }
 
 // BypassPart represents a part of the expression that we want to pass to the
@@ -66,6 +77,6 @@ func (p *BypassPart) String() string {
 	return "BypassPart[" + p.Chunk + "]"
 }
 
-func (p *BypassPart) ToSQL() string {
+func (p *BypassPart) ToSQL(cs []string) string {
 	return p.Chunk
 }
