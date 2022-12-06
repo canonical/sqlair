@@ -317,7 +317,6 @@ func (p *Parser) parseList(parseFn func(p *Parser) (FullName, bool, error)) ([]F
 		for nextItem {
 			if obj, ok, err := parseFn(p); ok {
 				objs = append(objs, obj)
-				p.skipSpaces()
 			} else if err != nil {
 				return nil, false, err
 			} else {
