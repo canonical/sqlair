@@ -40,7 +40,7 @@ func (p *InputPart) String() string {
 	return fmt.Sprintf("InputPart[%+v]", p.Source)
 }
 
-func (p *InputPart) ToSQL(cs []string) string {
+func (p *InputPart) ToSQL([]string) string {
 	return "?"
 }
 
@@ -77,6 +77,6 @@ func (p *BypassPart) String() string {
 	return "BypassPart[" + p.Chunk + "]"
 }
 
-func (p *BypassPart) ToSQL(cs []string) string {
+func (p *BypassPart) ToSQL([]string) string {
 	return p.Chunk
 }
