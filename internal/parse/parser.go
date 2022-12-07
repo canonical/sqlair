@@ -122,6 +122,13 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 	for {
 		p.partStart = p.pos
 
+		if op, ok, err := p.parseOutputExpression(); err != nil {
+			return nil, err
+		} else if ok {
+			p.add(op)
+			continue
+		}
+
 		if ip, ok, err := p.parseInputExpression(); err != nil {
 			return nil, err
 		} else if ok {
@@ -256,6 +263,25 @@ func (p *Parser) parseIdentifier() (string, bool) {
 	return "", false
 }
 
+// parseColumn parses a column made up of name bytes, optionally dot-prefixed by
+// its table name. parseColumn returns an error so that it can be used with
+// parseList.
+func (p *Parser) parseColumn() (FullName, bool, error) {
+	cp := p.save()
+	if id, ok := p.parseIdentifierAsterisk(); ok {
+		if p.skipByte('.') {
+			if idCol, ok := p.parseIdentifierAsterisk(); ok {
+				return FullName{Prefix: id, Name: idCol}, true, nil
+			}
+		} else {
+			// A column name specified without a table prefix should be in Name.
+			return FullName{Name: id}, true, nil
+		}
+	}
+	cp.restore()
+	return FullName{}, false, nil
+}
+
 // parseGoFullName parses a Go type name qualified by a tag name (or asterisk)
 // of the form "TypeName.col_name". On success it returns the parsed FullName,
 // true and nil. If a Go full name is found, but not formatted correctly, false
@@ -275,6 +301,149 @@ func (p *Parser) parseGoFullName() (FullName, bool, error) {
 	}
 	cp.restore()
 	return FullName{}, false, nil
+}
+
+// parseList takes a parsing function that returns a FullName and parses a
+// bracketed, comma seperated, list. On success it returns an array of FullName
+// objects. Otherwise it returns an empty array, false and an error.
+func (p *Parser) parseList(parseFn func(p *Parser) (FullName, bool, error)) ([]FullName, bool, error) {
+	cp := p.save()
+	if p.skipByte('(') {
+		parenPos := p.pos
+		p.skipSpaces()
+
+		nextItem := true
+		var objs []FullName
+		for nextItem {
+			if obj, ok, err := parseFn(p); ok {
+				objs = append(objs, obj)
+				p.skipSpaces()
+			} else if err != nil {
+				return []FullName{}, false, err
+			} else {
+				return []FullName{}, false, fmt.Errorf("invalid identifier near char %d", p.pos)
+			}
+			p.skipSpaces()
+			if p.skipByte(')') {
+				return objs, true, nil
+			}
+			nextItem = p.skipByte(',')
+			p.skipSpaces()
+		}
+		return []FullName{}, false, fmt.Errorf("missing closing parentheses for char %d", parenPos)
+	}
+	cp.restore()
+	return []FullName{}, false, nil
+}
+
+// parseColumns parses text in the SQL query of the form "table.colname". If
+// there is more than one column then the columns must be enclosed in brackets
+// e.g.  "(col1, col2) AS &Person.*".
+func (p *Parser) parseColumns() ([]FullName, bool) {
+	cp := p.save()
+	// We skip a space here to keep consistent with parseTargets which also
+	// consumes one space before the start of the expression.
+	p.skipByte(' ')
+	// Case 1: A single column e.g. p.name
+	if col, ok, _ := p.parseColumn(); ok {
+		return []FullName{col}, true
+	} else if cols, ok, _ := p.parseList((*Parser).parseColumn); ok {
+		return cols, true
+	}
+	cp.restore()
+	return []FullName{}, false
+}
+
+// parseTargets parses the part of the output expression following the
+// ampersand. This can be one or more Go objects. If the ampersand is not found
+// or is not preceded by a space and succeeded by a name or opening bracket the
+// targets are not parsed.
+func (p *Parser) parseTargets() ([]FullName, bool, error) {
+	cp := p.save()
+	var targets []FullName
+
+	// An '&' must be preceded by a space and succeeded by a name or opening
+	// bracket.
+	if p.skipString(" &") {
+		// Case 1: A single target e.g. &Person.name
+		if target, ok, err := p.parseGoFullName(); ok {
+			return []FullName{target}, true, nil
+		} else if err != nil {
+			return []FullName{}, false, err
+			// Case 2: Multiple targets e.g. &(Person.name, Person.id)
+		} else if targets, ok, err := p.parseList((*Parser).parseGoFullName); ok {
+			if starCount(targets) > 1 {
+				return targets, false, fmt.Errorf("more than one asterisk in expression near char %d", p.pos)
+			}
+			return targets, true, nil
+		} else if err != nil {
+			return []FullName{}, false, err
+		}
+	}
+	cp.restore()
+	return targets, false, nil
+}
+
+// starCount returns the number of FullNames in the argument with a asterisk in
+// the Name field.
+func starCount(fns []FullName) int {
+	s := 0
+	for _, fn := range fns {
+		if fn.Name == "*" {
+			s++
+		}
+	}
+	return s
+}
+
+// parseOutputExpression parses all output expressions. The ampersand must be
+// preceded by a space and followed by a name byte.
+func (p *Parser) parseOutputExpression() (op *OutputPart, ok bool, err error) {
+	cp := p.save()
+	var cols []FullName
+	var targets []FullName
+
+	// Case 1: simple case with no columns e.g. &Person.*
+	if targets, ok, err = p.parseTargets(); ok {
+		return &OutputPart{cols, targets}, true, nil
+	} else if err != nil {
+		return nil, false, err
+	}
+	if cols, ok = p.parseColumns(); ok {
+		// Case 2: The expression contains an AS
+		// e.g. "p.col1 AS &Person.*".
+		numCols := len(cols)
+		p.skipSpaces()
+		if p.skipString("AS") {
+			if targets, ok, err = p.parseTargets(); ok {
+				numTargets := len(targets)
+				// If the target is not * then check there are equal columns
+				// and targets.
+				if !(numTargets == 1 && targets[0].Name == "*") {
+					if numCols != numTargets {
+						return nil, false, fmt.Errorf("number of cols = %d "+
+							"but number of targets = %d in expression near %d",
+							numCols, numTargets, p.pos)
+					}
+				}
+
+				// If the target is not M check that there are not mixed *
+				// and regular columns.
+				if targets[0].Prefix != "M" && numCols > 1 &&
+					starCount(cols) >= 1 {
+					return nil, false, fmt.Errorf("cannot mix asterisk "+
+						"and explicit columns in expression near %d",
+						p.pos)
+				}
+
+				return &OutputPart{cols, targets}, true, nil
+			} else if err != nil {
+				return nil, false, err
+			}
+		}
+	}
+	cp.restore()
+	return nil, false, nil
 }
 
 // parseInputExpression parses an input expression of the form $Type.name.
