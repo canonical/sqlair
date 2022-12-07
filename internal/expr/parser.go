@@ -6,7 +6,6 @@ import (
 	"strings"
 )
 
-// Parser keeps track of the current parsing state.
 type Parser struct {
 	input string
 	pos   int
@@ -111,8 +110,7 @@ func (p *Parser) add(part queryPart) {
 }
 
 // Parse takes an input string and parses the input and output parts. It returns
-// a pointer to a ParsedExpr. If the parser encounters an error then ParsedExpr
-// is nil.
+// a pointer to a ParsedExpr.
 func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 	defer func() {
 		if err != nil {
@@ -157,9 +155,8 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 	return &ParsedExpr{p.parts}, nil
 }
 
-// advance increments p.pos until we reach a space, a $, a " or a '. If we find
-// a space we advance to the rightmost adjacent space so the p.pos points to the
-// last space before the next non-space character.
+// advance increments p.pos until we reach content that may be the start of a
+// token we want to parse.
 func (p *Parser) advance() {
 	noteableBytes := map[byte]bool{
 		'$':  true,
@@ -167,19 +164,18 @@ func (p *Parser) advance() {
 		'\'': true,
 		' ':  true,
 	}
-	// Advance the parser to the next char.
+
 	p.pos++
-	// Keep incrementing pos until we find a character of interest.
 	for p.pos < len(p.input) && !noteableBytes[p.input[p.pos]] {
 		p.pos++
 	}
+
 	// If we are on a space, advance to the rightmost in the sequence.
 	if p.peekByte(' ') {
 		for p.pos+1 < len(p.input) && p.input[p.pos+1] == ' ' {
 			p.pos++
 		}
 	}
-	return
 }
 
 // peekByte returns true if the current byte equals the one passed as parameter.
