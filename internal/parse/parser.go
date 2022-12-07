@@ -14,7 +14,7 @@ type Parser struct {
 	// partStart is the value of pos just before we started parsing the part
 	// under pos. We maintain partStart >= prevPart.
 	partStart int
-	parts     []queryPart
+	parts     []QueryPart
 }
 
 func NewParser() *Parser {
@@ -27,7 +27,7 @@ func (p *Parser) init(input string) {
 	p.pos = 0
 	p.prevPart = 0
 	p.partStart = 0
-	p.parts = []queryPart{}
+	p.parts = []QueryPart{}
 }
 
 // A checkpoint struct for saving parser state to restore later. We only use
@@ -38,7 +38,7 @@ type checkpoint struct {
 	pos       int
 	prevPart  int
 	partStart int
-	parts     []queryPart
+	parts     []QueryPart
 }
 
 // save takes a snapshot of the state of the parser and returns a pointer to a
@@ -62,17 +62,16 @@ func (cp *checkpoint) restore() {
 	cp.parser.parts = cp.parts
 }
 
-// ParsedExpr is the AST representation of an SQL expression.
-// It has a representation of the original SQL statement in terms of queryParts
-// A SQL statement like this:
+// ParsedExpr is the AST representation of an SQL expression. The AST is made up
+// of QueryParts. For example, a SQL statement like this:
 //
-// Select p.* as &Person.* from person where p.name = $Boss.Name
+// Select p.* as &Person.* from person where p.name = $Boss.col_name
 //
 // would be represented as:
 //
 // [BypassPart OutputPart BypassPart InputPart]
 type ParsedExpr struct {
-	queryParts []queryPart
+	QueryParts []QueryPart
 }
 
 // String returns a textual representation of the AST contained in the
@@ -80,7 +79,7 @@ type ParsedExpr struct {
 func (pe *ParsedExpr) String() string {
 	var out bytes.Buffer
 	out.WriteString("ParsedExpr[")
-	for i, p := range pe.queryParts {
+	for i, p := range pe.QueryParts {
 		if i > 0 {
 			out.WriteString(" ")
 		}
@@ -93,7 +92,7 @@ func (pe *ParsedExpr) String() string {
 // add pushes the parsed part to the parsedExprBuilder along with the BypassPart
 // that stretches from the end of the previous part to the beginning of this
 // part.
-func (p *Parser) add(part queryPart) {
+func (p *Parser) add(part QueryPart) {
 	// Add the string between the previous I/O part and the current part.
 	if p.prevPart != p.partStart {
 		p.parts = append(p.parts,
