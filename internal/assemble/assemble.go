@@ -10,9 +10,8 @@ import (
 )
 
 type AssembledExpr struct {
-	Parsed    *parse.ParsedExpr
-	InputArgs []any
-	SQL       string
+	Parsed *parse.ParsedExpr
+	SQL    string
 }
 
 // assembleInput checks that the type in input expression is one we have
