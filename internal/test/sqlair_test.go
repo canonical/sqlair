@@ -1,4 +1,4 @@
-package parse_test
+package test
 
 import (
 	"testing"
@@ -7,9 +7,12 @@ import (
 	. "gopkg.in/check.v1"
 )
 
-type ParserSuite struct{}
+// Hook up gocheck into the "go test" runner.
+func Test(t *testing.T) { TestingT(t) }
 
-var _ = Suite(&ParserSuite{})
+type TestSuite struct{}
+
+var _ = Suite(&TestSuite{})
 
 type Address struct {
 	ID int `db:"id"`
@@ -218,7 +221,7 @@ var tests = []struct {
 		"InputPart[Person.id]]",
 }}
 
-func (s *ParserSuite) TestRound(c *C) {
+func (s *TestSuite) TestRound(c *C) {
 	parser := parse.NewParser()
 	for i, test := range tests {
 		var parsedExpr *parse.ParsedExpr
