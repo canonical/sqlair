@@ -11,11 +11,28 @@ type ParserSuite struct{}
 
 var _ = Suite(&ParserSuite{})
 
+type Address struct {
+	ID int `db:"id"`
+}
+
+type Person struct {
+	ID         int    `db:"id"`
+	Fullname   string `db:"name"`
+	PostalCode int    `db:"address_id"`
+}
+
+type Manager struct {
+	Name string `db:"manager_name"`
+}
+
+type District struct {
+}
+
+type M map[string]any
+
 var tests = []struct {
-	input             string
-	expectedParsed    string
-	assembleArgs      []any
-	expectedAssembled string
+	input          string
+	expectedParsed string
 }{{
 	"SELECT p.* AS &Person.*",
 	"ParsedExpr[BypassPart[SELECT p.* AS &Person.*]]",
