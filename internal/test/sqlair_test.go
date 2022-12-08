@@ -12,8 +12,10 @@ type ParserSuite struct{}
 var _ = Suite(&ParserSuite{})
 
 var tests = []struct {
-	input          string
-	expectedParsed string
+	input             string
+	expectedParsed    string
+	assembleArgs      []any
+	expectedAssembled string
 }{{
 	"SELECT p.* AS &Person.*",
 	"ParsedExpr[BypassPart[SELECT p.* AS &Person.*]]",
