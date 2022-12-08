@@ -4,30 +4,35 @@ import (
 	"testing"
 
 	"github.com/canonical/sqlair/internal/parse"
-	"github.com/stretchr/testify/assert"
+	. "gopkg.in/check.v1"
 )
 
-func TestInputPart(t *testing.T) {
+// Hook up gocheck into the "go test" runner.
+func Test(t *testing.T) { TestingT(t) }
+
+type PartsSuite struct{}
+
+var _ = Suite(&PartsSuite{})
+
+func (s *PartsSuite) TestInputPart(c *C) {
 	i := parse.InputPart{
 		parse.FullName{
 			Prefix: "mytype",
 			Name:   "mytag",
 		},
 	}
-	assert.NotEqual(t, nil, i)
-	assert.Equal(t, "mytype", i.Source.Prefix)
-	assert.Equal(t, "mytag", i.Source.Name)
+	c.Assert("mytype", Equals, i.Source.Prefix)
+	c.Assert("mytag", Equals, i.Source.Name)
 }
 
-func TestOutputPart(t *testing.T) {
+func (s *PartsSuite) TestOutputPart(c *C) {
 	// Fully specified part
 	p := parse.OutputPart{
 		[]parse.FullName{{"mytable", "mycolumn"}},
 		[]parse.FullName{{"mytype", "mytag"}},
 	}
-	assert.NotEqual(t, nil, p)
-	assert.Equal(t, "mytable", p.Source[0].Prefix)
-	assert.Equal(t, "mycolumn", p.Source[0].Name)
-	assert.Equal(t, "mytype", p.Target[0].Prefix)
-	assert.Equal(t, "mytag", p.Target[0].Name)
+	c.Assert("mytable", Equals, p.Source[0].Prefix)
+	c.Assert("mycolumn", Equals, p.Source[0].Name)
+	c.Assert("mytype", Equals, p.Target[0].Prefix)
+	c.Assert("mytag", Equals, p.Target[0].Name)
 }
