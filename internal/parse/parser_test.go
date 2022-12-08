@@ -9,25 +9,6 @@ type ParserSuite struct{}
 
 var _ = Suite(&ParserSuite{})
 
-type Address struct {
-	ID int `db:"id"`
-}
-
-type Person struct {
-	ID         int    `db:"id"`
-	Fullname   string `db:"name"`
-	PostalCode int    `db:"address_id"`
-}
-
-type Manager struct {
-	Name string `db:"manager_name"`
-}
-
-type District struct {
-}
-
-type M map[string]any
-
 // We return a proper error when we find an unbound string literal
 func (s *ParserSuite) TestUnfinishedStringLiteral(c *C) {
 	testList := []string{
