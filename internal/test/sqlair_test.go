@@ -16,7 +16,9 @@ type TestSuite struct{}
 var _ = Suite(&TestSuite{})
 
 type Address struct {
-	ID int `db:"id"`
+	ID       int    `db:"id"`
+	District string `db:"district"`
+	Street   string `db:"street"`
 }
 
 type Person struct {
@@ -43,7 +45,7 @@ var tests = []struct {
 	"SELECT p.* AS &Person.*",
 	"ParsedExpr[BypassPart[SELECT] OutputPart[[p.*] [Person.*]]]",
 	[]any{Person{}},
-	"SELECT p.address_id, p.id, p.name AS &Person.*",
+	"SELECT p.address_id, p.id, p.name",
 }, {
 	"SELECT p.* AS&Person.*",
 	"ParsedExpr[BypassPart[SELECT p.* AS&Person.*]]",
@@ -64,7 +66,7 @@ var tests = []struct {
 		"OutputPart[[*] [Person.*]] " +
 		"BypassPart[ FROM t]]",
 	[]any{Person{}},
-	"SELECT p.address_id, p.id, p.name FROM t",
+	"SELECT address_id, id, name FROM t",
 }, {
 	"SELECT foo, bar FROM table WHERE foo = $Person.id",
 	"ParsedExpr[BypassPart[SELECT foo, bar FROM table WHERE foo = ] " +
@@ -77,15 +79,7 @@ var tests = []struct {
 		"BypassPart[ FROM table WHERE foo = ] " +
 		"InputPart[Address.id]]",
 	[]any{Person{}, Address{}},
-	"SELECT &Person.* FROM table WHERE foo = $Address.id",
-}, {
-	"SELECT &Person.* FROM table WHERE foo = $Address.id",
-	"ParsedExpr[BypassPart[SELECT] " +
-		"OutputPart[[] [Person.*]] " +
-		"BypassPart[ FROM table WHERE foo = ] " +
-		"InputPart[Address.id]]",
-	[]any{Person{}, Address{}},
-	"SELECT &Person.* FROM table WHERE foo = $Address.id",
+	"SELECT address_id, id, name FROM table WHERE foo = ?",
 }, {
 	"SELECT foo, bar, &Person.id FROM table WHERE foo = 'xx'",
 	"ParsedExpr[BypassPart[SELECT foo, bar,] " +
@@ -93,17 +87,17 @@ var tests = []struct {
 		"BypassPart[ FROM table WHERE foo = ] " +
 		"BypassPart['xx']]",
 	[]any{Person{}},
-	"SELECT foo, bar, &Person.id FROM table WHERE foo = 'xx'",
+	"SELECT foo, bar, id FROM table WHERE foo = 'xx'",
 }, {
-	"SELECT foo, &Person.id, bar, baz, &Manager.name FROM table WHERE foo = 'xx'",
+	"SELECT foo, &Person.id, bar, baz, &Manager.manager_name FROM table WHERE foo = 'xx'",
 	"ParsedExpr[BypassPart[SELECT foo,] " +
 		"OutputPart[[] [Person.id]] " +
 		"BypassPart[, bar, baz,] " +
-		"OutputPart[[] [Manager.name]] " +
+		"OutputPart[[] [Manager.manager_name]] " +
 		"BypassPart[ FROM table WHERE foo = ] " +
 		"BypassPart['xx']]",
-	[]any{Manager{}},
-	"SELECT foo, &Person.id, bar, baz, &Manager.name FROM table WHERE foo = 'xx'",
+	[]any{Person{}, Manager{}},
+	"SELECT foo, id, bar, baz, manager_name FROM table WHERE foo = 'xx'",
 }, {
 	"SELECT * AS &Person.* FROM person WHERE name = 'Fred'",
 	"ParsedExpr[BypassPart[SELECT] " +
@@ -111,7 +105,7 @@ var tests = []struct {
 		"BypassPart[ FROM person WHERE name = ] " +
 		"BypassPart['Fred']]",
 	[]any{Person{}},
-	"SELECT * AS &Person.* FROM person WHERE name = 'Fred'",
+	"SELECT address_id, id, name FROM person WHERE name = 'Fred'",
 }, {
 	"SELECT &Person.* FROM person WHERE name = 'Fred'",
 	"ParsedExpr[BypassPart[SELECT] " +
@@ -119,7 +113,7 @@ var tests = []struct {
 		"BypassPart[ FROM person WHERE name = ] " +
 		"BypassPart['Fred']]",
 	[]any{Person{}},
-	"SELECT &Person.* FROM person WHERE name = 'Fred'",
+	"SELECT address_id, id, name FROM person WHERE name = 'Fred'",
 }, {
 	"SELECT * AS &Person.*, a.* AS &Address.* FROM person, address a WHERE name = 'Fred'",
 	"ParsedExpr[BypassPart[SELECT] " +
@@ -129,14 +123,14 @@ var tests = []struct {
 		"BypassPart[ FROM person, address a WHERE name = ] " +
 		"BypassPart['Fred']]",
 	[]any{Person{}, Address{}},
-	"SELECT * AS &Person.*, a.* AS &Address.* FROM person, address a WHERE name = 'Fred'",
+	"SELECT address_id, id, name, a.district, a.id, a.street FROM person, address a WHERE name = 'Fred'",
 }, {
 	"SELECT (a.district, a.street) AS &(Address.district, Address.street) FROM address AS a",
 	"ParsedExpr[BypassPart[SELECT] " +
 		"OutputPart[[a.district a.street] [Address.district Address.street]] " +
 		"BypassPart[ FROM address AS a]]",
 	[]any{Address{}, District{}},
-	"SELECT (a.district, a.street) AS &(Address.district, Address.street) FROM address AS a",
+	"SELECT a.district, a.street FROM address AS a",
 }, {
 	"SELECT (a.district, a.street) AS &(Address.district, Address.street), " +
 		"a.id AS &Person.id FROM address AS a",
@@ -145,8 +139,7 @@ var tests = []struct {
 		"BypassPart[,] OutputPart[[a.id] [Person.id]] " +
 		"BypassPart[ FROM address AS a]]",
 	[]any{Person{}, Address{}},
-	"SELECT (a.district, a.street) AS &(Address.district, Address.street), " +
-		"a.id AS &Person.id FROM address AS a",
+	"SELECT a.district, a.street, a.id FROM address AS a",
 }, {
 	"SELECT (a.district, a.street) AS &(Address.district, Address.street), " +
 		"&Person.* FROM address AS a",
@@ -155,15 +148,14 @@ var tests = []struct {
 		"BypassPart[,] OutputPart[[] [Person.*]] " +
 		"BypassPart[ FROM address AS a]]",
 	[]any{Person{}, Address{}},
-	"SELECT (a.district, a.street) AS &(Address.district, Address.street), " +
-		"&Person.* FROM address AS a",
+	"SELECT a.district, a.street, address_id, id, name FROM address AS a",
 }, {
 	"SELECT (a.district, a.street) AS &Address.* FROM address AS a WHERE p.name = 'Fred'",
 	"ParsedExpr[BypassPart[SELECT] " +
 		"OutputPart[[a.district a.street] [Address.*]] " +
 		"BypassPart[ FROM address AS a WHERE p.name = ] BypassPart['Fred']]",
 	[]any{Address{}},
-	"SELECT (a.district, a.street) AS &Address.* FROM address AS a WHERE p.name = 'Fred'",
+	"SELECT a.district, a.street FROM address AS a WHERE p.name = 'Fred'",
 }, {
 	"SELECT 1 FROM person WHERE p.name = 'Fred'",
 	"ParsedExpr[BypassPart[SELECT 1 FROM person WHERE p.name = ] " +
@@ -181,7 +173,7 @@ var tests = []struct {
 		"BypassPart[, (5+7), (col1 * col2) AS calculated_value FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] " +
 		"BypassPart['Fred']]",
 	[]any{Person{}, Address{}},
-	"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.*, " +
+	"SELECT p.address_id, p.id, p.name, a.district, a.street, " +
 		"(5+7), (col1 * col2) AS calculated_value FROM person AS p " +
 		"JOIN address AS a ON p.address_id = a.id WHERE p.name = 'Fred'",
 }, {
@@ -195,7 +187,7 @@ var tests = []struct {
 		"BypassPart[ FROM person AS p JOIN address AS a ON p .address_id = a.id WHERE p.name = ] " +
 		"BypassPart['Fred']]",
 	[]any{Person{}, Address{}},
-	"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* " +
+	"SELECT p.address_id, p.id, p.name, a.district, a.street " +
 		"FROM person AS p JOIN address AS a ON p .address_id = a.id " +
 		"WHERE p.name = 'Fred'",
 }, {
@@ -210,9 +202,9 @@ var tests = []struct {
 		"InputPart[Person.name] " +
 		"BypassPart[)]]",
 	[]any{Person{}, Address{}},
-	"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* " +
+	"SELECT p.address_id, p.id, p.name, a.district, a.street " +
 		"FROM person AS p JOIN address AS a ON p.address_id = a.id " +
-		"WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name)",
+		"WHERE p.name IN (SELECT name FROM table WHERE table.n = ?)",
 }, {
 	"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* " +
 		"FROM person WHERE p.name IN (SELECT name FROM table " +
@@ -232,48 +224,46 @@ var tests = []struct {
 		"InputPart[Person.name] " +
 		"BypassPart[)]]",
 	[]any{Person{}, Address{}},
-	"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* " +
+	"SELECT p.address_id, p.id, p.name, a.district, a.street " +
 		"FROM person WHERE p.name IN (SELECT name FROM table " +
-		"WHERE table.n = $Person.name) UNION " +
-		"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* " +
+		"WHERE table.n = ?) UNION " +
+		"SELECT p.address_id, p.id, p.name, a.district, a.street " +
 		"FROM person WHERE p.name IN " +
-		"(SELECT name FROM table WHERE table.n = $Person.name)",
+		"(SELECT name FROM table WHERE table.n = ?)",
 }, {
-	"SELECT p.* AS &Person.*, a.district AS &District.* " +
+	"SELECT p.* AS &Person.*, &District.* " +
 		"FROM person AS p JOIN address AS a ON p.address_id = a.id " +
 		"WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
 	"ParsedExpr[BypassPart[SELECT] " +
 		"OutputPart[[p.*] [Person.*]] " +
 		"BypassPart[,] " +
-		"OutputPart[[a.district] [District.*]] " +
+		"OutputPart[[] [District.*]] " +
 		"BypassPart[ FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] " +
 		"InputPart[Person.name] " +
 		"BypassPart[ AND p.address_id = ] " +
 		"InputPart[Person.address_id]]",
 	[]any{Person{}, District{}},
-	"SELECT p.* AS &Person.*, a.district AS &District.* " +
+	"SELECT p.address_id, p.id, p.name,  " +
 		"FROM person AS p JOIN address AS a ON p.address_id = a.id " +
-		"WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
+		"WHERE p.name = ? AND p.address_id = ?",
 }, {
-	"SELECT p.* AS &Person.*, a.district AS &District.* " +
+	"SELECT p.* AS &Person.*, " +
 		"FROM person AS p INNER JOIN address AS a " +
 		"ON p.address_id = $Address.id " +
 		"WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
 	"ParsedExpr[BypassPart[SELECT] " +
 		"OutputPart[[p.*] [Person.*]] " +
-		"BypassPart[,] " +
-		"OutputPart[[a.district] [District.*]] " +
-		"BypassPart[ FROM person AS p INNER JOIN address AS a ON p.address_id = ] " +
+		"BypassPart[, FROM person AS p INNER JOIN address AS a ON p.address_id = ] " +
 		"InputPart[Address.id] " +
 		"BypassPart[ WHERE p.name = ] " +
 		"InputPart[Person.name] " +
 		"BypassPart[ AND p.address_id = ] " +
 		"InputPart[Person.address_id]]",
-	[]any{Person{}, District{}},
-	"SELECT p.* AS &Person.*, a.district AS &District.* " +
+	[]any{Person{}, Address{}},
+	"SELECT p.address_id, p.id, p.name, " +
 		"FROM person AS p INNER JOIN address AS a " +
-		"ON p.address_id = $Address.id " +
-		"WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
+		"ON p.address_id = ? " +
+		"WHERE p.name = ? AND p.address_id = ?",
 }, {
 	"SELECT p.* AS &Person.*, m.* AS &Manager.* " +
 		"FROM person AS p JOIN person AS m " +
@@ -285,7 +275,7 @@ var tests = []struct {
 		"BypassPart[ FROM person AS p JOIN person AS m ON p.manager_id = m.id WHERE p.name = ] " +
 		"BypassPart['Fred']]",
 	[]any{Person{}, Manager{}},
-	"SELECT p.* AS &Person.*, m.* AS &Manager.* " +
+	"SELECT p.address_id, p.id, p.name, m.manager_name " +
 		"FROM person AS p JOIN person AS m " +
 		"ON p.manager_id = m.id WHERE p.name = 'Fred'",
 }, {
@@ -300,13 +290,13 @@ var tests = []struct {
 	"SELECT p FROM person WHERE p.name = $Person.name",
 	"ParsedExpr[BypassPart[SELECT p FROM person WHERE p.name = ] InputPart[Person.name]]",
 	[]any{Person{}},
-	"SELECT p FROM person WHERE p.name = $Person.name",
+	"SELECT p FROM person WHERE p.name = ?",
 }, {
 	"INSERT INTO person (name) VALUES $Person.name",
 	"ParsedExpr[BypassPart[INSERT INTO person (name) VALUES ] " +
 		"InputPart[Person.name]]",
 	[]any{Person{}},
-	"INSERT INTO person (name) VALUES $Person.name",
+	"INSERT INTO person (name) VALUES ?",
 }, {
 	"SELECT $ FROM moneytable",
 	"ParsedExpr[BypassPart[SELECT $ FROM moneytable]]",
@@ -329,7 +319,7 @@ var tests = []struct {
 		"InputPart[Person.name]]",
 	[]any{Person{}},
 	"SELECT p.*, a.district " +
-		"FROM person AS p WHERE p.name=$Person.name",
+		"FROM person AS p WHERE p.name=?",
 }, {
 	"UPDATE person SET person.address_id = $Address.id " +
 		"WHERE person.id = $Person.id",
@@ -338,14 +328,13 @@ var tests = []struct {
 		"BypassPart[ WHERE person.id = ] " +
 		"InputPart[Person.id]]",
 	[]any{Person{}, Address{}},
-	"UPDATE person SET person.address_id = $Address.id " +
-		"WHERE person.id = $Person.id",
+	"UPDATE person SET person.address_id = ? " +
+		"WHERE person.id = ?",
 }}
 
 func (s *TestSuite) TestRound(c *C) {
 	parser := parse.NewParser()
 	for i, test := range tests {
-		c.Log("Hit")
 		var (
 			parsedExpr    *parse.ParsedExpr
 			assembledExpr *assemble.AssembledExpr
@@ -357,7 +346,7 @@ func (s *TestSuite) TestRound(c *C) {
 			c.Errorf("test %d failed (Parse): input: %s\nexpected: %s\nactual:   %s\n", i, test.input, test.expectedParsed, parsedExpr.String())
 		}
 
-		if assembledExpr, err = assemble.Assemble(parsedExpr, test.assembleArgs); err != nil {
+		if assembledExpr, err = assemble.Assemble(parsedExpr, test.assembleArgs...); err != nil {
 			c.Errorf("test %d failed (Assemble): input: %s\nexpected: %s\nerr: %s\n", i, test.input, test.expectedAssembled, err)
 		} else if assembledExpr.SQL != test.expectedAssembled {
 			c.Errorf("test %d failed (Assemble): input: %s\nexpected: %s\nactual:   %s\n", i, test.input, test.expectedAssembled, assembledExpr.SQL)
