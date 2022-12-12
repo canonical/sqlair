@@ -14,10 +14,12 @@ type AssembledExpr struct {
 	SQL    string
 }
 
+type typeNameToInfo map[string]*typeinfo.Info
+
 // assembleInput checks that the type in input expression is one we have
 // reflected on and that the tag exists.
-func assembleInput(c map[string]*typeinfo.Info, p *parse.InputPart) error {
-	if inf, ok := c[p.Source.Prefix]; ok {
+func assembleInput(ti typeNameToInfo, p *parse.InputPart) error {
+	if inf, ok := ti[p.Source.Prefix]; ok {
 		if _, ok := inf.TagToField[p.Source.Name]; ok {
 			return nil
 		}
@@ -27,19 +29,30 @@ func assembleInput(c map[string]*typeinfo.Info, p *parse.InputPart) error {
 	return fmt.Errorf("unknown type: %s", p.Source.Prefix)
 }
 
-func assembleOutput(c map[string]*typeinfo.Info, p *parse.OutputPart) ([]string, error) {
+// makeOutCols builds an array of columns out of an array of tags.
+// It admits a prefix parameter that will be prepended to the column name.
+func makeOutCols(tags []string, prefix string) []string {
+	var outCols []string = make([]string, 0)
+	for _, tag := range tags {
+		outCols = append(outCols, prefix+tag)
+	}
+	return outCols
+}
+
+func assembleOutput(ti typeNameToInfo, p *parse.OutputPart) ([]string, error) {
 
 	var outCols []string = make([]string, 0)
 
 	// In parse we ensure that if p.Target[0] is a * then len(p.Target) == 1
-	if p.Target[0].Name == "*" { // Star target cases e.g. ...&P.*
+	// Case 1: Star target cases e.g. ...&P.*
+	if p.Target[0].Name == "*" {
 		var tags []string
 
-		inf, ok := c[p.Target[0].Prefix]
+		inf, ok := ti[p.Target[0].Prefix]
 		if !ok {
 			return nil, fmt.Errorf("unknown type: %s", p.Target[0].Prefix)
 		}
-		for tag, _ := range inf.TagToField {
+		for tag := range inf.TagToField {
 			tags = append(tags, tag)
 		}
 
@@ -49,9 +62,7 @@ func assembleOutput(c map[string]*typeinfo.Info, p *parse.OutputPart) ([]string,
 				if p.Source[0].Prefix != "" {
 					pref = p.Source[0].Prefix + "."
 				}
-				for _, tag := range tags {
-					outCols = append(outCols, pref+tag)
-				}
+				outCols = makeOutCols(tags, pref)
 			} else { // Explicit columns e.g. (col1, col2) AS &P.*
 				for _, c := range p.Source {
 					if _, ok := inf.TagToField[c.Name]; !ok {
@@ -62,32 +73,32 @@ func assembleOutput(c map[string]*typeinfo.Info, p *parse.OutputPart) ([]string,
 				}
 			}
 		} else { // This is the case for star but no columns e.g. &P.*
-			for _, tag := range tags {
-				outCols = append(outCols, tag)
-			}
+			outCols = makeOutCols(tags, "")
 		}
 		// The strings are sorted to give a deterministic order for
 		// testing.
 		sort.Strings(outCols)
-	} else { // None star target cases e.g. ...&(P.name, P.id)
-		for _, t := range p.Target {
-			if inf, ok := c[t.Prefix]; ok {
-				if _, ok := inf.TagToField[t.Name]; !ok {
-					return nil, fmt.Errorf("there is no tag with name %s in %s",
-						t.Name, inf.Type.Name())
-				}
-			} else {
-				return nil, fmt.Errorf("unknown type: %s", t.Prefix)
+		return outCols, nil
+	}
+
+	// Case 2: None star target cases e.g. ...&(P.name, P.id)
+	for _, t := range p.Target {
+		if inf, ok := ti[t.Prefix]; ok {
+			if _, ok := inf.TagToField[t.Name]; !ok {
+				return nil, fmt.Errorf("there is no tag with name %s in %s",
+					t.Name, inf.Type.Name())
 			}
+		} else {
+			return nil, fmt.Errorf("unknown type: %s", t.Prefix)
 		}
-		if len(p.Source) > 0 { // Explicit columns e.g. name_1 AS P.name
-			for _, c := range p.Source {
-				outCols = append(outCols, c.String())
-			}
-		} else { // No columns e.g. &(P.name, P.id)
-			for _, t := range p.Target {
-				outCols = append(outCols, t.Name)
-			}
+	}
+	if len(p.Source) > 0 { // Explicit columns e.g. name_1 AS P.name
+		for _, c := range p.Source {
+			outCols = append(outCols, c.String())
+		}
+	} else { // No columns e.g. &(P.name, P.id)
+		for _, t := range p.Target {
+			outCols = append(outCols, t.Name)
 		}
 	}
 	return outCols, nil
@@ -100,7 +111,7 @@ func Assemble(pe *parse.ParsedExpr, args ...any) (expr *AssembledExpr, err error
 		}
 	}()
 
-	var c = make(map[string]*typeinfo.Info)
+	var ti = make(typeNameToInfo)
 
 	// Generate and save reflection info.
 	for _, arg := range args {
@@ -108,7 +119,7 @@ func Assemble(pe *parse.ParsedExpr, args ...any) (expr *AssembledExpr, err error
 		if err != nil {
 			return nil, err
 		}
-		c[i.Type.Name()] = i
+		ti[i.Type.Name()] = i
 	}
 
 	sql := ""
@@ -116,7 +127,7 @@ func Assemble(pe *parse.ParsedExpr, args ...any) (expr *AssembledExpr, err error
 	// Check and expand each query part
 	for _, part := range pe.QueryParts {
 		if p, ok := part.(*parse.InputPart); ok {
-			err := assembleInput(c, p)
+			err := assembleInput(ti, p)
 			if err != nil {
 				return nil, err
 			}
@@ -125,7 +136,7 @@ func Assemble(pe *parse.ParsedExpr, args ...any) (expr *AssembledExpr, err error
 		}
 
 		if p, ok := part.(*parse.OutputPart); ok {
-			outCols, err := assembleOutput(c, p)
+			outCols, err := assembleOutput(ti, p)
 			if err != nil {
 				return nil, err
 			}
