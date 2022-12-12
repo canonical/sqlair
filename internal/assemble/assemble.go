@@ -32,18 +32,23 @@ func assembleOutput(ti typeNameToInfo, p *parse.OutputPart) ([]string, error) {
 
 	var outCols []string = make([]string, 0)
 
+	// Check target type and tags are valid.
+	for _, t := range p.Target {
+		if inf, ok := ti[t.Prefix]; ok {
+			if _, ok := inf.TagToField[t.Name]; !ok && t.Name != "*" {
+				return nil, fmt.Errorf("there is no tag with name %s in %s",
+					t.Name, inf.Type.Name())
+			}
+		} else {
+			return nil, fmt.Errorf("unknown type: %s", t.Prefix)
+		}
+	}
+
 	// Case 1: Star target cases e.g. "...&P.*".
 	// In parse we ensure that if p.Target[0] is a * then len(p.Target) == 1
 	if p.Target[0].Name == "*" {
-		var tags []string
 
-		inf, ok := ti[p.Target[0].Prefix]
-		if !ok {
-			return nil, fmt.Errorf("unknown type: %s", p.Target[0].Prefix)
-		}
-		for tag := range inf.TagToField {
-			tags = append(tags, tag)
-		}
+		inf, _ := ti[p.Target[0].Prefix]
 
 		// Case 1.1: Columns present e.g. "col1 AS &P.*".
 		if len(p.Source) > 0 {
@@ -54,7 +59,7 @@ func assembleOutput(ti typeNameToInfo, p *parse.OutputPart) ([]string, error) {
 				if p.Source[0].Prefix != "" {
 					pref = p.Source[0].Prefix + "."
 				}
-				for _, tag := range tags {
+				for tag := range inf.TagToField {
 					outCols = append(outCols, pref+tag)
 				}
 				// The strings are sorted to give a deterministic order for
@@ -63,7 +68,7 @@ func assembleOutput(ti typeNameToInfo, p *parse.OutputPart) ([]string, error) {
 				return outCols, nil
 			}
 
-			// Case 1.1.2: Explicit columns e.g. "(col1, col2) AS &P.*".
+			// Case 1.1.2: Explicit columns e.g. "(col1, t.col2) AS &P.*".
 			for _, c := range p.Source {
 				if _, ok := inf.TagToField[c.Name]; !ok {
 					return nil, fmt.Errorf("there is no tag with name %s in %s",
@@ -74,7 +79,7 @@ func assembleOutput(ti typeNameToInfo, p *parse.OutputPart) ([]string, error) {
 			return outCols, nil
 		}
 		// Case 1.2: Star but no columns e.g. "&P.*".
-		for _, tag := range tags {
+		for tag := range inf.TagToField {
 			outCols = append(outCols, tag)
 		}
 		sort.Strings(outCols)
@@ -82,18 +87,6 @@ func assembleOutput(ti typeNameToInfo, p *parse.OutputPart) ([]string, error) {
 	}
 
 	// Case 2: None star target cases e.g. "...&(P.name, P.id)".
-
-	// Check target type and tags are valid.
-	for _, t := range p.Target {
-		if inf, ok := ti[t.Prefix]; ok {
-			if _, ok := inf.TagToField[t.Name]; !ok {
-				return nil, fmt.Errorf("there is no tag with name %s in %s",
-					t.Name, inf.Type.Name())
-			}
-		} else {
-			return nil, fmt.Errorf("unknown type: %s", t.Prefix)
-		}
-	}
 
 	// Case 2.1: Explicit columns e.g. "name_1 AS P.name".
 	if len(p.Source) > 0 {
