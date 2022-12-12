@@ -50,25 +50,24 @@ func assembleOutput(ti typeNameToInfo, p *parse.OutputPart) ([]string, error) {
 
 		inf, _ := ti[p.Target[0].Prefix]
 
-		// Case 1.1: Columns present e.g. "col1 AS &P.*".
-		if len(p.Source) > 0 {
-
-			// Case 1.1.1: Single star column e.g. "t.* AS &P.*".
-			if p.Source[0].Name == "*" {
-				pref := ""
-				if p.Source[0].Prefix != "" {
-					pref = p.Source[0].Prefix + "."
-				}
-				for tag := range inf.TagToField {
-					outCols = append(outCols, pref+tag)
-				}
-				// The strings are sorted to give a deterministic order for
-				// testing.
-				sort.Strings(outCols)
-				return outCols, nil
+		// Case 1.1: Single star e.g. "t.* AS &P.*" or "&P.*"
+		if (len(p.Source) > 0 && p.Source[0].Name == "*") ||
+			len(p.Source) == 0 {
+			pref := ""
+			if len(p.Source) > 0 && p.Source[0].Prefix != "" {
+				pref = p.Source[0].Prefix + "."
 			}
+			for tag := range inf.TagToField {
+				outCols = append(outCols, pref+tag)
+			}
+			// The strings are sorted to give a deterministic order for
+			// testing.
+			sort.Strings(outCols)
+			return outCols, nil
+		}
 
-			// Case 1.1.2: Explicit columns e.g. "(col1, t.col2) AS &P.*".
+		// Case 1.2: Explicit columns e.g. "(col1, t.col2) AS &P.*".
+		if len(p.Source) > 0 {
 			for _, c := range p.Source {
 				if _, ok := inf.TagToField[c.Name]; !ok {
 					return nil, fmt.Errorf("there is no tag with name %s in %s",
@@ -78,12 +77,6 @@ func assembleOutput(ti typeNameToInfo, p *parse.OutputPart) ([]string, error) {
 			}
 			return outCols, nil
 		}
-		// Case 1.2: Star but no columns e.g. "&P.*".
-		for tag := range inf.TagToField {
-			outCols = append(outCols, tag)
-		}
-		sort.Strings(outCols)
-		return outCols, nil
 	}
 
 	// Case 2: None star target cases e.g. "...&(P.name, P.id)".
