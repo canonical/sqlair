@@ -160,14 +160,14 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 func (p *Parser) advance() {
 
 	// These bytes might be the start of an expression.
-	initialBytes := map[byte]bool{
+	stopBytes := map[byte]bool{
 		'$':  true,
 		'"':  true,
 		'\'': true,
 		'(':  true,
 	}
 
-	// The byte following these bytes might the start of an expression.
+	// The byte following these bytes might be the start of an expression.
 	delimiterBytes := map[byte]bool{
 		' ':  true,
 		'\t': true,
@@ -178,7 +178,7 @@ func (p *Parser) advance() {
 	}
 
 	p.pos++
-	for p.pos < len(p.input) && !initialBytes[p.input[p.pos]] &&
+	for p.pos < len(p.input) && !stopBytes[p.input[p.pos]] &&
 		!delimiterBytes[p.input[p.pos]] {
 		p.pos++
 	}
