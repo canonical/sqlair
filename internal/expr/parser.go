@@ -182,11 +182,13 @@ func (p *Parser) skipByteFind(b byte) bool {
 // parser position was actually changed, false otherwise.
 func (p *Parser) skipBlanks() bool {
 	mark := p.pos
-	for p.pos < len(p.input) {
-		if p.input[p.pos] != ' ' && p.input[p.pos] != '\t' &&
-			p.input[p.pos] != '\n' {
-			break
-		}
+	blanks := map[byte]bool{
+		' ':  true,
+		'\t': true,
+		'\r': true,
+		'\n': true,
+	}
+	for p.pos < len(p.input) && blanks[p.input[p.pos]] {
 		p.pos++
 	}
 	return p.pos != mark
