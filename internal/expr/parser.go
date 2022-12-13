@@ -158,24 +158,36 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 // advance increments p.pos until we reach content that may be the start of a
 // token we want to parse.
 func (p *Parser) advance() {
-	noteableBytes := map[byte]bool{
+
+	// These bytes might be the start of an expression.
+	initialBytes := map[byte]bool{
 		'$':  true,
 		'"':  true,
 		'\'': true,
+		'(':  true,
+	}
+
+	// The byte following these bytes might the start of an expression.
+	delimiterBytes := map[byte]bool{
 		' ':  true,
+		'\t': true,
+		'\n': true,
+		'\r': true,
+		')':  true,
+		';':  true,
 	}
 
 	p.pos++
-	for p.pos < len(p.input) && !noteableBytes[p.input[p.pos]] {
+	for p.pos < len(p.input) && !initialBytes[p.input[p.pos]] &&
+		!delimiterBytes[p.input[p.pos]] {
 		p.pos++
 	}
 
-	// If we are on a space, advance to the rightmost in the sequence.
-	if p.peekByte(' ') {
-		for p.pos+1 < len(p.input) && p.input[p.pos+1] == ' ' {
-			p.pos++
-		}
+	if p.pos < len(p.input) && delimiterBytes[p.input[p.pos]] {
+		p.pos++
 	}
+
+	p.skipSpaces()
 }
 
 // peekByte returns true if the current byte equals the one passed as parameter.
