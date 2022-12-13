@@ -1,6 +1,7 @@
 package assemble
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 
@@ -51,7 +52,7 @@ func Assemble(pe *parse.ParsedExpr, args ...any) (expr *AssembledExpr, err error
 		ti[i.Type.Name()] = i
 	}
 
-	sql := ""
+	var sql bytes.Buffer
 
 	// Check and expand each query part.
 	for _, part := range pe.QueryParts {
@@ -60,19 +61,18 @@ func Assemble(pe *parse.ParsedExpr, args ...any) (expr *AssembledExpr, err error
 			if err != nil {
 				return nil, err
 			}
-			sql = sql + p.ToSQL([]string{})
+			sql.WriteString(p.ToSQL([]string{}))
 			continue
 		}
 		if p, ok := part.(*parse.OutputPart); ok {
 			// Do nothing for now.
-			sql = sql + p.ToSQL([]string{"DUMMY_OUTPUT"})
+			sql.WriteString(p.ToSQL([]string{"DUMMY_OUTPUT"}))
 			continue
 		}
 		p := part.(*parse.BypassPart)
-		sql = sql + p.ToSQL([]string{})
+		sql.WriteString(p.ToSQL([]string{}))
 	}
 
-	sql = strings.TrimSpace(sql)
 	// We will probably need to save the outcols and in cols.
-	return &AssembledExpr{Parsed: pe, SQL: sql}, nil
+	return &AssembledExpr{Parsed: pe, SQL: strings.TrimSpace(sql.String())}, nil
 }
