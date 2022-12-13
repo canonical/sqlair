@@ -45,7 +45,7 @@ var tests = []struct {
 	"SELECT p.* AS &Person.*",
 	"ParsedExpr[BypassPart[SELECT] OutputPart[[p.*] [Person.*]]]",
 	[]any{Person{}},
-	"SELECT p.address_id, p.id, p.name",
+	"SELECT DUMMY_OUTPUT",
 }, {
 	"SELECT p.* AS&Person.*",
 	"ParsedExpr[BypassPart[SELECT p.* AS&Person.*]]",
@@ -59,14 +59,14 @@ var tests = []struct {
 		"BypassPart['&notAnOutputExpresion.*'] " +
 		"BypassPart[ AS literal FROM t]]",
 	[]any{Person{}},
-	"SELECT p.address_id, p.id, p.name, '&notAnOutputExpresion.*' AS literal FROM t",
+	"SELECT DUMMY_OUTPUT, '&notAnOutputExpresion.*' AS literal FROM t",
 }, {
 	"SELECT * AS &Person.* FROM t",
 	"ParsedExpr[BypassPart[SELECT] " +
 		"OutputPart[[*] [Person.*]] " +
 		"BypassPart[ FROM t]]",
 	[]any{Person{}},
-	"SELECT address_id, id, name FROM t",
+	"SELECT DUMMY_OUTPUT FROM t",
 }, {
 	"SELECT foo, bar FROM table WHERE foo = $Person.id",
 	"ParsedExpr[BypassPart[SELECT foo, bar FROM table WHERE foo = ] " +
@@ -79,7 +79,7 @@ var tests = []struct {
 		"BypassPart[ FROM table WHERE foo = ] " +
 		"InputPart[Address.id]]",
 	[]any{Person{}, Address{}},
-	"SELECT address_id, id, name FROM table WHERE foo = ?",
+	"SELECT DUMMY_OUTPUT FROM table WHERE foo = ?",
 }, {
 	"SELECT foo, bar, &Person.id FROM table WHERE foo = 'xx'",
 	"ParsedExpr[BypassPart[SELECT foo, bar,] " +
@@ -87,7 +87,7 @@ var tests = []struct {
 		"BypassPart[ FROM table WHERE foo = ] " +
 		"BypassPart['xx']]",
 	[]any{Person{}},
-	"SELECT foo, bar, id FROM table WHERE foo = 'xx'",
+	"SELECT foo, bar, DUMMY_OUTPUT FROM table WHERE foo = 'xx'",
 }, {
 	"SELECT foo, &Person.id, bar, baz, &Manager.manager_name FROM table WHERE foo = 'xx'",
 	"ParsedExpr[BypassPart[SELECT foo,] " +
@@ -97,7 +97,7 @@ var tests = []struct {
 		"BypassPart[ FROM table WHERE foo = ] " +
 		"BypassPart['xx']]",
 	[]any{Person{}, Manager{}},
-	"SELECT foo, id, bar, baz, manager_name FROM table WHERE foo = 'xx'",
+	"SELECT foo, DUMMY_OUTPUT, bar, baz, DUMMY_OUTPUT FROM table WHERE foo = 'xx'",
 }, {
 	"SELECT * AS &Person.* FROM person WHERE name = 'Fred'",
 	"ParsedExpr[BypassPart[SELECT] " +
@@ -105,7 +105,7 @@ var tests = []struct {
 		"BypassPart[ FROM person WHERE name = ] " +
 		"BypassPart['Fred']]",
 	[]any{Person{}},
-	"SELECT address_id, id, name FROM person WHERE name = 'Fred'",
+	"SELECT DUMMY_OUTPUT FROM person WHERE name = 'Fred'",
 }, {
 	"SELECT &Person.* FROM person WHERE name = 'Fred'",
 	"ParsedExpr[BypassPart[SELECT] " +
@@ -113,7 +113,7 @@ var tests = []struct {
 		"BypassPart[ FROM person WHERE name = ] " +
 		"BypassPart['Fred']]",
 	[]any{Person{}},
-	"SELECT address_id, id, name FROM person WHERE name = 'Fred'",
+	"SELECT DUMMY_OUTPUT FROM person WHERE name = 'Fred'",
 }, {
 	"SELECT * AS &Person.*, a.* AS &Address.* FROM person, address a WHERE name = 'Fred'",
 	"ParsedExpr[BypassPart[SELECT] " +
@@ -123,14 +123,14 @@ var tests = []struct {
 		"BypassPart[ FROM person, address a WHERE name = ] " +
 		"BypassPart['Fred']]",
 	[]any{Person{}, Address{}},
-	"SELECT address_id, id, name, a.district, a.id, a.street FROM person, address a WHERE name = 'Fred'",
+	"SELECT DUMMY_OUTPUT, DUMMY_OUTPUT FROM person, address a WHERE name = 'Fred'",
 }, {
 	"SELECT (a.district, a.street) AS &(Address.district, Address.street) FROM address AS a",
 	"ParsedExpr[BypassPart[SELECT] " +
 		"OutputPart[[a.district a.street] [Address.district Address.street]] " +
 		"BypassPart[ FROM address AS a]]",
 	[]any{Address{}, District{}},
-	"SELECT a.district, a.street FROM address AS a",
+	"SELECT DUMMY_OUTPUT FROM address AS a",
 }, {
 	"SELECT (a.district, a.street) AS &(Address.district, Address.street), " +
 		"a.id AS &Person.id FROM address AS a",
@@ -139,7 +139,7 @@ var tests = []struct {
 		"BypassPart[,] OutputPart[[a.id] [Person.id]] " +
 		"BypassPart[ FROM address AS a]]",
 	[]any{Person{}, Address{}},
-	"SELECT a.district, a.street, a.id FROM address AS a",
+	"SELECT DUMMY_OUTPUT, DUMMY_OUTPUT FROM address AS a",
 }, {
 	"SELECT (a.district, a.street) AS &(Address.district, Address.street), " +
 		"&Person.* FROM address AS a",
@@ -148,14 +148,14 @@ var tests = []struct {
 		"BypassPart[,] OutputPart[[] [Person.*]] " +
 		"BypassPart[ FROM address AS a]]",
 	[]any{Person{}, Address{}},
-	"SELECT a.district, a.street, address_id, id, name FROM address AS a",
+	"SELECT DUMMY_OUTPUT, DUMMY_OUTPUT FROM address AS a",
 }, {
 	"SELECT (a.district, a.street) AS &Address.* FROM address AS a WHERE p.name = 'Fred'",
 	"ParsedExpr[BypassPart[SELECT] " +
 		"OutputPart[[a.district a.street] [Address.*]] " +
 		"BypassPart[ FROM address AS a WHERE p.name = ] BypassPart['Fred']]",
 	[]any{Address{}},
-	"SELECT a.district, a.street FROM address AS a WHERE p.name = 'Fred'",
+	"SELECT DUMMY_OUTPUT FROM address AS a WHERE p.name = 'Fred'",
 }, {
 	"SELECT 1 FROM person WHERE p.name = 'Fred'",
 	"ParsedExpr[BypassPart[SELECT 1 FROM person WHERE p.name = ] " +
@@ -173,7 +173,7 @@ var tests = []struct {
 		"BypassPart[, (5+7), (col1 * col2) AS calculated_value FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] " +
 		"BypassPart['Fred']]",
 	[]any{Person{}, Address{}},
-	"SELECT p.address_id, p.id, p.name, a.district, a.street, " +
+	"SELECT DUMMY_OUTPUT, DUMMY_OUTPUT, " +
 		"(5+7), (col1 * col2) AS calculated_value FROM person AS p " +
 		"JOIN address AS a ON p.address_id = a.id WHERE p.name = 'Fred'",
 }, {
@@ -187,7 +187,7 @@ var tests = []struct {
 		"BypassPart[ FROM person AS p JOIN address AS a ON p .address_id = a.id WHERE p.name = ] " +
 		"BypassPart['Fred']]",
 	[]any{Person{}, Address{}},
-	"SELECT p.address_id, p.id, p.name, a.district, a.street " +
+	"SELECT DUMMY_OUTPUT, DUMMY_OUTPUT " +
 		"FROM person AS p JOIN address AS a ON p .address_id = a.id " +
 		"WHERE p.name = 'Fred'",
 }, {
@@ -202,7 +202,7 @@ var tests = []struct {
 		"InputPart[Person.name] " +
 		"BypassPart[)]]",
 	[]any{Person{}, Address{}},
-	"SELECT p.address_id, p.id, p.name, a.district, a.street " +
+	"SELECT DUMMY_OUTPUT, DUMMY_OUTPUT " +
 		"FROM person AS p JOIN address AS a ON p.address_id = a.id " +
 		"WHERE p.name IN (SELECT name FROM table WHERE table.n = ?)",
 }, {
@@ -224,10 +224,10 @@ var tests = []struct {
 		"InputPart[Person.name] " +
 		"BypassPart[)]]",
 	[]any{Person{}, Address{}},
-	"SELECT p.address_id, p.id, p.name, a.district, a.street " +
+	"SELECT DUMMY_OUTPUT, DUMMY_OUTPUT " +
 		"FROM person WHERE p.name IN (SELECT name FROM table " +
 		"WHERE table.n = ?) UNION " +
-		"SELECT p.address_id, p.id, p.name, a.district, a.street " +
+		"SELECT DUMMY_OUTPUT, DUMMY_OUTPUT " +
 		"FROM person WHERE p.name IN " +
 		"(SELECT name FROM table WHERE table.n = ?)",
 }, {
@@ -243,7 +243,7 @@ var tests = []struct {
 		"BypassPart[ AND p.address_id = ] " +
 		"InputPart[Person.address_id]]",
 	[]any{Person{}, District{}},
-	"SELECT p.address_id, p.id, p.name,  " +
+	"SELECT DUMMY_OUTPUT, DUMMY_OUTPUT " +
 		"FROM person AS p JOIN address AS a ON p.address_id = a.id " +
 		"WHERE p.name = ? AND p.address_id = ?",
 }, {
@@ -260,7 +260,7 @@ var tests = []struct {
 		"BypassPart[ AND p.address_id = ] " +
 		"InputPart[Person.address_id]]",
 	[]any{Person{}, Address{}},
-	"SELECT p.address_id, p.id, p.name, " +
+	"SELECT DUMMY_OUTPUT, " +
 		"FROM person AS p INNER JOIN address AS a " +
 		"ON p.address_id = ? " +
 		"WHERE p.name = ? AND p.address_id = ?",
@@ -275,7 +275,7 @@ var tests = []struct {
 		"BypassPart[ FROM person AS p JOIN person AS m ON p.manager_id = m.id WHERE p.name = ] " +
 		"BypassPart['Fred']]",
 	[]any{Person{}, Manager{}},
-	"SELECT p.address_id, p.id, p.name, m.manager_name " +
+	"SELECT DUMMY_OUTPUT, DUMMY_OUTPUT " +
 		"FROM person AS p JOIN person AS m " +
 		"ON p.manager_id = m.id WHERE p.name = 'Fred'",
 }, {
