@@ -9,6 +9,8 @@ import (
 	"github.com/canonical/sqlair/internal/typeinfo"
 )
 
+// AssembledExpr represents an SQL expression after the input and output parts
+// have been replaced but their corresponding expressions.
 type AssembledExpr struct {
 	Parsed *parse.ParsedExpr
 	SQL    string
@@ -73,6 +75,5 @@ func Assemble(pe *parse.ParsedExpr, args ...any) (expr *AssembledExpr, err error
 		sql.WriteString(p.ToSQL([]string{}))
 	}
 
-	// We will probably need to save the outcols and in cols.
 	return &AssembledExpr{Parsed: pe, SQL: strings.TrimSpace(sql.String())}, nil
 }
