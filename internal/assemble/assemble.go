@@ -15,9 +15,10 @@ type AssembledExpr struct {
 
 type typeNameToInfo map[string]*typeinfo.Info
 
-// assembleInput prepares an input part. Since input parts do not need any
-// special transformations, this function just checks that the used name
-// corresponds to a tag in the struct. Returns an error otherwise.
+// assembleInput prepares an input part.
+// Since input parts do not need any special transformations, this function just
+// checks that the used name corresponds to a tag in the struct.
+// Returns an error otherwise.
 func assembleInput(ti typeNameToInfo, p *parse.InputPart) error {
 	if inf, ok := ti[p.Source.Prefix]; ok {
 		if _, ok := inf.TagToField[p.Source.Name]; ok {
@@ -63,6 +64,7 @@ func Assemble(pe *parse.ParsedExpr, args ...any) (expr *AssembledExpr, err error
 			continue
 		}
 		if p, ok := part.(*parse.OutputPart); ok {
+			// Do nothing for now.
 			sql = sql + p.ToSQL([]string{"DUMMY_OUTPUT"})
 			continue
 		}
