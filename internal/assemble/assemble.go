@@ -32,7 +32,7 @@ func assembleInput(ti typeNameToInfo, p *parse.InputPart) error {
 }
 
 // Assemble prepares a parsed expression.
-// Returns a pointer to AssembledExpr on success.
+// Returns a pointer to AssembledExpr and nil on success.
 // Returns nil and an error otherwise.
 func Assemble(pe *parse.ParsedExpr, args ...any) (expr *AssembledExpr, err error) {
 	defer func() {
