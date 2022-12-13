@@ -55,7 +55,6 @@ func Assemble(pe *parse.ParsedExpr, args ...any) (expr *AssembledExpr, err error
 	}
 
 	var sql bytes.Buffer
-
 	// Check and expand each query part.
 	for _, part := range pe.QueryParts {
 		if p, ok := part.(*parse.InputPart); ok {
