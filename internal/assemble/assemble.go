@@ -10,7 +10,7 @@ import (
 )
 
 // AssembledExpr represents an SQL expression after the input and output parts
-// have been replaced but their corresponding expressions.
+// have been replaced by their corresponding expressions.
 type AssembledExpr struct {
 	ParsedExpr *parse.ParsedExpr
 	SQL        string
