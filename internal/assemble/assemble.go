@@ -19,9 +19,6 @@ type AssembledExpr struct {
 type typeNameToInfo map[string]*typeinfo.Info
 
 // assembleInput prepares an input part.
-// Since input parts do not need any special transformations, this function just
-// checks that the used name corresponds to a tag in the struct.
-// Returns an error otherwise.
 func assembleInput(ti typeNameToInfo, p *parse.InputPart) error {
 	if inf, ok := ti[p.Source.Prefix]; ok {
 		if _, ok := inf.TagToField[p.Source.Name]; ok {
