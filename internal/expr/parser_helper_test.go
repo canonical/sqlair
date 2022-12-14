@@ -34,7 +34,11 @@ func (s *ExprInternalSuite) TestRunTable(c *C) {
 		{stringf0: p.skipBlanks, result: []bool{true}, input: "     abcd", data: []string{}},
 		{stringf0: p.skipBlanks, result: []bool{true}, input: "  \t  abcd", data: []string{}},
 		{stringf0: p.skipBlanks, result: []bool{true}, input: "\t  abcd", data: []string{}},
-		{stringf0: p.skipBlanks, result: []bool{true}, input: "\n\t  abcd", data: []string{}},
+		{stringf0: p.skipBlanks, result: []bool{true}, input: "\n  abcd", data: []string{}},
+		{stringf0: p.skipBlanks, result: []bool{true}, input: "\r  abcd", data: []string{}},
+		{stringf0: p.skipBlanks, result: []bool{true}, input: "\n\r  abcd", data: []string{}},
+		{stringf0: p.skipBlanks, result: []bool{true}, input: "\n\r\t  abcd", data: []string{}},
+		{stringf0: p.skipBlanks, result: []bool{true}, input: "   \n\r\t  abcd", data: []string{}},
 
 		{stringf: p.skipString, result: []bool{false}, input: "", data: []string{"a"}},
 		{stringf: p.skipString, result: []bool{true, true}, input: "helloworld", data: []string{"hElLo", "w"}},
