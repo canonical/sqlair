@@ -177,9 +177,8 @@ func (p *Parser) skipByteFind(b byte) bool {
 	return false
 }
 
-// skipBlanks advances the parser jumping over consecutive spaces, tabs or new
-// lines. It stops when finding a non-blank character. Returns true if the
-// parser position was actually changed, false otherwise.
+// skipBlanks advances the parser past spaces, tabs and newlines. Returns
+// whether the parser position was changed.
 func (p *Parser) skipBlanks() bool {
 	mark := p.pos
 	blanks := map[byte]bool{
