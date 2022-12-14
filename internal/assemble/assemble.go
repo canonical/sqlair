@@ -12,8 +12,8 @@ import (
 // AssembledExpr represents an SQL expression after the input and output parts
 // have been replaced but their corresponding expressions.
 type AssembledExpr struct {
-	Parsed *parse.ParsedExpr
-	SQL    string
+	ParsedExpr *parse.ParsedExpr
+	SQL        string
 }
 
 type typeNameToInfo map[string]*typeinfo.Info
@@ -74,5 +74,5 @@ func Assemble(pe *parse.ParsedExpr, args ...any) (expr *AssembledExpr, err error
 		sql.WriteString(p.ToSQL([]string{}))
 	}
 
-	return &AssembledExpr{Parsed: pe, SQL: strings.TrimSpace(sql.String())}, nil
+	return &AssembledExpr{ParsedExpr: pe, SQL: strings.TrimSpace(sql.String())}, nil
 }
