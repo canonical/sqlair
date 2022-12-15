@@ -1,13 +1,15 @@
 package assemble_test
 
 import (
-	"fmt"
+	"testing"
 
 	"github.com/canonical/sqlair/internal/assemble"
 	"github.com/canonical/sqlair/internal/parse"
-	"github.com/stretchr/testify/assert"
 	. "gopkg.in/check.v1"
 )
+
+// Hook up gocheck into the "go test" runner.
+func Test(t *testing.T) { TestingT(t) }
 
 type ParserSuite struct{}
 
@@ -49,8 +51,9 @@ func (s *ParserSuite) TestValidAssemble(c *C) {
 	for _, test := range testList {
 		parser := parse.NewParser()
 		parsedExpr, _ := parser.Parse(test.input)
-		assembledExpr, _ := assemble.Assemble(parsedExpr, test.assembleArgs)
-		c.Assert(assembledExpr, Equals, test.expectedAssembled)
+		assembledExpr, err := assemble.Assemble(parsedExpr, test.assembleArgs...)
+		c.Log(err)
+		c.Assert(assembledExpr.SQL, Equals, test.expectedAssembled)
 	}
 }
 
@@ -59,7 +62,7 @@ func (s *ParserSuite) TestMismatchedInputStructName(c *C) {
 	parser := parse.NewParser()
 	parsedExpr, err := parser.Parse(sql)
 	_, err = assemble.Assemble(parsedExpr, Person{ID: 1})
-	assert.Equal(t, fmt.Errorf("cannot assemble expression: unknown type: Address"), err)
+	c.Assert(err, ErrorMatches, "cannot assemble expression: unknown type: Address")
 }
 
 func (s *ParserSuite) TestMissingTagInput(c *C) {
@@ -67,5 +70,5 @@ func (s *ParserSuite) TestMissingTagInput(c *C) {
 	parser := parse.NewParser()
 	parsedExpr, err := parser.Parse(sql)
 	_, err = assemble.Assemble(parsedExpr, Address{ID: 1})
-	assert.Equal(t, fmt.Errorf("cannot assemble expression: there is no tag with name number in Address"), err)
+	c.Assert(err, ErrorMatches, "cannot assemble expression: there is no tag with name number in Address")
 }
