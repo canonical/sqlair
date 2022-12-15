@@ -7,7 +7,12 @@ import (
 	"github.com/canonical/sqlair/internal/assemble"
 	"github.com/canonical/sqlair/internal/parse"
 	"github.com/stretchr/testify/assert"
+	. "gopkg.in/check.v1"
 )
+
+type ParserSuite struct{}
+
+var _ = Suite(&ParserSuite{})
 
 type Address struct {
 	ID       int    `db:"id"`
@@ -28,8 +33,30 @@ type Manager struct {
 type District struct {
 }
 
+func (s *ParserSuite) TestValidAssemble(c *C) {
+	testList := []struct {
+		input             string
+		assembleArgs      []any
+		expectedAssembled string
+	}{{
+		"SELECT street FROM t WHERE x = $Address.street",
+		[]any{Address{}},
+		"SELECT street FROM t WHERE x = ?",
+	}, {
+		"SELECT p FROM t WHERE x = $Person.id",
+		[]any{Person{}},
+		"SELECT p FROM t WHERE x = ?",
+	}}
+	for _, test := range testList {
+		parser := parse.NewParser()
+		parsedExpr, _ := parser.Parse(test.input)
+		assembledExpr, _ := assemble.Assemble(parsedExpr, test.assembleArgs)
+		c.Assert(assembledExpr, Equals, test.expectedAssembled)
+	}
+}
+
 func TestMismatchedInputStructName(t *testing.T) {
-	sql := "select street from t where x = $Address.street"
+	sql := "SELECT street FROM t WHERE x = $Address.street"
 	parser := parse.NewParser()
 	parsedExpr, err := parser.Parse(sql)
 	_, err = assemble.Assemble(parsedExpr, Person{ID: 1})
@@ -37,7 +64,7 @@ func TestMismatchedInputStructName(t *testing.T) {
 }
 
 func TestMissingTagInput(t *testing.T) {
-	sql := "select street from t where x = $Address.number"
+	sql := "SELECT street FROM t WHERE x = $Address.number"
 	parser := parse.NewParser()
 	parsedExpr, err := parser.Parse(sql)
 	_, err = assemble.Assemble(parsedExpr, Address{ID: 1})

@@ -30,9 +30,9 @@ func assembleInput(ti typeNameToInfo, p *parse.InputPart) error {
 	return fmt.Errorf("unknown type: %s", p.Source.Prefix)
 }
 
-// Assemble prepares a parsed expression.
-// Returns a pointer to AssembledExpr and nil on success.
-// Returns nil and an error otherwise.
+// Assemble takes a parsed expression and all the go objects mentioned in it.
+// The IO parts of the statement are checked for validity against the Go objects
+// and expanded if necessary.
 func Assemble(pe *parse.ParsedExpr, args ...any) (expr *AssembledExpr, err error) {
 	defer func() {
 		if err != nil {
