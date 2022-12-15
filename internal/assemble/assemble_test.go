@@ -2,7 +2,6 @@ package assemble_test
 
 import (
 	"fmt"
-	"testing"
 
 	"github.com/canonical/sqlair/internal/assemble"
 	"github.com/canonical/sqlair/internal/parse"
@@ -55,7 +54,7 @@ func (s *ParserSuite) TestValidAssemble(c *C) {
 	}
 }
 
-func TestMismatchedInputStructName(t *testing.T) {
+func (s *ParserSuite) TestMismatchedInputStructName(c *C) {
 	sql := "SELECT street FROM t WHERE x = $Address.street"
 	parser := parse.NewParser()
 	parsedExpr, err := parser.Parse(sql)
@@ -63,7 +62,7 @@ func TestMismatchedInputStructName(t *testing.T) {
 	assert.Equal(t, fmt.Errorf("cannot assemble expression: unknown type: Address"), err)
 }
 
-func TestMissingTagInput(t *testing.T) {
+func (s *ParserSuite) TestMissingTagInput(c *C) {
 	sql := "SELECT street FROM t WHERE x = $Address.number"
 	parser := parse.NewParser()
 	parsedExpr, err := parser.Parse(sql)
