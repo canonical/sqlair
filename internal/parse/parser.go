@@ -203,24 +203,33 @@ func (p *Parser) skipString(s string) bool {
 	return false
 }
 
-// isNameByte returns true if the byte passed as parameter is considered to be
-// one that can be part of a name. It returns false otherwise.
+// isNameByte returns true if the given byte can be part of a name. It returns
+// false otherwise.
 func isNameByte(c byte) bool {
 	return 'A' <= c && c <= 'Z' || 'a' <= c && c <= 'z' ||
 		'0' <= c && c <= '9' || c == '_'
 }
 
-// skipName returns false if the parser is not on a name. Otherwise it advances
-// the parser until it is on the first non name byte and returns true.
+// isNameInitialByte returns true if the given byte can appear at the start of a
+// name. It returns false otherwise.
+func isInitialNameByte(c byte) bool {
+	return 'A' <= c && c <= 'Z' || 'a' <= c && c <= 'z' || c == '_'
+}
+
+// skipName advances the parser until it is on the first non name byte and
+// returns true. If the p.pos does not start on a name byte it returns false.
 func (p *Parser) skipName() bool {
 	if p.pos >= len(p.input) {
 		return false
 	}
-	start := p.pos
-	for p.pos < len(p.input) && isNameByte(p.input[p.pos]) {
+	mark := p.pos
+	if isInitialNameByte(p.input[p.pos]) {
 		p.pos++
+		for p.pos < len(p.input) && isNameByte(p.input[p.pos]) {
+			p.pos++
+		}
 	}
-	return p.pos > start
+	return p.pos > mark
 }
 
 // Functions with the prefix parse attempt to parse some construct. They return
