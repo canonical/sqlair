@@ -234,6 +234,8 @@ func (s *TestSuite) TestRound(c *C) {
 	}
 }
 
+// FuzzParser is in this file rather than parser_test becuase it uses the
+// black box test inputs as a corpus.
 func FuzzParser(f *testing.F) {
 	// Add some values to the corpus
 	for _, test := range tests {
