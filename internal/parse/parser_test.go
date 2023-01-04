@@ -9,6 +9,27 @@ type ParserSuite struct{}
 
 var _ = Suite(&ParserSuite{})
 
+func (s *ParserSuite) TestValidInput(c *C) {
+	testList := []struct {
+		input          string
+		expectedParsed string
+	}{{
+		"SELECT street FROM t WHERE x = $Address.street",
+		"ParsedExpr[BypassPart[SELECT street FROM t WHERE x = ] " +
+			"InputPart[Address.street]]",
+	}, {
+		"SELECT p FROM t WHERE x = $Person.id",
+		"ParsedExpr[BypassPart[SELECT p FROM t WHERE x = ] " +
+			"InputPart[Person.id]]",
+	}}
+	for _, test := range testList {
+		parser := parse.NewParser()
+		parsedExpr, err := parser.Parse(test.input)
+		c.Log(err)
+		c.Assert(parsedExpr.String(), Equals, test.expectedParsed)
+	}
+}
+
 // We return a proper error when we find an unbound string literal
 func (s *ParserSuite) TestUnfinishedStringLiteral(c *C) {
 	testList := []string{
