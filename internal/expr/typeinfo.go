@@ -1,4 +1,4 @@
-package typeinfo
+package expr
 
 import (
 	"fmt"
@@ -9,11 +9,11 @@ import (
 )
 
 var cacheMutex sync.RWMutex
-var cache = make(map[reflect.Type]*Info)
+var cache = make(map[reflect.Type]*info)
 
-// Reflect will return the Info of a given type,
+// Reflect will return the info of a given type,
 // generating and caching as required.
-func TypeInfo(value any) (*Info, error) {
+func typeInfo(value any) (*info, error) {
 	if value == (any)(nil) {
 		return nil, fmt.Errorf("cannot reflect nil value")
 	}
@@ -41,37 +41,37 @@ func TypeInfo(value any) (*Info, error) {
 
 // generate produces and returns reflection information for the input
 // reflect.Value that is specifically required for SQLAir operation.
-func generate(value reflect.Value) (*Info, error) {
+func generate(value reflect.Value) (*info, error) {
 	// Reflection information is only generated for structs.
 	if value.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("internal error: attempted to obtain struct information for something that is not a struct: %s.", value.Type())
 	}
 
-	info := Info{
-		TagToField: make(map[string]Field),
-		FieldToTag: make(map[string]string),
-		Type:       value.Type(),
+	info := info{
+		tagToField: make(map[string]field),
+		fieldToTag: make(map[string]string),
+		structType: value.Type(),
 	}
 
 	typ := value.Type()
 	for i := 0; i < typ.NumField(); i++ {
-		field := typ.Field(i)
+		f := typ.Field(i)
 		// Fields without a "db" tag are outside of SQLAir's remit.
-		tag := field.Tag.Get("db")
+		tag := f.Tag.Get("db")
 		if tag == "" {
 			continue
 		}
 		tag, omitEmpty, err := parseTag(tag)
 		if err != nil {
-			return nil, fmt.Errorf("cannot parse tag for field %s.%s: %s", typ.Name(), field.Name, err)
+			return nil, fmt.Errorf("cannot parse tag for field %s.%s: %s", typ.Name(), f.Name, err)
 		}
-		info.TagToField[tag] = Field{
-			Name:      field.Name,
-			Index:     i,
-			OmitEmpty: omitEmpty,
-			Type:      reflect.TypeOf(value.Field(i).Interface()),
+		info.tagToField[tag] = field{
+			name:      f.Name,
+			index:     i,
+			omitEmpty: omitEmpty,
+			fieldType: reflect.TypeOf(value.Field(i).Interface()),
 		}
-		info.FieldToTag[field.Name] = tag
+		info.fieldToTag[f.Name] = tag
 	}
 
 	return &info, nil
