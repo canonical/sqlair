@@ -18,7 +18,7 @@ type fullName struct {
 	prefix, name string
 }
 
-func (fn fullName) toString() string {
+func (fn fullName) String() string {
 	if fn.prefix == "" {
 		return fn.name
 	} else if fn.name == "" {
