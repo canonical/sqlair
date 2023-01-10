@@ -224,8 +224,8 @@ func (s *ParserSuite) TestRound(c *C) {
 		var err error
 		if parsedExpr, err = parser.Parse(test.input); err != nil {
 			c.Errorf("test %d failed (Parse):\nsummary: %s\ninput: %s\nexpected: %s\nerr: %s\n", i, test.summary, test.input, test.expectedParsed, err)
-		} else if parsedExpr.toString() != test.expectedParsed {
-			c.Errorf("test %d failed (Parse):\nsummary: %s\ninput: %s\nexpected: %s\nactual:   %s\n", i, test.summary, test.input, test.expectedParsed, parsedExpr.toString())
+		} else if parsedExpr.String() != test.expectedParsed {
+			c.Errorf("test %d failed (Parse):\nsummary: %s\ninput: %s\nexpected: %s\nactual:   %s\n", i, test.summary, test.input, test.expectedParsed, parsedExpr.String())
 		}
 	}
 }

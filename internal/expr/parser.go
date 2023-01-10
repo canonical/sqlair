@@ -76,14 +76,14 @@ type ParsedExpr struct {
 
 // String returns a textual representation of the AST contained in the
 // ParsedExpr for debugging purposes.
-func (pe *ParsedExpr) toString() string {
+func (pe *ParsedExpr) String() string {
 	var out bytes.Buffer
 	out.WriteString("ParsedExpr[")
 	for i, p := range pe.queryParts {
 		if i > 0 {
 			out.WriteString(" ")
 		}
-		out.WriteString(p.toString())
+		out.WriteString(p.String())
 	}
 	out.WriteString("]")
 	return out.String()

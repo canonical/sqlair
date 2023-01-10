@@ -7,7 +7,7 @@ import "fmt"
 // their correct order.
 type queryPart interface {
 	// String returns the part's representation for debugging purposes.
-	toString() string
+	String() string
 
 	// ToSQL returns the SQL representation of the part.
 	toSQL() string
@@ -33,7 +33,7 @@ type inputPart struct {
 	source fullName
 }
 
-func (p *inputPart) toString() string {
+func (p *inputPart) String() string {
 	return fmt.Sprintf("InputPart[%+v]", p.source)
 }
 
@@ -48,7 +48,7 @@ type outputPart struct {
 	target []fullName
 }
 
-func (p *outputPart) toString() string {
+func (p *outputPart) String() string {
 	return fmt.Sprintf("OutputPart[%+v %+v]", p.source, p.target)
 }
 
@@ -62,7 +62,7 @@ type bypassPart struct {
 	chunk string
 }
 
-func (p *bypassPart) toString() string {
+func (p *bypassPart) String() string {
 	return "BypassPart[" + p.chunk + "]"
 }
 
