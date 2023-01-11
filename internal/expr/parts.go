@@ -27,21 +27,21 @@ func (fn fullName) String() string {
 	return fn.prefix + "." + fn.name
 }
 
-// InputPart represents a named parameter that will be sent to the database
+// inputPart represents a named parameter that will be sent to the database
 // while performing the query.
 type inputPart struct {
 	source fullName
 }
 
 func (p *inputPart) String() string {
-	return fmt.Sprintf("InputPart[%+v]", p.source)
+	return fmt.Sprintf("inputPart[%+v]", p.source)
 }
 
 func (p *inputPart) toSQL() string {
 	return ""
 }
 
-// OutputPart represents a named target output variable in the SQL expression,
+// outputPart represents a named target output variable in the SQL expression,
 // as well as the source table and column where it will be read from.
 type outputPart struct {
 	source []fullName
@@ -49,21 +49,21 @@ type outputPart struct {
 }
 
 func (p *outputPart) String() string {
-	return fmt.Sprintf("OutputPart[%+v %+v]", p.source, p.target)
+	return fmt.Sprintf("outputPart[%+v %+v]", p.source, p.target)
 }
 
 func (p *outputPart) toSQL() string {
 	return ""
 }
 
-// BypassPart represents a part of the expression that we want to pass to the
+// bypassPart represents a part of the expression that we want to pass to the
 // backend database verbatim.
 type bypassPart struct {
 	chunk string
 }
 
 func (p *bypassPart) String() string {
-	return "BypassPart[" + p.chunk + "]"
+	return "bypassPart[" + p.chunk + "]"
 }
 
 func (p *bypassPart) toSQL() string {
