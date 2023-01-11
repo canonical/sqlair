@@ -34,7 +34,7 @@ type inputPart struct {
 }
 
 func (p *inputPart) String() string {
-	return fmt.Sprintf("inputPart[%+v]", p.source)
+	return fmt.Sprintf("Input[%+v]", p.source)
 }
 
 func (p *inputPart) toSQL() string {
@@ -49,7 +49,7 @@ type outputPart struct {
 }
 
 func (p *outputPart) String() string {
-	return fmt.Sprintf("outputPart[%+v %+v]", p.source, p.target)
+	return fmt.Sprintf("Output[%+v %+v]", p.source, p.target)
 }
 
 func (p *outputPart) toSQL() string {
@@ -63,7 +63,7 @@ type bypassPart struct {
 }
 
 func (p *bypassPart) String() string {
-	return "bypassPart[" + p.chunk + "]"
+	return "Bypass[" + p.chunk + "]"
 }
 
 func (p *bypassPart) toSQL() string {

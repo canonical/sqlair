@@ -78,7 +78,7 @@ type ParsedExpr struct {
 // ParsedExpr for debugging purposes.
 func (pe *ParsedExpr) String() string {
 	var out bytes.Buffer
-	out.WriteString("ParsedExpr[")
+	out.WriteString("[")
 	for i, p := range pe.queryParts {
 		if i > 0 {
 			out.WriteString(" ")
