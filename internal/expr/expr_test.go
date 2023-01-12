@@ -1,15 +1,19 @@
 package expr_test
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/canonical/sqlair/internal/expr"
 	. "gopkg.in/check.v1"
 )
 
-type ParserSuite struct{}
+// Hook up gocheck into the "go test" runner.
+func TestExpr(t *testing.T) { TestingT(t) }
 
-var _ = Suite(&ParserSuite{})
+type ExprSuite struct{}
+
+var _ = Suite(&ExprSuite{})
 
 type Address struct {
 	ID int `db:"id"`
@@ -218,7 +222,7 @@ var tests = []struct {
 		"Input[Person.id]]",
 }}
 
-func (s *ParserSuite) TestRound(c *C) {
+func (s *ExprSuite) TestExpr(c *C) {
 	parser := expr.NewParser()
 	for i, test := range tests {
 		var parsedExpr *expr.ParsedExpr
@@ -232,7 +236,7 @@ func (s *ParserSuite) TestRound(c *C) {
 }
 
 // We return a proper error when we find an unbound string literal
-func (s *ParserSuite) TestUnfinishedStringLiteral(c *C) {
+func (s *ExprSuite) TestParseUnfinishedStringLiteral(c *C) {
 	testList := []string{
 		"SELECT foo FROM t WHERE x = 'dddd",
 		"SELECT foo FROM t WHERE x = \"dddd",
@@ -248,7 +252,7 @@ func (s *ParserSuite) TestUnfinishedStringLiteral(c *C) {
 }
 
 // Properly parsing empty string literal
-func (s *ParserSuite) TestEmptyStringLiteral(c *C) {
+func (s *ExprSuite) TestParseEmptyStringLiteral(c *C) {
 	sql := "SELECT foo FROM t WHERE x = ''"
 	parser := expr.NewParser()
 	_, err := parser.Parse(sql)
@@ -256,14 +260,14 @@ func (s *ParserSuite) TestEmptyStringLiteral(c *C) {
 }
 
 // Detect bad escaped string literal
-func (s *ParserSuite) TestBadEscaped(c *C) {
+func (s *ExprSuite) TestParseBadEscaped(c *C) {
 	sql := "SELECT foo FROM t WHERE x = 'O'Donnell'"
 	parser := expr.NewParser()
 	_, err := parser.Parse(sql)
 	c.Assert(err, ErrorMatches, "cannot parse expression: missing right quote in string literal")
 }
 
-func (s *ParserSuite) TestBadFormatInput(c *C) {
+func (s *ExprSuite) TestParseBadFormatInput(c *C) {
 	testListInvalidId := []string{
 		"SELECT foo FROM t WHERE x = $Address.",
 		"SELECT foo FROM t WHERE x = $Address.&d",
@@ -293,4 +297,133 @@ func FuzzParser(f *testing.F) {
 		parser := expr.NewParser()
 		parser.Parse(s)
 	})
+}
+
+func (s *ExprSuite) TestReflectSimpleConcurrent(c *C) {
+	type myStruct struct{}
+
+	// Get the type info of a struct sequentially.
+	var seqSt myStruct
+	seqInfo, err := expr.TypeInfo(seqSt)
+	c.Assert(err, IsNil)
+
+	// Get some type info concurrently.
+	var concSt myStruct
+	wg := sync.WaitGroup{}
+
+	// Set up some concurrent access.
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func() {
+			_, _ = expr.TypeInfo(concSt)
+			wg.Done()
+		}()
+	}
+
+	// Get type info alongside concurrent access.
+	concInfo, err := expr.TypeInfo(concSt)
+	c.Assert(err, IsNil)
+
+	c.Assert(seqInfo, Equals, concInfo)
+
+	wg.Wait()
+}
+
+func (s *ExprSuite) TestReflectNonStructType(c *C) {
+	type mymap map[int]int
+	var nonStructs = []any{
+		mymap{},
+		int(0),
+		string(""),
+		map[string]string{},
+	}
+
+	for _, value := range nonStructs {
+		i, err := expr.TypeInfo(value)
+		c.Assert(err, ErrorMatches, "internal error: attempted to obtain struct information for something that is not a struct: .*")
+		c.Assert(i, IsNil)
+	}
+}
+
+func (s *ExprSuite) TestReflectBadTagError(c *C) {
+
+	var unsupportedFlag = []any{
+		struct {
+			ID int64 `db:"id,bad-juju"`
+		}{99},
+		struct {
+			ID int64 `db:","`
+		}{99},
+		struct {
+			ID int64 `db:"id,omitempty,ddd"`
+		}{99},
+	}
+
+	var tagEmpty = []any{
+		struct {
+			ID int64 `db:",omitempty"`
+		}{99},
+	}
+
+	var invalidColumn = []any{
+		struct {
+			ID int64 `db:"5id"`
+		}{99},
+		struct {
+			ID int64 `db:"+id"`
+		}{99},
+		struct {
+			ID int64 `db:"-id"`
+		}{99},
+		struct {
+			ID int64 `db:"id/col"`
+		}{99},
+		struct {
+			ID int64 `db:"id$$"`
+		}{99},
+		struct {
+			ID int64 `db:"id|2005"`
+		}{99},
+		struct {
+			ID int64 `db:"id|2005"`
+		}{99},
+	}
+
+	for _, value := range unsupportedFlag {
+		_, err := expr.TypeInfo(value)
+		c.Assert(err, ErrorMatches, "cannot parse tag for field .ID: unsupported flag .*")
+	}
+	for _, value := range tagEmpty {
+		_, err := expr.TypeInfo(value)
+		c.Assert(err, ErrorMatches, "cannot parse tag for field .ID: .*")
+	}
+	for _, value := range invalidColumn {
+		_, err := expr.TypeInfo(value)
+		c.Assert(err, ErrorMatches, "cannot parse tag for field .ID: invalid column name in 'db' tag: .*")
+	}
+}
+
+func (s *ExprSuite) TestReflectValidTag(c *C) {
+	var validTags = []any{
+		struct {
+			ID int64 `db:"id_"`
+		}{99},
+		struct {
+			ID int64 `db:"id5"`
+		}{99},
+		struct {
+			ID int64 `db:"_i_d_55"`
+		}{99},
+		struct {
+			ID int64 `db:"id_2002"`
+		}{99},
+		struct {
+			ID int64 `db:"IdENT99"`
+		}{99},
+	}
+
+	for _, value := range validTags {
+		_, err := expr.TypeInfo(value)
+		c.Assert(err, IsNil)
+	}
 }

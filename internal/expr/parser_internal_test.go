@@ -1,7 +1,7 @@
 package expr
 
 import (
-	"testing"
+	. "gopkg.in/check.v1"
 )
 
 type parseHelperTest struct {
@@ -13,7 +13,7 @@ type parseHelperTest struct {
 	data     []string
 }
 
-func TestRunTable(t *testing.T) {
+func (s *ExprInternalSuite) TestRunTable(c *C) {
 	var p = NewParser()
 	var parseTests = []parseHelperTest{
 
@@ -59,7 +59,7 @@ func TestRunTable(t *testing.T) {
 				result = v.stringf0()
 			}
 			if v.result[i] != result {
-				t.Errorf("Test %#v failed. Expected: '%t', got '%t'\n", v, result, v.result[i])
+				c.Errorf("Test %#v failed. Expected: '%t', got '%t'\n", v, result, v.result[i])
 			}
 		}
 	}
