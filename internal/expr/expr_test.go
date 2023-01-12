@@ -213,18 +213,22 @@ var tests = []struct {
 		"Input[Person.name]]",
 }, {
 	"escaped double quote",
-	"SELECT foo FROM t WHERE t.p = \"Jimmy \\\"Quickfingers\\\" Jones\"",
-	"ParsedExpr[BypassPart[SELECT foo FROM t WHERE t.p = ] " +
-		"BypassPart[\"Jimmy \\\"Quickfingers\\\" Jones\"]]",
+	`SELECT foo FROM t WHERE t.p = "Jimmy \"Quickfingers\" Jones"`,
+	`ParsedExpr[BypassPart[SELECT foo FROM t WHERE t.p = ] ` +
+		`BypassPart["Jimmy \"Quickfingers\" Jones"]]`,
 }, {
 	"escaped single quote",
-	"SELECT foo FROM t WHERE t.p = 'Olly O\\'Flanagan'",
-	"ParsedExpr[BypassPart[SELECT foo FROM t WHERE t.p = ] " +
-		"BypassPart['Olly O\\'Flanagan']]",
+	`SELECT foo FROM t WHERE t.p = 'Olly O\'Flanagan'`,
+	`ParsedExpr[BypassPart[SELECT foo FROM t WHERE t.p = ] ` +
+		`BypassPart['Olly O\'Flanagan']]`,
 }, {
 	"escaped quotes",
-	"\\\"\"\\\"\"",
-	"ParsedExpr[BypassPart[\\\"] BypassPart[\"\\\"\"]]",
+	`\""\""`,
+	`ParsedExpr[BypassPart[\"] BypassPart["\""]]`,
+}, {
+	"small escaped quotes",
+	`"\\"`,
+	`ParsedExpr[BypassPart["\\"]]`,
 }, {
 	"update",
 	"UPDATE person SET person.address_id = $Address.id " +
@@ -259,7 +263,7 @@ func (s *ExprSuite) TestParseUnfinishedStringLiteral(c *C) {
 	for _, sql := range testList {
 		parser := expr.NewParser()
 		expr, err := parser.Parse(sql)
-		c.Assert(err, ErrorMatches, "cannot parse expression: missing right quote in string literal")
+		c.Assert(err, ErrorMatches, "cannot parse expression: missing right quote for char 28 in string literal")
 		c.Assert(expr, IsNil)
 	}
 }
@@ -277,7 +281,7 @@ func (s *ExprSuite) TestParseBadEscaped(c *C) {
 	sql := "SELECT foo FROM t WHERE x = 'O'Donnell'"
 	parser := expr.NewParser()
 	_, err := parser.Parse(sql)
-	c.Assert(err, ErrorMatches, "cannot parse expression: missing right quote in string literal")
+	c.Assert(err, ErrorMatches, "cannot parse expression: missing right quote for char 38 in string literal")
 }
 
 func (s *ExprSuite) TestParseBadFormatInput(c *C) {
