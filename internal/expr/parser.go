@@ -320,7 +320,7 @@ func (p *Parser) parseStringLiteral() (*bypassPart, bool, error) {
 			// If this looks like a closing quote, check if it might be an
 			// escape for a following quote. If not, we're done.
 			if maybeCloser && !p.peekByte(c) {
-				return &BypassPart{p.input[mark:p.pos]}, true, nil
+				return &bypassPart{p.input[mark:p.pos]}, true, nil
 			}
 			maybeCloser = !maybeCloser
 		}
