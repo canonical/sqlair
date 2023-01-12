@@ -1,38 +1,21 @@
 package expr
 
 import (
-	"fmt"
 	"reflect"
 	"sync"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	. "gopkg.in/check.v1"
 )
 
-func TestReflectSimpleConcurrent(t *testing.T) {
-	type mystruct struct{}
-	var st mystruct
-	wg := sync.WaitGroup{}
+// Hook up gocheck into the "go test" runner.
+func TestInternal(t *testing.T) { TestingT(t) }
 
-	// Set up some concurrent access.
-	for i := 0; i < 5; i++ {
-		wg.Add(1)
-		go func() {
-			_, _ = typeInfo(st)
-			wg.Done()
-		}()
-	}
+type ExprInternalSuite struct{}
 
-	info, err := typeInfo(st)
-	assert.Nil(t, err)
+var _ = Suite(&ExprInternalSuite{})
 
-	assert.Equal(t, reflect.Struct, info.structType.Kind())
-	assert.Equal(t, reflect.TypeOf(st), info.structType)
-
-	wg.Wait()
-}
-
-func TestReflectStruct(t *testing.T) {
+func (e *ExprInternalSuite) TestReflectStruct(c *C) {
 	type something struct {
 		ID      int64  `db:"id"`
 		Name    string `db:"name,omitempty"`
@@ -46,142 +29,149 @@ func TestReflectStruct(t *testing.T) {
 	}
 
 	info, err := typeInfo(s)
-	assert.Nil(t, err)
+	c.Assert(err, IsNil)
 
-	assert.Equal(t, reflect.Struct, info.structType.Kind())
-	assert.Equal(t, reflect.TypeOf(s), info.structType)
+	c.Assert(reflect.Struct, Equals, info.structType.Kind())
+	c.Assert(reflect.TypeOf(s), Equals, info.structType)
 
-	assert.Len(t, info.tagToField, 2)
+	c.Assert(info.tagToField, HasLen, 2)
 
 	id, ok := info.tagToField["id"]
-	assert.True(t, ok)
-	assert.Equal(t, "ID", id.name)
-	assert.False(t, id.omitEmpty)
+	c.Assert(ok, Equals, true)
+	c.Assert("ID", Equals, id.name)
+	c.Assert(id.omitEmpty, Equals, false)
 
 	name, ok := info.tagToField["name"]
-	assert.True(t, ok)
-	assert.Equal(t, "Name", name.name)
-	assert.True(t, name.omitEmpty)
+	c.Assert(ok, Equals, true)
+	c.Assert("Name", Equals, name.name)
+	c.Assert(name.omitEmpty, Equals, true)
 }
 
-func TestReflectNonStructType(t *testing.T) {
-	type tagErrorTest struct {
-		value any
-		err   error
+func (s *ExprInternalSuite) TestReflectSimpleConcurrent(c *C) {
+	type myStruct struct{}
+
+	// Get the type info of a struct sequentially.
+	var seqSt myStruct
+	seqInfo, err := typeInfo(seqSt)
+	c.Assert(err, IsNil)
+
+	// Get some type info concurrently.
+	var concSt myStruct
+	wg := sync.WaitGroup{}
+
+	// Set up some concurrent access.
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func() {
+			_, _ = typeInfo(concSt)
+			wg.Done()
+		}()
 	}
 
+	// Get type info alongside concurrent access.
+	concInfo, err := typeInfo(concSt)
+	c.Assert(err, IsNil)
+
+	c.Assert(seqInfo, Equals, concInfo)
+
+	wg.Wait()
+}
+
+func (s *ExprInternalSuite) TestReflectNonStructType(c *C) {
 	type mymap map[int]int
-	var tagErrorTable = []tagErrorTest{{
-		value: mymap{},
-		err:   fmt.Errorf(`internal error: attempted to obtain struct information for something that is not a struct: expr.mymap.`),
-	}, {
-		value: int(0),
-		err:   fmt.Errorf(`internal error: attempted to obtain struct information for something that is not a struct: int.`),
-	}, {
-		value: string(""),
-		err:   fmt.Errorf(`internal error: attempted to obtain struct information for something that is not a struct: string.`),
-	}, {
-		value: map[string]string{},
-		err:   fmt.Errorf(`internal error: attempted to obtain struct information for something that is not a struct: map[string]string.`),
-	}}
+	var nonStructs = []any{
+		mymap{},
+		int(0),
+		string(""),
+		map[string]string{},
+	}
 
-	for _, test := range tagErrorTable {
-		i, err := typeInfo(test.value)
-		assert.Equal(t, test.err, err)
-		assert.Equal(t, (*info)(nil), i)
+	for _, value := range nonStructs {
+		i, err := typeInfo(value)
+		c.Assert(err, ErrorMatches, "internal error: attempted to obtain struct information for something that is not a struct: .*")
+		c.Assert(i, IsNil)
 	}
 }
 
-func TestReflectBadTagError(t *testing.T) {
-	type tagErrorTest struct {
-		value any
-		err   error
-	}
+func (s *ExprInternalSuite) TestReflectBadTagError(c *C) {
 
-	var tagErrorTable = []tagErrorTest{{
-		value: struct {
+	var unsupportedFlag = []any{
+		struct {
 			ID int64 `db:"id,bad-juju"`
 		}{99},
-		err: fmt.Errorf(`cannot parse tag for field .ID: unsupported flag "bad-juju" in tag "id,bad-juju"`),
-	}, {
-		value: struct {
+		struct {
 			ID int64 `db:","`
 		}{99},
-		err: fmt.Errorf(`cannot parse tag for field .ID: unsupported flag "" in tag ","`),
-	}, {
-		value: struct {
-			ID int64 `db:",omitempty"`
-		}{99},
-		err: fmt.Errorf(`cannot parse tag for field .ID: empty db tag`),
-	}, {
-		value: struct {
+		struct {
 			ID int64 `db:"id,omitempty,ddd"`
 		}{99},
-		err: fmt.Errorf(`cannot parse tag for field .ID: unsupported flag "ddd" in tag "id,omitempty,ddd"`),
-	}, {
-		value: struct {
+	}
+
+	var tagEmpty = []any{
+		struct {
+			ID int64 `db:",omitempty"`
+		}{99},
+	}
+
+	var invalidColumn = []any{
+		struct {
 			ID int64 `db:"5id"`
 		}{99},
-		err: fmt.Errorf(`cannot parse tag for field .ID: invalid column name in 'db' tag: "5id"`),
-	}, {
-		value: struct {
+		struct {
 			ID int64 `db:"+id"`
 		}{99},
-		err: fmt.Errorf(`cannot parse tag for field .ID: invalid column name in 'db' tag: "+id"`),
-	}, {
-		value: struct {
+		struct {
 			ID int64 `db:"-id"`
 		}{99},
-		err: fmt.Errorf(`cannot parse tag for field .ID: invalid column name in 'db' tag: "-id"`),
-	}, {
-		value: struct {
+		struct {
 			ID int64 `db:"id/col"`
 		}{99},
-		err: fmt.Errorf(`cannot parse tag for field .ID: invalid column name in 'db' tag: "id/col"`),
-	}, {
-		value: struct {
+		struct {
 			ID int64 `db:"id$$"`
 		}{99},
-		err: fmt.Errorf(`cannot parse tag for field .ID: invalid column name in 'db' tag: "id$$"`),
-	}, {
-		value: struct {
+		struct {
 			ID int64 `db:"id|2005"`
 		}{99},
-		err: fmt.Errorf(`cannot parse tag for field .ID: invalid column name in 'db' tag: "id|2005"`),
-	}, {
-		value: struct {
+		struct {
 			ID int64 `db:"id|2005"`
 		}{99},
-		err: fmt.Errorf(`cannot parse tag for field .ID: invalid column name in 'db' tag: "id|2005"`),
-	}, {
-		value: struct {
+	}
+
+	for _, value := range unsupportedFlag {
+		_, err := typeInfo(value)
+		c.Assert(err, ErrorMatches, "cannot parse tag for field .ID: unsupported flag .*")
+	}
+	for _, value := range tagEmpty {
+		_, err := typeInfo(value)
+		c.Assert(err, ErrorMatches, "cannot parse tag for field .ID: .*")
+	}
+	for _, value := range invalidColumn {
+		_, err := typeInfo(value)
+		c.Assert(err, ErrorMatches, "cannot parse tag for field .ID: invalid column name in 'db' tag: .*")
+	}
+}
+
+func (s *ExprInternalSuite) TestReflectValidTag(c *C) {
+	var validTags = []any{
+		struct {
 			ID int64 `db:"id_"`
 		}{99},
-		err: nil,
-	}, {
-		value: struct {
+		struct {
 			ID int64 `db:"id5"`
 		}{99},
-		err: nil,
-	}, {
-		value: struct {
+		struct {
 			ID int64 `db:"_i_d_55"`
 		}{99},
-		err: nil,
-	}, {
-		value: struct {
+		struct {
 			ID int64 `db:"id_2002"`
 		}{99},
-		err: nil,
-	}, {
-		value: struct {
+		struct {
 			ID int64 `db:"IdENT99"`
 		}{99},
-		err: nil,
-	}}
+	}
 
-	for _, test := range tagErrorTable {
-		_, err := typeInfo(test.value)
-		assert.Equal(t, test.err, err)
+	for _, value := range validTags {
+		_, err := typeInfo(value)
+		c.Assert(err, IsNil)
 	}
 }

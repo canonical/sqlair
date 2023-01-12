@@ -7,9 +7,12 @@ import (
 	. "gopkg.in/check.v1"
 )
 
-type ParserSuite struct{}
+// Hook up gocheck into the "go test" runner.
+func TestExpr(t *testing.T) { TestingT(t) }
 
-var _ = Suite(&ParserSuite{})
+type ExprSuite struct{}
+
+var _ = Suite(&ExprSuite{})
 
 type Address struct {
 	ID int `db:"id"`
@@ -218,7 +221,7 @@ var tests = []struct {
 		"Input[Person.id]]",
 }}
 
-func (s *ParserSuite) TestRound(c *C) {
+func (s *ExprSuite) TestExpr(c *C) {
 	parser := expr.NewParser()
 	for i, test := range tests {
 		var parsedExpr *expr.ParsedExpr
@@ -232,7 +235,7 @@ func (s *ParserSuite) TestRound(c *C) {
 }
 
 // We return a proper error when we find an unbound string literal
-func (s *ParserSuite) TestUnfinishedStringLiteral(c *C) {
+func (s *ExprSuite) TestParseUnfinishedStringLiteral(c *C) {
 	testList := []string{
 		"SELECT foo FROM t WHERE x = 'dddd",
 		"SELECT foo FROM t WHERE x = \"dddd",
@@ -248,7 +251,7 @@ func (s *ParserSuite) TestUnfinishedStringLiteral(c *C) {
 }
 
 // Properly parsing empty string literal
-func (s *ParserSuite) TestEmptyStringLiteral(c *C) {
+func (s *ExprSuite) TestParseEmptyStringLiteral(c *C) {
 	sql := "SELECT foo FROM t WHERE x = ''"
 	parser := expr.NewParser()
 	_, err := parser.Parse(sql)
@@ -256,14 +259,14 @@ func (s *ParserSuite) TestEmptyStringLiteral(c *C) {
 }
 
 // Detect bad escaped string literal
-func (s *ParserSuite) TestBadEscaped(c *C) {
+func (s *ExprSuite) TestParseBadEscaped(c *C) {
 	sql := "SELECT foo FROM t WHERE x = 'O'Donnell'"
 	parser := expr.NewParser()
 	_, err := parser.Parse(sql)
 	c.Assert(err, ErrorMatches, "cannot parse expression: missing right quote in string literal")
 }
 
-func (s *ParserSuite) TestBadFormatInput(c *C) {
+func (s *ExprSuite) TestParseBadFormatInput(c *C) {
 	testListInvalidId := []string{
 		"SELECT foo FROM t WHERE x = $Address.",
 		"SELECT foo FROM t WHERE x = $Address.&d",
