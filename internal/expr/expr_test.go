@@ -212,6 +212,20 @@ var tests = []struct {
 	"[Bypass[SELECT p.*, a.district FROM person AS p WHERE p.name=] " +
 		"Input[Person.name]]",
 }, {
+	"escaped double quote",
+	"SELECT foo FROM t WHERE t.p = \"Jimmy \\\"Quickfingers\\\" Jones\"",
+	"ParsedExpr[BypassPart[SELECT foo FROM t WHERE t.p = ] " +
+		"BypassPart[\"Jimmy \\\"Quickfingers\\\" Jones\"]]",
+}, {
+	"escaped single quote",
+	"SELECT foo FROM t WHERE t.p = 'Olly O\\'Flanagan'",
+	"ParsedExpr[BypassPart[SELECT foo FROM t WHERE t.p = ] " +
+		"BypassPart['Olly O\\'Flanagan']]",
+}, {
+	"escaped quotes",
+	"\\\"\"\\\"\"",
+	"ParsedExpr[BypassPart[\\\"] BypassPart[\"\\\"\"]]",
+}, {
 	"update",
 	"UPDATE person SET person.address_id = $Address.id " +
 		"WHERE person.id = $Person.id",

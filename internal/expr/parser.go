@@ -305,20 +305,22 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 	return nil, false, nil
 }
 
-// parseStringLiteral parses quoted expressions and ignores their content.
+// parseStringLiteral parses quoted expressions and ignores their content
+// including escaped quotes.
 func (p *Parser) parseStringLiteral() (*bypassPart, bool, error) {
 	cp := p.save()
 
 	if p.pos < len(p.input) {
 		c := p.input[p.pos]
-		if c == '"' || c == '\'' {
+		if (c == '"' || c == '\'') && (p.pos == 0 || p.input[p.pos-1] != '\\') {
 			p.skipByte(c)
-			// TODO Handle escaping
-			if !p.skipByteFind(c) {
-				// Reached end of string and didn't find the closing quote.
-				return nil, false, fmt.Errorf("missing right quote in string literal")
+			for p.skipByteFind(c) {
+				if p.input[p.pos-2] != '\\' {
+					return &bypassPart{p.input[cp.pos:p.pos]}, true, nil
+				}
 			}
-			return &bypassPart{p.input[cp.pos:p.pos]}, true, nil
+			// Reached end of string and didn't find the closing quote
+			return nil, false, fmt.Errorf("missing right quote in string literal")
 		}
 	}
 
