@@ -1,31 +1,31 @@
-package typeinfo
+package expr
 
 import (
 	"reflect"
 )
 
 // Field represents a single field from a struct type.
-type Field struct {
-	Type reflect.Type
+type field struct {
+	fieldType reflect.Type
 
 	// Name is the name of the struct field.
-	Name string
+	name string
 
 	// Index of this field in the structure.
-	Index int
+	index int
 
 	// OmitEmpty is true when "omitempty" is
 	// a property of the field's "db" tag.
-	OmitEmpty bool
+	omitEmpty bool
 }
 
 // Info represents reflected information about a struct type.
-type Info struct {
-	Type reflect.Type
+type info struct {
+	structType reflect.Type
 
 	// Relate tag names to fields.
-	TagToField map[string]Field
+	tagToField map[string]field
 
 	// Relate field names to tags.
-	FieldToTag map[string]string
+	fieldToTag map[string]string
 }

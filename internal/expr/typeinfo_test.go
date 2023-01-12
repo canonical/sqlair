@@ -1,4 +1,4 @@
-package typeinfo
+package expr
 
 import (
 	"fmt"
@@ -18,16 +18,16 @@ func TestReflectSimpleConcurrent(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		wg.Add(1)
 		go func() {
-			_, _ = TypeInfo(st)
+			_, _ = typeInfo(st)
 			wg.Done()
 		}()
 	}
 
-	info, err := TypeInfo(st)
+	info, err := typeInfo(st)
 	assert.Nil(t, err)
 
-	assert.Equal(t, reflect.Struct, info.Type.Kind())
-	assert.Equal(t, reflect.TypeOf(st), info.Type)
+	assert.Equal(t, reflect.Struct, info.structType.Kind())
+	assert.Equal(t, reflect.TypeOf(st), info.structType)
 
 	wg.Wait()
 }
@@ -45,23 +45,23 @@ func TestReflectStruct(t *testing.T) {
 		NotInDB: "doesn't matter",
 	}
 
-	info, err := TypeInfo(s)
+	info, err := typeInfo(s)
 	assert.Nil(t, err)
 
-	assert.Equal(t, reflect.Struct, info.Type.Kind())
-	assert.Equal(t, reflect.TypeOf(s), info.Type)
+	assert.Equal(t, reflect.Struct, info.structType.Kind())
+	assert.Equal(t, reflect.TypeOf(s), info.structType)
 
-	assert.Len(t, info.TagToField, 2)
+	assert.Len(t, info.tagToField, 2)
 
-	id, ok := info.TagToField["id"]
+	id, ok := info.tagToField["id"]
 	assert.True(t, ok)
-	assert.Equal(t, "ID", id.Name)
-	assert.False(t, id.OmitEmpty)
+	assert.Equal(t, "ID", id.name)
+	assert.False(t, id.omitEmpty)
 
-	name, ok := info.TagToField["name"]
+	name, ok := info.tagToField["name"]
 	assert.True(t, ok)
-	assert.Equal(t, "Name", name.Name)
-	assert.True(t, name.OmitEmpty)
+	assert.Equal(t, "Name", name.name)
+	assert.True(t, name.omitEmpty)
 }
 
 func TestReflectNonStructType(t *testing.T) {
@@ -73,7 +73,7 @@ func TestReflectNonStructType(t *testing.T) {
 	type mymap map[int]int
 	var tagErrorTable = []tagErrorTest{{
 		value: mymap{},
-		err:   fmt.Errorf(`internal error: attempted to obtain struct information for something that is not a struct: typeinfo.mymap.`),
+		err:   fmt.Errorf(`internal error: attempted to obtain struct information for something that is not a struct: expr.mymap.`),
 	}, {
 		value: int(0),
 		err:   fmt.Errorf(`internal error: attempted to obtain struct information for something that is not a struct: int.`),
@@ -86,9 +86,9 @@ func TestReflectNonStructType(t *testing.T) {
 	}}
 
 	for _, test := range tagErrorTable {
-		info, err := TypeInfo(test.value)
+		i, err := typeInfo(test.value)
 		assert.Equal(t, test.err, err)
-		assert.Equal(t, (*Info)(nil), info)
+		assert.Equal(t, (*info)(nil), i)
 	}
 }
 
@@ -181,7 +181,7 @@ func TestReflectBadTagError(t *testing.T) {
 	}}
 
 	for _, test := range tagErrorTable {
-		_, err := TypeInfo(test.value)
+		_, err := typeInfo(test.value)
 		assert.Equal(t, test.err, err)
 	}
 }

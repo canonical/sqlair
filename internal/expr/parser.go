@@ -1,4 +1,4 @@
-package parse
+package expr
 
 import (
 	"bytes"
@@ -14,7 +14,7 @@ type Parser struct {
 	// partStart is the value of pos just before we started parsing the part
 	// under pos. We maintain partStart >= prevPart.
 	partStart int
-	parts     []QueryPart
+	parts     []queryPart
 }
 
 func NewParser() *Parser {
@@ -27,7 +27,7 @@ func (p *Parser) init(input string) {
 	p.pos = 0
 	p.prevPart = 0
 	p.partStart = 0
-	p.parts = []QueryPart{}
+	p.parts = []queryPart{}
 }
 
 // A checkpoint struct for saving parser state to restore later. We only use
@@ -38,7 +38,7 @@ type checkpoint struct {
 	pos       int
 	prevPart  int
 	partStart int
-	parts     []QueryPart
+	parts     []queryPart
 }
 
 // save takes a snapshot of the state of the parser and returns a pointer to a
@@ -63,23 +63,23 @@ func (cp *checkpoint) restore() {
 }
 
 // ParsedExpr is the AST representation of an SQL expression. The AST is made up
-// of QueryParts. For example, a SQL statement like this:
+// of queryParts. For example, a SQL statement like this:
 //
 // Select p.* as &Person.* from person where p.name = $Boss.col_name
 //
 // would be represented as:
 //
-// [BypassPart OutputPart BypassPart InputPart]
+// [bypassPart outputPart bypassPart inputPart]
 type ParsedExpr struct {
-	QueryParts []QueryPart
+	queryParts []queryPart
 }
 
 // String returns a textual representation of the AST contained in the
 // ParsedExpr for debugging purposes.
 func (pe *ParsedExpr) String() string {
 	var out bytes.Buffer
-	out.WriteString("ParsedExpr[")
-	for i, p := range pe.QueryParts {
+	out.WriteString("[")
+	for i, p := range pe.queryParts {
 		if i > 0 {
 			out.WriteString(" ")
 		}
@@ -89,14 +89,14 @@ func (pe *ParsedExpr) String() string {
 	return out.String()
 }
 
-// add pushes the parsed part to the parsedExprBuilder along with the BypassPart
+// add pushes the parsed part to the parsedExprBuilder along with the bypassPart
 // that stretches from the end of the previous part to the beginning of this
 // part.
-func (p *Parser) add(part QueryPart) {
+func (p *Parser) add(part queryPart) {
 	// Add the string between the previous I/O part and the current part.
 	if p.prevPart != p.partStart {
 		p.parts = append(p.parts,
-			&BypassPart{p.input[p.prevPart:p.partStart]})
+			&bypassPart{p.input[p.prevPart:p.partStart]})
 	}
 
 	if part != nil {
@@ -266,37 +266,37 @@ func (p *Parser) parseIdentifier() (string, bool) {
 }
 
 // parseGoFullName parses a Go type name qualified by a tag name (or asterisk)
-// of the form "TypeName.col_name". On success it returns the parsed FullName,
+// of the form "TypeName.col_name". On success it returns the parsed fullName,
 // true and nil. If a Go full name is found, but not formatted correctly, false
 // and an error are returned. Otherwise the error is nil.
-func (p *Parser) parseGoFullName() (FullName, bool, error) {
+func (p *Parser) parseGoFullName() (fullName, bool, error) {
 	cp := p.save()
 	if id, ok := p.parseIdentifier(); ok {
 		if p.skipByte('.') {
 			if idField, ok := p.parseIdentifierAsterisk(); ok {
-				return FullName{id, idField}, true, nil
+				return fullName{id, idField}, true, nil
 			}
-			return FullName{}, false,
+			return fullName{}, false,
 				fmt.Errorf("invalid identifier near char %d", p.pos)
 		}
-		return FullName{}, false,
+		return fullName{}, false,
 			fmt.Errorf("go object near char %d not qualified", p.pos)
 	}
 	cp.restore()
-	return FullName{}, false, nil
+	return fullName{}, false, nil
 }
 
 // parseInputExpression parses an input expression of the form $Type.name.
-func (p *Parser) parseInputExpression() (*InputPart, bool, error) {
+func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 	cp := p.save()
 
 	if p.skipByte('$') {
 		if fn, ok, err := p.parseGoFullName(); ok {
-			if fn.Name == "*" {
+			if fn.name == "*" {
 				return nil, false, fmt.Errorf("asterisk not allowed "+
 					"in expression near %d", p.pos)
 			}
-			return &InputPart{fn}, true, nil
+			return &inputPart{fn}, true, nil
 		} else if err != nil {
 			return nil, false, err
 		}
@@ -306,7 +306,7 @@ func (p *Parser) parseInputExpression() (*InputPart, bool, error) {
 }
 
 // parseStringLiteral parses quoted expressions and ignores their content.
-func (p *Parser) parseStringLiteral() (*BypassPart, bool, error) {
+func (p *Parser) parseStringLiteral() (*bypassPart, bool, error) {
 	cp := p.save()
 
 	if p.pos < len(p.input) {
@@ -318,7 +318,7 @@ func (p *Parser) parseStringLiteral() (*BypassPart, bool, error) {
 				// Reached end of string and didn't find the closing quote.
 				return nil, false, fmt.Errorf("missing right quote in string literal")
 			}
-			return &BypassPart{p.input[cp.pos:p.pos]}, true, nil
+			return &bypassPart{p.input[cp.pos:p.pos]}, true, nil
 		}
 	}
 

@@ -1,9 +1,9 @@
-package parse_test
+package expr_test
 
 import (
 	"testing"
 
-	"github.com/canonical/sqlair/internal/parse"
+	"github.com/canonical/sqlair/internal/expr"
 	. "gopkg.in/check.v1"
 )
 
@@ -37,101 +37,101 @@ var tests = []struct {
 }{{
 	"star table as output",
 	"SELECT p.* AS &Person.*",
-	"ParsedExpr[BypassPart[SELECT p.* AS &Person.*]]",
+	"[Bypass[SELECT p.* AS &Person.*]]",
 }, {
 	"quoted output expression",
 	"SELECT p.* AS &Person.*, '&notAnOutputExpresion.*' AS literal FROM t",
-	"ParsedExpr[BypassPart[SELECT p.* AS &Person.*, ] " +
-		"BypassPart['&notAnOutputExpresion.*'] " +
-		"BypassPart[ AS literal FROM t]]",
+	"[Bypass[SELECT p.* AS &Person.*, ] " +
+		"Bypass['&notAnOutputExpresion.*'] " +
+		"Bypass[ AS literal FROM t]]",
 }, {
 	"star as output",
 	"SELECT * AS &Person.* FROM t",
-	"ParsedExpr[BypassPart[SELECT * AS &Person.* FROM t]]",
+	"[Bypass[SELECT * AS &Person.* FROM t]]",
 }, {
 	"input v1",
 	"SELECT foo, bar FROM table WHERE foo = $Person.id",
-	"ParsedExpr[BypassPart[SELECT foo, bar FROM table WHERE foo = ] " +
-		"InputPart[Person.id]]",
+	"[Bypass[SELECT foo, bar FROM table WHERE foo = ] " +
+		"Input[Person.id]]",
 }, {
 	"input v2",
 	"SELECT p FROM person WHERE p.name = $Person.name",
-	"ParsedExpr[BypassPart[SELECT p FROM person WHERE p.name = ] InputPart[Person.name]]",
+	"[Bypass[SELECT p FROM person WHERE p.name = ] Input[Person.name]]",
 }, {
 	"input v3",
 	"SELECT p.*, a.district " +
 		"FROM person AS p JOIN address AS a ON p.address_id = a.id " +
 		"WHERE p.name = $Person.name",
-	"ParsedExpr[BypassPart[SELECT p.*, a.district FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] " +
-		"InputPart[Person.name]]",
+	"[Bypass[SELECT p.*, a.district FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] " +
+		"Input[Person.name]]",
 }, {
 	"output and input",
 	"SELECT &Person FROM table WHERE foo = $Address.id",
-	"ParsedExpr[BypassPart[SELECT &Person FROM table WHERE foo = ] " +
-		"InputPart[Address.id]]",
+	"[Bypass[SELECT &Person FROM table WHERE foo = ] " +
+		"Input[Address.id]]",
 }, {
 	"star output and input",
 	"SELECT &Person.* FROM table WHERE foo = $Address.id",
-	"ParsedExpr[BypassPart[SELECT &Person.* FROM table WHERE foo = ] " +
-		"InputPart[Address.id]]",
+	"[Bypass[SELECT &Person.* FROM table WHERE foo = ] " +
+		"Input[Address.id]]",
 }, {
 	"output and quote",
 	"SELECT foo, bar, &Person.id FROM table WHERE foo = 'xx'",
-	"ParsedExpr[BypassPart[SELECT foo, bar, &Person.id FROM table WHERE foo = ] " +
-		"BypassPart['xx']]",
+	"[Bypass[SELECT foo, bar, &Person.id FROM table WHERE foo = ] " +
+		"Bypass['xx']]",
 }, {
 	"two outputs and quote",
 	"SELECT foo, &Person.id, bar, baz, &Manager.name FROM table WHERE foo = 'xx'",
-	"ParsedExpr[BypassPart[SELECT foo, &Person.id, bar, baz, &Manager.name FROM table WHERE foo = ] " +
-		"BypassPart['xx']]",
+	"[Bypass[SELECT foo, &Person.id, bar, baz, &Manager.name FROM table WHERE foo = ] " +
+		"Bypass['xx']]",
 }, {
 	"star as output and quote",
 	"SELECT * AS &Person.* FROM person WHERE name = 'Fred'",
-	"ParsedExpr[BypassPart[SELECT * AS &Person.* FROM person WHERE name = ] " +
-		"BypassPart['Fred']]",
+	"[Bypass[SELECT * AS &Person.* FROM person WHERE name = ] " +
+		"Bypass['Fred']]",
 }, {
 	"star output and quote",
 	"SELECT &Person.* FROM person WHERE name = 'Fred'",
-	"ParsedExpr[BypassPart[SELECT &Person.* FROM person WHERE name = ] " +
-		"BypassPart['Fred']]",
+	"[Bypass[SELECT &Person.* FROM person WHERE name = ] " +
+		"Bypass['Fred']]",
 }, {
 	"two star as outputs and quote",
 	"SELECT * AS &Person.*, a.* AS &Address.* FROM person, address a WHERE name = 'Fred'",
-	"ParsedExpr[BypassPart[SELECT * AS &Person.*, a.* AS &Address.* FROM person, address a WHERE name = ] " +
-		"BypassPart['Fred']]",
+	"[Bypass[SELECT * AS &Person.*, a.* AS &Address.* FROM person, address a WHERE name = ] " +
+		"Bypass['Fred']]",
 }, {
 	"multicolumn output and quote",
 	"SELECT (a.district, a.street) AS &Address.* FROM address AS a WHERE p.name = 'Fred'",
-	"ParsedExpr[BypassPart[SELECT (a.district, a.street) AS &Address.* FROM address AS a WHERE p.name = ] BypassPart['Fred']]",
+	"[Bypass[SELECT (a.district, a.street) AS &Address.* FROM address AS a WHERE p.name = ] Bypass['Fred']]",
 }, {
 	"quote",
 	"SELECT 1 FROM person WHERE p.name = 'Fred'",
-	"ParsedExpr[BypassPart[SELECT 1 FROM person WHERE p.name = ] " +
-		"BypassPart['Fred']]",
+	"[Bypass[SELECT 1 FROM person WHERE p.name = ] " +
+		"Bypass['Fred']]",
 }, {
 	"complex query v1",
 	"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.*, " +
 		"(5+7), (col1 * col2) AS calculated_value FROM person AS p " +
 		"JOIN address AS a ON p.address_id = a.id WHERE p.name = 'Fred'",
-	"ParsedExpr[BypassPart[SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.*, (5+7), (col1 * col2) AS calculated_value FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] " +
-		"BypassPart['Fred']]",
+	"[Bypass[SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.*, (5+7), (col1 * col2) AS calculated_value FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] " +
+		"Bypass['Fred']]",
 }, {
 	"complex query v2",
 	"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* " +
 		"FROM person AS p JOIN address AS a ON p .address_id = a.id " +
 		"WHERE p.name = 'Fred'",
-	"ParsedExpr[BypassPart[SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.*" +
+	"[Bypass[SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.*" +
 		" FROM person AS p JOIN address AS a ON p .address_id = a.id WHERE p.name = ] " +
-		"BypassPart['Fred']]",
+		"Bypass['Fred']]",
 }, {
 	"complex query v3",
 	"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* " +
 		"FROM person AS p JOIN address AS a ON p.address_id = a.id " +
 		"WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name)",
-	"ParsedExpr[BypassPart[SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* " +
+	"[Bypass[SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* " +
 		"FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name IN (SELECT name FROM table WHERE table.n = ] " +
-		"InputPart[Person.name] " +
-		"BypassPart[)]]",
+		"Input[Person.name] " +
+		"Bypass[)]]",
 }, {
 	"complex query v4",
 	"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* " +
@@ -140,88 +140,88 @@ var tests = []struct {
 		"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* " +
 		"FROM person WHERE p.name IN " +
 		"(SELECT name FROM table WHERE table.n = $Person.name)",
-	"ParsedExpr[BypassPart[SELECT p.* AS &Person.*, " +
+	"[Bypass[SELECT p.* AS &Person.*, " +
 		"(a.district, a.street) AS &Address.* " +
 		"FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = ] " +
-		"InputPart[Person.name] " +
-		"BypassPart[) UNION SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* " +
+		"Input[Person.name] " +
+		"Bypass[) UNION SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* " +
 		"FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = ] " +
-		"InputPart[Person.name] " +
-		"BypassPart[)]]",
+		"Input[Person.name] " +
+		"Bypass[)]]",
 }, {
 	"complex query v5",
 	"SELECT p.* AS &Person, a.District AS &District " +
 		"FROM person AS p JOIN address AS a ON p.address_id = a.id " +
 		"WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
-	"ParsedExpr[BypassPart[SELECT p.* AS &Person, a.District AS &District " +
+	"[Bypass[SELECT p.* AS &Person, a.District AS &District " +
 		"FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] " +
-		"InputPart[Person.name] " +
-		"BypassPart[ AND p.address_id = ] " +
-		"InputPart[Person.address_id]]",
+		"Input[Person.name] " +
+		"Bypass[ AND p.address_id = ] " +
+		"Input[Person.address_id]]",
 }, {
 	"complex query v6",
 	"SELECT p.* AS &Person, a.District AS &District " +
 		"FROM person AS p INNER JOIN address AS a " +
 		"ON p.address_id = $Address.id " +
 		"WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
-	"ParsedExpr[BypassPart[SELECT p.* AS &Person, a.District AS &District " +
+	"[Bypass[SELECT p.* AS &Person, a.District AS &District " +
 		"FROM person AS p INNER JOIN address AS a ON p.address_id = ] " +
-		"InputPart[Address.id] " +
-		"BypassPart[ WHERE p.name = ] " +
-		"InputPart[Person.name] " +
-		"BypassPart[ AND p.address_id = ] " +
-		"InputPart[Person.address_id]]",
+		"Input[Address.id] " +
+		"Bypass[ WHERE p.name = ] " +
+		"Input[Person.name] " +
+		"Bypass[ AND p.address_id = ] " +
+		"Input[Person.address_id]]",
 }, {
 	"join v1",
 	"SELECT p.* AS &Person.*, m.* AS &Manager.* " +
 		"FROM person AS p JOIN person AS m " +
 		"ON p.manager_id = m.id WHERE p.name = 'Fred'",
-	"ParsedExpr[BypassPart[SELECT p.* AS &Person.*, m.* AS &Manager.* " +
+	"[Bypass[SELECT p.* AS &Person.*, m.* AS &Manager.* " +
 		"FROM person AS p JOIN person AS m ON p.manager_id = m.id WHERE p.name = ] " +
-		"BypassPart['Fred']]",
+		"Bypass['Fred']]",
 }, {
 	"join v2",
 	"SELECT person.*, address.district FROM person JOIN address " +
 		"ON person.address_id = address.id WHERE person.name = 'Fred'",
-	"ParsedExpr[BypassPart[SELECT person.*, address.district FROM person JOIN address ON person.address_id = address.id WHERE person.name = ] " +
-		"BypassPart['Fred']]",
+	"[Bypass[SELECT person.*, address.district FROM person JOIN address ON person.address_id = address.id WHERE person.name = ] " +
+		"Bypass['Fred']]",
 }, {
 	"insert",
 	"INSERT INTO person (name) VALUES $Person.name",
-	"ParsedExpr[BypassPart[INSERT INTO person (name) VALUES ] " +
-		"InputPart[Person.name]]",
+	"[Bypass[INSERT INTO person (name) VALUES ] " +
+		"Input[Person.name]]",
 }, {
 	"ignore dollar v1",
 	"SELECT $ FROM moneytable",
-	"ParsedExpr[BypassPart[SELECT $ FROM moneytable]]",
+	"[Bypass[SELECT $ FROM moneytable]]",
 }, {
 	"ignore dollar v2",
 	"SELECT foo FROM data$",
-	"ParsedExpr[BypassPart[SELECT foo FROM data$]]",
+	"[Bypass[SELECT foo FROM data$]]",
 }, {
 	"ignore dollar v3",
 	"SELECT dollerrow$ FROM moneytable",
-	"ParsedExpr[BypassPart[SELECT dollerrow$ FROM moneytable]]",
+	"[Bypass[SELECT dollerrow$ FROM moneytable]]",
 }, {
 	"input with no space",
 	"SELECT p.*, a.district " +
 		"FROM person AS p WHERE p.name=$Person.name",
-	"ParsedExpr[BypassPart[SELECT p.*, a.district FROM person AS p WHERE p.name=] " +
-		"InputPart[Person.name]]",
+	"[Bypass[SELECT p.*, a.district FROM person AS p WHERE p.name=] " +
+		"Input[Person.name]]",
 }, {
 	"update",
 	"UPDATE person SET person.address_id = $Address.id " +
 		"WHERE person.id = $Person.id",
-	"ParsedExpr[BypassPart[UPDATE person SET person.address_id = ] " +
-		"InputPart[Address.id] " +
-		"BypassPart[ WHERE person.id = ] " +
-		"InputPart[Person.id]]",
+	"[Bypass[UPDATE person SET person.address_id = ] " +
+		"Input[Address.id] " +
+		"Bypass[ WHERE person.id = ] " +
+		"Input[Person.id]]",
 }}
 
 func (s *ParserSuite) TestRound(c *C) {
-	parser := parse.NewParser()
+	parser := expr.NewParser()
 	for i, test := range tests {
-		var parsedExpr *parse.ParsedExpr
+		var parsedExpr *expr.ParsedExpr
 		var err error
 		if parsedExpr, err = parser.Parse(test.input); err != nil {
 			c.Errorf("test %d failed (Parse):\nsummary: %s\ninput: %s\nexpected: %s\nerr: %s\n", i, test.summary, test.input, test.expectedParsed, err)
@@ -240,7 +240,7 @@ func (s *ParserSuite) TestUnfinishedStringLiteral(c *C) {
 	}
 
 	for _, sql := range testList {
-		parser := parse.NewParser()
+		parser := expr.NewParser()
 		expr, err := parser.Parse(sql)
 		c.Assert(err, ErrorMatches, "cannot parse expression: missing right quote in string literal")
 		c.Assert(expr, IsNil)
@@ -250,7 +250,7 @@ func (s *ParserSuite) TestUnfinishedStringLiteral(c *C) {
 // Properly parsing empty string literal
 func (s *ParserSuite) TestEmptyStringLiteral(c *C) {
 	sql := "SELECT foo FROM t WHERE x = ''"
-	parser := parse.NewParser()
+	parser := expr.NewParser()
 	_, err := parser.Parse(sql)
 	c.Assert(err, IsNil)
 }
@@ -258,7 +258,7 @@ func (s *ParserSuite) TestEmptyStringLiteral(c *C) {
 // Detect bad escaped string literal
 func (s *ParserSuite) TestBadEscaped(c *C) {
 	sql := "SELECT foo FROM t WHERE x = 'O'Donnell'"
-	parser := parse.NewParser()
+	parser := expr.NewParser()
 	_, err := parser.Parse(sql)
 	c.Assert(err, ErrorMatches, "cannot parse expression: missing right quote in string literal")
 }
@@ -271,14 +271,14 @@ func (s *ParserSuite) TestBadFormatInput(c *C) {
 	}
 
 	for _, sql := range testListInvalidId {
-		parser := parse.NewParser()
+		parser := expr.NewParser()
 		expr, err := parser.Parse(sql)
 		c.Assert(err, ErrorMatches, "cannot parse expression: invalid identifier near char 37")
 		c.Assert(expr, IsNil)
 	}
 
 	sql := "SELECT foo FROM t WHERE x = $Address"
-	parser := parse.NewParser()
+	parser := expr.NewParser()
 	_, err := parser.Parse(sql)
 	c.Assert(err, ErrorMatches, "cannot parse expression: go object near char 36 not qualified")
 }
@@ -290,7 +290,7 @@ func FuzzParser(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, s string) {
 		// Loop forever or until it crashes
-		parser := parse.NewParser()
+		parser := expr.NewParser()
 		parser.Parse(s)
 	})
 }
