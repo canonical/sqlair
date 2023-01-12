@@ -266,6 +266,11 @@ func (s *ExprSuite) TestParseUnfinishedStringLiteral(c *C) {
 		c.Assert(err, ErrorMatches, "cannot parse expression: missing right quote for char 28 in string literal")
 		c.Assert(expr, IsNil)
 	}
+
+	sql := "SELECT foo FROM t WHERE x = 'O'Donnell'"
+	parser := parse.NewParser()
+	_, err := parser.Parse(sql)
+	c.Assert(err, ErrorMatches, "cannot parse expression: missing right quote for char 38 in string literal")
 }
 
 // Properly parsing empty string literal
@@ -274,14 +279,6 @@ func (s *ExprSuite) TestParseEmptyStringLiteral(c *C) {
 	parser := expr.NewParser()
 	_, err := parser.Parse(sql)
 	c.Assert(err, IsNil)
-}
-
-// Detect bad escaped string literal
-func (s *ExprSuite) TestParseBadEscaped(c *C) {
-	sql := "SELECT foo FROM t WHERE x = 'O'Donnell'"
-	parser := expr.NewParser()
-	_, err := parser.Parse(sql)
-	c.Assert(err, ErrorMatches, "cannot parse expression: missing right quote for char 38 in string literal")
 }
 
 func (s *ExprSuite) TestParseBadFormatInput(c *C) {

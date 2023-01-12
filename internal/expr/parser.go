@@ -264,7 +264,7 @@ func (p *Parser) skipCharFind(c byte) bool {
 // parameter. If the char is escaped it is ignored. Returns true in that case,
 // false otherwise.
 func (p *Parser) skipChar(c byte) bool {
-	if (p.pos < len(p.input)) && (p.input[p.pos] == c) && (!p.isEscaped()) {
+	if p.peekByte(c) && !p.isEscaped() {
 		p.pos++
 		return true
 	}
