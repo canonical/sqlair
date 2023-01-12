@@ -153,12 +153,6 @@ func (p *Parser) peekByte(b byte) bool {
 	return p.pos < len(p.input) && p.input[p.pos] == b
 }
 
-// peekByteAt returns true if the byte at i equals the one passed as a
-// parameter.
-func (p *Parser) peekByteAt(b byte, i int) bool {
-	return i >= 0 && i < len(p.input) && p.input[i] == b
-}
-
 // skipByte jumps over the current byte if it matches the byte passed as a
 // parameter. Returns true in that case, false otherwise.
 func (p *Parser) skipByte(b byte) bool {
@@ -236,39 +230,6 @@ func (p *Parser) skipName() bool {
 		}
 	}
 	return p.pos > mark
-}
-
-// isEscaped checks if the byte at p.pos is escaped.
-func (p *Parser) isEscaped() bool {
-	return p.peekByteAt('\\', p.pos-1) && !p.peekByteAt('\\', p.pos-2)
-}
-
-// skipCharFind advances the parser until it finds the char passed as a
-// parameter then jumps over it and returns true. If the parameter is escaped
-// the it is ignored.  If the end of the string is reached and no matching byte
-// was found, it returns false.
-func (p *Parser) skipCharFind(c byte) bool {
-	mark := p.pos
-	for p.pos < len(p.input) {
-		if p.peekByte(c) && !p.isEscaped() {
-			p.pos++
-			return true
-		}
-		p.pos++
-	}
-	p.pos = mark
-	return false
-}
-
-// skipChar jumps over the current char if it matches the byte passed as a
-// parameter. If the char is escaped it is ignored. Returns true in that case,
-// false otherwise.
-func (p *Parser) skipChar(c byte) bool {
-	if p.peekByte(c) && !p.isEscaped() {
-		p.pos++
-		return true
-	}
-	return false
 }
 
 // Functions with the prefix parse attempt to parse some construct. They return
@@ -351,18 +312,28 @@ func (p *Parser) parseStringLiteral() (*bypassPart, bool, error) {
 
 	if p.pos < len(p.input) {
 		c := p.input[p.pos]
-		if (c == '"' || c == '\'') && (p.pos == 0 || p.input[p.pos-1] != '\\') {
-			p.skipByte(c)
-			for p.skipByteFind(c) {
-				if p.input[p.pos-2] != '\\' {
-					return &bypassPart{p.input[cp.pos:p.pos]}, true, nil
+
+		if c == '"' || c == '\'' {
+			mark := p.pos
+
+			if p.skipByte(c) {
+				// We keep track of whether the next quote has been previously
+				// escaped. If not, it might be a closer.
+				maybeCloser := true
+				for p.skipByteFind(c) {
+					// If this looks like a closing quote, check if it might be an
+					// escape for a following quote. If not, we're done.
+					if maybeCloser && !p.peekByte(c) {
+						return &BypassPart{p.input[mark:p.pos]}, true, nil
+					}
+					maybeCloser = !maybeCloser
 				}
+
 				// Reached end of string and didn't find the closing quote
 				return nil, false, fmt.Errorf("missing right quote for char %d in string literal", cp.pos)
 			}
 		}
 	}
-
 	cp.restore()
 	return nil, false, nil
 }
