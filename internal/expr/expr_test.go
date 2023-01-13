@@ -42,6 +42,28 @@ var tests = []struct {
 	"SELECT p.* AS &Person.*",
 	"[Bypass[SELECT p.* AS &Person.*]]",
 }, {
+	"spaces and tabs",
+	"SELECT p.* 	AS 		   &Person.*",
+	"ParsedExpr[BypassPart[SELECT p.* 	AS 		   &Person.*]]",
+}, {
+	"new lines",
+	`SELECT
+		p.* AS &Person.*,
+		foo
+	 FROM t
+	 WHERE
+		foo = bar
+		and
+		x = y`,
+	`ParsedExpr[BypassPart[SELECT
+		p.* AS &Person.*,
+		foo
+	 FROM t
+	 WHERE
+		foo = bar
+		and
+		x = y]]`,
+}, {
 	"quoted output expression",
 	"SELECT p.* AS &Person.*, '&notAnOutputExpresion.*' AS literal FROM t",
 	"[Bypass[SELECT p.* AS &Person.*, ] " +

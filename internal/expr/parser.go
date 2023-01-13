@@ -177,16 +177,17 @@ func (p *Parser) skipByteFind(b byte) bool {
 	return false
 }
 
-// skipSpaces advances the parser jumping over consecutive spaces. It stops when
-// finding a non-space character. Returns true if the parser position was
-// actually changed, false otherwise.
-func (p *Parser) skipSpaces() bool {
+// skipBlanks advances the parser past spaces, tabs and newlines. Returns
+// whether the parser position was changed.
+func (p *Parser) skipBlanks() bool {
 	mark := p.pos
 	for p.pos < len(p.input) {
-		if p.input[p.pos] != ' ' {
-			break
+		switch p.input[p.pos] {
+		case ' ', '\t', '\r', '\n':
+			p.pos++
+		default:
+			return p.pos != mark
 		}
-		p.pos++
 	}
 	return p.pos != mark
 }
