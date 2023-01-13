@@ -11,7 +11,7 @@ import (
 var cacheMutex sync.RWMutex
 var cache = make(map[reflect.Type]*info)
 
-// Reflect will return the info of a given type,
+// typeInfo will return the Info of a given type,
 // generating and caching as required.
 func typeInfo(value any) (*info, error) {
 	if value == (any)(nil) {
