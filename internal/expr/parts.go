@@ -38,7 +38,7 @@ func (p *inputPart) String() string {
 }
 
 func (p *inputPart) toSQL() string {
-	return ""
+	return "?"
 }
 
 // outputPart represents a named target output variable in the SQL expression,
