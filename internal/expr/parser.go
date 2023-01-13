@@ -122,17 +122,24 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 	for {
 		p.partStart = p.pos
 
-		if ip, ok, err := p.parseInputExpression(); err != nil {
+		if out, ok, err := p.parseOutputExpression(); err != nil {
 			return nil, err
 		} else if ok {
-			p.add(ip)
+			p.add(out)
 			continue
 		}
 
-		if sp, ok, err := p.parseStringLiteral(); err != nil {
+		if in, ok, err := p.parseInputExpression(); err != nil {
 			return nil, err
 		} else if ok {
-			p.add(sp)
+			p.add(in)
+			continue
+		}
+
+		if bypass, ok, err := p.parseStringLiteral(); err != nil {
+			return nil, err
+		} else if ok {
+			p.add(bypass)
 			continue
 		}
 
@@ -265,12 +272,45 @@ func (p *Parser) parseIdentifier() (string, bool) {
 	return "", false
 }
 
+// parseColumn parses a column made up of name bytes, optionally dot-prefixed by
+// its table name. parseColumn returns an error so that it can be used with
+// parseList.
+func (p *Parser) parseColumn() (fullName, bool, error) {
+	cp := p.save()
+
+	if id, ok := p.parseIdentifierAsterisk(); ok {
+		if id != "*" && p.skipByte('.') {
+			if idCol, ok := p.parseIdentifierAsterisk(); ok {
+				return fullName{prefix: id, name: idCol}, true, nil
+			}
+		} else {
+			// A column name specified without a table prefix should be in name.
+			return fullName{name: id}, true, nil
+		}
+	}
+
+	cp.restore()
+	return fullName{}, false, nil
+}
+
+func (p *Parser) parseTarget() (fullName, bool, error) {
+	cp := p.save()
+
+	if p.skipByte('&') {
+		return p.parseGoFullName()
+	}
+
+	cp.restore()
+	return fullName{}, false, nil
+}
+
 // parseGoFullName parses a Go type name qualified by a tag name (or asterisk)
-// of the form "TypeName.col_name". On success it returns the parsed fullName,
+// of the form "&TypeName.col_name". On success it returns the parsed FullName,
 // true and nil. If a Go full name is found, but not formatted correctly, false
 // and an error are returned. Otherwise the error is nil.
 func (p *Parser) parseGoFullName() (fullName, bool, error) {
 	cp := p.save()
+
 	if id, ok := p.parseIdentifier(); ok {
 		if p.skipByte('.') {
 			if idField, ok := p.parseIdentifierAsterisk(); ok {
@@ -282,11 +322,148 @@ func (p *Parser) parseGoFullName() (fullName, bool, error) {
 		return fullName{}, false,
 			fmt.Errorf("go object near char %d not qualified", p.pos)
 	}
+
 	cp.restore()
 	return fullName{}, false, nil
 }
 
-// parseInputExpression parses an input expression of the form $Type.name.
+// parseList takes a parsing function that returns a fullName and parses a
+// bracketed, comma seperated, list.
+func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]fullName, bool, error) {
+	cp := p.save()
+
+	if !p.skipByte('(') {
+		return nil, false, nil
+	}
+
+	parenPos := p.pos
+	p.skipSpaces()
+
+	nextItem := true
+	var objs []fullName
+	for i := 0; nextItem; i++ {
+		if obj, ok, err := parseFn(p); ok {
+			objs = append(objs, obj)
+		} else if err != nil {
+			return nil, false, err
+		} else if i == 0 {
+			// If the first item is not what we are looking for we exit.
+			cp.restore()
+			return nil, false, nil
+		} else {
+			// On subsequent items we return an error.
+			return nil, false, fmt.Errorf("column %d: invalid expression", p.pos)
+		}
+
+		p.skipSpaces()
+		if p.skipByte(')') {
+			return objs, true, nil
+		}
+
+		nextItem = p.skipByte(',')
+		p.skipSpaces()
+	}
+	return nil, false, fmt.Errorf("column %d: missing closing parentheses", parenPos)
+}
+
+// parseColumns parses a list of columns. For lists of more than one column the
+// columns must be enclosed in brackets e.g. "(col1, col2) AS &Person.*".
+func (p *Parser) parseColumns() ([]fullName, bool) {
+	cp := p.save()
+
+	// Case 1: A single column e.g. "p.name".
+	if col, ok, _ := p.parseColumn(); ok {
+		return []fullName{col}, true
+	}
+
+	// Case 2: Multiple columns e.g. "(p.name, p.id)".
+	if cols, ok, _ := p.parseList((*Parser).parseColumn); ok {
+		return cols, true
+	}
+
+	cp.restore()
+	return nil, false
+}
+
+// parseTargets parses the part of the output expression following the
+// ampersand. This can be one or more references Go objects.
+// If the ampersand is not preceded by a space and succeeded by a name or
+// opening bracket the targets are not parsed.
+func (p *Parser) parseTargets() ([]fullName, bool, error) {
+	cp := p.save()
+
+	// Case 1: A single target e.g. "&Person.name".
+	if target, ok, err := p.parseTarget(); ok {
+		return []fullName{target}, true, nil
+	} else if err != nil {
+		return nil, false, err
+	}
+
+	// Case 2: Multiple targets e.g. "(&Person.name, &Person.id)".
+	if targets, ok, err := p.parseList((*Parser).parseTarget); ok {
+		if starCount(targets) > 1 {
+			return nil, false, fmt.Errorf("column %d: more than one asterisk in expression", p.pos)
+		}
+		return targets, true, nil
+	} else if err != nil {
+		return nil, false, err
+	}
+
+	cp.restore()
+	return nil, false, nil
+}
+
+func starCount(fns []fullName) int {
+	s := 0
+	for _, fn := range fns {
+		if fn.name == "*" {
+			s++
+		}
+	}
+	return s
+}
+
+// parseOutputExpression parses all output expressions. The ampersand must be
+// preceded by a space and followed by a name byte.
+func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
+	cp := p.save()
+
+	// Case 1: There are no columns e.g. "&Person.*".
+	if targets, ok, err := p.parseTargets(); ok {
+		return &outputPart{[]fullName{}, targets}, true, nil
+	} else if err != nil {
+		return nil, false, err
+	}
+
+	// Case 2: There are columns e.g. "p.col1 AS &Person.*".
+	if cols, ok := p.parseColumns(); ok {
+		numCols := len(cols)
+		p.skipSpaces()
+		if p.skipString("AS") {
+			p.skipSpaces()
+			if targets, ok, err := p.parseTargets(); ok {
+				numTargets := len(targets)
+				// If the target is not * then check there are equal columns
+				// and targets.
+				if !(numTargets == 1 && targets[0].name == "*") &&
+					numCols != numTargets {
+					return nil, false, fmt.Errorf("mismatched number of "+
+						"cols and targets in expression: %s",
+						p.input[cp.pos:p.pos])
+				}
+
+				return &outputPart{cols, targets}, true, nil
+			} else if err != nil {
+				return nil, false, err
+			}
+		}
+	}
+
+	cp.restore()
+	return nil, false, nil
+}
+
+// parseInputExpression parses an input expression of the form "$Type.name".
 func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 	cp := p.save()
 
@@ -301,6 +478,7 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 			return nil, false, err
 		}
 	}
+
 	cp.restore()
 	return nil, false, nil
 }
