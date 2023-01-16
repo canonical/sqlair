@@ -214,7 +214,9 @@ func (s *ExprSuite) TestValidInput(c *C) {
 	for _, test := range testList {
 		parser := expr.NewParser()
 		parsedExpr, err := parser.Parse(test.input)
-		c.Log(err)
+		if err != nil {
+			c.Fatal(err)
+		}
 		c.Assert(parsedExpr.String(), Equals, test.expectedParsed)
 	}
 }
