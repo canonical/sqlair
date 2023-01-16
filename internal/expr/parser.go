@@ -313,11 +313,11 @@ func (p *Parser) parseGoFullName() (fullName, bool, error) {
 
 	if id, ok := p.parseIdentifier(); ok {
 		if p.skipByte('.') {
-			if idField, ok := p.parseIdentifierAsterisk(); ok {
-				return fullName{id, idField}, true, nil
+			idField, ok := p.parseIdentifierAsterisk()
+			if !ok {
+				return fullName{}, false, fmt.Errorf("invalid identifier near char %d", p.pos)
 			}
-			return fullName{}, false,
-				fmt.Errorf("invalid identifier near char %d", p.pos)
+			return fullName{id, idField}, true, nil
 		}
 		return fullName{}, false,
 			fmt.Errorf("go object near char %d not qualified", p.pos)
@@ -347,7 +347,7 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 		} else if err != nil {
 			return nil, false, err
 		} else if i == 0 {
-			// If the first item is not what we are looking for we exit.
+			// If the first item is not what we are looking for, we exit.
 			cp.restore()
 			return nil, false, nil
 		} else {
