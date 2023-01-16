@@ -312,15 +312,15 @@ func (p *Parser) parseGoFullName() (fullName, bool, error) {
 	cp := p.save()
 
 	if id, ok := p.parseIdentifier(); ok {
-		if p.skipByte('.') {
-			idField, ok := p.parseIdentifierAsterisk()
-			if !ok {
-				return fullName{}, false, fmt.Errorf("invalid identifier near char %d", p.pos)
-			}
-			return fullName{id, idField}, true, nil
+		if !p.skipByte('.') {
+			return fullName{}, false, fmt.Errorf("go object near char %d not qualified", p.pos)
 		}
-		return fullName{}, false,
-			fmt.Errorf("go object near char %d not qualified", p.pos)
+
+		idField, ok := p.parseIdentifierAsterisk()
+		if !ok {
+			return fullName{}, false, fmt.Errorf("invalid identifier near char %d", p.pos)
+		}
+		return fullName{id, idField}, true, nil
 	}
 
 	cp.restore()
@@ -393,34 +393,21 @@ func (p *Parser) parseTargets() ([]fullName, bool, error) {
 	cp := p.save()
 
 	// Case 1: A single target e.g. "&Person.name".
-	if target, ok, err := p.parseTarget(); ok {
-		return []fullName{target}, true, nil
-	} else if err != nil {
+	if target, ok, err := p.parseTarget(); err != nil {
 		return nil, false, err
+	} else if ok {
+		return []fullName{target}, true, nil
 	}
 
 	// Case 2: Multiple targets e.g. "(&Person.name, &Person.id)".
-	if targets, ok, err := p.parseList((*Parser).parseTarget); ok {
-		if starCount(targets) > 1 {
-			return nil, false, fmt.Errorf("column %d: more than one asterisk in expression", p.pos)
-		}
-		return targets, true, nil
-	} else if err != nil {
+	if targets, ok, err := p.parseList((*Parser).parseTarget); err != nil {
 		return nil, false, err
+	} else if ok {
+		return targets, true, nil
 	}
 
 	cp.restore()
 	return nil, false, nil
-}
-
-func starCount(fns []fullName) int {
-	s := 0
-	for _, fn := range fns {
-		if fn.name == "*" {
-			s++
-		}
-	}
-	return s
 }
 
 // parseOutputExpression parses all output expressions. The ampersand must be
@@ -437,24 +424,13 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 
 	// Case 2: There are columns e.g. "p.col1 AS &Person.*".
 	if cols, ok := p.parseColumns(); ok {
-		numCols := len(cols)
 		p.skipSpaces()
 		if p.skipString("AS") {
 			p.skipSpaces()
-			if targets, ok, err := p.parseTargets(); ok {
-				numTargets := len(targets)
-				// If the target is not * then check there are equal columns
-				// and targets.
-				if !(numTargets == 1 && targets[0].name == "*") &&
-					numCols != numTargets {
-					return nil, false, fmt.Errorf("mismatched number of "+
-						"cols and targets in expression: %s",
-						p.input[cp.pos:p.pos])
-				}
-
-				return &outputPart{cols, targets}, true, nil
-			} else if err != nil {
+			if targets, ok, err := p.parseTargets(); err != nil {
 				return nil, false, err
+			} else if ok {
+				return &outputPart{cols, targets}, true, nil
 			}
 		}
 	}
