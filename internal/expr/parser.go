@@ -379,8 +379,8 @@ func (p *Parser) parseColumns() ([]fullName, bool) {
 
 // parseTargets parses the part of the output expression following the
 // ampersand. This can be one or more references to Go types.
-// If the ampersand is not preceded by a space and succeeded by a name or
-// opening bracket the targets are not parsed.
+// If the ampersand is not preceded by a space or opening bracket and succeeded
+// by a name the targets are not parsed.
 func (p *Parser) parseTargets() ([]fullName, bool, error) {
 	// Case 1: A single target e.g. "&Person.name".
 	if target, ok, err := p.parseTarget(); err != nil {
