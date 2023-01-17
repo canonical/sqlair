@@ -327,11 +327,11 @@ func (p *Parser) parseGoFullName() (fullName, bool, error) {
 // parseList takes a parsing function that returns a fullName and parses a
 // bracketed, comma seperated, list.
 func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]fullName, bool, error) {
-	cp := p.save()
-
 	if !p.skipByte('(') {
 		return nil, false, nil
 	}
+
+	cp := p.save()
 
 	parenPos := p.pos
 	p.skipSpaces()
