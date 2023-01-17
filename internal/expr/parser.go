@@ -310,7 +310,6 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 func (p *Parser) parseStringLiteral() (*bypassPart, bool, error) {
 	cp := p.save()
 
-	mark := p.pos
 	if p.skipByte('"') || p.skipByte('\'') {
 		c := p.input[p.pos-1]
 		// We keep track of whether the next quote has been previously
@@ -320,7 +319,7 @@ func (p *Parser) parseStringLiteral() (*bypassPart, bool, error) {
 			// If this looks like a closing quote, check if it might be an
 			// escape for a following quote. If not, we're done.
 			if maybeCloser && !p.peekByte(c) {
-				return &bypassPart{p.input[mark:p.pos]}, true, nil
+				return &bypassPart{p.input[cp.pos:p.pos]}, true, nil
 			}
 			maybeCloser = !maybeCloser
 		}
