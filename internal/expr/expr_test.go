@@ -279,14 +279,14 @@ func (s *ExprSuite) TestParseUnfinishedStringLiteral(c *C) {
 	for _, sql := range testList {
 		parser := expr.NewParser()
 		expr, err := parser.Parse(sql)
-		c.Assert(err, ErrorMatches, "cannot parse expression: missing right quote for char 28 in string literal")
+		c.Assert(err, ErrorMatches, "cannot parse expression: column 28: missing right quote in string literal")
 		c.Assert(expr, IsNil)
 	}
 
 	sql := "SELECT foo FROM t WHERE x = 'O'Donnell'"
 	parser := expr.NewParser()
 	_, err := parser.Parse(sql)
-	c.Assert(err, ErrorMatches, "cannot parse expression: missing right quote for char 38 in string literal")
+	c.Assert(err, ErrorMatches, "cannot parse expression: column 38: missing right quote in string literal")
 }
 
 // Properly parsing empty string literal
