@@ -310,12 +310,12 @@ func (p *Parser) parseGoFullName() (fullName, bool, error) {
 
 	if id, ok := p.parseIdentifier(); ok {
 		if !p.skipByte('.') {
-			return fullName{}, false, fmt.Errorf("go object near char %d not qualified", p.pos)
+			return fullName{}, false, fmt.Errorf("column %d: type not qualified", p.pos)
 		}
 
 		idField, ok := p.parseIdentifierAsterisk()
 		if !ok {
-			return fullName{}, false, fmt.Errorf("invalid identifier near char %d", p.pos)
+			return fullName{}, false, fmt.Errorf("column %d: invalid identifier", p.pos)
 		}
 		return fullName{id, idField}, true, nil
 	}

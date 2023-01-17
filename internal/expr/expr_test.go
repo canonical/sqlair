@@ -343,14 +343,14 @@ func (s *ExprSuite) TestParseBadFormatInput(c *C) {
 	for _, sql := range testListInvalidId {
 		parser := expr.NewParser()
 		expr, err := parser.Parse(sql)
-		c.Assert(err, ErrorMatches, "cannot parse expression: invalid identifier near char 37")
+		c.Assert(err, ErrorMatches, "cannot parse expression: column 37: invalid identifier")
 		c.Assert(expr, IsNil)
 	}
 
 	sql := "SELECT foo FROM t WHERE x = $Address"
 	parser := expr.NewParser()
 	_, err := parser.Parse(sql)
-	c.Assert(err, ErrorMatches, "cannot parse expression: go object near char 36 not qualified")
+	c.Assert(err, ErrorMatches, "cannot parse expression: column 36: type not qualified")
 }
 
 func FuzzParser(f *testing.F) {
