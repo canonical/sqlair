@@ -327,11 +327,10 @@ func (p *Parser) parseGoFullName() (fullName, bool, error) {
 // parseList takes a parsing function that returns a fullName and parses a
 // bracketed, comma seperated, list.
 func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]fullName, bool, error) {
+	cp := p.save()
 	if !p.skipByte('(') {
 		return nil, false, nil
 	}
-
-	cp := p.save()
 
 	parenPos := p.pos
 	p.skipSpaces()
@@ -366,7 +365,6 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 // parseColumns parses a list of columns. For lists of more than one column the
 // columns must be enclosed in brackets e.g. "(col1, col2) AS &Person.*".
 func (p *Parser) parseColumns() ([]fullName, bool) {
-	cp := p.save()
 
 	// Case 1: A single column e.g. "p.name".
 	if col, ok, _ := p.parseColumn(); ok {
@@ -378,7 +376,6 @@ func (p *Parser) parseColumns() ([]fullName, bool) {
 		return cols, true
 	}
 
-	cp.restore()
 	return nil, false
 }
 
@@ -387,8 +384,6 @@ func (p *Parser) parseColumns() ([]fullName, bool) {
 // If the ampersand is not preceded by a space and succeeded by a name or
 // opening bracket the targets are not parsed.
 func (p *Parser) parseTargets() ([]fullName, bool, error) {
-	cp := p.save()
-
 	// Case 1: A single target e.g. "&Person.name".
 	if target, ok, err := p.parseTarget(); err != nil {
 		return nil, false, err
@@ -403,7 +398,6 @@ func (p *Parser) parseTargets() ([]fullName, bool, error) {
 		return targets, true, nil
 	}
 
-	cp.restore()
 	return nil, false, nil
 }
 
