@@ -294,18 +294,15 @@ func (p *Parser) parseColumn() (fullName, bool, error) {
 }
 
 func (p *Parser) parseTarget() (fullName, bool, error) {
-	cp := p.save()
-
 	if p.skipByte('&') {
 		return p.parseGoFullName()
 	}
 
-	cp.restore()
 	return fullName{}, false, nil
 }
 
 // parseGoFullName parses a Go type name qualified by a tag name (or asterisk)
-// of the form "&TypeName.col_name". On success it returns the parsed FullName,
+// of the form "&TypeName.col_name". On success it returns the parsed fullName,
 // true and nil. If a Go full name is found, but not formatted correctly, false
 // and an error are returned. Otherwise the error is nil.
 func (p *Parser) parseGoFullName() (fullName, bool, error) {
