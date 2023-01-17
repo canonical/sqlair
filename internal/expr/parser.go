@@ -273,8 +273,8 @@ func (p *Parser) parseIdentifier() (string, bool) {
 }
 
 // parseColumn parses a column made up of name bytes, optionally dot-prefixed by
-// its table name. parseColumn returns an error so that it can be used with
-// parseList.
+// its table name.
+// parseColumn returns an error so that it can be used with parseList.
 func (p *Parser) parseColumn() (fullName, bool, error) {
 	cp := p.save()
 
@@ -302,9 +302,7 @@ func (p *Parser) parseTarget() (fullName, bool, error) {
 }
 
 // parseGoFullName parses a Go type name qualified by a tag name (or asterisk)
-// of the form "&TypeName.col_name". On success it returns the parsed fullName,
-// true and nil. If a Go full name is found, but not formatted correctly, false
-// and an error are returned. Otherwise the error is nil.
+// of the form "&TypeName.col_name".
 func (p *Parser) parseGoFullName() (fullName, bool, error) {
 	cp := p.save()
 
