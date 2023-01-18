@@ -159,12 +159,9 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 // token we want to parse.
 func (p *Parser) advance() {
 
-	// These bytes might be the start of an expression.
-	stopBytes := map[byte]bool{
-		'$':  true,
+	quoteBytes := map[byte]bool{
 		'"':  true,
 		'\'': true,
-		'(':  true,
 	}
 
 	// The byte following these bytes might be the start of an expression.
@@ -173,12 +170,10 @@ func (p *Parser) advance() {
 		'\t': true,
 		'\n': true,
 		'\r': true,
-		')':  true,
-		';':  true,
 	}
 
 	p.pos++
-	for p.pos < len(p.input) && !stopBytes[p.input[p.pos]] &&
+	for p.pos < len(p.input) && !quoteBytes[p.input[p.pos]] &&
 		!delimiterBytes[p.input[p.pos]] {
 		p.pos++
 	}

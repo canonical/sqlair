@@ -44,15 +44,11 @@ var tests = []struct {
 }, {
 	"multiple-quoted bypass expression",
 	`SELECT '''' AS &Person.*`,
-	`[Bypass[SELECT ] Bypass[''''] Bypass[ AS &Person.*]]`,
+	`[Bypass[SELECT ] Bypass[''''] Bypass[ AS ] Output[[] [Person.*]]]`,
 }, {
 	"single quote in double quotes",
 	`SELECT "'" AS &Person.*`,
-	`[Bypass[SELECT ] Bypass["'"] Bypass[ AS &Person.*]]`,
-}, {
-	"dollar without preceding space",
-	"SELECT p.* AS&Person.*",
-	"[Bypass[SELECT p.* AS&Person.*]]",
+	`[Bypass[SELECT ] Bypass["'"] Bypass[ AS ] Output[[] [Person.*]]]`,
 }, {
 	"quoted output expression",
 	"SELECT p.* AS &Person.*, '&notAnOutputExpresion.*' AS literal FROM t",
@@ -288,8 +284,7 @@ var tests = []struct {
 	"input with no space",
 	"SELECT p.*, a.district " +
 		"FROM person AS p WHERE p.name=$Person.name",
-	"[Bypass[SELECT p.*, a.district FROM person AS p WHERE p.name=] " +
-		"Input[Person.name]]",
+	"[Bypass[SELECT p.*, a.district FROM person AS p WHERE p.name=$Person.name]]",
 }, {
 	"escaped double quote",
 	`SELECT foo FROM t WHERE t.p = "Jimmy ""Quickfingers"" Jones"`,
@@ -304,7 +299,7 @@ var tests = []struct {
 	"complex escaped quotes",
 	`SELECT * AS &Person.* FROM person WHERE ` +
 		`name IN ('Lorn', 'Onos T''oolan', '', ''' ''');`,
-	`[Bypass[SELECT * AS &Person.* FROM person WHERE name IN (] ` +
+	`[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE name IN (] ` +
 		`Bypass['Lorn'] Bypass[, ] Bypass['Onos T''oolan'] ` +
 		`Bypass[, ] Bypass[''] Bypass[, ] Bypass[''' '''] ` +
 		`Bypass[);]]`,

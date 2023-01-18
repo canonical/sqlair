@@ -3,13 +3,9 @@ package expr
 import (
 	"reflect"
 	"sync"
-	"testing"
 
 	. "gopkg.in/check.v1"
 )
-
-// Hook up gocheck into the "go test" runner.
-func TestInternal(t *testing.T) { TestingT(t) }
 
 type ExprInternalSuite struct{}
 
