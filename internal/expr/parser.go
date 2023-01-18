@@ -331,11 +331,11 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 	}
 
 	parenPos := p.pos
-	p.skipSpaces()
 
 	nextItem := true
 	var objs []fullName
 	for i := 0; nextItem; i++ {
+		p.skipSpaces()
 		if obj, ok, err := parseFn(p); ok {
 			objs = append(objs, obj)
 		} else if err != nil {
@@ -355,7 +355,6 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 		}
 
 		nextItem = p.skipByte(',')
-		p.skipSpaces()
 	}
 	return nil, false, fmt.Errorf("column %d: missing closing parentheses", parenPos)
 }
@@ -379,8 +378,6 @@ func (p *Parser) parseColumns() ([]fullName, bool) {
 
 // parseTargets parses the part of the output expression following the
 // ampersand. This can be one or more references to Go types.
-// If the ampersand is not preceded by a space or opening bracket and succeeded
-// by a name the targets are not parsed.
 func (p *Parser) parseTargets() ([]fullName, bool, error) {
 	// Case 1: A single target e.g. "&Person.name".
 	if target, ok, err := p.parseTarget(); err != nil {
@@ -399,16 +396,16 @@ func (p *Parser) parseTargets() ([]fullName, bool, error) {
 	return nil, false, nil
 }
 
-// parseOutputExpression parses all output expressions. The ampersand must be
-// preceded by a space and followed by a name byte.
+// parseOutputExpression requires that the ampersand before the identifiers must
+// be preceded by a space and followed by a name byte.
 func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 	cp := p.save()
 
 	// Case 1: There are no columns e.g. "&Person.*".
-	if targets, ok, err := p.parseTargets(); ok {
-		return &outputPart{[]fullName{}, targets}, true, nil
-	} else if err != nil {
+	if targets, ok, err := p.parseTargets(); err != nil {
 		return nil, false, err
+	} else if ok {
+		return &outputPart{[]fullName{}, targets}, true, nil
 	}
 
 	// Case 2: There are columns e.g. "p.col1 AS &Person.*".
