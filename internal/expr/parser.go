@@ -399,7 +399,6 @@ func (p *Parser) parseTargets() ([]fullName, bool, error) {
 // parseOutputExpression requires that the ampersand before the identifiers must
 // be preceded by a space and followed by a name byte.
 func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
-	cp := p.save()
 
 	// Case 1: There are no columns e.g. "&Person.*".
 	if targets, ok, err := p.parseTargets(); err != nil {
@@ -407,6 +406,8 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 	} else if ok {
 		return &outputPart{[]fullName{}, targets}, true, nil
 	}
+
+	cp := p.save()
 
 	// Case 2: There are columns e.g. "p.col1 AS &Person.*".
 	if cols, ok := p.parseColumns(); ok {
