@@ -305,23 +305,28 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 	return nil, false, nil
 }
 
-// parseStringLiteral parses quoted expressions and ignores their content.
+// parseStringLiteral parses quoted expressions and ignores their content
+// including escaped quotes.
 func (p *Parser) parseStringLiteral() (*bypassPart, bool, error) {
 	cp := p.save()
 
-	if p.pos < len(p.input) {
-		c := p.input[p.pos]
-		if c == '"' || c == '\'' {
-			p.skipByte(c)
-			// TODO Handle escaping
-			if !p.skipByteFind(c) {
-				// Reached end of string and didn't find the closing quote.
-				return nil, false, fmt.Errorf("missing right quote in string literal")
+	if p.skipByte('"') || p.skipByte('\'') {
+		c := p.input[p.pos-1]
+		// We keep track of whether the next quote has been previously
+		// escaped. If not, it might be a closer.
+		maybeCloser := true
+		for p.skipByteFind(c) {
+			// If this looks like a closing quote, check if it might be an
+			// escape for a following quote. If not, we're done.
+			if maybeCloser && !p.peekByte(c) {
+				return &bypassPart{p.input[cp.pos:p.pos]}, true, nil
 			}
-			return &bypassPart{p.input[cp.pos:p.pos]}, true, nil
+			maybeCloser = !maybeCloser
 		}
-	}
 
+		// Reached end of string and didn't find the closing quote
+		return nil, false, fmt.Errorf("column %d: missing right quote in string literal", cp.pos)
+	}
 	cp.restore()
 	return nil, false, nil
 }

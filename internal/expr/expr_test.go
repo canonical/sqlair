@@ -42,6 +42,18 @@ var tests = []struct {
 	"SELECT p.* AS &Person.*",
 	"[Bypass[SELECT p.* AS &Person.*]]",
 }, {
+	"multiple-quoted bypass expression",
+	`SELECT '''' AS &Person.*`,
+	`[Bypass[SELECT ] Bypass[''''] Bypass[ AS &Person.*]]`,
+}, {
+	"single quote in double quotes",
+	`SELECT "'" AS &Person.*`,
+	`[Bypass[SELECT ] Bypass["'"] Bypass[ AS &Person.*]]`,
+}, {
+	"dollar without preceding space",
+	"SELECT p.* AS&Person.*",
+	"[Bypass[SELECT p.* AS&Person.*]]",
+}, {
 	"quoted output expression",
 	"SELECT p.* AS &Person.*, '&notAnOutputExpresion.*' AS literal FROM t",
 	"[Bypass[SELECT p.* AS &Person.*, ] " +
@@ -212,6 +224,24 @@ var tests = []struct {
 	"[Bypass[SELECT p.*, a.district FROM person AS p WHERE p.name=] " +
 		"Input[Person.name]]",
 }, {
+	"escaped double quote",
+	`SELECT foo FROM t WHERE t.p = "Jimmy ""Quickfingers"" Jones"`,
+	`[Bypass[SELECT foo FROM t WHERE t.p = ] ` +
+		`Bypass["Jimmy ""Quickfingers"" Jones"]]`,
+}, {
+	"escaped single quote",
+	`SELECT foo FROM t WHERE t.p = 'Olly O''Flanagan'`,
+	`[Bypass[SELECT foo FROM t WHERE t.p = ] ` +
+		`Bypass['Olly O''Flanagan']]`,
+}, {
+	"complex escaped quotes",
+	`SELECT * AS &Person.* FROM person WHERE ` +
+		`name IN ('Lorn', 'Onos T''oolan', '', ''' ''');`,
+	`[Bypass[SELECT * AS &Person.* FROM person WHERE name IN (] ` +
+		`Bypass['Lorn'] Bypass[, ] Bypass['Onos T''oolan'] ` +
+		`Bypass[, ] Bypass[''] Bypass[, ] Bypass[''' '''] ` +
+		`Bypass[);]]`,
+}, {
 	"update",
 	"UPDATE person SET person.address_id = $Address.id " +
 		"WHERE person.id = $Person.id",
@@ -240,14 +270,23 @@ func (s *ExprSuite) TestParseUnfinishedStringLiteral(c *C) {
 		"SELECT foo FROM t WHERE x = 'dddd",
 		"SELECT foo FROM t WHERE x = \"dddd",
 		"SELECT foo FROM t WHERE x = \"dddd'",
+		"SELECT foo FROM t WHERE x = '''",
+		`SELECT foo FROM t WHERE x = '''""`,
+		`SELECT foo FROM t WHERE x = """`,
+		`SELECT foo FROM t WHERE x = """''`,
 	}
 
 	for _, sql := range testList {
 		parser := expr.NewParser()
 		expr, err := parser.Parse(sql)
-		c.Assert(err, ErrorMatches, "cannot parse expression: missing right quote in string literal")
+		c.Assert(err, ErrorMatches, "cannot parse expression: column 28: missing right quote in string literal")
 		c.Assert(expr, IsNil)
 	}
+
+	sql := "SELECT foo FROM t WHERE x = 'O'Donnell'"
+	parser := expr.NewParser()
+	_, err := parser.Parse(sql)
+	c.Assert(err, ErrorMatches, "cannot parse expression: column 38: missing right quote in string literal")
 }
 
 // Properly parsing empty string literal
@@ -258,22 +297,30 @@ func (s *ExprSuite) TestParseEmptyStringLiteral(c *C) {
 	c.Assert(err, IsNil)
 }
 
-// Detect bad escaped string literal
-func (s *ExprSuite) TestParseBadEscaped(c *C) {
-	sql := "SELECT foo FROM t WHERE x = 'O'Donnell'"
-	parser := expr.NewParser()
-	_, err := parser.Parse(sql)
-	c.Assert(err, ErrorMatches, "cannot parse expression: missing right quote in string literal")
+// Detect well escaped string literals
+func (s *ExprSuite) TestWellEscaped(c *C) {
+	sqls := []string{
+		`SELECT foo FROM t WHERE x = 'O''Donnell'`,
+		`SELECT foo FROM t WHERE x = "O""Donnell"`,
+		`SELECT foo FROM t WHERE x = 'O''Do''nnell'`,
+		`SELECT foo FROM t WHERE x = "O""Do""nnell"`,
+	}
+
+	for _, sql := range sqls {
+		parser := expr.NewParser()
+		_, err := parser.Parse(sql)
+		c.Assert(err, IsNil)
+	}
 }
 
 func (s *ExprSuite) TestParseBadFormatInput(c *C) {
-	testListInvalidId := []string{
+	testList := []string{
 		"SELECT foo FROM t WHERE x = $Address.",
 		"SELECT foo FROM t WHERE x = $Address.&d",
 		"SELECT foo FROM t WHERE x = $Address.-",
 	}
 
-	for _, sql := range testListInvalidId {
+	for _, sql := range testList {
 		parser := expr.NewParser()
 		expr, err := parser.Parse(sql)
 		c.Assert(err, ErrorMatches, "cannot parse expression: invalid identifier near char 37")
