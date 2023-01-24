@@ -125,11 +125,11 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 			return nil, err
 		}
 
+		p.partStart = p.pos
+
 		if p.pos == len(p.input) {
 			break
 		}
-
-		p.partStart = p.pos
 
 		if out, ok, err := p.parseOutputExpression(); err != nil {
 			return nil, err
@@ -147,7 +147,6 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 	}
 
 	// Add any remaining unparsed string input to the parser.
-	p.partStart = p.pos
 	p.add(nil)
 	return &ParsedExpr{p.parts}, nil
 }
@@ -156,18 +155,7 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 // we want to parse.
 func (p *Parser) advance() error {
 
-	// The byte following these bytes might occur before the start of an expression.
-	delimiterBytes := map[byte]bool{
-		' ':  true,
-		'\t': true,
-		'\n': true,
-		'\r': true,
-		')':  true,
-		';':  true,
-		'=':  true,
-		',':  true,
-	}
-
+loop:
 	for p.pos < len(p.input) {
 		if ok, err := p.skipStringLiteral(); err != nil {
 			return err
@@ -175,11 +163,13 @@ func (p *Parser) advance() error {
 			continue
 		}
 
-		if delimiterBytes[p.input[p.pos]] {
-			p.pos++
-			break
-		}
 		p.pos++
+		switch p.input[p.pos-1] {
+		// If the preceding byte is one of these then we might be at the start
+		// of an expression.
+		case ' ', '\t', '\n', '\r', '=', ',':
+			break loop
+		}
 	}
 
 	p.skipBlanks()
