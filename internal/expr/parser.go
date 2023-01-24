@@ -117,10 +117,19 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 			err = fmt.Errorf("cannot parse expression: %s", err)
 		}
 	}()
-	p.init(input)
 
+	p.init(input)
 	for {
+		// Advance the parser to the start of the next expression.
+		if err := p.advance(); err != nil {
+			return nil, err
+		}
+
 		p.partStart = p.pos
+
+		if p.pos == len(p.input) {
+			break
+		}
 
 		if out, ok, err := p.parseOutputExpression(); err != nil {
 			return nil, err
@@ -135,24 +144,65 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 			p.add(in)
 			continue
 		}
-
-		if bypass, ok, err := p.parseStringLiteral(); err != nil {
-			return nil, err
-		} else if ok {
-			p.add(bypass)
-			continue
-		}
-
-		if p.pos == len(p.input) {
-			break
-		}
-
-		// If nothing above can be parsed we advance the parser.
-		p.pos++
 	}
+
 	// Add any remaining unparsed string input to the parser.
 	p.add(nil)
 	return &ParsedExpr{p.parts}, nil
+}
+
+// advance increments p.pos until it reaches content that might preceed a token
+// we want to parse.
+func (p *Parser) advance() error {
+
+loop:
+	for p.pos < len(p.input) {
+		if ok, err := p.skipStringLiteral(); err != nil {
+			return err
+		} else if ok {
+			continue
+		}
+
+		p.pos++
+		switch p.input[p.pos-1] {
+		// If the preceding byte is one of these then we might be at the start
+		// of an expression.
+		case ' ', '\t', '\n', '\r', '=', ',':
+			break loop
+		}
+	}
+
+	p.skipBlanks()
+
+	return nil
+
+}
+
+// skipStringLiteral jumps over single and double quoted sections of input.
+// Doubled up quotes are escaped.
+func (p *Parser) skipStringLiteral() (bool, error) {
+	cp := p.save()
+
+	if p.skipByte('"') || p.skipByte('\'') {
+		c := p.input[p.pos-1]
+
+		// We keep track of whether the next quote has been previously
+		// escaped. If not, it might be a closing quote.
+		maybeCloser := true
+		for p.skipByteFind(c) {
+			// If this looks like a closing quote, check if it might be an
+			// escape for a following quote. If not, we're done.
+			if maybeCloser && !p.peekByte(c) {
+				return true, nil
+			}
+			maybeCloser = !maybeCloser
+		}
+
+		// Reached end of string and didn't find the closing quote
+		cp.restore()
+		return false, fmt.Errorf("column %d: missing closing quote in string literal", cp.pos)
+	}
+	return false, nil
 }
 
 // peekByte returns true if the current byte equals the one passed as parameter.
@@ -184,16 +234,17 @@ func (p *Parser) skipByteFind(b byte) bool {
 	return false
 }
 
-// skipSpaces advances the parser jumping over consecutive spaces. It stops when
-// finding a non-space character. Returns true if the parser position was
-// actually changed, false otherwise.
-func (p *Parser) skipSpaces() bool {
+// skipBlanks advances the parser past spaces, tabs and newlines. Returns
+// whether the parser position was changed.
+func (p *Parser) skipBlanks() bool {
 	mark := p.pos
 	for p.pos < len(p.input) {
-		if p.input[p.pos] != ' ' {
-			break
+		switch p.input[p.pos] {
+		case ' ', '\t', '\r', '\n':
+			p.pos++
+		default:
+			return p.pos != mark
 		}
-		p.pos++
 	}
 	return p.pos != mark
 }
@@ -335,7 +386,7 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 	nextItem := true
 	var objs []fullName
 	for i := 0; nextItem; i++ {
-		p.skipSpaces()
+		p.skipBlanks()
 		if obj, ok, err := parseFn(p); ok {
 			objs = append(objs, obj)
 		} else if err != nil {
@@ -349,7 +400,7 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 			return nil, false, fmt.Errorf("column %d: invalid expression", p.pos)
 		}
 
-		p.skipSpaces()
+		p.skipBlanks()
 		if p.skipByte(')') {
 			return objs, true, nil
 		}
@@ -397,7 +448,7 @@ func (p *Parser) parseTargets() ([]fullName, bool, error) {
 }
 
 // parseOutputExpression requires that the ampersand before the identifiers must
-// be preceded by a space and followed by a name byte.
+// be followed by a name byte.
 func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 
 	// Case 1: There are no columns e.g. "&Person.*".
@@ -411,9 +462,9 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 
 	// Case 2: There are columns e.g. "p.col1 AS &Person.*".
 	if cols, ok := p.parseColumns(); ok {
-		p.skipSpaces()
+		p.skipBlanks()
 		if p.skipString("AS") {
-			p.skipSpaces()
+			p.skipBlanks()
 			if targets, ok, err := p.parseTargets(); err != nil {
 				return nil, false, err
 			} else if ok {
@@ -442,32 +493,6 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 		}
 	}
 
-	cp.restore()
-	return nil, false, nil
-}
-
-// parseStringLiteral parses quoted expressions and ignores their content
-// including escaped quotes.
-func (p *Parser) parseStringLiteral() (*bypassPart, bool, error) {
-	cp := p.save()
-
-	if p.skipByte('"') || p.skipByte('\'') {
-		c := p.input[p.pos-1]
-		// We keep track of whether the next quote has been previously
-		// escaped. If not, it might be a closer.
-		maybeCloser := true
-		for p.skipByteFind(c) {
-			// If this looks like a closing quote, check if it might be an
-			// escape for a following quote. If not, we're done.
-			if maybeCloser && !p.peekByte(c) {
-				return &bypassPart{p.input[cp.pos:p.pos]}, true, nil
-			}
-			maybeCloser = !maybeCloser
-		}
-
-		// Reached end of string and didn't find the closing quote
-		return nil, false, fmt.Errorf("column %d: missing right quote in string literal", cp.pos)
-	}
 	cp.restore()
 	return nil, false, nil
 }

@@ -29,11 +29,16 @@ func (s *ExprInternalSuite) TestRunTable(c *C) {
 		{bytef: p.skipByteFind, result: []bool{false, true, true}, input: "abcde", data: []string{"x", "b", "c"}},
 		{bytef: p.skipByteFind, result: []bool{true, false}, input: "abcde ", data: []string{" ", " "}},
 
-		{stringf0: p.skipSpaces, result: []bool{false}, input: "", data: []string{}},
-		{stringf0: p.skipSpaces, result: []bool{false}, input: "abc    d", data: []string{}},
-		{stringf0: p.skipSpaces, result: []bool{true}, input: "     abcd", data: []string{}},
-		{stringf0: p.skipSpaces, result: []bool{true}, input: "  \t  abcd", data: []string{}},
-		{stringf0: p.skipSpaces, result: []bool{false}, input: "\t  abcd", data: []string{}},
+		{stringf0: p.skipBlanks, result: []bool{false}, input: "", data: []string{}},
+		{stringf0: p.skipBlanks, result: []bool{false}, input: "abc    d", data: []string{}},
+		{stringf0: p.skipBlanks, result: []bool{true}, input: "     abcd", data: []string{}},
+		{stringf0: p.skipBlanks, result: []bool{true}, input: "  \t  abcd", data: []string{}},
+		{stringf0: p.skipBlanks, result: []bool{true}, input: "\t  abcd", data: []string{}},
+		{stringf0: p.skipBlanks, result: []bool{true}, input: "\n  abcd", data: []string{}},
+		{stringf0: p.skipBlanks, result: []bool{true}, input: "\r  abcd", data: []string{}},
+		{stringf0: p.skipBlanks, result: []bool{true}, input: "\n\r  abcd", data: []string{}},
+		{stringf0: p.skipBlanks, result: []bool{true}, input: "\n\r\t  abcd", data: []string{}},
+		{stringf0: p.skipBlanks, result: []bool{true}, input: "   \n\r\t  abcd", data: []string{}},
 
 		{stringf: p.skipString, result: []bool{false}, input: "", data: []string{"a"}},
 		{stringf: p.skipString, result: []bool{true, true}, input: "helloworld", data: []string{"hElLo", "w"}},
@@ -61,6 +66,69 @@ func (s *ExprInternalSuite) TestRunTable(c *C) {
 			if v.result[i] != result {
 				c.Errorf("Test %#v failed. Expected: '%t', got '%t'\n", v, result, v.result[i])
 			}
+		}
+	}
+}
+
+func (s *ExprInternalSuite) TestValidQuotes(c *C) {
+	var p = NewParser()
+
+	validQuotes := []string{
+		`'stringy string'`,
+		`'O''Flan'`,
+		`"J ""Quickfingers"" Johnson"`,
+		`''`,
+		`''' '''`,
+		`""`,
+		`" "" "`,
+		`'"""'`,
+		`' "''" '`,
+	}
+
+	for _, q := range validQuotes {
+		p.init(q)
+		ok, _ := p.skipStringLiteral()
+		if !ok {
+			c.Errorf("test failed. %s is a valid quoted string", q)
+		}
+	}
+}
+
+func (s *ExprInternalSuite) TestInvalidQuote(c *C) {
+	var p = NewParser()
+
+	invalidQuote := []string{
+		"`name`",
+		"unquoted string",
+	}
+
+	for _, q := range invalidQuote {
+		p.init(q)
+		ok, _ := p.skipStringLiteral()
+		if ok {
+			c.Errorf("test failed. %s is not a valid quoted string but is recognised as one", q)
+		}
+	}
+}
+
+func (s *ExprInternalSuite) TestUnfinishedQuote(c *C) {
+	var p = NewParser()
+
+	unfinishedQuotes := []string{
+		`'`,
+		`"`,
+		`' ''`,
+		`'"" ''`,
+		`'string`,
+		`'string"`,
+		`"string`,
+	}
+
+	for _, q := range unfinishedQuotes {
+		p.init(q)
+		_, err := p.skipStringLiteral()
+		if err == nil {
+			c.Errorf("test failed. the string %s was parsed but is not valid", q)
 		}
 	}
 }
