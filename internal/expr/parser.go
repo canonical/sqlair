@@ -181,7 +181,8 @@ loop:
 // skipStringLiteral jumps over single and double quoted sections of input.
 // Doubled up quotes are escaped.
 func (p *Parser) skipStringLiteral() (bool, error) {
-	mark := p.pos
+	cp := p.save()
+
 	if p.skipByte('"') || p.skipByte('\'') {
 		c := p.input[p.pos-1]
 
@@ -198,7 +199,8 @@ func (p *Parser) skipStringLiteral() (bool, error) {
 		}
 
 		// Reached end of string and didn't find the closing quote
-		return false, fmt.Errorf("column %d: missing closing quote in string literal", mark)
+		cp.restore()
+		return false, fmt.Errorf("column %d: missing closing quote in string literal", cp.pos)
 	}
 	return false, nil
 }
