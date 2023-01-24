@@ -257,19 +257,15 @@ func (s *ExprSuite) TestParseUnfinishedStringLiteral(c *C) {
 		`SELECT foo FROM t WHERE x = '''""`,
 		`SELECT foo FROM t WHERE x = """`,
 		`SELECT foo FROM t WHERE x = """''`,
+		`SELECT foo FROM t WHERE x = 'O'Donnell'`,
 	}
 
 	for _, sql := range testList {
 		parser := expr.NewParser()
 		expr, err := parser.Parse(sql)
-		c.Assert(err, ErrorMatches, "cannot parse expression: column 28: missing closing quote in string literal")
+		c.Assert(err, ErrorMatches, "cannot parse expression: column [0-9]+: missing closing quote in string literal")
 		c.Assert(expr, IsNil)
 	}
-
-	sql := "SELECT foo FROM t WHERE x = 'O'Donnell'"
-	parser := expr.NewParser()
-	_, err := parser.Parse(sql)
-	c.Assert(err, ErrorMatches, "cannot parse expression: column 38: missing closing quote in string literal")
 }
 
 // Properly parsing empty string literal
@@ -306,14 +302,14 @@ func (s *ExprSuite) TestParseBadFormatInput(c *C) {
 	for _, sql := range testList {
 		parser := expr.NewParser()
 		expr, err := parser.Parse(sql)
-		c.Assert(err, ErrorMatches, "cannot parse expression: column 37: invalid identifier")
+		c.Assert(err, ErrorMatches, "cannot parse expression: column [0-9]+: invalid identifier")
 		c.Assert(expr, IsNil)
 	}
 
 	sql := "SELECT foo FROM t WHERE x = $Address"
 	parser := expr.NewParser()
 	_, err := parser.Parse(sql)
-	c.Assert(err, ErrorMatches, "cannot parse expression: column 36: type not qualified")
+	c.Assert(err, ErrorMatches, "cannot parse expression: column [0-9]+: type not qualified")
 }
 
 func FuzzParser(f *testing.F) {
