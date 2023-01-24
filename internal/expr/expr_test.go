@@ -192,6 +192,10 @@ var tests = []struct {
 	"SELECT dollerrow$ FROM moneytable",
 	"[Bypass[SELECT dollerrow$ FROM moneytable]]",
 }, {
+	"input with no space",
+	"SELECT p.*, a.district FROM person AS p WHERE p.name=$Person.name",
+	"[Bypass[SELECT p.*, a.district FROM person AS p WHERE p.name=] Input[Person.name]]",
+}, {
 	"escaped double quote",
 	`SELECT foo FROM t WHERE t.p = "Jimmy ""Quickfingers"" Jones"`,
 	`[Bypass[SELECT foo FROM t WHERE t.p = "Jimmy ""Quickfingers"" Jones"]]`,
