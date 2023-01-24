@@ -345,8 +345,15 @@ func (p *Parser) parseColumn() (fullName, bool, error) {
 }
 
 func (p *Parser) parseTarget() (fullName, bool, error) {
+	cp := p.save()
+
 	if p.skipByte('&') {
-		return p.parseGoFullName()
+		fn, ok, err := p.parseGoFullName()
+		if err != nil {
+			cp.restore()
+			return fullName{}, false, err
+		}
+		return fn, ok, nil
 	}
 
 	return fullName{}, false, nil
@@ -359,12 +366,16 @@ func (p *Parser) parseGoFullName() (fullName, bool, error) {
 
 	if id, ok := p.parseIdentifier(); ok {
 		if !p.skipByte('.') {
-			return fullName{}, false, fmt.Errorf("column %d: type not qualified", p.pos)
+			mark := p.pos
+			cp.restore()
+			return fullName{}, false, fmt.Errorf("column %d: type not qualified", mark)
 		}
 
 		idField, ok := p.parseIdentifierAsterisk()
 		if !ok {
-			return fullName{}, false, fmt.Errorf("column %d: invalid identifier", p.pos)
+			mark := p.pos
+			cp.restore()
+			return fullName{}, false, fmt.Errorf("column %d: invalid identifier", mark)
 		}
 		return fullName{id, idField}, true, nil
 	}
@@ -390,6 +401,7 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 		if obj, ok, err := parseFn(p); ok {
 			objs = append(objs, obj)
 		} else if err != nil {
+			cp.restore()
 			return nil, false, err
 		} else if i == 0 {
 			// If the first item is not what we are looking for, we exit.
@@ -397,7 +409,9 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 			return nil, false, nil
 		} else {
 			// On subsequent items we return an error.
-			return nil, false, fmt.Errorf("column %d: invalid expression", p.pos)
+			mark := p.pos
+			cp.restore()
+			return nil, false, fmt.Errorf("column %d: invalid expression", mark)
 		}
 
 		p.skipBlanks()
@@ -407,6 +421,7 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 
 		nextItem = p.skipByte(',')
 	}
+	cp.restore()
 	return nil, false, fmt.Errorf("column %d: missing closing parentheses", parenPos)
 }
 
@@ -466,6 +481,7 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 		if p.skipString("AS") {
 			p.skipBlanks()
 			if targets, ok, err := p.parseTargets(); err != nil {
+				cp.restore()
 				return nil, false, err
 			} else if ok {
 				return &outputPart{cols, targets}, true, nil
@@ -484,11 +500,13 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 	if p.skipByte('$') {
 		if fn, ok, err := p.parseGoFullName(); ok {
 			if fn.name == "*" {
+				cp.restore()
 				return nil, false, fmt.Errorf("asterisk not allowed "+
 					"in expression near %d", p.pos)
 			}
 			return &inputPart{fn}, true, nil
 		} else if err != nil {
+			cp.restore()
 			return nil, false, err
 		}
 	}
