@@ -44,234 +44,115 @@ var tests = []struct {
 }, {
 	"multiple-quoted bypass expression",
 	`SELECT '''' AS &Person.*`,
-	`[Bypass[SELECT ] Bypass[''''] Bypass[ AS &Person.*]]`,
+	`[Bypass[SELECT ] Bypass[''''] Bypass[ AS ] Output[[] [Person.*]]]`,
 }, {
 	"single quote in double quotes",
 	`SELECT "'" AS &Person.*`,
-	`[Bypass[SELECT ] Bypass["'"] Bypass[ AS &Person.*]]`,
-}, {
-	"dollar without preceding space",
-	"SELECT p.* AS&Person.*",
-	"[Bypass[SELECT p.* AS&Person.*]]",
+	`[Bypass[SELECT ] Bypass["'"] Bypass[ AS ] Output[[] [Person.*]]]`,
 }, {
 	"quoted output expression",
 	"SELECT p.* AS &Person.*, '&notAnOutputExpresion.*' AS literal FROM t",
-	"[Bypass[SELECT ] " +
-		"Output[[p.*] [Person.*]] " +
-		"Bypass[, ] " +
-		"Bypass['&notAnOutputExpresion.*'] " +
-		"Bypass[ AS literal FROM t]]",
+	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Bypass['&notAnOutputExpresion.*'] Bypass[ AS literal FROM t]]",
 }, {
 	"star as output",
 	"SELECT * AS &Person.* FROM t",
-	"[Bypass[SELECT ] " +
-		"Output[[*] [Person.*]] " +
-		"Bypass[ FROM t]]",
+	"[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM t]]",
 }, {
 	"input v1",
 	"SELECT foo, bar FROM table WHERE foo = $Person.id",
-	"[Bypass[SELECT foo, bar FROM table WHERE foo = ] " +
-		"Input[Person.id]]",
+	"[Bypass[SELECT foo, bar FROM table WHERE foo = ] Input[Person.id]]",
 }, {
 	"input v2",
 	"SELECT p FROM person WHERE p.name = $Person.name",
 	"[Bypass[SELECT p FROM person WHERE p.name = ] Input[Person.name]]",
 }, {
 	"input v3",
-	"SELECT p.*, a.district " +
-		"FROM person AS p JOIN address AS a ON p.address_id = a.id " +
-		"WHERE p.name = $Person.name",
-	"[Bypass[SELECT p.*, a.district FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] " +
-		"Input[Person.name]]",
+	"SELECT p.*, a.district FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = $Person.name",
+	"[Bypass[SELECT p.*, a.district FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] Input[Person.name]]",
 }, {
 	"output and input",
 	"SELECT &Person.* FROM table WHERE foo = $Address.id",
-	"[Bypass[SELECT ] Output[[] [Person.*]] " +
-		"Bypass[ FROM table WHERE foo = ] " +
-		"Input[Address.id]]",
+	"[Bypass[SELECT ] Output[[] [Person.*]] Bypass[ FROM table WHERE foo = ] Input[Address.id]]",
 }, {
 	"star output and input",
 	"SELECT &Person.* FROM table WHERE foo = $Address.id",
-	"[Bypass[SELECT ] " +
-		"Output[[] [Person.*]] " +
-		"Bypass[ FROM table WHERE foo = ] " +
-		"Input[Address.id]]",
+	"[Bypass[SELECT ] Output[[] [Person.*]] Bypass[ FROM table WHERE foo = ] Input[Address.id]]",
 }, {
 	"output and quote",
 	"SELECT foo, bar, &Person.id FROM table WHERE foo = 'xx'",
-	"[Bypass[SELECT foo, bar, ] " +
-		"Output[[] [Person.id]] " +
-		"Bypass[ FROM table WHERE foo = ] " +
-		"Bypass['xx']]",
+	"[Bypass[SELECT foo, bar, ] Output[[] [Person.id]] Bypass[ FROM table WHERE foo = ] Bypass['xx']]",
 }, {
 	"two outputs and quote",
 	"SELECT foo, &Person.id, bar, baz, &Manager.name FROM table WHERE foo = 'xx'",
-	"[Bypass[SELECT foo, ] " +
-		"Output[[] [Person.id]] " +
-		"Bypass[, bar, baz, ] " +
-		"Output[[] [Manager.name]] " +
-		"Bypass[ FROM table WHERE foo = ] " +
-		"Bypass['xx']]",
+	"[Bypass[SELECT foo, ] Output[[] [Person.id]] Bypass[, bar, baz, ] Output[[] [Manager.name]] Bypass[ FROM table WHERE foo = ] Bypass['xx']]",
 }, {
 	"star as output and quote",
 	"SELECT * AS &Person.* FROM person WHERE name = 'Fred'",
-	"[Bypass[SELECT ] " +
-		"Output[[*] [Person.*]] " +
-		"Bypass[ FROM person WHERE name = ] " +
-		"Bypass['Fred']]",
+	"[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE name = ] Bypass['Fred']]",
 }, {
 	"star output and quote",
 	"SELECT &Person.* FROM person WHERE name = 'Fred'",
-	"[Bypass[SELECT ] " +
-		"Output[[] [Person.*]] " +
-		"Bypass[ FROM person WHERE name = ] " +
-		"Bypass['Fred']]",
+	"[Bypass[SELECT ] Output[[] [Person.*]] Bypass[ FROM person WHERE name = ] Bypass['Fred']]",
 }, {
 	"two star as outputs and quote",
 	"SELECT * AS &Person.*, a.* AS &Address.* FROM person, address a WHERE name = 'Fred'",
-	"[Bypass[SELECT ] " +
-		"Output[[*] [Person.*]] " +
-		"Bypass[, ] " +
-		"Output[[a.*] [Address.*]] " +
-		"Bypass[ FROM person, address a WHERE name = ] " +
-		"Bypass['Fred']]",
+	"[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[, ] Output[[a.*] [Address.*]] Bypass[ FROM person, address a WHERE name = ] Bypass['Fred']]",
 }, {
 	"multicolumn output",
 	"SELECT (a.district, a.street) AS (&Address.district, &Address.street) FROM address AS a",
-	"[Bypass[SELECT ] " +
-		"Output[[a.district a.street] [Address.district Address.street]] " +
-		"Bypass[ FROM address AS a]]",
+	"[Bypass[SELECT ] Output[[a.district a.street] [Address.district Address.street]] Bypass[ FROM address AS a]]",
 }, {
 	"multicolumn output and output",
-	"SELECT (a.district, a.street) AS (&Address.district, &Address.street), " +
-		"a.id AS &Person.id FROM address AS a",
-	"[Bypass[SELECT ] " +
-		"Output[[a.district a.street] [Address.district Address.street]] " +
-		"Bypass[, ] Output[[a.id] [Person.id]] " +
-		"Bypass[ FROM address AS a]]",
+	"SELECT (a.district, a.street) AS (&Address.district, &Address.street), a.id AS &Person.id FROM address AS a",
+	"[Bypass[SELECT ] Output[[a.district a.street] [Address.district Address.street]] Bypass[, ] Output[[a.id] [Person.id]] Bypass[ FROM address AS a]]",
 }, {
 	"multicolumn output and star",
-	"SELECT (a.district, a.street) AS (&Address.district, &Address.street), " +
-		"&Person.* FROM address AS a",
-	"[Bypass[SELECT ] " +
-		"Output[[a.district a.street] [Address.district Address.street]] " +
-		"Bypass[, ] Output[[] [Person.*]] " +
-		"Bypass[ FROM address AS a]]",
+	"SELECT (a.district, a.street) AS (&Address.district, &Address.street), &Person.* FROM address AS a",
+	"[Bypass[SELECT ] Output[[a.district a.street] [Address.district Address.street]] Bypass[, ] Output[[] [Person.*]] Bypass[ FROM address AS a]]",
 }, {
 	"multicolumn output and quote",
 	"SELECT (a.district, a.street) AS &Address.* FROM address AS a WHERE p.name = 'Fred'",
-	"[Bypass[SELECT ] " +
-		"Output[[a.district a.street] [Address.*]] " +
-		"Bypass[ FROM address AS a WHERE p.name = ] Bypass['Fred']]",
+	"[Bypass[SELECT ] Output[[a.district a.street] [Address.*]] Bypass[ FROM address AS a WHERE p.name = ] Bypass['Fred']]",
 }, {
 	"quote",
 	"SELECT 1 FROM person WHERE p.name = 'Fred'",
-	"[Bypass[SELECT 1 FROM person WHERE p.name = ] " +
-		"Bypass['Fred']]",
+	"[Bypass[SELECT 1 FROM person WHERE p.name = ] Bypass['Fred']]",
 }, {
 	"complex query v1",
-	"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.*, " +
-		"(5+7), (col1 * col2) AS calculated_value FROM person AS p " +
-		"JOIN address AS a ON p.address_id = a.id WHERE p.name = 'Fred'",
-	"[Bypass[SELECT ] " +
-		"Output[[p.*] [Person.*]] " +
-		"Bypass[, ] " +
-		"Output[[a.district a.street] [Address.*]] " +
-		"Bypass[, (5+7), (col1 * col2) AS calculated_value FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] " +
-		"Bypass['Fred']]",
+	"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.*, (5+7), (col1 * col2) AS calculated_value FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = 'Fred'",
+	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district a.street] [Address.*]] Bypass[, (5+7), (col1 * col2) AS calculated_value FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] Bypass['Fred']]",
 }, {
 	"complex query v2",
-	"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* " +
-		"FROM person AS p JOIN address AS a ON p .address_id = a.id " +
-		"WHERE p.name = 'Fred'",
-	"[Bypass[SELECT ] " +
-		"Output[[p.*] [Person.*]] " +
-		"Bypass[, ] " +
-		"Output[[a.district a.street] [Address.*]] " +
-		"Bypass[ FROM person AS p JOIN address AS a ON p .address_id = a.id WHERE p.name = ] " +
-		"Bypass['Fred']]",
+	"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* FROM person AS p JOIN address AS a ON p .address_id = a.id WHERE p.name = 'Fred'",
+	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district a.street] [Address.*]] Bypass[ FROM person AS p JOIN address AS a ON p .address_id = a.id WHERE p.name = ] Bypass['Fred']]",
 }, {
 	"complex query v3",
-	"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* " +
-		"FROM person AS p JOIN address AS a ON p.address_id = a.id " +
-		"WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name)",
-	"[Bypass[SELECT ] " +
-		"Output[[p.*] [Person.*]] " +
-		"Bypass[, ] " +
-		"Output[[a.district a.street] [Address.*]] " +
-		"Bypass[ FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name IN (SELECT name FROM table WHERE table.n = ] " +
-		"Input[Person.name] " +
-		"Bypass[)]]",
+	"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name)",
+	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district a.street] [Address.*]] Bypass[ FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name IN (SELECT name FROM table WHERE table.n = ] Input[Person.name] Bypass[)]]",
 }, {
 	"complex query v4",
-	"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* " +
-		"FROM person WHERE p.name IN (SELECT name FROM table " +
-		"WHERE table.n = $Person.name) UNION " +
-		"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* " +
-		"FROM person WHERE p.name IN " +
-		"(SELECT name FROM table WHERE table.n = $Person.name)",
-	"[Bypass[SELECT ] Output[[p.*] [Person.*]] " +
-		"Bypass[, ] Output[[a.district a.street] [Address.*]] " +
-		"Bypass[ FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = ] " +
-		"Input[Person.name] " +
-		"Bypass[) UNION SELECT ] " +
-		"Output[[p.*] [Person.*]] " +
-		"Bypass[, ] " +
-		"Output[[a.district a.street] [Address.*]] " +
-		"Bypass[ FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = ] " +
-		"Input[Person.name] " +
-		"Bypass[)]]",
+	"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name) UNION SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name)",
+	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district a.street] [Address.*]] Bypass[ FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = ] Input[Person.name] Bypass[) UNION SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district a.street] [Address.*]] Bypass[ FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = ] Input[Person.name] Bypass[)]]",
 }, {
 	"complex query v5",
-	"SELECT p.* AS &Person.*, a.district AS &District.* " +
-		"FROM person AS p JOIN address AS a ON p.address_id = a.id " +
-		"WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
-	"[Bypass[SELECT ] " +
-		"Output[[p.*] [Person.*]] " +
-		"Bypass[, ] " +
-		"Output[[a.district] [District.*]] " +
-		"Bypass[ FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] " +
-		"Input[Person.name] " +
-		"Bypass[ AND p.address_id = ] " +
-		"Input[Person.address_id]]",
+	"SELECT p.* AS &Person.*, a.district AS &District.* FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
+	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district] [District.*]] Bypass[ FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] Input[Person.name] Bypass[ AND p.address_id = ] Input[Person.address_id]]",
 }, {
 	"complex query v6",
-	"SELECT p.* AS &Person.*, a.district AS &District.* " +
-		"FROM person AS p INNER JOIN address AS a " +
-		"ON p.address_id = $Address.id " +
-		"WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
-	"[Bypass[SELECT ] " +
-		"Output[[p.*] [Person.*]] " +
-		"Bypass[, ] " +
-		"Output[[a.district] [District.*]] " +
-		"Bypass[ FROM person AS p INNER JOIN address AS a ON p.address_id = ] " +
-		"Input[Address.id] " +
-		"Bypass[ WHERE p.name = ] " +
-		"Input[Person.name] " +
-		"Bypass[ AND p.address_id = ] " +
-		"Input[Person.address_id]]",
+	"SELECT p.* AS &Person.*, a.district AS &District.* FROM person AS p INNER JOIN address AS a ON p.address_id = $Address.id WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
+	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district] [District.*]] Bypass[ FROM person AS p INNER JOIN address AS a ON p.address_id = ] Input[Address.id] Bypass[ WHERE p.name = ] Input[Person.name] Bypass[ AND p.address_id = ] Input[Person.address_id]]",
 }, {
 	"join v1",
-	"SELECT p.* AS &Person.*, m.* AS &Manager.* " +
-		"FROM person AS p JOIN person AS m " +
-		"ON p.manager_id = m.id WHERE p.name = 'Fred'",
-	"[Bypass[SELECT ] " +
-		"Output[[p.*] [Person.*]] " +
-		"Bypass[, ] " +
-		"Output[[m.*] [Manager.*]] " +
-		"Bypass[ FROM person AS p JOIN person AS m ON p.manager_id = m.id WHERE p.name = ] " +
-		"Bypass['Fred']]",
+	"SELECT p.* AS &Person.*, m.* AS &Manager.* FROM person AS p JOIN person AS m ON p.manager_id = m.id WHERE p.name = 'Fred'",
+	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[m.*] [Manager.*]] Bypass[ FROM person AS p JOIN person AS m ON p.manager_id = m.id WHERE p.name = ] Bypass['Fred']]",
 }, {
 	"join v2",
-	"SELECT person.*, address.district FROM person JOIN address " +
-		"ON person.address_id = address.id WHERE person.name = 'Fred'",
-	"[Bypass[SELECT person.*, address.district FROM person JOIN address ON person.address_id = address.id WHERE person.name = ] " +
-		"Bypass['Fred']]",
+	"SELECT person.*, address.district FROM person JOIN address ON person.address_id = address.id WHERE person.name = 'Fred'",
+	"[Bypass[SELECT person.*, address.district FROM person JOIN address ON person.address_id = address.id WHERE person.name = ] Bypass['Fred']]",
 }, {
 	"insert",
 	"INSERT INTO person (name) VALUES $Person.name",
-	"[Bypass[INSERT INTO person (name) VALUES ] " +
-		"Input[Person.name]]",
+	"[Bypass[INSERT INTO person (name) VALUES ] Input[Person.name]]",
 }, {
 	"ignore dollar v1",
 	"SELECT $ FROM moneytable",
@@ -286,36 +167,24 @@ var tests = []struct {
 	"[Bypass[SELECT dollerrow$ FROM moneytable]]",
 }, {
 	"input with no space",
-	"SELECT p.*, a.district " +
-		"FROM person AS p WHERE p.name=$Person.name",
-	"[Bypass[SELECT p.*, a.district FROM person AS p WHERE p.name=] " +
-		"Input[Person.name]]",
+	"SELECT p.*, a.district FROM person AS p WHERE p.name=$Person.name",
+	"[Bypass[SELECT p.*, a.district FROM person AS p WHERE p.name=] Input[Person.name]]",
 }, {
 	"escaped double quote",
 	`SELECT foo FROM t WHERE t.p = "Jimmy ""Quickfingers"" Jones"`,
-	`[Bypass[SELECT foo FROM t WHERE t.p = ] ` +
-		`Bypass["Jimmy ""Quickfingers"" Jones"]]`,
+	`[Bypass[SELECT foo FROM t WHERE t.p = ] Bypass["Jimmy ""Quickfingers"" Jones"]]`,
 }, {
 	"escaped single quote",
 	`SELECT foo FROM t WHERE t.p = 'Olly O''Flanagan'`,
-	`[Bypass[SELECT foo FROM t WHERE t.p = ] ` +
-		`Bypass['Olly O''Flanagan']]`,
+	`[Bypass[SELECT foo FROM t WHERE t.p = ] Bypass['Olly O''Flanagan']]`,
 }, {
 	"complex escaped quotes",
-	`SELECT * AS &Person.* FROM person WHERE ` +
-		`name IN ('Lorn', 'Onos T''oolan', '', ''' ''');`,
-	`[Bypass[SELECT * AS &Person.* FROM person WHERE name IN (] ` +
-		`Bypass['Lorn'] Bypass[, ] Bypass['Onos T''oolan'] ` +
-		`Bypass[, ] Bypass[''] Bypass[, ] Bypass[''' '''] ` +
-		`Bypass[);]]`,
+	`SELECT * AS &Person.* FROM person WHERE name IN ('Lorn', 'Onos T''oolan', '', ''' ''');`,
+	`[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE name IN (] Bypass['Lorn'] Bypass[, ] Bypass['Onos T''oolan'] Bypass[, ] Bypass[''] Bypass[, ] Bypass[''' '''] Bypass[);]]`,
 }, {
 	"update",
-	"UPDATE person SET person.address_id = $Address.id " +
-		"WHERE person.id = $Person.id",
-	"[Bypass[UPDATE person SET person.address_id = ] " +
-		"Input[Address.id] " +
-		"Bypass[ WHERE person.id = ] " +
-		"Input[Person.id]]",
+	"UPDATE person SET person.address_id = $Address.id WHERE person.id = $Person.id",
+	"[Bypass[UPDATE person SET person.address_id = ] Input[Address.id] Bypass[ WHERE person.id = ] Input[Person.id]]",
 }}
 
 func (s *ExprSuite) TestExpr(c *C) {
@@ -328,6 +197,27 @@ func (s *ExprSuite) TestExpr(c *C) {
 		} else if parsedExpr.String() != test.expectedParsed {
 			c.Errorf("test %d failed (Parse):\nsummary: %s\ninput: %s\nexpected: %s\nactual:   %s\n", i, test.summary, test.input, test.expectedParsed, parsedExpr.String())
 		}
+	}
+}
+
+func (s *ExprSuite) TestValidInput(c *C) {
+	testList := []struct {
+		input          string
+		expectedParsed string
+	}{{
+		"SELECT street FROM t WHERE x = $Address.street",
+		"[Bypass[SELECT street FROM t WHERE x = ] Input[Address.street]]",
+	}, {
+		"SELECT p FROM t WHERE x = $Person.id",
+		"[Bypass[SELECT p FROM t WHERE x = ] Input[Person.id]]",
+	}}
+	for _, test := range testList {
+		parser := expr.NewParser()
+		parsedExpr, err := parser.Parse(test.input)
+		if err != nil {
+			c.Fatal(err)
+		}
+		c.Assert(parsedExpr.String(), Equals, test.expectedParsed)
 	}
 }
 
