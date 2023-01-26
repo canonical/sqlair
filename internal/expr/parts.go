@@ -9,8 +9,8 @@ type queryPart interface {
 	// String returns the part's representation for debugging purposes.
 	String() string
 
-	// ToSQL returns the SQL representation of the part.
-	toSQL() string
+	// marker method
+	part()
 }
 
 // FullName represents a table column or a Go type identifier.
@@ -37,9 +37,7 @@ func (p *inputPart) String() string {
 	return fmt.Sprintf("Input[%+v]", p.source)
 }
 
-func (p *inputPart) toSQL() string {
-	return "?"
-}
+func (p *inputPart) part() {}
 
 // outputPart represents a named target output variable in the SQL expression,
 // as well as the source table and column where it will be read from.
@@ -52,9 +50,7 @@ func (p *outputPart) String() string {
 	return fmt.Sprintf("Output[%+v %+v]", p.source, p.target)
 }
 
-func (p *outputPart) toSQL() string {
-	return ""
-}
+func (p *outputPart) part() {}
 
 // bypassPart represents a part of the expression that we want to pass to the
 // backend database verbatim.
@@ -66,6 +62,4 @@ func (p *bypassPart) String() string {
 	return "Bypass[" + p.chunk + "]"
 }
 
-func (p *bypassPart) toSQL() string {
-	return p.chunk
-}
+func (p *bypassPart) part() {}

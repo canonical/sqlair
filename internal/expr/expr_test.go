@@ -356,8 +356,8 @@ func (s *ExprSuite) TestMismatchedInputStructName(c *C) {
 	sql := "SELECT street FROM t WHERE x = $Address.street"
 	parser := expr.NewParser()
 	parsedExpr, err := parser.Parse(sql)
-	_, err = parsedExpr.Prepare(Person{ID: 1})
-	c.Assert(err, ErrorMatches, `cannot prepare expression: unknown type: "Address"`)
+	_, err = parsedExpr.Prepare(Person{ID: 1}, Manager{})
+	c.Assert(err, ErrorMatches, `cannot prepare expression: type Address unknown, have: Person, Manager`)
 }
 
 func (s *ExprSuite) TestMissingTagInput(c *C) {
@@ -365,5 +365,5 @@ func (s *ExprSuite) TestMissingTagInput(c *C) {
 	parser := expr.NewParser()
 	parsedExpr, err := parser.Parse(sql)
 	_, err = parsedExpr.Prepare(Address{ID: 1})
-	c.Assert(err, ErrorMatches, `cannot prepare expression: no tag with name "number" in "Address"`)
+	c.Assert(err, ErrorMatches, `cannot prepare expression: type Address has no "number" db tag`)
 }

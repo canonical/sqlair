@@ -3,26 +3,37 @@ package expr
 import (
 	"bytes"
 	"fmt"
+	"strings"
 )
 
 // PreparedExpr contains an SQL expression that is ready for execution.
 type PreparedExpr struct {
-	ParsedExpr *ParsedExpr
-	SQL        string
+	inputs []*inputPart
+	SQL    string
 }
 
 type typeNameToInfo map[string]*info
 
+func getKeys(m map[string]*info) []string {
+	i := 0
+	keys := make([]string, len(m))
+	for k := range m {
+		keys[i] = k
+		i++
+	}
+	return keys
+}
+
 // prepareInput checks that the input expression corresponds to a known type.
 func prepareInput(ti typeNameToInfo, p *inputPart) error {
-	inf, ok := ti[p.source.prefix]
+	info, ok := ti[p.source.prefix]
 	if !ok {
-		return fmt.Errorf(`unknown type: "%s"`, p.source.prefix)
+		return fmt.Errorf(`type %s unknown, have: %s`, p.source.prefix, strings.Join(getKeys(ti), ", "))
 	}
 
-	if _, ok = inf.tagToField[p.source.name]; !ok {
-		return fmt.Errorf(`no tag with name "%s" in "%s"`,
-			p.source.name, inf.structType.Name())
+	if _, ok = info.tagToField[p.source.name]; !ok {
+		return fmt.Errorf(`type %s has no %q db tag`,
+			info.structType.Name(), p.source.name)
 	}
 
 	return nil
@@ -42,32 +53,34 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 
 	// Generate and save reflection info.
 	for _, arg := range args {
-		inf, err := typeInfo(arg)
+		info, err := typeInfo(arg)
 		if err != nil {
 			return nil, err
 		}
-		ti[inf.structType.Name()] = inf
+		ti[info.structType.Name()] = info
 	}
 
 	var sql bytes.Buffer
 	// Check and expand each query part.
+
+	ins := []*inputPart{}
+
 	for _, part := range pe.queryParts {
-		if p, ok := part.(*inputPart); ok {
+		switch p := part.(type) {
+		case *inputPart:
 			err := prepareInput(ti, p)
 			if err != nil {
 				return nil, err
 			}
-			sql.WriteString(p.toSQL())
-			continue
+			sql.WriteString("?")
+			ins = append(ins, p)
+		case *outputPart:
+		case *bypassPart:
+			sql.WriteString(p.chunk)
+		default:
+			return nil, fmt.Errorf("internal error")
 		}
-		if p, ok := part.(*outputPart); ok {
-			// Do nothing for now.
-			sql.WriteString(p.toSQL())
-			continue
-		}
-		p := part.(*bypassPart)
-		sql.WriteString(p.toSQL())
 	}
 
-	return &PreparedExpr{ParsedExpr: pe, SQL: sql.String()}, nil
+	return &PreparedExpr{inputs: ins, SQL: sql.String()}, nil
 }
