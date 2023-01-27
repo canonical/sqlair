@@ -3,6 +3,7 @@ package expr
 import (
 	"bytes"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -21,6 +22,7 @@ func getKeys(m map[string]*info) []string {
 		keys[i] = k
 		i++
 	}
+	sort.Strings(keys)
 	return keys
 }
 
@@ -78,7 +80,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 		case *bypassPart:
 			sql.WriteString(p.chunk)
 		default:
-			return nil, fmt.Errorf("internal error")
+			return nil, fmt.Errorf("internal error: unknown query part type %T", part)
 		}
 	}
 

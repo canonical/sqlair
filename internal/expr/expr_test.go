@@ -357,7 +357,7 @@ func (s *ExprSuite) TestMismatchedInputStructName(c *C) {
 	parser := expr.NewParser()
 	parsedExpr, err := parser.Parse(sql)
 	_, err = parsedExpr.Prepare(Person{ID: 1}, Manager{})
-	c.Assert(err, ErrorMatches, `cannot prepare expression: type Address unknown, have: Person, Manager`)
+	c.Assert(err, ErrorMatches, `cannot prepare expression: type Address unknown, have: Manager, Person`)
 }
 
 func (s *ExprSuite) TestMissingTagInput(c *C) {
