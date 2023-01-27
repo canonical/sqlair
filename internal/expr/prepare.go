@@ -192,9 +192,8 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			if err != nil {
 				return nil, err
 			}
-			s := p.toSQL(outCols, n)
 			n += len(outCols)
-			sql.WriteString(s)
+			sql.WriteString(p.toSQL(outCols, n))
 			continue
 		case *bypassPart:
 			sql.WriteString(p.chunk)
