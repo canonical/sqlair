@@ -3,6 +3,7 @@ package expr
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -10,9 +11,17 @@ import (
 
 // PreparedExpr contains an SQL expression that is ready for execution.
 type PreparedExpr struct {
-	outputs []*info
+	outputs typeToCols
 	inputs  []*inputPart
 	SQL     string
+}
+
+// Maps the output types to the columns they are assosiated with
+type typeToCols map[reflect.Type]numRange
+
+type numRange struct {
+	firstCol int
+	lastCol  int
 }
 
 type typeNameToInfo map[string]*info
@@ -179,8 +188,8 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	var sql bytes.Buffer
 	var n int
 
-	outs := []*info{}
-	ins := []*inputPart{}
+	var outs = make(typeToCols)
+	var ins = make([]*inputPart, 0)
 
 	// Check and expand each query part.
 	for _, part := range pe.queryParts {
@@ -197,6 +206,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			if err != nil {
 				return nil, err
 			}
+			startCol := n
 			for i, c := range outCols {
 				sql.WriteString(c.String())
 				sql.WriteString(" AS _sqlair_")
@@ -207,7 +217,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 				}
 				n++
 			}
-			outs = append(outs, ti[p.target[0].prefix])
+			outs[ti[p.target[0].prefix].structType] = numRange{startCol, n - 1}
 
 		case *bypassPart:
 			sql.WriteString(p.chunk)
