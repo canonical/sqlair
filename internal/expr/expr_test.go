@@ -15,7 +15,9 @@ type ExprSuite struct{}
 var _ = Suite(&ExprSuite{})
 
 type Address struct {
-	ID int `db:"id"`
+	ID       int    `db:"id"`
+	District string `db:"district"`
+	Street   string `db:"street"`
 }
 
 type Person struct {
@@ -322,4 +324,46 @@ func FuzzParser(f *testing.F) {
 		parser := expr.NewParser()
 		parser.Parse(s)
 	})
+}
+
+func (s *ExprSuite) TestValidPrepare(c *C) {
+	testList := []struct {
+		input            string
+		prepareArgs      []any
+		expectedPrepared string
+	}{{
+		"SELECT street FROM t WHERE x = $Address.street",
+		[]any{Address{}},
+		"SELECT street FROM t WHERE x = ?",
+	}, {
+		"SELECT p FROM t WHERE x = $Person.id",
+		[]any{Person{}},
+		"SELECT p FROM t WHERE x = ?",
+	}}
+	for _, test := range testList {
+		parser := expr.NewParser()
+		parsedExpr, _ := parser.Parse(test.input)
+		preparedExpr, err := parsedExpr.Prepare(test.prepareArgs...)
+
+		if err != nil {
+			c.Fatal(err)
+		}
+		c.Assert(preparedExpr.SQL, Equals, test.expectedPrepared)
+	}
+}
+
+func (s *ExprSuite) TestMismatchedInputStructName(c *C) {
+	sql := "SELECT street FROM t WHERE x = $Address.street"
+	parser := expr.NewParser()
+	parsedExpr, err := parser.Parse(sql)
+	_, err = parsedExpr.Prepare(Person{ID: 1}, Manager{})
+	c.Assert(err, ErrorMatches, `cannot prepare expression: type Address unknown, have: Manager, Person`)
+}
+
+func (s *ExprSuite) TestMissingTagInput(c *C) {
+	sql := "SELECT street FROM t WHERE x = $Address.number"
+	parser := expr.NewParser()
+	parsedExpr, err := parser.Parse(sql)
+	_, err = parsedExpr.Prepare(Address{ID: 1})
+	c.Assert(err, ErrorMatches, `cannot prepare expression: type Address has no "number" db tag`)
 }
