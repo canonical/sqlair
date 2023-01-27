@@ -458,9 +458,10 @@ func (s *ExprSuite) TestPrepareMismatchedStructName(c *C) {
 			c.Fatal(err)
 		}
 		_, err = parsedExpr.Prepare(test.structs...)
-		c.Assert(err, ErrorMatches, `cannot prepare expression: unknown type: .*`,
+		c.Assert(err, ErrorMatches, `cannot prepare expression: type [a-zA-Z_\.0-9]+ unknown, have: .*`,
 			Commentf("test %d failed:\nsql: '%s'\nstructs: '%+v'", i, test.sql, test.structs))
 	}
+
 }
 
 func (s *ExprSuite) TestPrepareMissingTag(c *C) {
@@ -485,8 +486,9 @@ func (s *ExprSuite) TestPrepareMissingTag(c *C) {
 			c.Fatal(err)
 		}
 		_, err = parsedExpr.Prepare(test.structs...)
-		c.Assert(err, ErrorMatches, `cannot prepare expression: no tag with name .*`,
+		c.Assert(err, ErrorMatches, `cannot prepare expression: type [a-zA-Z_\.0-9]+ has no "[a-zA-Z_\.0-9]+" db tag`,
 			Commentf("test %d failed:\nsql: '%s'\nstructs:'%+v'", i, test.sql, test.structs))
+
 	}
 }
 
