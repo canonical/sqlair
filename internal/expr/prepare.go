@@ -10,14 +10,9 @@ import (
 
 // PreparedExpr contains an SQL expression that is ready for execution.
 type PreparedExpr struct {
-	outs   []*outputInfo
-	inputs []*inputPart
-	SQL    string
-}
-
-type outputInfo struct {
-	info    *info
-	columns []string
+	outputs []*info
+	inputs  []*inputPart
+	SQL     string
 }
 
 type typeNameToInfo map[string]*info
@@ -184,7 +179,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	var sql bytes.Buffer
 	var n int
 
-	outs := []*outputInfo{}
+	outs := []*info{}
 	ins := []*inputPart{}
 
 	// Check and expand each query part.
@@ -205,14 +200,14 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			for i, c := range outCols {
 				sql.WriteString(c.String())
 				sql.WriteString(" AS _sqlair_")
-				sql.WriteString(alphaNum.ReplaceAllString(c.String(), ""))
+				sql.WriteString(c.name)
 				sql.WriteString(fmt.Sprintf("_%d", n))
 				if i != len(outCols)-1 {
 					sql.WriteString(", ")
 				}
 				n++
 			}
-			outs = append(outs, &outputInfo{ti[p.target[0].prefix], tags(outCols)})
+			outs = append(outs, ti[p.target[0].prefix])
 
 		case *bypassPart:
 			sql.WriteString(p.chunk)
@@ -222,12 +217,4 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	}
 
 	return &PreparedExpr{inputs: ins, SQL: sql.String()}, nil
-}
-
-func tags(ocs []fullName) []string {
-	tags := make([]string, len(ocs))
-	for i, oc := range ocs {
-		tags[i] = oc.name
-	}
-	return tags
 }
