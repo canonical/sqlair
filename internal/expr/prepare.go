@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"reflect"
-	"regexp"
 	"sort"
 	"strings"
 )
@@ -16,7 +15,7 @@ type PreparedExpr struct {
 	SQL     string
 }
 
-// Maps the output types to the columns they are assosiated with
+// typeToCols maps the output types to the columns they are assosiated with.
 type typeToCols map[reflect.Type]numRange
 
 type numRange struct {
@@ -24,9 +23,8 @@ type numRange struct {
 	lastCol  int
 }
 
-type typeNameToInfo map[string]*info
-
-func getKeys(m map[string]*info) []string {
+// getKeys returns the keys of a string map in a deterministic order.
+func getKeys[T any](m map[string]T) []string {
 	i := 0
 	keys := make([]string, len(m))
 	for k := range m {
@@ -62,6 +60,9 @@ func starCount(fns []fullName) int {
 	return s
 }
 
+// prepareOutput checks that the output expressions corresponds to a known type.
+// It then checks the asterisk are in the right place and finally generates the
+// columns needed from the database.
 func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, error) {
 
 	var outCols []fullName = make([]fullName, 0)
@@ -161,7 +162,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, error) {
 	return outCols, nil
 }
 
-var alphaNum = regexp.MustCompile("[^a-zA-Z0-9]+")
+type typeNameToInfo map[string]*info
 
 // Prepare takes a parsed expression and struct instantiations of all the types
 // mentioned in it.
