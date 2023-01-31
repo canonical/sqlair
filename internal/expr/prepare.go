@@ -78,7 +78,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, error) {
 				return nil, fmt.Errorf(`type %s unknown, have: %s`, t.prefix, strings.Join(getKeys(ti), ", "))
 			}
 		} else if t.prefix != info.structType.Name() {
-			return nil, fmt.Errorf("multiple types in single output expression")
+			return nil, fmt.Errorf("multiple target types in: %s", p.String())
 		}
 
 		_, ok = info.tagToField[t.name]
@@ -88,27 +88,27 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, error) {
 	}
 
 	// Check asterisk are in correct places.
-
 	sct := starCount(p.target)
-	scc := starCount(p.source)
+	scs := starCount(p.source)
 
-	if sct > 1 || scc > 1 || (scc == 1 && sct == 0) {
+	if sct > 1 || scs > 1 || (scs == 1 && sct == 0) {
 		return nil, fmt.Errorf("invalid asterisk in output expression")
 	}
 
 	starTarget := sct == 1
-	starSource := scc == 1
-
+	starSource := scs == 1
 	numSources := len(p.source)
 	numTargets := len(p.target)
 
 	if (starTarget && numTargets > 1) || (starSource && numSources > 1) {
-		return nil, fmt.Errorf("invalid mix of asterisk and none asterisk columns in output expression")
+		return nil, fmt.Errorf("invalid asterisk columns in: %s", p.String())
 	}
 
 	if !starTarget && (numSources > 0 && (numTargets != numSources)) {
-		return nil, fmt.Errorf("mismatched number of cols and targets in output expression")
+		return nil, fmt.Errorf("mismatched number of cols and targets in: %s", p.String())
 	}
+
+	// Generate columns to inject into SQL query.
 
 	// Case 1: Star target cases e.g. "...&P.*".
 	if starTarget {

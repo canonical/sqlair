@@ -538,7 +538,7 @@ func (s *ExprSuite) TestPrepareMixedTypes(c *C) {
 			c.Fatal(err)
 		}
 		_, err = parsedExpr.Prepare(test.structs...)
-		c.Assert(err, ErrorMatches, "cannot prepare expression: multiple types in single output expression",
+		c.Assert(err, ErrorMatches, "cannot prepare expression: multiple target types in: .*",
 			Commentf("test %d failed:\nsql: '%s'\nstructs:'%+v'", i, test.sql, test.structs))
 	}
 }
@@ -565,7 +565,7 @@ func (s *ExprSuite) TestPrepareAsteriskMix(c *C) {
 			c.Fatal(err)
 		}
 		_, err = parsedExpr.Prepare(test.structs...)
-		c.Assert(err, ErrorMatches, "cannot prepare expression: invalid mix of asterisk and none asterisk columns in output expression",
+		c.Assert(err, ErrorMatches, "cannot prepare expression: invalid asterisk columns in: .*",
 			Commentf("test %d failed:\nsql: '%s'\nstructs:'%+v'", i, test.sql, test.structs))
 	}
 }
@@ -589,7 +589,7 @@ func (s *ExprSuite) TestPrepareMismatchedColsAndTargs(c *C) {
 			c.Fatal(err)
 		}
 		_, err = parsedExpr.Prepare(test.structs...)
-		c.Assert(err, ErrorMatches, "cannot prepare expression: mismatched number of cols and targets in output expression",
+		c.Assert(err, ErrorMatches, "cannot prepare expression: mismatched number of cols and targets in: .*",
 			Commentf("test %d failed:\nsql: '%s'\nstructs:'%+v'", i, test.sql, test.structs))
 	}
 }
