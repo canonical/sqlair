@@ -35,6 +35,35 @@ func getKeys[T any](m map[string]T) []string {
 	return keys
 }
 
+func starCount(fns []fullName) int {
+	s := 0
+	for _, fn := range fns {
+		if fn.name == "*" {
+			s++
+		}
+	}
+	return s
+}
+
+func starCheckOutput(p *outputPart) error {
+	numSources := len(p.source)
+	numTargets := len(p.target)
+
+	targetStars := starCount(p.target)
+	sourceStars := starCount(p.source)
+	starTarget := targetStars == 1
+	starSource := sourceStars == 1
+
+	if targetStars > 1 || sourceStars > 1 || (sourceStars == 1 && targetStars == 0) ||
+		(starTarget && numTargets > 1) || (starSource && numSources > 1) {
+		return fmt.Errorf("invalid asterisk in output expression: %s", p)
+	}
+	if !starTarget && (numSources > 0 && (numTargets != numSources)) {
+		return fmt.Errorf("mismatched number of cols and targets in output expression: %s", p)
+	}
+	return nil
+}
+
 // prepareInput checks that the input expression corresponds to a known type.
 func prepareInput(ti typeNameToInfo, p *inputPart) error {
 	info, ok := ti[p.source.prefix]
@@ -48,16 +77,6 @@ func prepareInput(ti typeNameToInfo, p *inputPart) error {
 	}
 
 	return nil
-}
-
-func starCount(fns []fullName) int {
-	s := 0
-	for _, fn := range fns {
-		if fn.name == "*" {
-			s++
-		}
-	}
-	return s
 }
 
 // prepareOutput checks that the output expressions corresponds to a known type.
@@ -87,39 +106,22 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, error) {
 		}
 	}
 
-	// Check asterisk are in correct places.
-	sct := starCount(p.target)
-	scs := starCount(p.source)
-
-	if sct > 1 || scs > 1 || (scs == 1 && sct == 0) {
-		return nil, fmt.Errorf("invalid asterisk in output expression")
-	}
-
-	starTarget := sct == 1
-	starSource := scs == 1
-	numSources := len(p.source)
-	numTargets := len(p.target)
-
-	if (starTarget && numTargets > 1) || (starSource && numSources > 1) {
-		return nil, fmt.Errorf("invalid asterisk columns in: %s", p.String())
-	}
-
-	if !starTarget && (numSources > 0 && (numTargets != numSources)) {
-		return nil, fmt.Errorf("mismatched number of cols and targets in: %s", p.String())
+	if err := starCheckOutput(p); err != nil {
+		return nil, err
 	}
 
 	// Generate columns to inject into SQL query.
 
 	// Case 1: Star target cases e.g. "...&P.*".
-	if starTarget {
+	if p.target[0].name == "*" {
 		info, _ := ti[p.target[0].prefix]
 
 		// Case 1.1: Single star e.g. "t.* AS &P.*" or "&P.*"
-		if starSource || numSources == 0 {
+		if len(p.source) == 0 || p.source[0].name == "*" {
 			pref := ""
 
 			// Prepend table name. E.g. "t" in "t.* AS &P.*".
-			if numSources > 0 {
+			if len(p.source) > 0 {
 				pref = p.source[0].prefix
 			}
 
@@ -134,7 +136,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, error) {
 		}
 
 		// Case 1.2: Explicit columns e.g. "(col1, t.col2) AS &P.*".
-		if numSources > 0 {
+		if len(p.source) > 0 {
 			for _, c := range p.source {
 				if _, ok := info.tagToField[c.name]; !ok {
 					return nil, fmt.Errorf(`type %s has no %q db tag`, info.structType.Name(), c.name)
@@ -148,7 +150,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, error) {
 	// Case 2: None star target cases e.g. "...&(P.name, P.id)".
 
 	// Case 2.1: Explicit columns e.g. "name_1 AS P.name".
-	if numSources > 0 {
+	if len(p.source) > 0 {
 		for _, c := range p.source {
 			outCols = append(outCols, c)
 		}

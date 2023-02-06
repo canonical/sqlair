@@ -514,7 +514,7 @@ func (s *ExprSuite) TestPrepareInvalidAsteriskPlacement(c *C) {
 			c.Fatal(err)
 		}
 		_, err = parsedExpr.Prepare(test.structs...)
-		c.Assert(err, ErrorMatches, "cannot prepare expression: invalid asterisk in output expression",
+		c.Assert(err, ErrorMatches, "cannot prepare expression: invalid asterisk in output expression: .*",
 			Commentf("test %d failed:\nsql: '%s'\nstructs:'%+v'", i, test.sql, test.structs))
 	}
 }
@@ -565,7 +565,7 @@ func (s *ExprSuite) TestPrepareAsteriskMix(c *C) {
 			c.Fatal(err)
 		}
 		_, err = parsedExpr.Prepare(test.structs...)
-		c.Assert(err, ErrorMatches, "cannot prepare expression: invalid asterisk columns in: .*",
+		c.Assert(err, ErrorMatches, "cannot prepare expression: invalid asterisk in output expression: .*",
 			Commentf("test %d failed:\nsql: '%s'\nstructs:'%+v'", i, test.sql, test.structs))
 	}
 }
@@ -589,7 +589,7 @@ func (s *ExprSuite) TestPrepareMismatchedColsAndTargs(c *C) {
 			c.Fatal(err)
 		}
 		_, err = parsedExpr.Prepare(test.structs...)
-		c.Assert(err, ErrorMatches, "cannot prepare expression: mismatched number of cols and targets in: .*",
+		c.Assert(err, ErrorMatches, "cannot prepare expression: mismatched number of cols and targets in output expression: .*",
 			Commentf("test %d failed:\nsql: '%s'\nstructs:'%+v'", i, test.sql, test.structs))
 	}
 }
