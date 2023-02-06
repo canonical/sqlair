@@ -30,11 +30,12 @@ func (fn fullName) String() string {
 // inputPart represents a named parameter that will be sent to the database
 // while performing the query.
 type inputPart struct {
-	source fullName
+	cols   []string
+	source []fullName
 }
 
 func (p *inputPart) String() string {
-	return fmt.Sprintf("Input[%+v]", p.source)
+	return fmt.Sprintf("Input[%+v %+v]", p.cols, p.source)
 }
 
 func (p *inputPart) part() {}
