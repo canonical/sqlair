@@ -3,15 +3,23 @@ package expr
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
 // PreparedExpr contains an SQL expression that is ready for execution.
 type PreparedExpr struct {
-	inputs []fullName
+	inputs []inputLocation
 	SQL    string
+}
+
+// We get the position in the query from its position in inputLocation
+type inputLocation struct {
+	inputType reflect.Type
+	field     field
 }
 
 type typeNameToInfo map[string]*info
@@ -72,13 +80,29 @@ func printList(xs []string) string {
 	return s.String()
 }
 
+func nParams(start int, num int) string {
+	var s bytes.Buffer
+	s.WriteString("(")
+	for i := start; i < start+num; i++ {
+		s.WriteString("@_sqlair_")
+		s.WriteString(strconv.Itoa(i))
+		if i < start+num-1 {
+			s.WriteString(", ")
+		}
+	}
+	s.WriteString(")")
+	return s.String()
+}
+
 // prepareInput first checks the types mentioned in the expression are known, it
 // then checks the expression is valid and generates the SQL to print in place
 // of it.
 // As well as the SQL string it also returns a list of fullNames containing the
 // type and tag of each input parameter. These are used in the complete stage to
 // extract the arguments from the relevent structs.
-func prepareInput(ti typeNameToInfo, p *inputPart) (string, []fullName, error) {
+func prepareInput(ti typeNameToInfo, p *inputPart, n int) (string, []inputLocation, error) {
+
+	var inLocs = make([]inputLocation, 0)
 
 	// Check the input structs and their tags are valid.
 	for _, s := range p.source {
@@ -86,9 +110,14 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (string, []fullName, error) {
 		if !ok {
 			return "", nil, fmt.Errorf(`type %s unknown, have: %s`, s.prefix, strings.Join(getKeys(ti), ", "))
 		}
-		_, ok = info.tagToField[s.name]
-		if !ok && s.name != "*" {
-			return "", nil, fmt.Errorf(`type %s has no %q db tag`, info.structType.Name(), s.name)
+		if s.name != "*" {
+			f, ok := info.tagToField[s.name]
+			if !ok {
+				return "", nil, fmt.Errorf(`type %s has no %q db tag`, info.structType.Name(), s.name)
+			}
+			// For a none star expression we record output destinations here.
+			// For a star expression we fill out the destinations as we generate the columns.
+			inLocs = append(inLocs, inputLocation{info.structType, f})
 		}
 	}
 
@@ -101,45 +130,36 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (string, []fullName, error) {
 		if len(p.source) != 1 {
 			return "", nil, fmt.Errorf("internal error: cannot group standalone input expressions")
 		}
-		return fullNameToNamedParam(p.source[0], true), p.source, nil
+		return "@_sqlair_" + strconv.Itoa(n), inLocs, nil
 	}
 
 	// Case 2: A VALUES expression (probably inside an INSERT)
 	cols := []string{}
-	params := []string{}
-	ins := []fullName{}
 	// Case 2.1: An Asterisk VALUES expression e.g. "... VALUES $P.*".
 	if p.source[0].name == "*" {
 		info, _ := ti[p.source[0].prefix]
 		// Case 2.1.1 e.g. "(*) VALUES ($P.*)"
 		if p.cols[0] == "*" {
 			for _, tag := range getKeys(info.tagToField) {
-				fn := fullName{p.source[0].prefix, tag}
 				cols = append(cols, tag)
-				params = append(params, fullNameToNamedParam(fn, true))
-				ins = append(ins, fn)
+				inLocs = append(inLocs, inputLocation{info.structType, info.tagToField[tag]})
 			}
-			return printList(cols) + " VALUES " + printList(params), ins, nil
+			return printList(cols) + " VALUES " + nParams(n, len(cols)), inLocs, nil
 		}
 		// Case 2.1.2 e.g. "(col1, col2, col3) VALUES ($P.*)"
 		for _, col := range p.cols {
-			if _, ok := info.tagToField[col]; !ok {
+			f, ok := info.tagToField[col]
+			if !ok {
 				return "", nil, fmt.Errorf(`type %s has no %q db tag`, info.structType.Name(), col)
 			}
-			fn := fullName{p.source[0].prefix, col}
 			cols = append(cols, col)
-			params = append(params, fullNameToNamedParam(fn, true))
-			ins = append(ins, fn)
+			inLocs = append(inLocs, inputLocation{info.structType, f})
 		}
-		return printList(cols) + " VALUES " + printList(params), ins, nil
+		return printList(cols) + " VALUES " + nParams(n, len(cols)), inLocs, nil
 	}
 	// Case 2.2: explicit for both e.g. (mycol1, mycol2) VALUES ($Person.col1, $Address.col1)
 	cols = p.cols
-	for _, s := range p.source {
-		params = append(params, fullNameToNamedParam(s, true))
-	}
-	ins = p.source
-	return printList(cols) + " VALUES " + printList(params), ins, nil
+	return printList(p.cols) + " VALUES " + nParams(n, len(p.cols)), inLocs, nil
 }
 
 var alphaNum = regexp.MustCompile("[^a-zA-Z0-9]+")
@@ -179,12 +199,14 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	var sql bytes.Buffer
 	// Check and expand each query part.
 
-	inputs := []fullName{}
+	inputs := []inputLocation{}
+	n := 0
 
 	for _, part := range pe.queryParts {
 		switch p := part.(type) {
 		case *inputPart:
-			s, ins, err := prepareInput(ti, p)
+			s, ins, err := prepareInput(ti, p, n)
+			n += len(ins)
 			if err != nil {
 				return nil, err
 			}
