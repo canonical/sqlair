@@ -28,6 +28,8 @@ func getKeys[T any](m map[string]T) []string {
 	return keys
 }
 
+// starCheckInput checks that the input is well formed with regard to
+// asterisks and the number of sources and targets.
 func starCheckInput(p *inputPart) error {
 	numColumns := len(p.cols)
 	numSources := len(p.source)
@@ -70,10 +72,12 @@ func printList(xs []string) string {
 	return s.String()
 }
 
-// prepareInput checks that the input expression corresponds to a known type.
-// It returns the full string to put in the SQL including named parameters.
-// The fullNames are the type+tag tuples for complete to use to work out which
-// fields to extract and to match them the named params
+// prepareInput first checks the types mentioned in the expression are known, it
+// then checks the expression is valid and generates the SQL to print in place
+// of it.
+// As well as the SQL string it also returns a list of fullNames containing the
+// type and tag of each input parameter. These are used in the complete stage to
+// extract the arguments from the relevent structs.
 func prepareInput(ti typeNameToInfo, p *inputPart) (string, []fullName, error) {
 
 	// Check the input structs and their tags are valid.
@@ -97,7 +101,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (string, []fullName, error) {
 		if len(p.source) != 1 {
 			return "", nil, fmt.Errorf("internal error: cannot group standalone input expressions")
 		}
-		return partToNamedParam(p.source[0], true), p.source, nil
+		return fullNameToNamedParam(p.source[0], true), p.source, nil
 	}
 
 	// Case 2: A VALUES expression (probably inside an INSERT)
@@ -112,35 +116,38 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (string, []fullName, error) {
 			for _, tag := range getKeys(info.tagToField) {
 				fn := fullName{p.source[0].prefix, tag}
 				cols = append(cols, tag)
-				params = append(params, partToNamedParam(fn, true))
+				params = append(params, fullNameToNamedParam(fn, true))
 				ins = append(ins, fn)
 			}
-		} else {
-			// Case 2.1.2 e.g. "(col1, col2, col3) VALUES ($P.*)"
-			for _, col := range p.cols {
-				if _, ok := info.tagToField[col]; !ok {
-					return "", nil, fmt.Errorf(`type %s has no %q db tag`, info.structType.Name(), col)
-				}
-				fn := fullName{p.source[0].prefix, col}
-				cols = append(cols, col)
-				params = append(params, partToNamedParam(fn, true))
-				ins = append(ins, fn)
+			return printList(cols) + " VALUES " + printList(params), ins, nil
+		}
+		// Case 2.1.2 e.g. "(col1, col2, col3) VALUES ($P.*)"
+		for _, col := range p.cols {
+			if _, ok := info.tagToField[col]; !ok {
+				return "", nil, fmt.Errorf(`type %s has no %q db tag`, info.structType.Name(), col)
 			}
+			fn := fullName{p.source[0].prefix, col}
+			cols = append(cols, col)
+			params = append(params, fullNameToNamedParam(fn, true))
+			ins = append(ins, fn)
 		}
-	} else {
-		// Case 2.2: explicit for both e.g. (mycol1, mycol2) VALUES ($Person.col1, $Address.col1)
-		cols = p.cols
-		for _, s := range p.source {
-			params = append(params, partToNamedParam(s, true))
-		}
-		ins = p.source
+		return printList(cols) + " VALUES " + printList(params), ins, nil
 	}
+	// Case 2.2: explicit for both e.g. (mycol1, mycol2) VALUES ($Person.col1, $Address.col1)
+	cols = p.cols
+	for _, s := range p.source {
+		params = append(params, fullNameToNamedParam(s, true))
+	}
+	ins = p.source
 	return printList(cols) + " VALUES " + printList(params), ins, nil
 }
 
 var alphaNum = regexp.MustCompile("[^a-zA-Z0-9]+")
 
-func partToNamedParam(fn fullName, includeAt bool) string {
+// fullNameToNamedParam converts a to a named paramter.
+// The includeAt flag will prefix the name with an "@" symbol.
+// e.g. fullName{"Prefix", "name") =>  "@Prefixname".
+func fullNameToNamedParam(fn fullName, includeAt bool) string {
 	str := ""
 	if includeAt {
 		str = "@"
