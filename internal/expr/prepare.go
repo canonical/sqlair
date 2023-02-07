@@ -18,7 +18,7 @@ type PreparedExpr struct {
 
 type outputDest struct {
 	structType reflect.Type
-	fieldNum   int
+	field      field
 }
 
 // getKeys returns the keys of a string map in a deterministic order.
@@ -108,7 +108,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []outputDest, 
 			}
 			// For a none star expression we record output destinations here.
 			// For a star expression we fill out the destinations as we generate the columns.
-			outDests = append(outDests, outputDest{info.structType, f.index})
+			outDests = append(outDests, outputDest{info.structType, f})
 
 		}
 	}
@@ -132,7 +132,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []outputDest, 
 			tags := getKeys(info.tagToField)
 			for _, tag := range tags {
 				outCols = append(outCols, fullName{pref, tag})
-				outDests = append(outDests, outputDest{info.structType, info.tagToField[tag].index})
+				outDests = append(outDests, outputDest{info.structType, info.tagToField[tag]})
 			}
 			return outCols, outDests, nil
 		}
@@ -145,7 +145,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []outputDest, 
 					return nil, nil, fmt.Errorf(`type %s has no %q db tag`, info.structType.Name(), c.name)
 				}
 				outCols = append(outCols, c)
-				outDests = append(outDests, outputDest{info.structType, f.index})
+				outDests = append(outDests, outputDest{info.structType, f})
 			}
 			return outCols, outDests, nil
 		}
