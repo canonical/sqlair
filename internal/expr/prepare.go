@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -45,6 +46,8 @@ func starCount(fns []fullName) int {
 	return s
 }
 
+// starCheckOutput checks that the statement is well formed with regard to
+// asterisks and the number of sources and targets.
 func starCheckOutput(p *outputPart) error {
 	numSources := len(p.source)
 	numTargets := len(p.target)
@@ -79,9 +82,8 @@ func prepareInput(ti typeNameToInfo, p *inputPart) error {
 	return nil
 }
 
-// prepareOutput checks that the output expressions corresponds to a known type.
-// It then checks the asterisk are in the right place and finally generates the
-// columns needed from the database.
+// prepareOutput checks that the output expressions are correspond to a known types.
+// It then checks they are formatted correctly and finally generates the columns for the query.
 func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, error) {
 
 	var outCols []fullName = make([]fullName, 0)
@@ -125,13 +127,10 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, error) {
 				pref = p.source[0].prefix
 			}
 
-			for tag := range info.tagToField {
-				outCols = append(outCols, fullName{pref, tag})
+			tags := getKeys(info.tagToField)
+			for _, tag := range tags {
+				outCols = append(outCols, fullName{prefix: pref, name: tag})
 			}
-
-			// The strings are sorted to give a deterministic order for
-			// testing.
-			sort.Slice(outCols, func(i, j int) bool { return outCols[i].String() < outCols[j].String() })
 			return outCols, nil
 		}
 
@@ -214,7 +213,8 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 				sql.WriteString(c.String())
 				sql.WriteString(" AS _sqlair_")
 				sql.WriteString(c.name)
-				sql.WriteString(fmt.Sprintf("_%d", n))
+				sql.WriteString("_")
+				sql.WriteString(strconv.Itoa(n))
 				if i != len(outCols)-1 {
 					sql.WriteString(", ")
 				}
@@ -229,5 +229,5 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 		}
 	}
 
-	return &PreparedExpr{inputs: ins, SQL: sql.String()}, nil
+	return &PreparedExpr{inputs: ins, outputs: outs, SQL: sql.String()}, nil
 }
