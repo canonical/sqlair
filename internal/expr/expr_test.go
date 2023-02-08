@@ -432,3 +432,95 @@ func (s *ExprSuite) TestPrepareInvalidAsteriskPlacement(c *C) {
 			Commentf("test %d failed:\nsql: '%s'\nstructs:'%+v'", i, test.sql, test.structs))
 	}
 }
+
+func (s *ExprSuite) TestValidComplete(c *C) {
+	testList := []struct {
+		input          string
+		prepareArgs    []any
+		completeArgs   []any
+		completeValues []any
+	}{{
+		"SELECT * AS &Address.* FROM t WHERE x = $Person.name",
+		[]any{Address{}, Person{}},
+		[]any{Person{Fullname: "Jimany Johnson"}},
+		[]any{"Jimany Johnson"},
+	}, {
+		"SELECT foo FROM t WHERE x = $Address.street, y = $Person.id",
+		[]any{Person{}, Address{}},
+		[]any{Person{ID: 666}, Address{Street: "Highway to Hell"}},
+		[]any{"Highway to Hell", 666},
+	}}
+	for _, test := range testList {
+		parser := expr.NewParser()
+		parsedExpr, err := parser.Parse(test.input)
+		if err != nil {
+			c.Fatal(err)
+		}
+
+		preparedExpr, err := parsedExpr.Prepare(test.prepareArgs...)
+		if err != nil {
+			c.Fatal(err)
+		}
+
+		inputVals, err := preparedExpr.Complete(test.completeArgs...)
+		if err != nil {
+			c.Fatal(err)
+		}
+
+		c.Assert(inputVals, DeepEquals, test.completeValues)
+	}
+}
+
+func (s *ExprSuite) TestCompleteMissingParameter(c *C) {
+	sql := "SELECT street FROM t WHERE x = $Address.street, y = $Person.name"
+	parser := expr.NewParser()
+	parsedExpr, err := parser.Parse(sql)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	preparedExpr, err := parsedExpr.Prepare(Address{}, Person{})
+	if err != nil {
+		c.Fatal(err)
+	}
+	_, err = preparedExpr.Complete(Address{Street: "Dead end road"})
+	c.Assert(err, ErrorMatches, `type Person not passed as a parameter`)
+}
+
+func (s *ExprSuite) TestCompleteNilType(c *C) {
+	sql := "SELECT street FROM t WHERE x = $Address.street, y = $Person.name"
+	parser := expr.NewParser()
+	parsedExpr, err := parser.Parse(sql)
+	if err != nil {
+		c.Fatal(err)
+	}
+	preparedExpr, err := parsedExpr.Prepare(Address{}, Person{})
+	if err != nil {
+		c.Fatal(err)
+	}
+	_, err = preparedExpr.Complete(nil, Person{Fullname: "Monty Bingles"})
+	c.Assert(err, ErrorMatches, "nil parameter")
+}
+
+func (s *ExprSuite) TestCompleteDifferentType(c *C) {
+	sql := "SELECT street FROM t WHERE y = $Person.name"
+	outerP := Person{}
+	//type Person struct{}
+	type Person struct {
+		ID         int    `db:"id"`
+		Fullname   string `db:"name"`
+		PostalCode int    `db:"address_id"`
+	}
+	shadowedP := Person{}
+	parser := expr.NewParser()
+	parsedExpr, err := parser.Parse(sql)
+	if err != nil {
+		c.Fatal(err)
+	}
+	preparedExpr, err := parsedExpr.Prepare(outerP)
+	if err != nil {
+		c.Fatal(err)
+	}
+	_, err = preparedExpr.Complete(shadowedP)
+	c.Assert(err, ErrorMatches, `type Person not passed as a parameter`)
+}
