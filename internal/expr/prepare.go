@@ -94,12 +94,7 @@ func nParams(start int, num int) string {
 	return s.String()
 }
 
-// prepareInput first checks the types mentioned in the expression are known, it
-// then checks the expression is valid and generates the SQL to print in place
-// of it.
-// As well as the SQL string it also returns a list of fullNames containing the
-// type and tag of each input parameter. These are used in the complete stage to
-// extract the arguments from the relevent structs.
+// prepareInput generates an SQL snippit and associated input locations for the given input part.
 func prepareInput(ti typeNameToInfo, p *inputPart, n int) (string, []inputLocation, error) {
 
 	var inLocs = make([]inputLocation, 0)
