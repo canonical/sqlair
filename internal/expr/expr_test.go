@@ -415,17 +415,21 @@ func FuzzParser(f *testing.F) {
 
 func (s *ExprSuite) TestPrepareMismatchedStructName(c *C) {
 	testList := []struct {
-		sql     string
-		structs []any
+		sql      string
+		structs  []any
+		errorstr string
 	}{{
-		sql:     "SELECT street FROM t WHERE x = $Address.street",
-		structs: []any{Person{ID: 1}},
+		sql:      "SELECT street FROM t WHERE x = $Address.street",
+		structs:  []any{Person{ID: 1}},
+		errorstr: "cannot prepare expression: type Address unknown, have: Person",
 	}, {
-		sql:     "SELECT street AS &Address.street FROM t",
-		structs: []any{},
+		sql:      "SELECT street AS &Address.street FROM t",
+		structs:  []any{},
+		errorstr: "cannot prepare expression: type Address unknown, have: ",
 	}, {
-		sql:     "SELECT street AS &Address.id FROM t",
-		structs: []any{Person{ID: 1}},
+		sql:      "SELECT street AS &Address.id FROM t",
+		structs:  []any{Person{ID: 1}},
+		errorstr: "cannot prepare expression: type Address unknown, have: Person",
 	}}
 
 	for i, test := range testList {
@@ -435,7 +439,7 @@ func (s *ExprSuite) TestPrepareMismatchedStructName(c *C) {
 			c.Fatal(err)
 		}
 		_, err = parsedExpr.Prepare(test.structs...)
-		c.Assert(err, ErrorMatches, `cannot prepare expression: type [a-zA-Z_\.0-9]+ unknown, have: .*`,
+		c.Assert(err, ErrorMatches, test.errorstr,
 			Commentf("test %d failed:\nsql: '%s'\nstructs: '%+v'", i, test.sql, test.structs))
 	}
 
@@ -443,17 +447,21 @@ func (s *ExprSuite) TestPrepareMismatchedStructName(c *C) {
 
 func (s *ExprSuite) TestPrepareMissingTag(c *C) {
 	testList := []struct {
-		sql     string
-		structs []any
+		sql      string
+		structs  []any
+		errorstr string
 	}{{
-		sql:     "SELECT street FROM t WHERE x = $Address.number",
-		structs: []any{Address{ID: 1}},
+		sql:      "SELECT street FROM t WHERE x = $Address.number",
+		structs:  []any{Address{ID: 1}},
+		errorstr: `cannot prepare expression: type Address has no "number" db tag`,
 	}, {
-		sql:     "SELECT (street, road) AS &Address.* FROM t",
-		structs: []any{Address{ID: 1}},
+		sql:      "SELECT (street, road) AS &Address.* FROM t",
+		structs:  []any{Address{ID: 1}},
+		errorstr: `cannot prepare expression: type Address has no "road" db tag`,
 	}, {
-		sql:     "SELECT &Address.road FROM t",
-		structs: []any{Address{ID: 1}},
+		sql:      "SELECT &Address.road FROM t",
+		structs:  []any{Address{ID: 1}},
+		errorstr: `cannot prepare expression: type Address has no "road" db tag`,
 	}}
 
 	for i, test := range testList {
@@ -463,7 +471,7 @@ func (s *ExprSuite) TestPrepareMissingTag(c *C) {
 			c.Fatal(err)
 		}
 		_, err = parsedExpr.Prepare(test.structs...)
-		c.Assert(err, ErrorMatches, `cannot prepare expression: type [a-zA-Z_\.0-9]+ has no "[a-zA-Z_\.0-9]+" db tag`,
+		c.Assert(err, ErrorMatches, test.errorstr,
 			Commentf("test %d failed:\nsql: '%s'\nstructs:'%+v'", i, test.sql, test.structs))
 
 	}
@@ -471,17 +479,21 @@ func (s *ExprSuite) TestPrepareMissingTag(c *C) {
 
 func (s *ExprSuite) TestPrepareInvalidAsteriskPlacement(c *C) {
 	testList := []struct {
-		sql     string
-		structs []any
+		sql      string
+		structs  []any
+		errorstr string
 	}{{
-		sql:     "SELECT (&Person.*, &Person.*) FROM t",
-		structs: []any{Address{}, Person{}},
+		sql:      "SELECT (&Person.*, &Person.*) FROM t",
+		structs:  []any{Address{}, Person{}},
+		errorstr: "cannot prepare expression: invalid asterisk in output expression: Output[[] [Person.* Person.*]]",
 	}, {
-		sql:     "SELECT (p.*, t.*) AS &Address.* FROM t",
-		structs: []any{Address{}},
+		sql:      "SELECT (p.*, t.*) AS &Address.* FROM t",
+		structs:  []any{Address{}},
+		errorstr: "cannot prepare expression: invalid asterisk in output expression: Output[[p.* t.*] [Address.*]]",
 	}, {
-		sql:     "SELECT p.* AS &Address.street FROM t",
-		structs: []any{Address{}},
+		sql:      "SELECT p.* AS &Address.street FROM t",
+		structs:  []any{Address{}},
+		errorstr: "cannot prepare expression: invalid asterisk in output expression: Output[[p.*] [Address.street]]",
 	}}
 
 	for i, test := range testList {
@@ -491,24 +503,28 @@ func (s *ExprSuite) TestPrepareInvalidAsteriskPlacement(c *C) {
 			c.Fatal(err)
 		}
 		_, err = parsedExpr.Prepare(test.structs...)
-		c.Assert(err, ErrorMatches, "cannot prepare expression: invalid asterisk in output expression: .*",
+		c.Assert(err.Error(), Equals, test.errorstr,
 			Commentf("test %d failed:\nsql: '%s'\nstructs:'%+v'", i, test.sql, test.structs))
 	}
 }
 
 func (s *ExprSuite) TestPrepareAsteriskMix(c *C) {
 	testList := []struct {
-		sql     string
-		structs []any
+		sql      string
+		structs  []any
+		errorstr string
 	}{{
-		sql:     "SELECT (&Address.*, &Address.id) FROM t",
-		structs: []any{Address{}, Person{}},
+		sql:      "SELECT (&Address.*, &Address.id) FROM t",
+		structs:  []any{Address{}, Person{}},
+		errorstr: "cannot prepare expression: invalid asterisk in output expression: Output[[] [Address.* Address.id]]",
 	}, {
-		sql:     "SELECT (p.*, t.name) AS &Address.* FROM t",
-		structs: []any{Address{}},
+		sql:      "SELECT (p.*, t.name) AS &Address.* FROM t",
+		structs:  []any{Address{}},
+		errorstr: "cannot prepare expression: invalid asterisk in output expression: Output[[p.* t.name] [Address.*]]",
 	}, {
-		sql:     "SELECT (name, p.*) AS (&Person.id, &Person.*) FROM t",
-		structs: []any{Address{}, Person{}},
+		sql:      "SELECT (name, p.*) AS (&Person.id, &Person.*) FROM t",
+		structs:  []any{Address{}, Person{}},
+		errorstr: "cannot prepare expression: invalid asterisk in output expression: Output[[name p.*] [Person.id Person.*]]",
 	}}
 
 	for i, test := range testList {
@@ -518,21 +534,24 @@ func (s *ExprSuite) TestPrepareAsteriskMix(c *C) {
 			c.Fatal(err)
 		}
 		_, err = parsedExpr.Prepare(test.structs...)
-		c.Assert(err, ErrorMatches, "cannot prepare expression: invalid asterisk in output expression: .*",
+		c.Assert(err.Error(), Equals, test.errorstr,
 			Commentf("test %d failed:\nsql: '%s'\nstructs:'%+v'", i, test.sql, test.structs))
 	}
 }
 
 func (s *ExprSuite) TestPrepareMismatchedColsAndTargs(c *C) {
 	testList := []struct {
-		sql     string
-		structs []any
+		sql      string
+		structs  []any
+		errorstr string
 	}{{
-		sql:     "SELECT (p.name, t.id) AS &Address.id FROM t",
-		structs: []any{Address{}},
+		sql:      "SELECT (p.name, t.id) AS &Address.id FROM t",
+		structs:  []any{Address{}},
+		errorstr: "cannot prepare expression: mismatched number of cols and targets in output expression: Output[[p.name t.id] [Address.id]]",
 	}, {
-		sql:     "SELECT p.name AS (&Address.district, &Address.street) FROM t",
-		structs: []any{Address{}},
+		sql:      "SELECT p.name AS (&Address.district, &Address.street) FROM t",
+		structs:  []any{Address{}},
+		errorstr: "cannot prepare expression: mismatched number of cols and targets in output expression: Output[[p.name] [Address.district Address.street]]",
 	}}
 
 	for i, test := range testList {
@@ -542,7 +561,7 @@ func (s *ExprSuite) TestPrepareMismatchedColsAndTargs(c *C) {
 			c.Fatal(err)
 		}
 		_, err = parsedExpr.Prepare(test.structs...)
-		c.Assert(err, ErrorMatches, "cannot prepare expression: mismatched number of cols and targets in output expression: .*",
+		c.Assert(err.Error(), Equals, test.errorstr,
 			Commentf("test %d failed:\nsql: '%s'\nstructs:'%+v'", i, test.sql, test.structs))
 	}
 }

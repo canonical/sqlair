@@ -79,14 +79,14 @@ func prepareInput(ti typeNameToInfo, p *inputPart) error {
 	return nil
 }
 
-// prepareOutput checks that the output expressions are correspond to a known types.
+// prepareOutput checks that the output expressions correspond to known types.
 // It then checks they are formatted correctly and finally generates the columns for the query.
 func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []outputDest, error) {
 
 	var outCols = make([]fullName, 0)
 	var outDests = make([]outputDest, 0)
 
-	// Check the asterisk are well formed (if present).
+	// Check the asterisks are well formed (if present).
 	if err := starCheckOutput(p); err != nil {
 		return nil, nil, err
 	}
@@ -109,7 +109,6 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []outputDest, 
 			// For a none star expression we record output destinations here.
 			// For a star expression we fill out the destinations as we generate the columns.
 			outDests = append(outDests, outputDest{info.structType, f})
-
 		}
 	}
 
