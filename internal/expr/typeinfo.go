@@ -115,3 +115,17 @@ func parseTag(tag string) (string, bool, error) {
 
 	return name, omitEmpty, nil
 }
+
+// fieldValue gets a concrete value from a struct.
+// It makes sure the struct has been seen at the prepare stage
+func fieldValue(value any, p fullName) (any, error) {
+	v := reflect.ValueOf(value)
+
+	// If the type was used during the prepare stage, then it must be in the cache.
+	// If the name of the type matches the input part then it must be the same one.
+	if inf, ok := cache[v.Type()]; ok {
+		f, _ := inf.tagToField[p.name]
+		return v.Field(f.index).Interface(), nil
+	}
+	return nil, fmt.Errorf(`type %s not the same as type seen before`, p.prefix)
+}
