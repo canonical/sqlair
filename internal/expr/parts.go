@@ -1,6 +1,8 @@
 package expr
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // A QueryPart represents a section of a parsed SQL statement, which forms
 // a complete query when processed together with its surrounding parts, in

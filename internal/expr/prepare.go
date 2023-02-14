@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"reflect"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -12,17 +11,15 @@ import (
 
 // PreparedExpr contains an SQL expression that is ready for execution.
 type PreparedExpr struct {
-	inputs []inputLocation
-	SQL    string
+	outputs []outputDest
+	inputs  []*inputPart
+	SQL     string
 }
 
-// We get the position in the query from its position in inputLocation
-type inputLocation struct {
-	inputType reflect.Type
-	field     field
+type outputDest struct {
+	structType reflect.Type
+	field      field
 }
-
-type typeNameToInfo map[string]*info
 
 // getKeys returns the keys of a string map in a deterministic order.
 func getKeys[T any](m map[string]T) []string {
@@ -36,11 +33,43 @@ func getKeys[T any](m map[string]T) []string {
 	return keys
 }
 
-// starCheckInput checks that the input is well formed with regard to
+func starCount(fns []fullName) int {
+	s := 0
+	for _, fn := range fns {
+		if fn.name == "*" {
+			s++
+		}
+	}
+	return s
+}
+
+// starCheckOutput checks that the statement is well formed with regard to
 // asterisks and the number of sources and targets.
-func starCheckInput(p *inputPart) error {
-	numColumns := len(p.cols)
+func starCheckOutput(p *outputPart) error {
 	numSources := len(p.source)
+	numTargets := len(p.target)
+
+	targetStars := starCount(p.target)
+	sourceStars := starCount(p.source)
+	starTarget := targetStars == 1
+	starSource := sourceStars == 1
+
+	if targetStars > 1 || sourceStars > 1 || (sourceStars == 1 && targetStars == 0) ||
+		(starTarget && numTargets > 1) || (starSource && numSources > 1) {
+		return fmt.Errorf("invalid asterisk in output expression: %s", p)
+	}
+	if !starTarget && (numSources > 0 && (numTargets != numSources)) {
+		return fmt.Errorf("mismatched number of cols and targets in output expression: %s", p)
+	}
+	return nil
+}
+
+// prepareInput checks that the input expression corresponds to a known type.
+func prepareInput(ti typeNameToInfo, p *inputPart) error {
+	info, ok := ti[p.source.prefix]
+	if !ok {
+		return fmt.Errorf(`type %s unknown, have: %s`, p.source.prefix, strings.Join(getKeys(ti), ", "))
+	}
 
 	sourceStars := starCount(p.source)
 	columnStars := 0
@@ -62,115 +91,98 @@ func starCheckInput(p *inputPart) error {
 	return nil
 }
 
-func starCount(fns []fullName) int {
-	s := 0
-	for _, fn := range fns {
-		if fn.name == "*" {
-			s++
-		}
+// prepareOutput checks that the output expressions correspond to known types.
+// It then checks they are formatted correctly and finally generates the columns for the query.
+func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []outputDest, error) {
+
+	var outCols = make([]fullName, 0)
+	var outDests = make([]outputDest, 0)
+
+	// Check the asterisks are well formed (if present).
+	if err := starCheckOutput(p); err != nil {
+		return nil, nil, err
 	}
-	return s
-}
 
-func printList(xs []string) string {
-	var s bytes.Buffer
-	s.WriteString("(")
-	s.WriteString(strings.Join(xs, ", "))
-	s.WriteString(")")
-	return s.String()
-}
+	// Check target struct type and its tags are valid.
+	var info *info
+	var ok bool
 
-func nParams(start int, num int) string {
-	var s bytes.Buffer
-	s.WriteString("(")
-	for i := start; i < start+num; i++ {
-		s.WriteString("@_sqlair_")
-		s.WriteString(strconv.Itoa(i))
-		if i < start+num-1 {
-			s.WriteString(", ")
-		}
-	}
-	s.WriteString(")")
-	return s.String()
-}
-
-// prepareInput generates an SQL snippit and associated input locations for the given input part.
-func prepareInput(ti typeNameToInfo, p *inputPart, n int) (string, []inputLocation, error) {
-
-	var inLocs = make([]inputLocation, 0)
-
-	// Check the input structs and their tags are valid.
-	for _, s := range p.source {
-		info, ok := ti[s.prefix]
+	for _, t := range p.target {
+		info, ok = ti[t.prefix]
 		if !ok {
-			return "", nil, fmt.Errorf(`type %s unknown, have: %s`, s.prefix, strings.Join(getKeys(ti), ", "))
+			return nil, nil, fmt.Errorf(`type %s unknown, have: %s`, t.prefix, strings.Join(getKeys(ti), ", "))
 		}
-		if s.name != "*" {
-			f, ok := info.tagToField[s.name]
+
+		if t.name != "*" {
+			f, ok := info.tagToField[t.name]
 			if !ok {
-				return "", nil, fmt.Errorf(`type %s has no %q db tag`, info.structType.Name(), s.name)
+				return nil, nil, fmt.Errorf(`type %s has no %q db tag`, info.structType.Name(), t.name)
 			}
 			// For a none star expression we record output destinations here.
 			// For a star expression we fill out the destinations as we generate the columns.
-			inLocs = append(inLocs, inputLocation{info.structType, f})
+			outDests = append(outDests, outputDest{info.structType, f})
 		}
 	}
 
-	if err := starCheckInput(p); err != nil {
-		return "", nil, err
-	}
+	// Generate columns to inject into SQL query.
 
-	// Case 1: A simple standalone input expression e.g. "$P.name".
-	if len(p.cols) == 0 {
-		if len(p.source) != 1 {
-			return "", nil, fmt.Errorf("internal error: cannot group standalone input expressions")
-		}
-		return "@_sqlair_" + strconv.Itoa(n), inLocs, nil
-	}
+	// Case 1: Star target cases e.g. "...&P.*".
+	if p.target[0].name == "*" {
+		info, _ := ti[p.target[0].prefix]
 
-	// Case 2: A VALUES expression (probably inside an INSERT)
-	cols := []string{}
-	// Case 2.1: An Asterisk VALUES expression e.g. "... VALUES $P.*".
-	if p.source[0].name == "*" {
-		info, _ := ti[p.source[0].prefix]
-		// Case 2.1.1 e.g. "(*) VALUES ($P.*)"
-		if p.cols[0] == "*" {
-			for _, tag := range getKeys(info.tagToField) {
-				cols = append(cols, tag)
-				inLocs = append(inLocs, inputLocation{info.structType, info.tagToField[tag]})
+		// Case 1.1: Single star i.e. "t.* AS &P.*" or "&P.*"
+		if len(p.source) == 0 || p.source[0].name == "*" {
+			pref := ""
+
+			// Prepend table name. E.g. "t" in "t.* AS &P.*".
+			if len(p.source) > 0 {
+				pref = p.source[0].prefix
 			}
-			return printList(cols) + " VALUES " + nParams(n, len(cols)), inLocs, nil
-		}
-		// Case 2.1.2 e.g. "(col1, col2, col3) VALUES ($P.*)"
-		for _, col := range p.cols {
-			f, ok := info.tagToField[col]
-			if !ok {
-				return "", nil, fmt.Errorf(`type %s has no %q db tag`, info.structType.Name(), col)
+
+			// getKeys also sorts the keys.
+			tags := getKeys(info.tagToField)
+			for _, tag := range tags {
+				outCols = append(outCols, fullName{pref, tag})
+				outDests = append(outDests, outputDest{info.structType, info.tagToField[tag]})
 			}
-			cols = append(cols, col)
-			inLocs = append(inLocs, inputLocation{info.structType, f})
+			return outCols, outDests, nil
 		}
-		return printList(cols) + " VALUES " + nParams(n, len(cols)), inLocs, nil
+
+		// Case 1.2: Explicit columns e.g. "(col1, t.col2) AS &P.*".
+		if len(p.source) > 0 {
+			for _, c := range p.source {
+				f, ok := info.tagToField[c.name]
+				if !ok {
+					return nil, nil, fmt.Errorf(`type %s has no %q db tag`, info.structType.Name(), c.name)
+				}
+				outCols = append(outCols, c)
+				outDests = append(outDests, outputDest{info.structType, f})
+			}
+			return outCols, outDests, nil
+		}
 	}
-	// Case 2.2: explicit for both e.g. (mycol1, mycol2) VALUES ($Person.col1, $Address.col1)
-	cols = p.cols
-	return printList(p.cols) + " VALUES " + nParams(n, len(p.cols)), inLocs, nil
+
+	// Case 2: None star target cases e.g. "...(&P.name, &P.id)".
+
+	// Case 2.1: Explicit columns e.g. "name_1 AS P.name".
+	if len(p.source) > 0 {
+		for _, c := range p.source {
+			outCols = append(outCols, c)
+		}
+		return outCols, outDests, nil
+	}
+
+	// Case 2.2: No columns e.g. "(&P.name, &P.id)".
+	for _, t := range p.target {
+		outCols = append(outCols, fullName{name: t.name})
+	}
+	return outCols, outDests, nil
 }
 
-var alphaNum = regexp.MustCompile("[^a-zA-Z0-9]+")
+type typeNameToInfo map[string]*info
 
-// fullNameToNamedParam converts a to a named paramter.
-// The includeAt flag will prefix the name with an "@" symbol.
-// e.g. fullName{"Prefix", "name") =>  "@Prefixname".
-func fullNameToNamedParam(fn fullName, includeAt bool) string {
-	str := ""
-	if includeAt {
-		str = "@"
-	}
-	return str + alphaNum.ReplaceAllString(fn.String(), "")
-}
-
-// Prepare takes a parsed expression and all the Go objects mentioned in it.
+// Prepare takes a parsed expression and struct instantiations of all the types
+// mentioned in it.
 // The IO parts of the statement are checked for validity against the types
 // and expanded if necessary.
 func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
@@ -192,11 +204,12 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	}
 
 	var sql bytes.Buffer
+	var n int
+
+	var outputDests = make([]outputDest, 0)
+	var ins = make([]*inputPart, 0)
+
 	// Check and expand each query part.
-
-	inputs := []inputLocation{}
-	n := 0
-
 	for _, part := range pe.queryParts {
 		switch p := part.(type) {
 		case *inputPart:
@@ -208,6 +221,21 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			sql.WriteString(s)
 			inputs = append(inputs, ins...)
 		case *outputPart:
+			outCols, outDests, err := prepareOutput(ti, p)
+			if err != nil {
+				return nil, err
+			}
+			for i, c := range outCols {
+				sql.WriteString(c.String())
+				sql.WriteString(" AS _sqlair_")
+				sql.WriteString(strconv.Itoa(n))
+				if i != len(outCols)-1 {
+					sql.WriteString(", ")
+				}
+				n++
+			}
+			outputDests = append(outputDests, outDests...)
+
 		case *bypassPart:
 			sql.WriteString(p.chunk)
 		default:
@@ -215,5 +243,5 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 		}
 	}
 
-	return &PreparedExpr{inputs: inputs, SQL: sql.String()}, nil
+	return &PreparedExpr{inputs: ins, outputs: outputDests, SQL: sql.String()}, nil
 }
