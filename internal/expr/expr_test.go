@@ -484,15 +484,15 @@ func (s *ExprSuite) TestPrepareInvalidAsteriskPlacement(c *C) {
 	}{{
 		sql:      "SELECT (&Person.*, &Person.*) FROM t",
 		structs:  []any{Address{}, Person{}},
-		errorstr: "cannot prepare expression: invalid asterisk in output expression: Output[[] [Person.* Person.*]]",
+		errorstr: "cannot prepare expression: invalid asterisk in output expression: (&Person.*, &Person.*)",
 	}, {
 		sql:      "SELECT (p.*, t.*) AS &Address.* FROM t",
 		structs:  []any{Address{}},
-		errorstr: "cannot prepare expression: invalid asterisk in output expression: Output[[p.* t.*] [Address.*]]",
+		errorstr: "cannot prepare expression: invalid asterisk in output expression: (p.*, t.*) AS &Address.*",
 	}, {
 		sql:      "SELECT p.* AS &Address.street FROM t",
 		structs:  []any{Address{}},
-		errorstr: "cannot prepare expression: invalid asterisk in output expression: Output[[p.*] [Address.street]]",
+		errorstr: "cannot prepare expression: invalid asterisk in output expression: p.* AS &Address.street",
 	}}
 
 	for i, test := range testList {
@@ -515,15 +515,15 @@ func (s *ExprSuite) TestPrepareAsteriskMix(c *C) {
 	}{{
 		sql:      "SELECT (&Address.*, &Address.id) FROM t",
 		structs:  []any{Address{}, Person{}},
-		errorstr: "cannot prepare expression: invalid asterisk in output expression: Output[[] [Address.* Address.id]]",
+		errorstr: "cannot prepare expression: invalid asterisk in output expression: (&Address.*, &Address.id)",
 	}, {
 		sql:      "SELECT (p.*, t.name) AS &Address.* FROM t",
 		structs:  []any{Address{}},
-		errorstr: "cannot prepare expression: invalid asterisk in output expression: Output[[p.* t.name] [Address.*]]",
+		errorstr: "cannot prepare expression: invalid asterisk in output expression: (p.*, t.name) AS &Address.*",
 	}, {
 		sql:      "SELECT (name, p.*) AS (&Person.id, &Person.*) FROM t",
 		structs:  []any{Address{}, Person{}},
-		errorstr: "cannot prepare expression: invalid asterisk in output expression: Output[[name p.*] [Person.id Person.*]]",
+		errorstr: "cannot prepare expression: invalid asterisk in output expression: (name, p.*) AS (&Person.id, &Person.*)",
 	}}
 
 	for i, test := range testList {
@@ -546,11 +546,11 @@ func (s *ExprSuite) TestPrepareMismatchedColsAndTargs(c *C) {
 	}{{
 		sql:      "SELECT (p.name, t.id) AS &Address.id FROM t",
 		structs:  []any{Address{}},
-		errorstr: "cannot prepare expression: mismatched number of cols and targets in output expression: Output[[p.name t.id] [Address.id]]",
+		errorstr: "cannot prepare expression: mismatched number of cols and targets in output expression: (p.name, t.id) AS &Address.id",
 	}, {
 		sql:      "SELECT p.name AS (&Address.district, &Address.street) FROM t",
 		structs:  []any{Address{}},
-		errorstr: "cannot prepare expression: mismatched number of cols and targets in output expression: Output[[p.name] [Address.district Address.street]]",
+		errorstr: "cannot prepare expression: mismatched number of cols and targets in output expression: p.name AS (&Address.district, &Address.street)",
 	}}
 
 	for i, test := range testList {

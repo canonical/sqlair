@@ -50,10 +50,10 @@ func starCheckOutput(p *outputPart) error {
 
 	if targetStars > 1 || sourceStars > 1 || (sourceStars == 1 && targetStars == 0) ||
 		(starTarget && numTargets > 1) || (starSource && numSources > 1) {
-		return fmt.Errorf("invalid asterisk in output expression: %s", p)
+		return fmt.Errorf("invalid asterisk in output expression: %s", p.raw)
 	}
 	if !starTarget && (numSources > 0 && (numTargets != numSources)) {
-		return fmt.Errorf("mismatched number of cols and targets in output expression: %s", p)
+		return fmt.Errorf("mismatched number of cols and targets in output expression: %s", p.raw)
 	}
 	return nil
 }
