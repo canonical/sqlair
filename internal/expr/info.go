@@ -6,7 +6,7 @@ import (
 
 // Field represents a single field from a struct type.
 type field struct {
-	fieldType reflect.Type
+	typ reflect.Type
 
 	// Name is the name of the struct field.
 	name string
@@ -21,11 +21,11 @@ type field struct {
 
 // Info represents reflected information about a struct type.
 type info struct {
-	structType reflect.Type
+	typ reflect.Type
+
+	// Ordered list of tags
+	tags []string
 
 	// Relate tag names to fields.
 	tagToField map[string]field
-
-	// Relate field names to tags.
-	fieldToTag map[string]string
 }

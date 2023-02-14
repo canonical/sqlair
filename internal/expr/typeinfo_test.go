@@ -27,8 +27,8 @@ func (e *ExprInternalSuite) TestReflectStruct(c *C) {
 	info, err := typeInfo(s)
 	c.Assert(err, IsNil)
 
-	c.Assert(reflect.Struct, Equals, info.structType.Kind())
-	c.Assert(reflect.TypeOf(s), Equals, info.structType)
+	c.Assert(reflect.Struct, Equals, info.typ.Kind())
+	c.Assert(reflect.TypeOf(s), Equals, info.typ)
 
 	c.Assert(info.tagToField, HasLen, 2)
 

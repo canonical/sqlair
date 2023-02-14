@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -49,9 +50,9 @@ func generate(value reflect.Value) (*info, error) {
 
 	info := info{
 		tagToField: make(map[string]field),
-		fieldToTag: make(map[string]string),
-		structType: value.Type(),
+		typ:        value.Type(),
 	}
+	tags := []string{}
 
 	typ := value.Type()
 	for i := 0; i < typ.NumField(); i++ {
@@ -65,14 +66,17 @@ func generate(value reflect.Value) (*info, error) {
 		if err != nil {
 			return nil, fmt.Errorf("cannot parse tag for field %s.%s: %s", typ.Name(), f.Name, err)
 		}
+		tags = append(tags, tag)
 		info.tagToField[tag] = field{
 			name:      f.Name,
 			index:     i,
 			omitEmpty: omitEmpty,
-			fieldType: reflect.TypeOf(value.Field(i).Interface()),
+			typ:       reflect.TypeOf(value.Field(i).Interface()),
 		}
-		info.fieldToTag[f.Name] = tag
 	}
+
+	sort.Strings(tags)
+	info.tags = tags
 
 	return &info, nil
 }
