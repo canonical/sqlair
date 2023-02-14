@@ -3,6 +3,7 @@ package expr
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -50,10 +51,10 @@ func starCheckOutput(p *outputPart) error {
 
 	if targetStars > 1 || sourceStars > 1 || (sourceStars == 1 && targetStars == 0) ||
 		(starTarget && numTargets > 1) || (starSource && numSources > 1) {
-		return fmt.Errorf("invalid asterisk in output expression: %s", p)
+		return fmt.Errorf("invalid asterisk in output expression: %s", p.raw)
 	}
 	if !starTarget && (numSources > 0 && (numTargets != numSources)) {
-		return fmt.Errorf("mismatched number of cols and targets in output expression: %s", p)
+		return fmt.Errorf("mismatched number of cols and targets in output expression: %s", p.raw)
 	}
 	return nil
 }
@@ -62,11 +63,16 @@ func starCheckOutput(p *outputPart) error {
 func prepareInput(ti typeNameToInfo, p *inputPart) (field, error) {
 	info, ok := ti[p.source.prefix]
 	if !ok {
-		return field{}, fmt.Errorf(`type %s unknown, have: %s`, p.source.prefix, strings.Join(getKeys(ti), ", "))
+		ts := getKeys(ti)
+		if len(ts) == 0 {
+			return field{}, fmt.Errorf(`type %q not found, no types were passed to Prepare`, p.source.prefix)
+		} else {
+			return field{}, fmt.Errorf(`type %q not found, have: %s`, p.source.prefix, strings.Join(ts, ", "))
+		}
 	}
 	f, ok := info.tagToField[p.source.name]
 	if !ok {
-		return field{}, fmt.Errorf(`type %s has no %q db tag`, info.typ.Name(), p.source.name)
+		return field{}, fmt.Errorf(`type %q has no %q db tag`, info.typ.Name(), p.source.name)
 	}
 
 	return f, nil
@@ -91,13 +97,13 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []field, error
 	for _, t := range p.target {
 		info, ok = ti[t.prefix]
 		if !ok {
-			return nil, nil, fmt.Errorf(`type %s unknown, have: %s`, t.prefix, strings.Join(getKeys(ti), ", "))
+			return nil, nil, fmt.Errorf(`type %q not found, have: %s`, t.prefix, strings.Join(getKeys(ti), ", "))
 		}
 
 		if t.name != "*" {
 			f, ok := info.tagToField[t.name]
 			if !ok {
-				return nil, nil, fmt.Errorf(`type %s has no %q db tag`, info.typ.Name(), t.name)
+				return nil, nil, fmt.Errorf(`type %q has no %q db tag`, info.typ.Name(), t.name)
 			}
 			// For a none star expression we record output destinations here.
 			// For a star expression we fill out the destinations as we generate the columns.
@@ -132,7 +138,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []field, error
 			for _, c := range p.source {
 				f, ok := info.tagToField[c.name]
 				if !ok {
-					return nil, nil, fmt.Errorf(`type %s has no %q db tag`, info.typ.Name(), c.name)
+					return nil, nil, fmt.Errorf(`type %q has no %q db tag`, info.typ.Name(), c.name)
 				}
 				outCols = append(outCols, c)
 				fields = append(fields, f)
@@ -175,6 +181,12 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 
 	// Generate and save reflection info.
 	for _, arg := range args {
+		if k := reflect.TypeOf(arg).Kind(); k != reflect.Struct {
+			if k == reflect.Pointer {
+				return nil, fmt.Errorf("need struct, got pointer. Prepare takes structs by value as they are only used for their type information")
+			}
+			return nil, fmt.Errorf("need struct, got %s", k) // TODO Add test for this
+		}
 		info, err := typeInfo(arg)
 		if err != nil {
 			return nil, err

@@ -35,7 +35,7 @@ type District struct {
 type M map[string]any
 
 var tests = []struct {
-	summery          string
+	summary          string
 	input            string
 	expectedParsed   string
 	prepareArgs      []any
@@ -293,111 +293,80 @@ var tests = []struct {
 
 func (s *ExprSuite) TestExpr(c *C) {
 	parser := expr.NewParser()
-	for i, test := range tests {
+	for i, t := range tests {
 		var (
 			parsedExpr   *expr.ParsedExpr
 			preparedExpr *expr.PreparedExpr
 			err          error
 		)
-		if parsedExpr, err = parser.Parse(test.input); err != nil {
-			c.Errorf("test %d failed (Parse):\nsummery: %s\ninput: %s\nexpected: %s\nerr: %s\n", i, test.summery, test.input, test.expectedParsed, err)
-		} else if parsedExpr.String() != test.expectedParsed {
-			c.Errorf("test %d failed (Parse):\nsummery: %s\ninput: %s\nexpected: %s\nactual:   %s\n", i, test.summery, test.input, test.expectedParsed, parsedExpr.String())
+		if parsedExpr, err = parser.Parse(t.input); err != nil {
+			c.Errorf("test %d failed (Parse):\nsummary: %s\ninput: %s\nexpected: %s\nerr: %s\n", i, t.summary, t.input, t.expectedParsed, err)
+		} else if parsedExpr.String() != t.expectedParsed {
+			c.Errorf("test %d failed (Parse):\nsummary: %s\ninput: %s\nexpected: %s\nactual:   %s\n", i, t.summary, t.input, t.expectedParsed, parsedExpr.String())
 		}
 
-		if preparedExpr, err = parsedExpr.Prepare(test.prepareArgs...); err != nil {
-			c.Errorf("test %d failed (Prepare):\nsummery: %s\ninput: %s\nexpected: %s\nerr: %s\n", i, test.summery, test.input, test.expectedPrepared, err)
+		if preparedExpr, err = parsedExpr.Prepare(t.prepareArgs...); err != nil {
+			c.Errorf("test %d failed (Prepare):\nsummary: %s\ninput: %s\nexpected: %s\nerr: %s\n", i, t.summary, t.input, t.expectedPrepared, err)
 		} else {
-			c.Check(expr.PreparedSQL(preparedExpr), Equals, test.expectedPrepared,
-				Commentf("test %d failed (Prepare):\nsummery: %s\ninput: %s\nexpected: %s\nactual:   %s\n", i, test.summery, test.input, test.expectedPrepared, expr.PreparedSQL(preparedExpr)))
+			c.Check(expr.PreparedSQL(preparedExpr), Equals, t.expectedPrepared,
+				Commentf("test %d failed (Prepare):\nsummary: %s\ninput: %s\nexpected: %s\nactual:   %s\n", i, t.summary, t.input, t.expectedPrepared, expr.PreparedSQL(preparedExpr)))
 		}
-	}
-}
-
-func (s *ExprSuite) TestValidInput(c *C) {
-	testList := []struct {
-		input          string
-		expectedParsed string
-	}{{
-		"SELECT street FROM t WHERE x = $Address.street",
-		"[Bypass[SELECT street FROM t WHERE x = ] Input[Address.street]]",
-	}, {
-		"SELECT p FROM t WHERE x = $Person.id",
-		"[Bypass[SELECT p FROM t WHERE x = ] Input[Person.id]]",
-	}}
-	for _, test := range testList {
-		parser := expr.NewParser()
-		parsedExpr, err := parser.Parse(test.input)
-		if err != nil {
-			c.Fatal(err)
-		}
-		c.Assert(parsedExpr.String(), Equals, test.expectedParsed)
 	}
 }
 
 // We return a proper error when we find an unbound string literal
 func (s *ExprSuite) TestParseUnfinishedStringLiteral(c *C) {
-	testList := []string{
-		"SELECT foo FROM t WHERE x = 'dddd",
-		"SELECT foo FROM t WHERE x = \"dddd",
-		"SELECT foo FROM t WHERE x = \"dddd'",
-		"SELECT foo FROM t WHERE x = '''",
-		`SELECT foo FROM t WHERE x = '''""`,
-		`SELECT foo FROM t WHERE x = """`,
-		`SELECT foo FROM t WHERE x = """''`,
-		`SELECT foo FROM t WHERE x = 'O'Donnell'`,
-	}
+	tests := []struct {
+		query       string
+		expectedErr string
+	}{{
+		query:       "SELECT foo FROM t WHERE x = 'dddd",
+		expectedErr: "cannot parse expression: column 28: missing closing quote in string literal",
+	}, {
+		query:       "SELECT foo FROM t WHERE x = \"dddd",
+		expectedErr: "cannot parse expression: column 28: missing closing quote in string literal",
+	}, {
+		query:       "SELECT foo FROM t WHERE x = \"dddd'",
+		expectedErr: "cannot parse expression: column 28: missing closing quote in string literal",
+	}, {
+		query:       "SELECT foo FROM t WHERE x = '''",
+		expectedErr: "cannot parse expression: column 28: missing closing quote in string literal",
+	}, {
+		query:       `SELECT foo FROM t WHERE x = '''""`,
+		expectedErr: "cannot parse expression: column 28: missing closing quote in string literal",
+	}, {
+		query:       `SELECT foo FROM t WHERE x = """`,
+		expectedErr: "cannot parse expression: column 28: missing closing quote in string literal",
+	}, {
+		query:       `SELECT foo FROM t WHERE x = """''`,
+		expectedErr: "cannot parse expression: column 28: missing closing quote in string literal",
+	}, {
+		query:       `SELECT foo FROM t WHERE x = 'O'Donnell'`,
+		expectedErr: "cannot parse expression: column 38: missing closing quote in string literal",
+	}, {
+		query:       "SELECT foo FROM t WHERE x = $Address.",
+		expectedErr: `cannot parse expression: column 37: invalid identifier following "Address"`,
+	}, {
+		query:       "SELECT foo FROM t WHERE x = $Address.&d",
+		expectedErr: `cannot parse expression: column 37: invalid identifier following "Address"`,
+	}, {
+		query:       "SELECT foo FROM t WHERE x = $Address.-",
+		expectedErr: `cannot parse expression: column 37: invalid identifier following "Address"`,
+	}, {
+		query:       "SELECT foo FROM t WHERE x = $Address",
+		expectedErr: `cannot parse expression: column 36: type "Address" not qualified. Types can be qualified with a db tag or an asterisk. e.g. &P.col1 or &P.*`,
+	}}
 
-	for _, sql := range testList {
+	for _, t := range tests {
 		parser := expr.NewParser()
-		expr, err := parser.Parse(sql)
-		c.Assert(err, ErrorMatches, "cannot parse expression: column [0-9]+: missing closing quote in string literal")
+		expr, err := parser.Parse(t.query)
+		if err != nil {
+			c.Assert(err.Error(), Equals, t.expectedErr)
+		} else {
+			c.Errorf("Expecting %q, got nil", t.expectedErr)
+		}
 		c.Assert(expr, IsNil)
 	}
-}
-
-// Properly parsing empty string literal
-func (s *ExprSuite) TestParseEmptyStringLiteral(c *C) {
-	sql := "SELECT foo FROM t WHERE x = ''"
-	parser := expr.NewParser()
-	_, err := parser.Parse(sql)
-	c.Assert(err, IsNil)
-}
-
-// Detect well escaped string literals
-func (s *ExprSuite) TestWellEscaped(c *C) {
-	sqls := []string{
-		`SELECT foo FROM t WHERE x = 'O''Donnell'`,
-		`SELECT foo FROM t WHERE x = "O""Donnell"`,
-		`SELECT foo FROM t WHERE x = 'O''Do''nnell'`,
-		`SELECT foo FROM t WHERE x = "O""Do""nnell"`,
-	}
-
-	for _, sql := range sqls {
-		parser := expr.NewParser()
-		_, err := parser.Parse(sql)
-		c.Assert(err, IsNil)
-	}
-}
-
-func (s *ExprSuite) TestParseBadFormatInput(c *C) {
-	testList := []string{
-		"SELECT foo FROM t WHERE x = $Address.",
-		"SELECT foo FROM t WHERE x = $Address.&d",
-		"SELECT foo FROM t WHERE x = $Address.-",
-	}
-
-	for _, sql := range testList {
-		parser := expr.NewParser()
-		expr, err := parser.Parse(sql)
-		c.Assert(err, ErrorMatches, "cannot parse expression: column [0-9]+: invalid identifier")
-		c.Assert(expr, IsNil)
-	}
-
-	sql := "SELECT foo FROM t WHERE x = $Address"
-	parser := expr.NewParser()
-	_, err := parser.Parse(sql)
-	c.Assert(err, ErrorMatches, "cannot parse expression: column [0-9]+: type not qualified")
 }
 
 func FuzzParser(f *testing.F) {
@@ -412,161 +381,99 @@ func FuzzParser(f *testing.F) {
 	})
 }
 
-func (s *ExprSuite) TestPrepareMismatchedStructName(c *C) {
-	testList := []struct {
-		sql      string
-		structs  []any
-		errorstr string
-	}{{
-		sql:      "SELECT street FROM t WHERE x = $Address.street",
-		structs:  []any{Person{ID: 1}},
-		errorstr: "cannot prepare expression: type Address unknown, have: Person",
-	}, {
-		sql:      "SELECT street AS &Address.street FROM t",
-		structs:  []any{},
-		errorstr: "cannot prepare expression: type Address unknown, have: ",
-	}, {
-		sql:      "SELECT street AS &Address.id FROM t",
-		structs:  []any{Person{ID: 1}},
-		errorstr: "cannot prepare expression: type Address unknown, have: Person",
-	}}
-
-	for i, test := range testList {
-		parser := expr.NewParser()
-		parsedExpr, err := parser.Parse(test.sql)
-		if err != nil {
-			c.Fatal(err)
-		}
-		_, err = parsedExpr.Prepare(test.structs...)
-		c.Assert(err, ErrorMatches, test.errorstr,
-			Commentf("test %d failed:\nsql: '%s'\nstructs: '%+v'", i, test.sql, test.structs))
-	}
-
-}
-
-func (s *ExprSuite) TestPrepareMissingTag(c *C) {
-	testList := []struct {
-		sql      string
-		structs  []any
-		errorstr string
-	}{{
-		sql:      "SELECT street FROM t WHERE x = $Address.number",
-		structs:  []any{Address{ID: 1}},
-		errorstr: `cannot prepare expression: type Address has no "number" db tag`,
-	}, {
-		sql:      "SELECT (street, road) AS &Address.* FROM t",
-		structs:  []any{Address{ID: 1}},
-		errorstr: `cannot prepare expression: type Address has no "road" db tag`,
-	}, {
-		sql:      "SELECT &Address.road FROM t",
-		structs:  []any{Address{ID: 1}},
-		errorstr: `cannot prepare expression: type Address has no "road" db tag`,
-	}}
-
-	for i, test := range testList {
-		parser := expr.NewParser()
-		parsedExpr, err := parser.Parse(test.sql)
-		if err != nil {
-			c.Fatal(err)
-		}
-		_, err = parsedExpr.Prepare(test.structs...)
-		c.Assert(err, ErrorMatches, test.errorstr,
-			Commentf("test %d failed:\nsql: '%s'\nstructs:'%+v'", i, test.sql, test.structs))
-
-	}
-}
-
-func (s *ExprSuite) TestPrepareInvalidAsteriskPlacement(c *C) {
-	testList := []struct {
-		sql      string
-		structs  []any
-		errorstr string
-	}{{
-		sql:      "SELECT (&Person.*, &Person.*) FROM t",
-		structs:  []any{Address{}, Person{}},
-		errorstr: "cannot prepare expression: invalid asterisk in output expression: Output[[] [Person.* Person.*]]",
-	}, {
-		sql:      "SELECT (p.*, t.*) AS &Address.* FROM t",
-		structs:  []any{Address{}},
-		errorstr: "cannot prepare expression: invalid asterisk in output expression: Output[[p.* t.*] [Address.*]]",
-	}, {
-		sql:      "SELECT p.* AS &Address.street FROM t",
-		structs:  []any{Address{}},
-		errorstr: "cannot prepare expression: invalid asterisk in output expression: Output[[p.*] [Address.street]]",
-	}}
-
-	for i, test := range testList {
-		parser := expr.NewParser()
-		parsedExpr, err := parser.Parse(test.sql)
-		if err != nil {
-			c.Fatal(err)
-		}
-		_, err = parsedExpr.Prepare(test.structs...)
-		c.Assert(err.Error(), Equals, test.errorstr,
-			Commentf("test %d failed:\nsql: '%s'\nstructs:'%+v'", i, test.sql, test.structs))
-	}
-}
-
-func (s *ExprSuite) TestPrepareAsteriskMix(c *C) {
-	testList := []struct {
-		sql      string
-		structs  []any
-		errorstr string
-	}{{
-		sql:      "SELECT (&Address.*, &Address.id) FROM t",
-		structs:  []any{Address{}, Person{}},
-		errorstr: "cannot prepare expression: invalid asterisk in output expression: Output[[] [Address.* Address.id]]",
-	}, {
-		sql:      "SELECT (p.*, t.name) AS &Address.* FROM t",
-		structs:  []any{Address{}},
-		errorstr: "cannot prepare expression: invalid asterisk in output expression: Output[[p.* t.name] [Address.*]]",
-	}, {
-		sql:      "SELECT (name, p.*) AS (&Person.id, &Person.*) FROM t",
-		structs:  []any{Address{}, Person{}},
-		errorstr: "cannot prepare expression: invalid asterisk in output expression: Output[[name p.*] [Person.id Person.*]]",
-	}}
-
-	for i, test := range testList {
-		parser := expr.NewParser()
-		parsedExpr, err := parser.Parse(test.sql)
-		if err != nil {
-			c.Fatal(err)
-		}
-		_, err = parsedExpr.Prepare(test.structs...)
-		c.Assert(err.Error(), Equals, test.errorstr,
-			Commentf("test %d failed:\nsql: '%s'\nstructs:'%+v'", i, test.sql, test.structs))
-	}
-}
-
-func (s *ExprSuite) TestPrepareMismatchedColsAndTargs(c *C) {
-	testList := []struct {
+func (s *ExprSuite) TestPrepareErrors(c *C) {
+	tests := []struct {
 		sql      string
 		structs  []any
 		errorstr string
 	}{{
 		sql:      "SELECT (p.name, t.id) AS &Address.id FROM t",
 		structs:  []any{Address{}},
-		errorstr: "cannot prepare expression: mismatched number of cols and targets in output expression: Output[[p.name t.id] [Address.id]]",
+		errorstr: "cannot prepare expression: mismatched number of cols and targets in output expression: (p.name, t.id) AS &Address.id",
 	}, {
 		sql:      "SELECT p.name AS (&Address.district, &Address.street) FROM t",
 		structs:  []any{Address{}},
-		errorstr: "cannot prepare expression: mismatched number of cols and targets in output expression: Output[[p.name] [Address.district Address.street]]",
+		errorstr: "cannot prepare expression: mismatched number of cols and targets in output expression: p.name AS (&Address.district, &Address.street)",
+	}, {
+		sql:      "SELECT (&Address.*, &Address.id) FROM t",
+		structs:  []any{Address{}, Person{}},
+		errorstr: "cannot prepare expression: invalid asterisk in output expression: (&Address.*, &Address.id)",
+	}, {
+		sql:      "SELECT (p.*, t.name) AS &Address.* FROM t",
+		structs:  []any{Address{}},
+		errorstr: "cannot prepare expression: invalid asterisk in output expression: (p.*, t.name) AS &Address.*",
+	}, {
+		sql:      "SELECT (name, p.*) AS (&Person.id, &Person.*) FROM t",
+		structs:  []any{Address{}, Person{}},
+		errorstr: "cannot prepare expression: invalid asterisk in output expression: (name, p.*) AS (&Person.id, &Person.*)",
+	}, {
+		sql:      "SELECT (&Person.*, &Person.*) FROM t",
+		structs:  []any{Address{}, Person{}},
+		errorstr: "cannot prepare expression: invalid asterisk in output expression: (&Person.*, &Person.*)",
+	}, {
+		sql:      "SELECT (p.*, t.*) AS &Address.* FROM t",
+		structs:  []any{Address{}},
+		errorstr: "cannot prepare expression: invalid asterisk in output expression: (p.*, t.*) AS &Address.*",
+	}, {
+		sql:      "SELECT p.* AS &Address.street FROM t",
+		structs:  []any{Address{}},
+		errorstr: "cannot prepare expression: invalid asterisk in output expression: p.* AS &Address.street",
+	}, {
+		sql:      "SELECT street FROM t WHERE x = $Address.number",
+		structs:  []any{Address{}},
+		errorstr: `cannot prepare expression: type "Address" has no "number" db tag`,
+	}, {
+		sql:      "SELECT (street, road) AS &Address.* FROM t",
+		structs:  []any{Address{}},
+		errorstr: `cannot prepare expression: type "Address" has no "road" db tag`,
+	}, {
+		sql:      "SELECT &Address.road FROM t",
+		structs:  []any{Address{}},
+		errorstr: `cannot prepare expression: type "Address" has no "road" db tag`,
+	}, {
+		sql:      "SELECT street FROM t WHERE x = $Address.street",
+		structs:  []any{Person{}},
+		errorstr: `cannot prepare expression: type "Address" not found, have: Person`,
+	}, {
+		sql:      "SELECT street AS &Address.street FROM t",
+		structs:  []any{},
+		errorstr: `cannot prepare expression: type "Address" not found, have: `,
+	}, {
+		sql:      "SELECT street AS &Address.id FROM t",
+		structs:  []any{Person{}},
+		errorstr: `cannot prepare expression: type "Address" not found, have: Person`,
+	}, {
+		sql:      "SELECT * AS &Person.* FROM t",
+		structs:  []any{[]any{Person{}}},
+		errorstr: `cannot prepare expression: need struct, got slice`,
+	}, {
+		sql:      "SELECT * AS &Person.* FROM t",
+		structs:  []any{&Person{}},
+		errorstr: `cannot prepare expression: need struct, got pointer. Prepare takes structs by value as they are only used for their type information`,
+	}, {
+		sql:      "SELECT * AS &Person.* FROM t",
+		structs:  []any{map[string]any{}},
+		errorstr: `cannot prepare expression: need struct, got map`,
 	}}
 
-	for i, test := range testList {
+	for i, test := range tests {
 		parser := expr.NewParser()
 		parsedExpr, err := parser.Parse(test.sql)
 		if err != nil {
 			c.Fatal(err)
 		}
 		_, err = parsedExpr.Prepare(test.structs...)
-		c.Assert(err.Error(), Equals, test.errorstr,
-			Commentf("test %d failed:\nsql: '%s'\nstructs:'%+v'", i, test.sql, test.structs))
+		if err != nil {
+			c.Assert(err.Error(), Equals, test.errorstr,
+				Commentf("test %d failed:\nsql: %q\nstructs:'%+v'", i, test.sql, test.structs))
+		} else {
+			c.Errorf("test %d failed:\nexpected err: %q but got nil\nsql: %q\nstructs:'%+v'", i, test.errorstr, test.sql, test.structs)
+		}
 	}
 }
 
 func (s *ExprSuite) TestValidComplete(c *C) {
-	testList := []struct {
+	tests := []struct {
 		sql            string
 		prepareArgs    []any
 		completeArgs   []any
@@ -587,29 +494,29 @@ func (s *ExprSuite) TestValidComplete(c *C) {
 		[]any{&Person{ID: 666}, &Address{Street: "Highway to Hell"}},
 		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
 	}}
-	for _, test := range testList {
+	for _, t := range tests {
 		parser := expr.NewParser()
-		parsedExpr, err := parser.Parse(test.sql)
+		parsedExpr, err := parser.Parse(t.sql)
 		if err != nil {
 			c.Fatal(err)
 		}
 
-		preparedExpr, err := parsedExpr.Prepare(test.prepareArgs...)
+		preparedExpr, err := parsedExpr.Prepare(t.prepareArgs...)
 		if err != nil {
 			c.Fatal(err)
 		}
 
-		completedExpr, err := preparedExpr.Complete(test.completeArgs...)
+		completedExpr, err := preparedExpr.Complete(t.completeArgs...)
 		if err != nil {
 			c.Fatal(err)
 		}
 
-		c.Assert(expr.CompletedArgs(completedExpr), DeepEquals, test.completeValues)
+		c.Assert(expr.CompletedArgs(completedExpr), DeepEquals, t.completeValues)
 	}
 }
 
 func (s *ExprSuite) TestCompleteError(c *C) {
-	testList := []struct {
+	tests := []struct {
 		sql          string
 		prepareArgs  []any
 		completeArgs []any
@@ -618,12 +525,12 @@ func (s *ExprSuite) TestCompleteError(c *C) {
 		sql:          "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs:  []any{Address{}, Person{}},
 		completeArgs: []any{Address{Street: "Dead end road"}},
-		err:          "invalid input parameter: type Person not found, have: Address",
+		err:          `invalid input parameter: type "Person" not found, have: Address`,
 	}, {
 		sql:          "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs:  []any{Address{}, Person{}},
 		completeArgs: []any{nil, Person{Fullname: "Monty Bingles"}},
-		err:          "invalid input parameter: need valid struct, got nil",
+		err:          "invalid input parameter: need struct, got nil",
 	}, {
 		sql:          "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs:  []any{Address{}},
@@ -634,6 +541,11 @@ func (s *ExprSuite) TestCompleteError(c *C) {
 		prepareArgs:  []any{Address{}},
 		completeArgs: []any{map[string]any{}},
 		err:          "invalid input parameter: need struct, got map",
+	}, {
+		sql:          "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
+		prepareArgs:  []any{Address{}, Person{}},
+		completeArgs: []any{},
+		err:          `invalid input parameter: type "Address" not found, no input structs were found`,
 	}}
 
 	outerP := Person{}
@@ -645,7 +557,7 @@ func (s *ExprSuite) TestCompleteError(c *C) {
 	}
 	shadowedP := Person{}
 
-	testListShadowed := []struct {
+	testsShadowed := []struct {
 		sql          string
 		prepareArgs  []any
 		completeArgs []any
@@ -657,9 +569,9 @@ func (s *ExprSuite) TestCompleteError(c *C) {
 		err:          "invalid input parameter: type expr_test.Person not found, have expr_test.Person",
 	}}
 
-	testList = append(testList, testListShadowed...)
+	tests = append(tests, testsShadowed...)
 
-	for i, t := range testList {
+	for i, t := range tests {
 		parser := expr.NewParser()
 		parsedExpr, err := parser.Parse(t.sql)
 		if err != nil {

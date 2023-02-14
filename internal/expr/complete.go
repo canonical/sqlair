@@ -37,7 +37,7 @@ func (pe *PreparedExpr) Complete(args ...any) (ce *CompletedExpr, err error) {
 	var typeNames []string
 	for _, arg := range args {
 		if arg == nil {
-			return nil, fmt.Errorf("need valid struct, got nil")
+			return nil, fmt.Errorf("need struct, got nil")
 		}
 		v := reflect.ValueOf(arg)
 		v = reflect.Indirect(v)
@@ -57,10 +57,8 @@ func (pe *PreparedExpr) Complete(args ...any) (ce *CompletedExpr, err error) {
 					return nil, fmt.Errorf("type %s not found, have %s", in.structType.String(), t.String())
 				}
 			}
-
 			return nil, fmt.Errorf("%s not referenced in query", t.Name())
 		}
-
 	}
 
 	// Query parameteres.
@@ -69,7 +67,11 @@ func (pe *PreparedExpr) Complete(args ...any) (ce *CompletedExpr, err error) {
 	for i, in := range pe.inputs {
 		v, ok := typeValue[in.structType]
 		if !ok {
-			return nil, fmt.Errorf(`type %s not found, have: %s`, in.structType.Name(), strings.Join(typeNames, ", "))
+			if len(typeNames) == 0 {
+				return nil, fmt.Errorf(`type %q not found, no input structs were found`, in.structType.Name())
+			} else {
+				return nil, fmt.Errorf(`type %q not found, have: %s`, in.structType.Name(), strings.Join(typeNames, ", "))
+			}
 		}
 		named := sql.Named("sqlair_"+strconv.Itoa(i), v.FieldByIndex(in.index).Interface())
 		qargs = append(qargs, named)
