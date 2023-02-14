@@ -4,12 +4,23 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 )
 
 var cacheMutex sync.RWMutex
 var cache = make(map[reflect.Type]*info)
+
+func typeInfoFromCache(t reflect.Type) (*info, error) {
+	cacheMutex.RLock()
+	info, found := cache[t]
+	cacheMutex.RUnlock()
+	if found {
+		return info, nil
+	}
+	return nil, fmt.Errorf("type %s not seen before", t.Name())
+}
 
 // Reflect will return the info of a given type,
 // generating and caching as required.
@@ -49,9 +60,9 @@ func generate(value reflect.Value) (*info, error) {
 
 	info := info{
 		tagToField: make(map[string]field),
-		fieldToTag: make(map[string]string),
 		structType: value.Type(),
 	}
+	tags := []string{}
 
 	typ := value.Type()
 	for i := 0; i < typ.NumField(); i++ {
@@ -65,14 +76,18 @@ func generate(value reflect.Value) (*info, error) {
 		if err != nil {
 			return nil, fmt.Errorf("cannot parse tag for field %s.%s: %s", typ.Name(), f.Name, err)
 		}
+		tags = append(tags, tag)
 		info.tagToField[tag] = field{
 			name:      f.Name,
 			index:     i,
 			omitEmpty: omitEmpty,
 			fieldType: reflect.TypeOf(value.Field(i).Interface()),
 		}
-		info.fieldToTag[f.Name] = tag
+
 	}
+
+	sort.Strings(tags)
+	info.tags = tags
 
 	return &info, nil
 }

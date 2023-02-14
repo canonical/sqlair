@@ -1,8 +1,10 @@
 package expr
 
 import (
+	"database/sql"
 	"fmt"
 	"reflect"
+	"strconv"
 )
 
 // Complete gathers the query arguments that are specified in inputParts from
@@ -20,12 +22,13 @@ func (pe *PreparedExpr) Complete(args ...any) ([]any, error) {
 	// Query parameteres.
 	qargs := []any{}
 
-	for _, in := range pe.inputs {
-		v, ok := tv[in.inputType]
+	for i, in := range pe.inputs {
+		v, ok := tv[in.typ]
 		if !ok {
-			return nil, fmt.Errorf(`type %s not passed as a parameter`, in.inputType.Name())
+			return nil, fmt.Errorf(`type %s not passed as a parameter`, in.typ.Name())
 		}
-		qargs = append(qargs, v.Field(in.field.index).Interface())
+		named := sql.Named("sqlair_"+strconv.Itoa(i), v.Field(in.field.index).Interface())
+		qargs = append(qargs, named)
 	}
 
 	return qargs, nil

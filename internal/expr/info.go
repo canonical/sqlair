@@ -23,9 +23,9 @@ type field struct {
 type info struct {
 	structType reflect.Type
 
+	// Ordered list of tags
+	tags []string
+
 	// Relate tag names to fields.
 	tagToField map[string]field
-
-	// Relate field names to tags.
-	fieldToTag map[string]string
 }

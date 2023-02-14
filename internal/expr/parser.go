@@ -303,13 +303,11 @@ func (p *Parser) skipName() bool {
 //		The construct was not the one we are looking for
 
 // parseIdentifierAsterisk parses a name made up of only nameBytes or of a single asterisk.
-// It returns an error (always nil) so it may be used with parseList.
-func (p *Parser) parseIdentifierAsterisk() (string, bool, error) {
+func (p *Parser) parseIdentifierAsterisk() (string, bool) {
 	if p.skipByte('*') {
-		return "*", true, nil
+		return "*", true
 	}
-	str, ok := p.parseIdentifier()
-	return str, ok, nil
+	return p.parseIdentifier()
 }
 
 // parseIdentifier parses a name made up of only nameBytes. On success it
@@ -329,9 +327,9 @@ func (p *Parser) parseIdentifier() (string, bool) {
 func (p *Parser) parseColumn() (fullName, bool, error) {
 	cp := p.save()
 
-	if id, ok, _ := p.parseIdentifierAsterisk(); ok {
+	if id, ok := p.parseIdentifierAsterisk(); ok {
 		if id != "*" && p.skipByte('.') {
-			if idCol, ok, _ := p.parseIdentifierAsterisk(); ok {
+			if idCol, ok := p.parseIdentifierAsterisk(); ok {
 				return fullName{prefix: id, name: idCol}, true, nil
 			}
 		} else {
@@ -362,7 +360,7 @@ func (p *Parser) parseGoFullName() (fullName, bool, error) {
 			return fullName{}, false, fmt.Errorf("column %d: type not qualified", p.pos)
 		}
 
-		idField, ok, _ := p.parseIdentifierAsterisk()
+		idField, ok := p.parseIdentifierAsterisk()
 		if !ok {
 			return fullName{}, false, fmt.Errorf("column %d: invalid identifier", p.pos)
 		}
@@ -432,11 +430,14 @@ func (p *Parser) parseSingletonOrList(parseFn func(p *Parser) (fullName, bool, e
 // be followed by a name byte.
 func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 
+	// TODO: Would this be better as a simple parseTarget, since the output
+	// expressions are effectivly independent here and it would be nicer to
+	// return an error message for each?
 	// Case 1: There are no columns e.g. "&Person.*".
-	if targets, ok, err := p.parseSingletonOrList((*Parser).parseTarget); err != nil {
+	if target, ok, err := p.parseTarget(); err != nil {
 		return nil, false, err
 	} else if ok {
-		return &outputPart{[]fullName{}, targets}, true, nil
+		return &outputPart{[]fullName{}, []fullName{target}}, true, nil
 	}
 
 	cp := p.save()
@@ -473,10 +474,10 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 	if source, ok, err := p.parseInputType(); err != nil {
 		return nil, false, err
 	} else if ok {
-		return &inputPart{[]string{}, []fullName{source}}, true, nil
+		return &inputPart{[]fullName{}, []fullName{source}}, true, nil
 	}
 
-	if cols, ok, _ := parseList(p, (*Parser).parseIdentifierAsterisk); ok {
+	if cols, ok, _ := parseList(p, (*Parser).parseColumn); ok {
 		p.skipBlanks()
 		if p.skipString("VALUES") {
 			p.skipBlanks()

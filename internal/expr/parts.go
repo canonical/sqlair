@@ -32,7 +32,7 @@ func (fn fullName) String() string {
 // inputPart represents a named parameter that will be sent to the database
 // while performing the query.
 type inputPart struct {
-	cols   []string
+	cols   []fullName
 	source []fullName
 }
 
