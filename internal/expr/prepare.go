@@ -36,46 +36,6 @@ func getKeys[T any](m map[string]T) []string {
 	return keys
 }
 
-type ioPart struct {
-	cols  []fullName
-	types []fullName
-	isOut bool
-}
-
-func (p *ioPart) raw() string {
-	var midWord string
-	var symb string
-	if p.isOut {
-		midWord = ") AS "
-		symb = "&"
-	} else {
-		midWord = ") VALUES "
-		symb = "$"
-	}
-	var b bytes.Buffer
-	if len(p.cols) > 0 {
-		b.WriteString("(")
-		for i, c := range p.cols {
-			b.WriteString(c.String())
-			if i < len(p.cols)-1 {
-				b.WriteString(", ")
-			}
-		}
-		b.WriteString(midWord)
-	}
-
-	b.WriteString("(")
-	for i, s := range p.types {
-		b.WriteString(symb)
-		b.WriteString(s.String())
-		if i < len(p.types)-1 {
-			b.WriteString(", ")
-		}
-	}
-	b.WriteString(")")
-	return b.String()
-}
-
 // printCols prints a bracketed, comma seperated list of fullNames.
 func printCols(cs []fullName) string {
 	var s bytes.Buffer
@@ -117,7 +77,7 @@ func starCount(fns []fullName) int {
 }
 
 // checkValid ensures that the expression is formatted correctly.
-func checkValid(p ioPart) error {
+func checkValid(p *ioPart) error {
 	numTypes := len(p.types)
 	numCols := len(p.cols)
 	starTypes := starCount(p.types)
@@ -132,11 +92,11 @@ func checkValid(p ioPart) error {
 	}
 
 	if (numCols > 1 && starCols > 0) || (!p.isOut && numCols == 0 && starTypes > 0) {
-		return fmt.Errorf("invalid asterisk in: %s", p.raw())
+		return fmt.Errorf("invalid asterisk in: %s", p.rawString)
 	}
 
 	if numCols > 0 && starCols == 0 && !((numTypes == 1 && starTypes == 1) || (starTypes == 0 && numTypes == numCols)) {
-		return fmt.Errorf("cannot match columns to types in: %s", p.raw())
+		return fmt.Errorf("cannot match columns to types in: %s", p.rawString)
 	}
 
 	return nil
@@ -149,20 +109,10 @@ type retBuilder struct {
 
 // prepareExpr checks that an input or output part is correctly formatted, that
 // it corrosponds to known types and then generates the columns to go in the query.
-func prepareExpr(ti typeNameToInfo, part queryPart) ([]fullName, []loc, error) {
+func prepareExpr(ti typeNameToInfo, p *ioPart) ([]fullName, []loc, error) {
 
 	var info *info
 	var ok bool
-
-	var io ioPart
-	switch p := part.(type) {
-	case *inputPart:
-		io = ioPart{cols: p.cols, types: p.source, isOut: false}
-	case *outputPart:
-		io = ioPart{cols: p.source, types: p.target, isOut: true}
-	case *bypassPart:
-		return nil, nil, fmt.Errorf("internal error: cannot prepare bypass part")
-	}
 
 	// res stores the list of columns to put in the query and their locations.
 	res := retBuilder{}
@@ -176,26 +126,26 @@ func prepareExpr(ti typeNameToInfo, part queryPart) ([]fullName, []loc, error) {
 
 		f, ok := info.tagToField[tag]
 		if !ok {
-			return fmt.Errorf(`type %s has no %q db tag`, info.structType.Name(), tag)
+			return fmt.Errorf(`type %s has no %q db tag`, info.typ.Name(), tag)
 		}
 		res.cols = append(res.cols, col)
-		res.locs = append(res.locs, loc{info.structType, f})
+		res.locs = append(res.locs, loc{info.typ, f})
 		return nil
 	}
 
 	// Check the expression is valid.
-	if err := checkValid(io); err != nil {
+	if err := checkValid(p); err != nil {
 		return nil, nil, err
 	}
 
 	// Generate columns to inject into SQL query.
 
 	// Case 0: A simple standalone input expression e.g. "$P.name".
-	if !io.isOut && len(io.cols) == 0 {
-		if len(io.types) != 1 {
+	if !p.isOut && len(p.cols) == 0 {
+		if len(p.types) != 1 {
 			return []fullName{fullName{}}, nil, fmt.Errorf("internal error: cannot group standalone input expressions")
 		}
-		if err := add(io.types[0].prefix, io.types[0].name, fullName{}); err != nil {
+		if err := add(p.types[0].prefix, p.types[0].name, fullName{}); err != nil {
 			return nil, nil, err
 		}
 		return res.cols, res.locs, nil
@@ -203,13 +153,13 @@ func prepareExpr(ti typeNameToInfo, part queryPart) ([]fullName, []loc, error) {
 
 	// Case 1: sqlair generates columns e.g. "* AS (&P.*, &A.id)" or "&P.*" or
 	// 		   "(*) VALUES ($P.*)".
-	if (io.isOut && len(io.cols) == 0) || (len(io.cols) == 1 && (io.cols[0].name == "*")) {
+	if (p.isOut && len(p.cols) == 0) || (len(p.cols) == 1 && (p.cols[0].name == "*")) {
 		pref := ""
 		// Prepend table name. E.g. the "t" in "t.* AS &P.*".
-		if len(io.cols) > 0 {
-			pref = io.cols[0].prefix
+		if len(p.cols) > 0 {
+			pref = p.cols[0].prefix
 		}
-		for _, t := range io.types {
+		for _, t := range p.types {
 			if t.name == "*" {
 				// Generate columns for Star types.
 				info, ok = ti[t.prefix]
@@ -233,9 +183,9 @@ func prepareExpr(ti typeNameToInfo, part queryPart) ([]fullName, []loc, error) {
 	// Case 2: Explicit columns with star e.g. "(name, id) AS (&P.*)" or
 	// 		   "(col1, col2) VALUES ($P.*)".
 	// There must only be a single type in this case.
-	if io.types[0].name == "*" {
-		for _, c := range io.cols {
-			if err := add(io.types[0].prefix, c.name, c); err != nil {
+	if p.types[0].name == "*" {
+		for _, c := range p.cols {
+			if err := add(p.types[0].prefix, c.name, c); err != nil {
 				return nil, nil, err
 			}
 		}
@@ -245,8 +195,8 @@ func prepareExpr(ti typeNameToInfo, part queryPart) ([]fullName, []loc, error) {
 	// Case 3: Explicit columns and targets e.g. "(col1, col2) AS (&P.name, &P.id)" or
 	// 		   "(col1, col2) VALUES ($P.name, $P.id)".
 	// The number of each must be equal here.
-	for i, c := range io.cols {
-		if err := add(io.types[i].prefix, io.types[i].name, c); err != nil {
+	for i, c := range p.cols {
+		if err := add(p.types[i].prefix, p.types[i].name, c); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -272,7 +222,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 		if err != nil {
 			return nil, err
 		}
-		ti[info.structType.Name()] = info
+		ti[info.typ.Name()] = info
 	}
 
 	var sql bytes.Buffer
@@ -287,36 +237,33 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	// Check and expand each query part.
 	for _, part := range pe.queryParts {
 		switch p := part.(type) {
-		case *inputPart:
+		case *ioPart:
 			cols, locs, err := prepareExpr(ti, p)
 			if err != nil {
 				return nil, err
 			}
-			if len(p.cols) == 0 {
-				sql.WriteString("@sqlair_" + strconv.Itoa(n))
-			} else {
-				sql.WriteString(printCols(cols))
-				sql.WriteString(" VALUES ")
-				sql.WriteString(nParams(n, len(cols)))
-			}
-			n += len(cols)
-			inputs = append(inputs, locs...)
-		case *outputPart:
-			cols, locs, err := prepareExpr(ti, p)
-			if err != nil {
-				return nil, err
-			}
-			for i, c := range cols {
-				sql.WriteString(c.String())
-				sql.WriteString(" AS _sqlair_")
-				sql.WriteString(strconv.Itoa(m))
-				if i != len(cols)-1 {
-					sql.WriteString(", ")
+			if p.isOut {
+				for i, c := range cols {
+					sql.WriteString(c.String())
+					sql.WriteString(" AS _sqlair_")
+					sql.WriteString(strconv.Itoa(m))
+					if i != len(cols)-1 {
+						sql.WriteString(", ")
+					}
+					m++
 				}
-				m++
+				outputs = append(outputs, locs...)
+			} else {
+				if len(p.cols) == 0 {
+					sql.WriteString("@sqlair_" + strconv.Itoa(n))
+				} else {
+					sql.WriteString(printCols(cols))
+					sql.WriteString(" VALUES ")
+					sql.WriteString(nParams(n, len(cols)))
+				}
+				n += len(cols)
+				inputs = append(inputs, locs...)
 			}
-			outputs = append(outputs, locs...)
-
 		case *bypassPart:
 			sql.WriteString(p.chunk)
 		default:

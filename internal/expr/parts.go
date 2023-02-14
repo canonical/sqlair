@@ -29,6 +29,23 @@ func (fn fullName) String() string {
 	return fn.prefix + "." + fn.name
 }
 
+type ioPart struct {
+	cols      []fullName
+	types     []fullName
+	rawString string
+	isOut     bool
+}
+
+func (p *ioPart) String() string {
+	if p.isOut {
+		return fmt.Sprintf("Output[%+v %+v]", p.cols, p.types)
+	} else {
+		return fmt.Sprintf("Input[%+v %+v]", p.cols, p.types)
+	}
+}
+
+func (p *ioPart) part() {}
+
 // inputPart represents a named parameter that will be sent to the database
 // while performing the query.
 type inputPart struct {

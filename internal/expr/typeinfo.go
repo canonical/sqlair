@@ -60,7 +60,7 @@ func generate(value reflect.Value) (*info, error) {
 
 	info := info{
 		tagToField: make(map[string]field),
-		structType: value.Type(),
+		typ:        value.Type(),
 	}
 	tags := []string{}
 
@@ -81,7 +81,7 @@ func generate(value reflect.Value) (*info, error) {
 			name:      f.Name,
 			index:     i,
 			omitEmpty: omitEmpty,
-			fieldType: reflect.TypeOf(value.Field(i).Interface()),
+			typ:       reflect.TypeOf(value.Field(i).Interface()),
 		}
 
 	}

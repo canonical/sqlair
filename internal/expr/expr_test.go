@@ -500,7 +500,7 @@ func (s *ExprSuite) TestInvalidPrepare(c *C) {
 	}, {
 		sql:      "SELECT (p.*, t.*) AS &Address.* FROM t",
 		structs:  []any{Address{}},
-		errorstr: "cannot prepare expression: invalid asterisk in: (p.*, t.*) AS (&Address.*)",
+		errorstr: "cannot prepare expression: invalid asterisk in: (p.*, t.*) AS &Address.*",
 	}, {
 		sql:      "INSERT INTO person (*, postalcode) VALUES ($Person.name, $Address.id)",
 		structs:  []any{Address{}, Person{}},
@@ -512,11 +512,11 @@ func (s *ExprSuite) TestInvalidPrepare(c *C) {
 	}, {
 		sql:      "SELECT street FROM t WHERE x = $Address.*",
 		structs:  []any{Address{}},
-		errorstr: "cannot prepare expression: invalid asterisk in: ($Address.*)",
+		errorstr: "cannot prepare expression: invalid asterisk in: $Address.*",
 	}, {
 		sql:      "SELECT (p.*, t.name) AS &Address.* FROM t",
 		structs:  []any{Address{}},
-		errorstr: "cannot prepare expression: invalid asterisk in: (p.*, t.name) AS (&Address.*)",
+		errorstr: "cannot prepare expression: invalid asterisk in: (p.*, t.name) AS &Address.*",
 	}, {
 		sql:      "SELECT (name, p.*) AS (&Person.id, &Person.*) FROM t",
 		structs:  []any{Address{}, Person{}},
@@ -532,11 +532,11 @@ func (s *ExprSuite) TestInvalidPrepare(c *C) {
 	}, {
 		sql:      "SELECT (p.name, t.id) AS &Address.id FROM t",
 		structs:  []any{Address{}},
-		errorstr: "cannot prepare expression: cannot match columns to types in: (p.name, t.id) AS (&Address.id)",
+		errorstr: "cannot prepare expression: cannot match columns to types in: (p.name, t.id) AS &Address.id",
 	}, {
 		sql:      "SELECT p.name AS (&Address.district, &Address.street) FROM t",
 		structs:  []any{Address{}},
-		errorstr: "cannot prepare expression: cannot match columns to types in: (p.name) AS (&Address.district, &Address.street)",
+		errorstr: "cannot prepare expression: cannot match columns to types in: p.name AS (&Address.district, &Address.street)",
 	}}
 
 	for i, test := range testList {
