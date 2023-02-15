@@ -1,6 +1,7 @@
 package expr_test
 
 import (
+	"database/sql"
 	"testing"
 
 	"github.com/canonical/sqlair/internal/expr"
@@ -565,6 +566,7 @@ func (s *ExprSuite) TestPrepareMismatchedColsAndTargs(c *C) {
 			Commentf("test %d failed:\nsql: '%s'\nstructs:'%+v'", i, test.sql, test.structs))
 	}
 }
+
 func (s *ExprSuite) TestValidComplete(c *C) {
 	testList := []struct {
 		input          string
@@ -575,12 +577,12 @@ func (s *ExprSuite) TestValidComplete(c *C) {
 		"SELECT * AS &Address.* FROM t WHERE x = $Person.name",
 		[]any{Address{}, Person{}},
 		[]any{Person{Fullname: "Jimany Johnson"}},
-		[]any{"Jimany Johnson"},
+		[]any{sql.Named("sqlair_0", "Jimany Johnson")},
 	}, {
 		"SELECT foo FROM t WHERE x = $Address.street, y = $Person.id",
 		[]any{Person{}, Address{}},
 		[]any{Person{ID: 666}, Address{Street: "Highway to Hell"}},
-		[]any{"Highway to Hell", 666},
+		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
 	}}
 	for _, test := range testList {
 		parser := expr.NewParser()
@@ -594,14 +596,13 @@ func (s *ExprSuite) TestValidComplete(c *C) {
 			c.Fatal(err)
 		}
 
-		args, err := preparedExpr.Complete(test.completeArgs...)
+		completedExpr, err := preparedExpr.Complete(test.completeArgs...)
 		if err != nil {
 			c.Fatal(err)
 		}
 
-		c.Assert(args, DeepEquals, test.completeValues)
+		c.Assert(completedExpr.Args, DeepEquals, test.completeValues)
 	}
-
 }
 
 func (s *ExprSuite) TestCompleteMissingParameter(c *C) {
@@ -655,5 +656,5 @@ func (s *ExprSuite) TestCompleteDifferentType(c *C) {
 		c.Fatal(err)
 	}
 	_, err = preparedExpr.Complete(shadowedP)
-	c.Assert(err, ErrorMatches, `type Person not the same as type seen before`)
+	c.Assert(err, ErrorMatches, `type Person not passed as a parameter`)
 }

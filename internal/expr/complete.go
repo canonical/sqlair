@@ -1,37 +1,41 @@
 package expr
 
 import (
+	"database/sql"
 	"fmt"
 	"reflect"
+	"strconv"
 )
 
-type typeNameToValue = map[string]any
+type CompletedExpr struct {
+	outputs []loc
+	SQL     string
+	Args    []any
+}
 
 // Complete gathers the query arguments that are specified in inputParts from
 // structs passed as parameters.
-func (pe *PreparedExpr) Complete(args ...any) ([]any, error) {
-	var tv = make(typeNameToValue)
+func (pe *PreparedExpr) Complete(args ...any) (*CompletedExpr, error) {
+	var tv = make(map[reflect.Type]reflect.Value)
 	for _, arg := range args {
-		if arg == (any)(nil) {
+		if arg == nil {
 			return nil, fmt.Errorf("nil parameter")
 		}
-		tv[reflect.TypeOf(arg).Name()] = arg
+		v := reflect.ValueOf(arg)
+		tv[v.Type()] = v
 	}
 
 	// Query parameteres.
 	qargs := []any{}
 
-	for _, p := range pe.inputs {
-		v, ok := tv[p.source.prefix]
+	for i, in := range pe.inputs {
+		v, ok := tv[in.typ]
 		if !ok {
-			return nil, fmt.Errorf(`type %s not passed as a parameter`, p.source.prefix)
+			return nil, fmt.Errorf(`type %s not passed as a parameter`, in.typ.Name())
 		}
-		qp, err := fieldValue(v, p.source)
-		if err != nil {
-			return nil, err
-		}
-		qargs = append(qargs, qp)
+		named := sql.Named("sqlair_"+strconv.Itoa(i), v.FieldByIndex(in.field.index).Interface())
+		qargs = append(qargs, named)
 	}
 
-	return qargs, nil
+	return &CompletedExpr{outputs: pe.outputs, SQL: pe.SQL, Args: qargs}, nil
 }
