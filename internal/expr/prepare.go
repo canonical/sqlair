@@ -73,7 +73,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) error {
 
 	if _, ok = info.tagToField[p.source.name]; !ok {
 		return fmt.Errorf(`type %s has no %q db tag`,
-			info.structType.Name(), p.source.name)
+			info.typ.Name(), p.source.name)
 	}
 
 	return nil
@@ -104,11 +104,11 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []outputDest, 
 		if t.name != "*" {
 			f, ok := info.tagToField[t.name]
 			if !ok {
-				return nil, nil, fmt.Errorf(`type %s has no %q db tag`, info.structType.Name(), t.name)
+				return nil, nil, fmt.Errorf(`type %s has no %q db tag`, info.typ.Name(), t.name)
 			}
 			// For a none star expression we record output destinations here.
 			// For a star expression we fill out the destinations as we generate the columns.
-			outDests = append(outDests, outputDest{info.structType, f})
+			outDests = append(outDests, outputDest{info.typ, f})
 		}
 	}
 
@@ -127,11 +127,9 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []outputDest, 
 				pref = p.source[0].prefix
 			}
 
-			// getKeys also sorts the keys.
-			tags := getKeys(info.tagToField)
-			for _, tag := range tags {
+			for _, tag := range info.tags {
 				outCols = append(outCols, fullName{pref, tag})
-				outDests = append(outDests, outputDest{info.structType, info.tagToField[tag]})
+				outDests = append(outDests, outputDest{info.typ, info.tagToField[tag]})
 			}
 			return outCols, outDests, nil
 		}
@@ -141,10 +139,10 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []outputDest, 
 			for _, c := range p.source {
 				f, ok := info.tagToField[c.name]
 				if !ok {
-					return nil, nil, fmt.Errorf(`type %s has no %q db tag`, info.structType.Name(), c.name)
+					return nil, nil, fmt.Errorf(`type %s has no %q db tag`, info.typ.Name(), c.name)
 				}
 				outCols = append(outCols, c)
-				outDests = append(outDests, outputDest{info.structType, f})
+				outDests = append(outDests, outputDest{info.typ, f})
 			}
 			return outCols, outDests, nil
 		}
@@ -188,7 +186,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 		if err != nil {
 			return nil, err
 		}
-		ti[info.structType.Name()] = info
+		ti[info.typ.Name()] = info
 	}
 
 	var sql bytes.Buffer
