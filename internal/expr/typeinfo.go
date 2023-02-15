@@ -19,22 +19,22 @@ func typeInfo(value any) (*info, error) {
 		return nil, fmt.Errorf("cannot reflect nil value")
 	}
 
-	v := reflect.ValueOf(value)
+	t := reflect.TypeOf(value)
 
 	cacheMutex.RLock()
-	info, found := cache[v.Type()]
+	info, found := cache[t]
 	cacheMutex.RUnlock()
 	if found {
 		return info, nil
 	}
 
-	info, err := generate(v)
+	info, err := generate(t)
 	if err != nil {
 		return nil, err
 	}
 
 	cacheMutex.Lock()
-	cache[v.Type()] = info
+	cache[t] = info
 	cacheMutex.Unlock()
 
 	return info, nil
@@ -42,36 +42,39 @@ func typeInfo(value any) (*info, error) {
 
 // generate produces and returns reflection information for the input
 // reflect.Value that is specifically required for SQLAir operation.
-func generate(value reflect.Value) (*info, error) {
+func generate(t reflect.Type) (*info, error) {
 	// Reflection information is only generated for structs.
-	if value.Kind() != reflect.Struct {
-		return nil, fmt.Errorf("internal error: attempted to obtain struct information for something that is not a struct: %s.", value.Type())
+	if t.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("internal error: attempted to obtain struct information for something that is not a struct: %s.", t)
 	}
 
 	info := info{
 		tagToField: make(map[string]field),
-		typ:        value.Type(),
+		typ:        t,
 	}
 	tags := []string{}
 
-	typ := value.Type()
-	for i := 0; i < typ.NumField(); i++ {
-		f := typ.Field(i)
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
 		// Fields without a "db" tag are outside of SQLAir's remit.
 		tag := f.Tag.Get("db")
 		if tag == "" {
 			continue
 		}
+		if !f.IsExported() {
+			return nil, fmt.Errorf("field %q of struct %s not exported", f.Name, t.Name())
+		}
+
 		tag, omitEmpty, err := parseTag(tag)
 		if err != nil {
-			return nil, fmt.Errorf("cannot parse tag for field %s.%s: %s", typ.Name(), f.Name, err)
+			return nil, fmt.Errorf("cannot parse tag for field %s.%s: %s", t.Name(), f.Name, err)
 		}
 		tags = append(tags, tag)
 		info.tagToField[tag] = field{
 			name:      f.Name,
-			index:     i,
+			index:     f.Index,
 			omitEmpty: omitEmpty,
-			typ:       reflect.TypeOf(value.Field(i).Interface()),
+			typ:       f.Type,
 		}
 	}
 

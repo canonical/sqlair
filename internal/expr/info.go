@@ -10,8 +10,8 @@ type field struct {
 
 	name string
 
-	// Index of this field in the structure.
-	index int
+	// index sequence for Type.FieldByIndex
+	index []int
 
 	// OmitEmpty is true when "omitempty" is
 	// a property of the field's "db" tag.
