@@ -4,11 +4,10 @@ import (
 	"reflect"
 )
 
-// Field represents a single field from a struct type.
+// field represents reflection information about a field from some struct type.
 type field struct {
 	typ reflect.Type
 
-	// Name is the name of the struct field.
 	name string
 
 	// Index of this field in the structure.
@@ -26,6 +25,5 @@ type info struct {
 	// Ordered list of tags
 	tags []string
 
-	// Relate tag names to fields.
 	tagToField map[string]field
 }
