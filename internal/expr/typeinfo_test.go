@@ -171,3 +171,24 @@ func (s *ExprInternalSuite) TestReflectValidTag(c *C) {
 		c.Assert(err, IsNil)
 	}
 }
+
+func (s *ExprInternalSuite) TestUnexportedField(c *C) {
+	var unexportedFields = []any{
+		struct {
+			ID    int64 `db:"id"`
+			unexp int64 `db:"unexp"`
+		}{99, 100},
+		struct {
+			unexp int64 `db:"unexp"`
+			ID    int64 `db:"id"`
+		}{99, 100},
+		struct {
+			unexp int64 `db:"unexp"`
+		}{100},
+	}
+
+	for _, value := range unexportedFields {
+		_, err := typeInfo(value)
+		c.Assert(err, ErrorMatches, `field "unexp" of struct  not exported`)
+	}
+}
