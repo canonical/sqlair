@@ -15,7 +15,13 @@ type CompletedExpr struct {
 
 // Complete gathers the query arguments that are specified in inputParts from
 // structs passed as parameters.
-func (pe *PreparedExpr) Complete(args ...any) (*CompletedExpr, error) {
+func (pe *PreparedExpr) Complete(args ...any) (ce *CompletedExpr, err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("parameter issue: %s", err)
+		}
+	}()
+
 	var tv = make(map[reflect.Type]reflect.Value)
 	for _, arg := range args {
 		if arg == nil {
