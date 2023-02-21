@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 )
 
 type CompletedExpr struct {
@@ -23,12 +24,14 @@ func (pe *PreparedExpr) Complete(args ...any) (ce *CompletedExpr, err error) {
 	}()
 
 	var tv = make(map[reflect.Type]reflect.Value)
+	var typeNames []string
 	for _, arg := range args {
 		if arg == nil {
 			return nil, fmt.Errorf("nil parameter")
 		}
 		v := reflect.ValueOf(arg)
 		tv[v.Type()] = v
+		typeNames = append(typeNames, v.Type().String())
 	}
 
 	// Query parameteres.
@@ -37,7 +40,7 @@ func (pe *PreparedExpr) Complete(args ...any) (ce *CompletedExpr, err error) {
 	for i, in := range pe.inputs {
 		v, ok := tv[in.typ]
 		if !ok {
-			return nil, fmt.Errorf(`type %s not passed as a parameter`, in.typ.Name())
+			return nil, fmt.Errorf(`type %s not found, have: %s`, in.typ.String(), strings.Join(typeNames, ", "))
 		}
 		named := sql.Named("sqlair_"+strconv.Itoa(i), v.FieldByIndex(in.field.index).Interface())
 		qargs = append(qargs, named)
