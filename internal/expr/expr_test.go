@@ -601,7 +601,7 @@ func (s *ExprSuite) TestValidComplete(c *C) {
 			c.Fatal(err)
 		}
 
-		c.Assert(CompletedArgs(completedExpr), DeepEquals, test.completeValues)
+		c.Assert(expr.CompletedArgs(completedExpr), DeepEquals, test.completeValues)
 	}
 }
 
@@ -618,7 +618,7 @@ func (s *ExprSuite) TestCompleteMissingParameter(c *C) {
 		c.Fatal(err)
 	}
 	_, err = preparedExpr.Complete(Address{Street: "Dead end road"})
-	c.Assert(err, ErrorMatches, `parameter issue: type Person not found, have: Address`)
+	c.Assert(err, ErrorMatches, `invalid input parameter: type Person not found, have: Address`)
 }
 
 func (s *ExprSuite) TestCompleteNilType(c *C) {
@@ -633,7 +633,7 @@ func (s *ExprSuite) TestCompleteNilType(c *C) {
 		c.Fatal(err)
 	}
 	_, err = preparedExpr.Complete(nil, Person{Fullname: "Monty Bingles"})
-	c.Assert(err, ErrorMatches, "parameter issue: nil parameter")
+	c.Assert(err, ErrorMatches, "invalid input parameter: need valid struct, got nil")
 }
 
 func (s *ExprSuite) TestCompleteDifferentType(c *C) {
@@ -656,5 +656,5 @@ func (s *ExprSuite) TestCompleteDifferentType(c *C) {
 		c.Fatal(err)
 	}
 	_, err = preparedExpr.Complete(shadowedP)
-	c.Assert(err, ErrorMatches, `parameter issue: type Person not found, have: Person`)
+	c.Assert(err, ErrorMatches, `invalid input parameter: type not found, have Person from package "github.com/canonical/sqlair/internal/expr_test" but need Person from package "github.com/canonical/sqlair/internal/expr_test"`)
 }
