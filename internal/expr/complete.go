@@ -14,7 +14,7 @@ type CompletedExpr struct {
 	Args    []any
 }
 
-// Complete gathers the query arguments that are specified in inputParts from
+// Complete gathers the arguments that are specified in the query input parts from
 // structs passed as parameters.
 func (pe *PreparedExpr) Complete(args ...any) (ce *CompletedExpr, err error) {
 	defer func() {
@@ -31,6 +31,8 @@ func (pe *PreparedExpr) Complete(args ...any) (ce *CompletedExpr, err error) {
 		}
 		v := reflect.ValueOf(arg)
 		tv[v.Type()] = v
+
+		// Gather the names of argument types to use in the error message.
 		typeNames = append(typeNames, v.Type().Name())
 	}
 
