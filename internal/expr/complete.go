@@ -48,8 +48,7 @@ func (pe *PreparedExpr) Complete(args ...any) (ce *CompletedExpr, err error) {
 			// Check if we have a type with the same name from a different package.
 			for _, in := range pe.inputs {
 				if t.Name() == in.typ.Name() {
-					return nil, fmt.Errorf("type not found, have %s from package %q but need %s from package %q",
-						t.Name(), t.PkgPath(), in.typ.Name(), in.typ.PkgPath())
+					return nil, fmt.Errorf("type %s not found, have %s", in.typ.String(), t.String())
 				}
 			}
 

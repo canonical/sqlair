@@ -656,5 +656,5 @@ func (s *ExprSuite) TestCompleteDifferentType(c *C) {
 		c.Fatal(err)
 	}
 	_, err = preparedExpr.Complete(shadowedP)
-	c.Assert(err, ErrorMatches, `invalid input parameter: type not found, have Person from package "github.com/canonical/sqlair/internal/expr_test" but need Person from package "github.com/canonical/sqlair/internal/expr_test"`)
+	c.Assert(err, ErrorMatches, `invalid input parameter: type expr_test.Person not found, have expr_test.Person`)
 }
