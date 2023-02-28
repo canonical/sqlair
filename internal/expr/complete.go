@@ -69,5 +69,5 @@ func (pe *PreparedExpr) Complete(args ...any) (ce *CompletedExpr, err error) {
 		qargs = append(qargs, named)
 	}
 
-	return &CompletedExpr{outputs: pe.outputs, sql: pe.SQL, args: qargs}, nil
+	return &CompletedExpr{outputs: pe.outputs, sql: pe.sql, args: qargs}, nil
 }

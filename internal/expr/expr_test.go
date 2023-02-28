@@ -310,8 +310,8 @@ func (s *ExprSuite) TestExpr(c *C) {
 		if preparedExpr, err = parsedExpr.Prepare(test.prepareArgs...); err != nil {
 			c.Errorf("test %d failed (Prepare):\nsummary: %s\ninput: %s\nexpected: %s\nerr: %s\n", i, test.summary, test.input, test.expectedPrepared, err)
 		} else {
-			c.Check(preparedExpr.SQL, Equals, test.expectedPrepared,
-				Commentf("test %d failed (Prepare):\nsummary: %s\ninput: %s\nexpected: %s\nactual:   %s\n", i, test.summary, test.input, test.expectedPrepared, preparedExpr.SQL))
+			c.Check(expr.PreparedSQL(preparedExpr), Equals, test.expectedPrepared,
+				Commentf("test %d failed (Prepare):\nsummary: %s\ninput: %s\nexpected: %s\nactual:   %s\n", i, test.summary, test.input, test.expectedPrepared, expr.PreparedSQL(preparedExpr)))
 		}
 	}
 }

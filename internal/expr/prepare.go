@@ -13,7 +13,7 @@ import (
 type PreparedExpr struct {
 	outputs []loc
 	inputs  []loc
-	SQL     string
+	sql     string
 }
 
 type loc struct {
@@ -227,5 +227,5 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 		}
 	}
 
-	return &PreparedExpr{inputs: inputs, outputs: outputs, SQL: sql.String()}, nil
+	return &PreparedExpr{inputs: inputs, outputs: outputs, sql: sql.String()}, nil
 }
