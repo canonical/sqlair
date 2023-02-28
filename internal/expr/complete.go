@@ -31,7 +31,7 @@ func (pe *PreparedExpr) Complete(args ...any) (ce *CompletedExpr, err error) {
 		}
 		v := reflect.ValueOf(arg)
 		tv[v.Type()] = v
-		typeNames = append(typeNames, v.Type().String())
+		typeNames = append(typeNames, v.Type().Name())
 	}
 
 	// Query parameteres.
@@ -40,7 +40,7 @@ func (pe *PreparedExpr) Complete(args ...any) (ce *CompletedExpr, err error) {
 	for i, in := range pe.inputs {
 		v, ok := tv[in.typ]
 		if !ok {
-			return nil, fmt.Errorf(`type %s not found, have: %s`, in.typ.String(), strings.Join(typeNames, ", "))
+			return nil, fmt.Errorf(`type %s not found, have: %s`, in.typ.Name(), strings.Join(typeNames, ", "))
 		}
 		named := sql.Named("sqlair_"+strconv.Itoa(i), v.FieldByIndex(in.field.index).Interface())
 		qargs = append(qargs, named)
