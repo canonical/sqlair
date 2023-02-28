@@ -3,7 +3,6 @@ package expr
 import (
 	"bytes"
 	"fmt"
-	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -11,14 +10,9 @@ import (
 
 // PreparedExpr contains an SQL expression that is ready for execution.
 type PreparedExpr struct {
-	outputs []loc
-	inputs  []loc
+	outputs []field
+	inputs  []field
 	sql     string
-}
-
-type loc struct {
-	typ   reflect.Type
-	field field
 }
 
 // getKeys returns the keys of a string map in a deterministic order.
@@ -65,25 +59,25 @@ func starCheckOutput(p *outputPart) error {
 }
 
 // prepareInput checks that the input expression corresponds to a known type.
-func prepareInput(ti typeNameToInfo, p *inputPart) (loc, error) {
+func prepareInput(ti typeNameToInfo, p *inputPart) (field, error) {
 	info, ok := ti[p.source.prefix]
 	if !ok {
-		return loc{}, fmt.Errorf(`type %s unknown, have: %s`, p.source.prefix, strings.Join(getKeys(ti), ", "))
+		return field{}, fmt.Errorf(`type %s unknown, have: %s`, p.source.prefix, strings.Join(getKeys(ti), ", "))
 	}
 	f, ok := info.tagToField[p.source.name]
 	if !ok {
-		return loc{}, fmt.Errorf(`type %s has no %q db tag`, info.typ.Name(), p.source.name)
+		return field{}, fmt.Errorf(`type %s has no %q db tag`, info.typ.Name(), p.source.name)
 	}
 
-	return loc{info.typ, f}, nil
+	return f, nil
 }
 
 // prepareOutput checks that the output expressions correspond to known types.
 // It then checks they are formatted correctly and finally generates the columns for the query.
-func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []loc, error) {
+func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []field, error) {
 
 	var outCols = make([]fullName, 0)
-	var outLocs = make([]loc, 0)
+	var fields = make([]field, 0)
 
 	// Check the asterisks are well formed (if present).
 	if err := starCheckOutput(p); err != nil {
@@ -107,7 +101,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []loc, error) 
 			}
 			// For a none star expression we record output destinations here.
 			// For a star expression we fill out the destinations as we generate the columns.
-			outLocs = append(outLocs, loc{info.typ, f})
+			fields = append(fields, f)
 		}
 	}
 
@@ -128,9 +122,9 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []loc, error) 
 
 			for _, tag := range info.tags {
 				outCols = append(outCols, fullName{pref, tag})
-				outLocs = append(outLocs, loc{info.typ, info.tagToField[tag]})
+				fields = append(fields, info.tagToField[tag])
 			}
-			return outCols, outLocs, nil
+			return outCols, fields, nil
 		}
 
 		// Case 1.2: Explicit columns e.g. "(col1, t.col2) AS &P.*".
@@ -141,9 +135,9 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []loc, error) 
 					return nil, nil, fmt.Errorf(`type %s has no %q db tag`, info.typ.Name(), c.name)
 				}
 				outCols = append(outCols, c)
-				outLocs = append(outLocs, loc{info.typ, f})
+				fields = append(fields, f)
 			}
-			return outCols, outLocs, nil
+			return outCols, fields, nil
 		}
 	}
 
@@ -154,14 +148,14 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []loc, error) 
 		for _, c := range p.source {
 			outCols = append(outCols, c)
 		}
-		return outCols, outLocs, nil
+		return outCols, fields, nil
 	}
 
 	// Case 2.2: No columns e.g. "(&P.name, &P.id)".
 	for _, t := range p.target {
 		outCols = append(outCols, fullName{name: t.name})
 	}
-	return outCols, outLocs, nil
+	return outCols, fields, nil
 }
 
 type typeNameToInfo map[string]*info
@@ -191,8 +185,8 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	var sql bytes.Buffer
 	var n int
 
-	var outputs = make([]loc, 0)
-	var inputs = make([]loc, 0)
+	var outputs = make([]field, 0)
+	var inputs = make([]field, 0)
 
 	// Check and expand each query part.
 	for _, part := range pe.queryParts {
@@ -205,7 +199,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			sql.WriteString("?")
 			inputs = append(inputs, inLoc)
 		case *outputPart:
-			outCols, outLocs, err := prepareOutput(ti, p)
+			outCols, fields, err := prepareOutput(ti, p)
 			if err != nil {
 				return nil, err
 			}
@@ -218,7 +212,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 				}
 				n++
 			}
-			outputs = append(outputs, outLocs...)
+			outputs = append(outputs, fields...)
 
 		case *bypassPart:
 			sql.WriteString(p.chunk)

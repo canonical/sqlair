@@ -9,7 +9,7 @@ import (
 )
 
 type CompletedExpr struct {
-	outputs []loc
+	outputs []field
 	sql     string
 	args    []any
 }
@@ -30,7 +30,7 @@ func (pe *PreparedExpr) Complete(args ...any) (ce *CompletedExpr, err error) {
 
 	var typeInQuery = make(map[reflect.Type]bool)
 	for _, in := range pe.inputs {
-		typeInQuery[in.typ] = true
+		typeInQuery[in.structType] = true
 	}
 
 	var typeValue = make(map[reflect.Type]reflect.Value)
@@ -47,8 +47,8 @@ func (pe *PreparedExpr) Complete(args ...any) (ce *CompletedExpr, err error) {
 		if !typeInQuery[t] {
 			// Check if we have a type with the same name from a different package.
 			for _, in := range pe.inputs {
-				if t.Name() == in.typ.Name() {
-					return nil, fmt.Errorf("type %s not found, have %s", in.typ.String(), t.String())
+				if t.Name() == in.structType.Name() {
+					return nil, fmt.Errorf("type %s not found, have %s", in.structType.String(), t.String())
 				}
 			}
 
@@ -61,11 +61,11 @@ func (pe *PreparedExpr) Complete(args ...any) (ce *CompletedExpr, err error) {
 	qargs := []any{}
 
 	for i, in := range pe.inputs {
-		v, ok := typeValue[in.typ]
+		v, ok := typeValue[in.structType]
 		if !ok {
-			return nil, fmt.Errorf(`type %s not found, have: %s`, in.typ.Name(), strings.Join(typeNames, ", "))
+			return nil, fmt.Errorf(`type %s not found, have: %s`, in.structType.Name(), strings.Join(typeNames, ", "))
 		}
-		named := sql.Named("sqlair_"+strconv.Itoa(i), v.FieldByIndex(in.field.index).Interface())
+		named := sql.Named("sqlair_"+strconv.Itoa(i), v.FieldByIndex(in.index).Interface())
 		qargs = append(qargs, named)
 	}
 
