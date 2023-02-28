@@ -601,7 +601,7 @@ func (s *ExprSuite) TestValidComplete(c *C) {
 			c.Fatal(err)
 		}
 
-		c.Assert(completedExpr.Args, DeepEquals, test.completeValues)
+		c.Assert(CompletedArgs(completedExpr), DeepEquals, test.completeValues)
 	}
 }
 

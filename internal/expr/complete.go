@@ -11,7 +11,7 @@ import (
 type CompletedExpr struct {
 	outputs []loc
 	SQL     string
-	Args    []any
+	args    []any
 }
 
 // Complete gathers the arguments that are specified in the query input parts from
@@ -48,5 +48,5 @@ func (pe *PreparedExpr) Complete(args ...any) (ce *CompletedExpr, err error) {
 		qargs = append(qargs, named)
 	}
 
-	return &CompletedExpr{outputs: pe.outputs, SQL: pe.SQL, Args: qargs}, nil
+	return &CompletedExpr{outputs: pe.outputs, SQL: pe.SQL, args: qargs}, nil
 }
