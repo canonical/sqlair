@@ -1,6 +1,7 @@
 package expr_test
 
 import (
+	"database/sql"
 	"testing"
 
 	"github.com/canonical/sqlair/internal/expr"
@@ -309,8 +310,8 @@ func (s *ExprSuite) TestExpr(c *C) {
 		if preparedExpr, err = parsedExpr.Prepare(test.prepareArgs...); err != nil {
 			c.Errorf("test %d failed (Prepare):\nsummary: %s\ninput: %s\nexpected: %s\nerr: %s\n", i, test.summary, test.input, test.expectedPrepared, err)
 		} else {
-			c.Check(preparedExpr.SQL, Equals, test.expectedPrepared,
-				Commentf("test %d failed (Prepare):\nsummary: %s\ninput: %s\nexpected: %s\nactual:   %s\n", i, test.summary, test.input, test.expectedPrepared, preparedExpr.SQL))
+			c.Check(expr.PreparedSQL(preparedExpr), Equals, test.expectedPrepared,
+				Commentf("test %d failed (Prepare):\nsummary: %s\ninput: %s\nexpected: %s\nactual:   %s\n", i, test.summary, test.input, test.expectedPrepared, expr.PreparedSQL(preparedExpr)))
 		}
 	}
 }
@@ -564,4 +565,96 @@ func (s *ExprSuite) TestPrepareMismatchedColsAndTargs(c *C) {
 		c.Assert(err.Error(), Equals, test.errorstr,
 			Commentf("test %d failed:\nsql: '%s'\nstructs:'%+v'", i, test.sql, test.structs))
 	}
+}
+
+func (s *ExprSuite) TestValidComplete(c *C) {
+	testList := []struct {
+		input          string
+		prepareArgs    []any
+		completeArgs   []any
+		completeValues []any
+	}{{
+		"SELECT * AS &Address.* FROM t WHERE x = $Person.name",
+		[]any{Address{}, Person{}},
+		[]any{Person{Fullname: "Jimany Johnson"}},
+		[]any{sql.Named("sqlair_0", "Jimany Johnson")},
+	}, {
+		"SELECT foo FROM t WHERE x = $Address.street, y = $Person.id",
+		[]any{Person{}, Address{}},
+		[]any{Person{ID: 666}, Address{Street: "Highway to Hell"}},
+		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
+	}}
+	for _, test := range testList {
+		parser := expr.NewParser()
+		parsedExpr, err := parser.Parse(test.input)
+		if err != nil {
+			c.Fatal(err)
+		}
+
+		preparedExpr, err := parsedExpr.Prepare(test.prepareArgs...)
+		if err != nil {
+			c.Fatal(err)
+		}
+
+		completedExpr, err := preparedExpr.Complete(test.completeArgs...)
+		if err != nil {
+			c.Fatal(err)
+		}
+
+		c.Assert(expr.CompletedArgs(completedExpr), DeepEquals, test.completeValues)
+	}
+}
+
+func (s *ExprSuite) TestCompleteMissingParameter(c *C) {
+	sql := "SELECT street FROM t WHERE x = $Address.street, y = $Person.name"
+	parser := expr.NewParser()
+	parsedExpr, err := parser.Parse(sql)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	preparedExpr, err := parsedExpr.Prepare(Address{}, Person{})
+	if err != nil {
+		c.Fatal(err)
+	}
+	_, err = preparedExpr.Complete(Address{Street: "Dead end road"})
+	c.Assert(err, ErrorMatches, `invalid input parameter: type Person not found, have: Address`)
+}
+
+func (s *ExprSuite) TestCompleteNilType(c *C) {
+	sql := "SELECT street FROM t WHERE x = $Address.street, y = $Person.name"
+	parser := expr.NewParser()
+	parsedExpr, err := parser.Parse(sql)
+	if err != nil {
+		c.Fatal(err)
+	}
+	preparedExpr, err := parsedExpr.Prepare(Address{}, Person{})
+	if err != nil {
+		c.Fatal(err)
+	}
+	_, err = preparedExpr.Complete(nil, Person{Fullname: "Monty Bingles"})
+	c.Assert(err, ErrorMatches, "invalid input parameter: need valid struct, got nil")
+}
+
+func (s *ExprSuite) TestCompleteDifferentType(c *C) {
+	sql := "SELECT street FROM t WHERE y = $Person.name"
+	outerP := Person{}
+	//type Person struct{}
+	type Person struct {
+		ID         int    `db:"id"`
+		Fullname   string `db:"name"`
+		PostalCode int    `db:"address_id"`
+	}
+	shadowedP := Person{}
+	parser := expr.NewParser()
+	parsedExpr, err := parser.Parse(sql)
+	if err != nil {
+		c.Fatal(err)
+	}
+	preparedExpr, err := parsedExpr.Prepare(outerP)
+	if err != nil {
+		c.Fatal(err)
+	}
+	_, err = preparedExpr.Complete(shadowedP)
+	c.Assert(err, ErrorMatches, `invalid input parameter: type expr_test.Person not found, have expr_test.Person`)
 }

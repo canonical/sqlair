@@ -6,11 +6,14 @@ import (
 
 // field represents reflection information about a field from some struct type.
 type field struct {
-	typ reflect.Type
+	fieldType reflect.Type
 
 	name string
 
-	// index sequence for Type.FieldByIndex
+	// The type of the containing struct.
+	structType reflect.Type
+
+	// Index sequence for Type.FieldByIndex.
 	index []int
 
 	// OmitEmpty is true when "omitempty" is

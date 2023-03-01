@@ -71,10 +71,11 @@ func generate(t reflect.Type) (*info, error) {
 		}
 		tags = append(tags, tag)
 		info.tagToField[tag] = field{
-			name:      f.Name,
-			index:     f.Index,
-			omitEmpty: omitEmpty,
-			typ:       f.Type,
+			name:       f.Name,
+			index:      f.Index,
+			omitEmpty:  omitEmpty,
+			fieldType:  f.Type,
+			structType: t,
 		}
 	}
 
