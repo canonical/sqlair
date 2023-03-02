@@ -74,7 +74,7 @@ func generate(t reflect.Type) (*info, error) {
 			name:       f.Name,
 			index:      f.Index,
 			omitEmpty:  omitEmpty,
-			fieldType:  f.Type,
+			typ:        f.Type,
 			structType: t,
 		}
 	}

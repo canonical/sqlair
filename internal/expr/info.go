@@ -6,7 +6,7 @@ import (
 
 // field represents reflection information about a field from some struct type.
 type field struct {
-	fieldType reflect.Type
+	typ reflect.Type
 
 	name string
 
