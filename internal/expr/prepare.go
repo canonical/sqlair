@@ -183,7 +183,9 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	}
 
 	var sql bytes.Buffer
-	var n int
+
+	var inCount int
+	var outCount int
 
 	var outputs = make([]field, 0)
 	var inputs = make([]field, 0)
@@ -196,7 +198,8 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			if err != nil {
 				return nil, err
 			}
-			sql.WriteString("?")
+			sql.WriteString("@sqlair_" + strconv.Itoa(inCount))
+			inCount++
 			inputs = append(inputs, inLoc)
 		case *outputPart:
 			outCols, fields, err := prepareOutput(ti, p)
@@ -206,11 +209,11 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			for i, c := range outCols {
 				sql.WriteString(c.String())
 				sql.WriteString(" AS _sqlair_")
-				sql.WriteString(strconv.Itoa(n))
+				sql.WriteString(strconv.Itoa(outCount))
 				if i != len(outCols)-1 {
 					sql.WriteString(", ")
 				}
-				n++
+				outCount++
 			}
 			outputs = append(outputs, fields...)
 
