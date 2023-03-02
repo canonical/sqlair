@@ -27,7 +27,7 @@ func (db *DB) QueryContext(ce *CompletedExpr, ctx context.Context) (*ResultExpr,
 	if err != nil {
 		return nil, err
 	}
-	return &ResultExpr{ce.outputs, rows}, nil
+	return &ResultExpr{outputs: ce.outputs, rows: rows}, nil
 }
 
 func (db *DB) Exec(ce *CompletedExpr) (sql.Result, error) {
