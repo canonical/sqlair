@@ -514,7 +514,7 @@ type JujuLeaseKey struct {
 
 type JujuLeaseInfo struct {
 	Holder string `db:"holder"`
-	Expiry int64  `db:"expiry"`
+	Expiry int    `db:"expiry"`
 }
 
 func JujuStoreLeaseDB() (string, *sql.DB, error) {

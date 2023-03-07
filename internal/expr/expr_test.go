@@ -16,15 +16,15 @@ type ExprSuite struct{}
 var _ = Suite(&ExprSuite{})
 
 type Address struct {
-	ID       int64  `db:"id,omitempty"`
+	ID       int    `db:"id,omitempty"`
 	District string `db:"district"`
 	Street   string `db:"street"`
 }
 
 type Person struct {
-	ID         int64  `db:"id"`
+	ID         int    `db:"id"`
 	Fullname   string `db:"name"`
-	PostalCode int64  `db:"address_id"`
+	PostalCode int    `db:"address_id"`
 }
 
 type Manager Person
@@ -580,12 +580,12 @@ func (s *ExprSuite) TestValidComplete(c *C) {
 		"SELECT foo FROM t WHERE x = $Address.street, y = $Person.id",
 		[]any{Person{}, Address{}},
 		[]any{Person{ID: 666}, Address{Street: "Highway to Hell"}},
-		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", int64(666))},
+		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
 	}, {
 		"SELECT foo FROM t WHERE x = $Address.street, y = $Person.id",
 		[]any{Person{}, Address{}},
 		[]any{&Person{ID: 666}, &Address{Street: "Highway to Hell"}},
-		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", int64(666))},
+		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
 	}}
 	for _, test := range testList {
 		parser := expr.NewParser()
