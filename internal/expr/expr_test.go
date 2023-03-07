@@ -27,9 +27,7 @@ type Person struct {
 	PostalCode int    `db:"address_id"`
 }
 
-type Manager struct {
-	Name string `db:"manager_name"`
-}
+type Manager Person
 
 type District struct {
 }
@@ -37,7 +35,7 @@ type District struct {
 type M map[string]any
 
 var tests = []struct {
-	summary          string
+	summery          string
 	input            string
 	expectedParsed   string
 	prepareArgs      []any
@@ -104,25 +102,25 @@ var tests = []struct {
 	"SELECT foo, bar FROM table WHERE foo = $Person.id",
 	"[Bypass[SELECT foo, bar FROM table WHERE foo = ] Input[Person.id]]",
 	[]any{Person{}},
-	`SELECT foo, bar FROM table WHERE foo = ?`,
+	`SELECT foo, bar FROM table WHERE foo = @sqlair_0`,
 }, {
 	"input v2",
 	"SELECT p FROM person WHERE p.name = $Person.name",
 	"[Bypass[SELECT p FROM person WHERE p.name = ] Input[Person.name]]",
 	[]any{Person{}},
-	`SELECT p FROM person WHERE p.name = ?`,
+	`SELECT p FROM person WHERE p.name = @sqlair_0`,
 }, {
 	"input v3",
 	"SELECT p.*, a.district FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = $Person.name",
 	"[Bypass[SELECT p.*, a.district FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] Input[Person.name]]",
 	[]any{Person{}},
-	`SELECT p.*, a.district FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ?`,
+	`SELECT p.*, a.district FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = @sqlair_0`,
 }, {
 	"output and input",
 	"SELECT &Person.* FROM table WHERE foo = $Address.id",
 	"[Bypass[SELECT ] Output[[] [Person.*]] Bypass[ FROM table WHERE foo = ] Input[Address.id]]",
 	[]any{Person{}, Address{}},
-	`SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM table WHERE foo = ?`,
+	`SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM table WHERE foo = @sqlair_0`,
 }, {
 	"output and quote",
 	"SELECT foo, bar, &Person.id FROM table WHERE foo = 'xx'",
@@ -131,10 +129,10 @@ var tests = []struct {
 	"SELECT foo, bar, id AS _sqlair_0 FROM table WHERE foo = 'xx'",
 }, {
 	"two outputs and quote",
-	"SELECT foo, &Person.id, bar, baz, &Manager.manager_name FROM table WHERE foo = 'xx'",
-	"[Bypass[SELECT foo, ] Output[[] [Person.id]] Bypass[, bar, baz, ] Output[[] [Manager.manager_name]] Bypass[ FROM table WHERE foo = 'xx']]",
+	"SELECT foo, &Person.id, bar, baz, &Manager.name FROM table WHERE foo = 'xx'",
+	"[Bypass[SELECT foo, ] Output[[] [Person.id]] Bypass[, bar, baz, ] Output[[] [Manager.name]] Bypass[ FROM table WHERE foo = 'xx']]",
 	[]any{Person{}, Manager{}},
-	"SELECT foo, id AS _sqlair_0, bar, baz, manager_name AS _sqlair_1 FROM table WHERE foo = 'xx'",
+	"SELECT foo, id AS _sqlair_0, bar, baz, name AS _sqlair_1 FROM table WHERE foo = 'xx'",
 }, {
 	"star as output and quote",
 	"SELECT * AS &Person.* FROM person WHERE name = 'Fred'",
@@ -206,31 +204,31 @@ var tests = []struct {
 	"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name)",
 	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district a.street] [Address.*]] Bypass[ FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name IN (SELECT name FROM table WHERE table.n = ] Input[Person.name] Bypass[)]]",
 	[]any{Person{}, Address{}},
-	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, a.district AS _sqlair_3, a.street AS _sqlair_4 FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name IN (SELECT name FROM table WHERE table.n = ?)`,
+	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, a.district AS _sqlair_3, a.street AS _sqlair_4 FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name IN (SELECT name FROM table WHERE table.n = @sqlair_0)`,
 }, {
 	"complex query v4",
 	"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name) UNION SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name)",
 	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district a.street] [Address.*]] Bypass[ FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = ] Input[Person.name] Bypass[) UNION SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district a.street] [Address.*]] Bypass[ FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = ] Input[Person.name] Bypass[)]]",
 	[]any{Person{}, Address{}},
-	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, a.district AS _sqlair_3, a.street AS _sqlair_4 FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = ?) UNION SELECT p.address_id AS _sqlair_5, p.id AS _sqlair_6, p.name AS _sqlair_7, a.district AS _sqlair_8, a.street AS _sqlair_9 FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = ?)`,
+	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, a.district AS _sqlair_3, a.street AS _sqlair_4 FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = @sqlair_0) UNION SELECT p.address_id AS _sqlair_5, p.id AS _sqlair_6, p.name AS _sqlair_7, a.district AS _sqlair_8, a.street AS _sqlair_9 FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = @sqlair_1)`,
 }, {
 	"complex query v5",
 	"SELECT p.* AS &Person.*, &District.* FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
 	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[] [District.*]] Bypass[ FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] Input[Person.name] Bypass[ AND p.address_id = ] Input[Person.address_id]]",
 	[]any{Person{}, District{}},
-	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2,  FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ? AND p.address_id = ?`,
+	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2,  FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = @sqlair_0 AND p.address_id = @sqlair_1`,
 }, {
 	"complex query v6",
 	"SELECT p.* AS &Person.*, FROM person AS p INNER JOIN address AS a ON p.address_id = $Address.id WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
 	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, FROM person AS p INNER JOIN address AS a ON p.address_id = ] Input[Address.id] Bypass[ WHERE p.name = ] Input[Person.name] Bypass[ AND p.address_id = ] Input[Person.address_id]]",
 	[]any{Person{}, Address{}},
-	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, FROM person AS p INNER JOIN address AS a ON p.address_id = ? WHERE p.name = ? AND p.address_id = ?`,
+	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, FROM person AS p INNER JOIN address AS a ON p.address_id = @sqlair_0 WHERE p.name = @sqlair_1 AND p.address_id = @sqlair_2`,
 }, {
 	"join v1",
-	"SELECT p.* AS &Person.*, m.* AS &Manager.* FROM person AS p JOIN person AS m ON p.manager_id = m.id WHERE p.name = 'Fred'",
-	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[m.*] [Manager.*]] Bypass[ FROM person AS p JOIN person AS m ON p.manager_id = m.id WHERE p.name = 'Fred']]",
+	"SELECT p.* AS &Person.*, m.* AS &Manager.* FROM person AS p JOIN person AS m ON p.id = m.id WHERE p.name = 'Fred'",
+	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[m.*] [Manager.*]] Bypass[ FROM person AS p JOIN person AS m ON p.id = m.id WHERE p.name = 'Fred']]",
 	[]any{Person{}, Manager{}},
-	"SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, m.manager_name AS _sqlair_3 FROM person AS p JOIN person AS m ON p.manager_id = m.id WHERE p.name = 'Fred'",
+	"SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, m.address_id AS _sqlair_3, m.id AS _sqlair_4, m.name AS _sqlair_5 FROM person AS p JOIN person AS m ON p.id = m.id WHERE p.name = 'Fred'",
 }, {
 	"join v2",
 	"SELECT person.*, address.district FROM person JOIN address ON person.address_id = address.id WHERE person.name = 'Fred'",
@@ -242,7 +240,7 @@ var tests = []struct {
 	"INSERT INTO person (name) VALUES $Person.name",
 	"[Bypass[INSERT INTO person (name) VALUES ] Input[Person.name]]",
 	[]any{Person{}},
-	`INSERT INTO person (name) VALUES ?`,
+	`INSERT INTO person (name) VALUES @sqlair_0`,
 }, {
 	"ignore dollar v1",
 	"SELECT $ FROM moneytable",
@@ -266,7 +264,7 @@ var tests = []struct {
 	"SELECT p.*, a.district FROM person AS p WHERE p.name=$Person.name",
 	"[Bypass[SELECT p.*, a.district FROM person AS p WHERE p.name=] Input[Person.name]]",
 	[]any{Person{}},
-	`SELECT p.*, a.district FROM person AS p WHERE p.name=?`,
+	`SELECT p.*, a.district FROM person AS p WHERE p.name=@sqlair_0`,
 }, {
 	"escaped double quote",
 	`SELECT foo FROM t WHERE t.p = "Jimmy ""Quickfingers"" Jones"`,
@@ -290,7 +288,7 @@ var tests = []struct {
 	"UPDATE person SET person.address_id = $Address.id WHERE person.id = $Person.id",
 	"[Bypass[UPDATE person SET person.address_id = ] Input[Address.id] Bypass[ WHERE person.id = ] Input[Person.id]]",
 	[]any{Person{}, Address{}},
-	`UPDATE person SET person.address_id = ? WHERE person.id = ?`,
+	`UPDATE person SET person.address_id = @sqlair_0 WHERE person.id = @sqlair_1`,
 }}
 
 func (s *ExprSuite) TestExpr(c *C) {
@@ -302,16 +300,16 @@ func (s *ExprSuite) TestExpr(c *C) {
 			err          error
 		)
 		if parsedExpr, err = parser.Parse(test.input); err != nil {
-			c.Errorf("test %d failed (Parse):\nsummary: %s\ninput: %s\nexpected: %s\nerr: %s\n", i, test.summary, test.input, test.expectedParsed, err)
+			c.Errorf("test %d failed (Parse):\nsummery: %s\ninput: %s\nexpected: %s\nerr: %s\n", i, test.summery, test.input, test.expectedParsed, err)
 		} else if parsedExpr.String() != test.expectedParsed {
-			c.Errorf("test %d failed (Parse):\nsummary: %s\ninput: %s\nexpected: %s\nactual:   %s\n", i, test.summary, test.input, test.expectedParsed, parsedExpr.String())
+			c.Errorf("test %d failed (Parse):\nsummery: %s\ninput: %s\nexpected: %s\nactual:   %s\n", i, test.summery, test.input, test.expectedParsed, parsedExpr.String())
 		}
 
 		if preparedExpr, err = parsedExpr.Prepare(test.prepareArgs...); err != nil {
-			c.Errorf("test %d failed (Prepare):\nsummary: %s\ninput: %s\nexpected: %s\nerr: %s\n", i, test.summary, test.input, test.expectedPrepared, err)
+			c.Errorf("test %d failed (Prepare):\nsummery: %s\ninput: %s\nexpected: %s\nerr: %s\n", i, test.summery, test.input, test.expectedPrepared, err)
 		} else {
 			c.Check(expr.PreparedSQL(preparedExpr), Equals, test.expectedPrepared,
-				Commentf("test %d failed (Prepare):\nsummary: %s\ninput: %s\nexpected: %s\nactual:   %s\n", i, test.summary, test.input, test.expectedPrepared, expr.PreparedSQL(preparedExpr)))
+				Commentf("test %d failed (Prepare):\nsummery: %s\ninput: %s\nexpected: %s\nactual:   %s\n", i, test.summery, test.input, test.expectedPrepared, expr.PreparedSQL(preparedExpr)))
 		}
 	}
 }
@@ -569,7 +567,7 @@ func (s *ExprSuite) TestPrepareMismatchedColsAndTargs(c *C) {
 
 func (s *ExprSuite) TestValidComplete(c *C) {
 	testList := []struct {
-		input          string
+		sql            string
 		prepareArgs    []any
 		completeArgs   []any
 		completeValues []any
@@ -583,10 +581,15 @@ func (s *ExprSuite) TestValidComplete(c *C) {
 		[]any{Person{}, Address{}},
 		[]any{Person{ID: 666}, Address{Street: "Highway to Hell"}},
 		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
+	}, {
+		"SELECT foo FROM t WHERE x = $Address.street, y = $Person.id",
+		[]any{Person{}, Address{}},
+		[]any{&Person{ID: 666}, &Address{Street: "Highway to Hell"}},
+		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
 	}}
 	for _, test := range testList {
 		parser := expr.NewParser()
-		parsedExpr, err := parser.Parse(test.input)
+		parsedExpr, err := parser.Parse(test.sql)
 		if err != nil {
 			c.Fatal(err)
 		}
@@ -605,56 +608,72 @@ func (s *ExprSuite) TestValidComplete(c *C) {
 	}
 }
 
-func (s *ExprSuite) TestCompleteMissingParameter(c *C) {
-	sql := "SELECT street FROM t WHERE x = $Address.street, y = $Person.name"
-	parser := expr.NewParser()
-	parsedExpr, err := parser.Parse(sql)
-	if err != nil {
-		c.Fatal(err)
-	}
+func (s *ExprSuite) TestCompleteError(c *C) {
+	testList := []struct {
+		sql          string
+		prepareArgs  []any
+		completeArgs []any
+		err          string
+	}{{
+		sql:          "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
+		prepareArgs:  []any{Address{}, Person{}},
+		completeArgs: []any{Address{Street: "Dead end road"}},
+		err:          "invalid input parameter: type Person not found, have: Address",
+	}, {
+		sql:          "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
+		prepareArgs:  []any{Address{}, Person{}},
+		completeArgs: []any{nil, Person{Fullname: "Monty Bingles"}},
+		err:          "invalid input parameter: need valid struct, got nil",
+	}, {
+		sql:          "SELECT street FROM t WHERE x = $Address.street",
+		prepareArgs:  []any{Address{}},
+		completeArgs: []any{8},
+		err:          "invalid input parameter: need struct, got int",
+	}, {
+		sql:          "SELECT street FROM t WHERE x = $Address.street",
+		prepareArgs:  []any{Address{}},
+		completeArgs: []any{map[string]any{}},
+		err:          "invalid input parameter: need struct, got map",
+	}}
 
-	preparedExpr, err := parsedExpr.Prepare(Address{}, Person{})
-	if err != nil {
-		c.Fatal(err)
-	}
-	_, err = preparedExpr.Complete(Address{Street: "Dead end road"})
-	c.Assert(err, ErrorMatches, `invalid input parameter: type Person not found, have: Address`)
-}
-
-func (s *ExprSuite) TestCompleteNilType(c *C) {
-	sql := "SELECT street FROM t WHERE x = $Address.street, y = $Person.name"
-	parser := expr.NewParser()
-	parsedExpr, err := parser.Parse(sql)
-	if err != nil {
-		c.Fatal(err)
-	}
-	preparedExpr, err := parsedExpr.Prepare(Address{}, Person{})
-	if err != nil {
-		c.Fatal(err)
-	}
-	_, err = preparedExpr.Complete(nil, Person{Fullname: "Monty Bingles"})
-	c.Assert(err, ErrorMatches, "invalid input parameter: need valid struct, got nil")
-}
-
-func (s *ExprSuite) TestCompleteDifferentType(c *C) {
-	sql := "SELECT street FROM t WHERE y = $Person.name"
 	outerP := Person{}
-	//type Person struct{}
+	// Person shadows the Person struct in the tests above
 	type Person struct {
 		ID         int    `db:"id"`
 		Fullname   string `db:"name"`
 		PostalCode int    `db:"address_id"`
 	}
 	shadowedP := Person{}
-	parser := expr.NewParser()
-	parsedExpr, err := parser.Parse(sql)
-	if err != nil {
-		c.Fatal(err)
+
+	testListShadowed := []struct {
+		sql          string
+		prepareArgs  []any
+		completeArgs []any
+		err          string
+	}{{
+		sql:          "SELECT street FROM t WHERE y = $Person.name",
+		prepareArgs:  []any{outerP},
+		completeArgs: []any{shadowedP},
+		err:          "invalid input parameter: type expr_test.Person not found, have expr_test.Person",
+	}}
+
+	testList = append(testList, testListShadowed...)
+
+	for i, t := range testList {
+		parser := expr.NewParser()
+		parsedExpr, err := parser.Parse(t.sql)
+		if err != nil {
+			c.Fatal(err)
+		}
+
+		preparedExpr, err := parsedExpr.Prepare(t.prepareArgs...)
+		if err != nil {
+			c.Fatal(err)
+		}
+
+		_, err = preparedExpr.Complete(t.completeArgs...)
+		c.Assert(err, ErrorMatches, t.err,
+			Commentf("test %d failed:\ninput: %s", i, t.sql))
+
 	}
-	preparedExpr, err := parsedExpr.Prepare(outerP)
-	if err != nil {
-		c.Fatal(err)
-	}
-	_, err = preparedExpr.Complete(shadowedP)
-	c.Assert(err, ErrorMatches, `invalid input parameter: type expr_test.Person not found, have expr_test.Person`)
 }
