@@ -581,6 +581,11 @@ func (s *ExprSuite) TestValidComplete(c *C) {
 		[]any{Person{}, Address{}},
 		[]any{Person{ID: 666}, Address{Street: "Highway to Hell"}},
 		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
+	}, {
+		"SELECT foo FROM t WHERE x = $Address.street, y = $Person.id",
+		[]any{Person{}, Address{}},
+		[]any{&Person{ID: 666}, &Address{Street: "Highway to Hell"}},
+		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
 	}}
 	for _, test := range testList {
 		parser := expr.NewParser()
@@ -622,8 +627,8 @@ func (s *ExprSuite) TestCompleteError(c *C) {
 	}, {
 		sql:          "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs:  []any{Address{}},
-		completeArgs: []any{&Address{}},
-		err:          "invalid input parameter: need struct, got pointer to struct",
+		completeArgs: []any{8},
+		err:          "invalid input parameter: need struct, got int",
 	}, {
 		sql:          "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs:  []any{Address{}},

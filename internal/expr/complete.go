@@ -40,13 +40,11 @@ func (pe *PreparedExpr) Complete(args ...any) (ce *CompletedExpr, err error) {
 			return nil, fmt.Errorf("need valid struct, got nil")
 		}
 		v := reflect.ValueOf(arg)
+		v = reflect.Indirect(v)
 		t := v.Type()
 
 		if t.Kind() != reflect.Struct {
-			if t.Kind() != reflect.Pointer {
-				return nil, fmt.Errorf("need struct, got %s", t.Kind())
-			}
-			return nil, fmt.Errorf("need struct, got pointer to %s", t.Elem().Kind())
+			return nil, fmt.Errorf("need struct, got %s", t.Kind())
 		}
 
 		typeValue[t] = v
