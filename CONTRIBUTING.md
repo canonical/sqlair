@@ -2,7 +2,7 @@ Code formatting
 ===============
 
 Go provides a tool, `go fmt`, which facilitates a standardised format to Go 
-source code. SQLAir has two additional policies:
+source code. SQLair has two additional policies:
 
 Imports
 -------
@@ -10,7 +10,7 @@ Imports
 Import statements are grouped into three sections: 
 - standard library 
 - third party libraries 
-- SQLAir imports 
+- SQLair imports 
 
 The tool "go fmt" can be used to ensure each group is alphabetically sorted, 
 for example:
