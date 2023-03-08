@@ -141,7 +141,7 @@ func (q *Query) Decode(outputStructs ...any) bool {
 		q.err = err
 		// We must close the rows if an error occours.
 		// The error, if any, from Rows.Close is ignored.
-		_ := q.re.Close()
+		_ = q.re.Close()
 		return false
 	}
 	return true
@@ -158,4 +158,15 @@ func (q *Query) Close(outputStructs ...any) error {
 	}
 	q.re = nil
 	return nil
+}
+
+// One is shorthand for q.Next(); q.Decode(outputStructs...); q.Close().
+func (q *Query) One(outputStructs ...any) error {
+	return q.re.One(outputStructs...)
+}
+
+// All iterates over the query and decodes all the rows.
+// It fabricates all struct instansiations needed.
+func (q *Query) All() ([][]any, error) {
+	return q.re.All()
 }
