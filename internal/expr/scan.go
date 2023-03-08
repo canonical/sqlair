@@ -43,7 +43,8 @@ func getTypes(outs []field) []reflect.Type {
 	return ts
 }
 
-// All returns a slice of all rows returned in the query.
+// All iterates over the query and decodes all the rows.
+// It fabricates all struct instansiations needed.
 func (re *ResultExpr) All() ([][]any, error) {
 	var rss [][]any
 
