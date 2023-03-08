@@ -12,8 +12,8 @@ type ResultExpr struct {
 	rows    *sql.Rows
 }
 
-func NewResultExpr(ce *CompletedExpr, rows *sql.Rows) *ResultExpr {
-	return &ResultExpr{outputs: ce.outputs, rows: rows}
+func NewResultExpr(pe *PreparedExpr, rows *sql.Rows) *ResultExpr {
+	return &ResultExpr{outputs: pe.outputs, rows: rows}
 }
 
 func (re *ResultExpr) One(args ...any) error {

@@ -137,7 +137,7 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 				break
 			}
 			if !q.Decode(t.outputs[i]...) {
-				c.Errorf("test %q failed (Decode):\ninput: %s\nerr: %s\n", t.summery, t.query, q.Err)
+				c.Errorf("test %q failed (Decode):\ninput: %s\nerr: %s\n", t.summery, t.query, q.Err())
 				break
 			}
 			i++
