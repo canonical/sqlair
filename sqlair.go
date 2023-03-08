@@ -17,7 +17,7 @@ type DB struct {
 
 type Query struct {
 	re  *expr.ResultExpr
-	Err error
+	err error
 }
 
 func NewDB(db *sql.DB) *DB {
@@ -88,33 +88,33 @@ func (db *DB) Exec(s *Statement, inputStructs ...any) (sql.Result, error) {
 }
 
 func (q *Query) Next() bool {
-	if q.Err != nil {
+	if q.err != nil {
 		return false
 	}
 	ok, err := q.re.Next()
 	if err != nil {
-		q.Err = err
+		q.err = err
 		return false
 	}
 	return ok
 }
 
 func (q *Query) Decode(outputStructs ...any) bool {
-	if q.Err != nil {
+	if q.err != nil {
 		return false
 	}
 	err := q.re.Decode(outputStructs...)
 	if err != nil {
-		q.Err = err
+		q.err = err
 		return false
 	}
 	return true
 }
 
 func (q *Query) Close(outputStructs ...any) error {
-	if q.Err != nil {
+	if q.err != nil {
 		q.re.Close() // Which error should we return here? We have two and are currently ignoring the error of q.Close()
-		return q.Err
+		return q.err
 	}
 	err := q.re.Close()
 	if err != nil {
