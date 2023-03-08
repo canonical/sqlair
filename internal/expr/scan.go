@@ -30,10 +30,10 @@ func (re *ResultExpr) One(args ...any) error {
 	return nil
 }
 
-// getTypes returns the types in the order they appear in the query
+// getTypes returns the types mentioned in SQLair expression of the query in the order they appear.
 func getTypes(outs []field) []reflect.Type {
 	isDup := make(map[reflect.Type]bool)
-	ts := []reflect.Type{}
+	ts := make([]reflect.Type, 0)
 	for _, out := range outs {
 		if t := out.structType; !isDup[t] {
 			isDup[t] = true
@@ -43,7 +43,8 @@ func getTypes(outs []field) []reflect.Type {
 	return ts
 }
 
-// All returns a slice of all rows returned in the query.
+// All iterates over the query and decodes all the rows.
+// It fabricates all struct instansiations needed.
 func (re *ResultExpr) All() ([][]any, error) {
 	var rss [][]any
 

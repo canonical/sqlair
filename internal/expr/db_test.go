@@ -150,7 +150,7 @@ func (s *DBSuite) TestValidDecode(c *C) {
 		c.Fatal(err)
 	}
 
-	sqlairDB := expr.NewTestDB(db)
+	testDB := expr.NewTestDB(db)
 
 	parser := expr.NewParser()
 
@@ -170,7 +170,7 @@ func (s *DBSuite) TestValidDecode(c *C) {
 			c.Errorf("test %q failed (Complete):\ninput: %s\nerr: %s\n", t.summery, t.query, err)
 			continue
 		}
-		resultExpr, err := sqlairDB.Query(completedExpr)
+		resultExpr, err := testDB.Query(completedExpr)
 		if err != nil {
 			c.Errorf("test %q failed (Exec):\ninput: %s\nerr: %s\n", t.summery, t.query, err)
 			continue
@@ -181,14 +181,14 @@ func (s *DBSuite) TestValidDecode(c *C) {
 			if ok, err := resultExpr.Next(); err != nil {
 				c.Fatalf("test %q failed (Next):\ninput: %s\nerr: %s", t.summery, t.query, err)
 			} else if !ok {
-				c.Fatalf("test %q failed (Next):\ninput: %s\nerr: no more rows in query", t.summery, t.query)
+				c.Fatalf("test %q failed (Next):\ninput: %s\nerr: no more rows in query\n", t.summery, t.query)
 			}
 			err := resultExpr.Decode(outs...)
 			if err != nil {
 				c.Fatalf("test %q failed (Decode):\ninput: %s\nerr: %s\n", t.summery, t.query, err)
 			}
 			c.Assert(outs, HasLen, len(t.expected[i]),
-				Commentf("test %q failed:\ninput: %s", t.summery, t.query))
+				Commentf("test %q failed (Decode):\ninput: %s", t.summery, t.query))
 			for j, out := range outs {
 				c.Assert(out, DeepEquals, t.expected[i][j],
 					Commentf("test %q failed (Decode):\ninput: %s", t.summery, t.query))
@@ -246,7 +246,7 @@ func (s *DBSuite) TestDecodeErrors(c *C) {
 		c.Fatal(err)
 	}
 
-	sqlairDB := expr.NewTestDB(db)
+	testDB := expr.NewTestDB(db)
 
 	parser := expr.NewParser()
 
@@ -266,7 +266,7 @@ func (s *DBSuite) TestDecodeErrors(c *C) {
 			c.Errorf("test %q failed (Complete):\ninput: %s\nerr: %s\n", t.summery, t.query, err)
 			continue
 		}
-		resultExpr, err := sqlairDB.Query(completedExpr)
+		resultExpr, err := testDB.Query(completedExpr)
 		if err != nil {
 			c.Errorf("test %q failed (Exec):\ninput: %s\nerr: %s\n", t.summery, t.query, err)
 			continue
@@ -275,13 +275,13 @@ func (s *DBSuite) TestDecodeErrors(c *C) {
 		// Get as many rows as we have lists of structs to output into.
 		for _, outs := range t.outputs {
 			if ok, err := resultExpr.Next(); err != nil {
-				c.Fatalf("test %q failed (Next) :\ninput: %s\nerr: %s", t.summery, t.query, err)
+				c.Fatalf("test %q failed (Next):\ninput: %s\nerr: %s", t.summery, t.query, err)
 			} else if !ok {
-				c.Fatalf("test %q failed (Next) :\ninput: %s\nerr: no more rows in query", t.summery, t.query)
+				c.Fatalf("test %q failed (Next):\ninput: %s\nerr: no more rows in query\n", t.summery, t.query)
 			}
 			err := resultExpr.Decode(outs...)
 			c.Assert(err, ErrorMatches, t.err,
-				Commentf("test %q failed:\ninput: %s\noutputs: %s", t.summery, t.query, t.outputs))
+				Commentf("test %q failed (Decode):\ninput: %s\noutputs: %s", t.summery, t.query, t.outputs))
 		}
 		resultExpr.Close()
 	}
@@ -330,7 +330,7 @@ func (s *DBSuite) TestValidAll(c *C) {
 		c.Fatal(err)
 	}
 
-	sqlairDB := expr.NewTestDB(db)
+	testDB := expr.NewTestDB(db)
 
 	parser := expr.NewParser()
 
@@ -350,7 +350,7 @@ func (s *DBSuite) TestValidAll(c *C) {
 			c.Errorf("test %q failed (Complete):\ninput: %s\nerr: %s\n", t.summery, t.query, err)
 			continue
 		}
-		resultExpr, err := sqlairDB.Query(completedExpr)
+		resultExpr, err := testDB.Query(completedExpr)
 		if err != nil {
 			c.Errorf("test %q failed (Exec):\ninput: %s\nerr: %s\n", t.summery, t.query, err)
 			continue
@@ -361,11 +361,11 @@ func (s *DBSuite) TestValidAll(c *C) {
 			continue
 		}
 		c.Assert(res, HasLen, len(t.expected),
-			Commentf("test %q failed:\ninput: %s", t.summery, t.query))
+			Commentf("test %q failed (All):\ninput: %s", t.summery, t.query))
 		for i, es := range t.expected {
 			for j, e := range es {
 				c.Assert(res[i][j], DeepEquals, e,
-					Commentf("test %q failed:\ninput: %s", t.summery, t.query))
+					Commentf("test %q failed (All):\ninput: %s", t.summery, t.query))
 			}
 		}
 	}
@@ -405,7 +405,7 @@ func (s *DBSuite) TestValidOne(c *C) {
 		c.Fatal(err)
 	}
 
-	sqlairDB := expr.NewTestDB(db)
+	testDB := expr.NewTestDB(db)
 
 	parser := expr.NewParser()
 
@@ -425,7 +425,7 @@ func (s *DBSuite) TestValidOne(c *C) {
 			c.Errorf("test %q failed (Complete):\ninput: %s\nerr: %s\n", t.summery, t.query, err)
 			continue
 		}
-		resultExpr, err := sqlairDB.Query(completedExpr)
+		resultExpr, err := testDB.Query(completedExpr)
 		if err != nil {
 			c.Errorf("test %q failed (Exec):\ninput: %s\nerr: %s\n", t.summery, t.query, err)
 			continue
@@ -437,7 +437,7 @@ func (s *DBSuite) TestValidOne(c *C) {
 		}
 		for i, e := range t.expected {
 			c.Assert(t.outputs[i], DeepEquals, e,
-				Commentf("test %q failed:\ninput: %s", t.summery, t.query))
+				Commentf("test %q failed (All):\ninput: %s", t.summery, t.query))
 		}
 	}
 
@@ -469,7 +469,7 @@ func (s *DBSuite) TestOneErrors(c *C) {
 		c.Fatal(err)
 	}
 
-	sqlairDB := expr.NewTestDB(db)
+	testDB := expr.NewTestDB(db)
 
 	parser := expr.NewParser()
 
@@ -489,7 +489,7 @@ func (s *DBSuite) TestOneErrors(c *C) {
 			c.Errorf("test %q failed (Complete):\ninput: %s\nerr: %s\n", t.summery, t.query, err)
 			continue
 		}
-		resultExpr, err := sqlairDB.Query(completedExpr)
+		resultExpr, err := testDB.Query(completedExpr)
 		if err != nil {
 			c.Errorf("test %q failed (Exec):\ninput: %s\nerr: %s\n", t.summery, t.query, err)
 			continue
@@ -497,7 +497,7 @@ func (s *DBSuite) TestOneErrors(c *C) {
 
 		err = resultExpr.One(t.outputs...)
 		c.Assert(err, ErrorMatches, t.err,
-			Commentf("test %q failed:\ninput: %s\noutputs: %s", t.summery, t.query, t.outputs))
+			Commentf("test %q failed (One):\ninput: %s\noutputs: %s", t.summery, t.query, t.outputs))
 	}
 
 	_, err = db.Exec(drop)
