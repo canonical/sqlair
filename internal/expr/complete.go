@@ -8,6 +8,14 @@ import (
 	"strings"
 )
 
+func GetCompletedSQL(ce *CompletedExpr) string {
+	return ce.sql
+}
+
+func GetCompletedArgs(ce *CompletedExpr) []any {
+	return ce.args
+}
+
 type CompletedExpr struct {
 	outputs []field
 	sql     string

@@ -1,10 +1,20 @@
 package expr
 
 import (
+	"database/sql"
 	"fmt"
 	"reflect"
 	"strconv"
 )
+
+type ResultExpr struct {
+	outputs []field
+	rows    *sql.Rows
+}
+
+func NewResultExpr(ce *CompletedExpr, rows *sql.Rows) *ResultExpr {
+	return &ResultExpr{outputs: ce.outputs, rows: rows}
+}
 
 func (re *ResultExpr) One(args ...any) error {
 	if ok, err := re.Next(); err != nil {
