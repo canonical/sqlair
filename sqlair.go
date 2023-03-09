@@ -88,11 +88,13 @@ func (db *DB) QueryContext(s *Statement, ctx context.Context, inputStructs ...an
 	return &Query{pe: s.pe, q: q}, nil
 }
 
-// Exec executes a query without returning any rows.
+// Exec executes an SQLair Statement without returning any rows.
+// Exec uses ExecContext with context.Background internally.
 func (db *DB) Exec(s *Statement, inputStructs ...any) (sql.Result, error) {
 	return db.ExecContext(s, context.Background())
 }
 
+// ExecContext executes an SQLair Statement without returning any rows.
 func (db *DB) ExecContext(s *Statement, ctx context.Context, inputStructs ...any) (sql.Result, error) {
 	ce, err := s.pe.Complete(inputStructs...)
 	if err != nil {
