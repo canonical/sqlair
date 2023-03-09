@@ -41,7 +41,7 @@ func typeInfo(value any) (*info, error) {
 }
 
 // generate produces and returns reflection information for the input
-// reflect.Value that is specifically required for SQLair operation.
+// reflect.Value that is specifically required for SQLAir operation.
 func generate(t reflect.Type) (*info, error) {
 	// Reflection information is only generated for structs.
 	if t.Kind() != reflect.Struct {
@@ -56,7 +56,7 @@ func generate(t reflect.Type) (*info, error) {
 
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
-		// Fields without a "db" tag are outside of SQLair's remit.
+		// Fields without a "db" tag are outside of SQLAir's remit.
 		tag := f.Tag.Get("db")
 		if tag == "" {
 			continue

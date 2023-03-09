@@ -1,4 +1,4 @@
-# SQLair
+# SQLAir
 
 Friendly type mapping for SQL databases.
 
