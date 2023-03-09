@@ -21,13 +21,13 @@ func setupDB() (*sql.DB, error) {
 	return sql.Open("sqlite3", ":memory:")
 }
 
-func createExampleDB(create string, inserts []string) (*sql.DB, error) {
+func createExampleDB(createTables string, inserts []string) (*sql.DB, error) {
 	db, err := setupDB()
 	if err != nil {
 		return nil, err
 	}
 
-	_, err = db.Exec(create)
+	_, err = db.Exec(createTables)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ type JujuLeaseInfo struct {
 }
 
 func JujuStoreLeaseDB() (string, *sql.DB, error) {
-	create := `
+	createTables := `
 CREATE TABLE lease (
 	model_uuid text,
 	name text,
@@ -67,10 +67,10 @@ CREATE TABLE lease_type (
 );
 
 `
-	drop := `
-	 drop table lease;
-	 drop table lease_type;
-	 `
+	dropTables := `
+DROP TABLE lease;
+DROP TABLE lease_type;
+`
 
 	inserts := []string{
 		"INSERT INTO lease VALUES ('uuid1', 'name1', 'holder1', 1, 'type_id1');",
@@ -80,11 +80,11 @@ CREATE TABLE lease_type (
 		"INSERT INTO lease_type VALUES ('type_id2', 'type2');",
 	}
 
-	db, err := createExampleDB(create, inserts)
+	db, err := createExampleDB(createTables, inserts)
 	if err != nil {
 		return "", nil, err
 	}
-	return drop, db, nil
+	return dropTables, db, nil
 
 }
 
@@ -109,7 +109,7 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 		expected: [][]any{{&JujuLeaseKey{Namespace: "type1", ModelUUID: "uuid1", Lease: "name1"}, &JujuLeaseInfo{Holder: "holder1", Expiry: 1}}},
 	}}
 
-	drop, db, err := JujuStoreLeaseDB()
+	dropTables, db, err := JujuStoreLeaseDB()
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -149,7 +149,7 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 		}
 	}
 
-	_, err = sqlairDB.Exec(sqlair.MustPrepare(drop))
+	_, err = sqlairDB.Exec(sqlair.MustPrepare(dropTables))
 	if err != nil {
 		c.Fatal(err)
 	}

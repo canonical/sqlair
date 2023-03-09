@@ -7,12 +7,13 @@ import (
 	"github.com/canonical/sqlair/internal/expr"
 )
 
-// Statement is a sql statement with valid sqlair DML.
+// Statement represents a SQL statemnt with valid SQLair expressions.
+// It is ready to be run on a SQLair DB.
 type Statement struct {
 	pe *expr.PreparedExpr
 }
 
-// Query stores a database query and iterates over the results.
+// Query holds a database query and is used to iterate over the results.
 type Query struct {
 	pe  *expr.PreparedExpr
 	re  *expr.ResultExpr
@@ -39,9 +40,10 @@ func (db *DB) sqlDB() *sql.DB {
 	return db.db
 }
 
-// Prepare checks that SQLair DML statements in a SQL query are well formed.
+// Prepare expands the types mentioned in the SQLair expressions and checks
+// the SQLair parts of the query are well formed.
 // typeInstantiations must contain an instance of every type mentioned in the
-// SQLair DML of the query. These are used only for type information.
+// SQLair expressions of the query. These are used only for type information.
 func Prepare(query string, typeInstantiations ...any) (*Statement, error) {
 	parser := expr.NewParser()
 	parsedExpr, err := parser.Parse(query)
@@ -55,6 +57,7 @@ func Prepare(query string, typeInstantiations ...any) (*Statement, error) {
 	return &Statement{pe: preparedExpr}, nil
 }
 
+// MustPrepare is the same as prepare except that it panics on error.
 func MustPrepare(query string, typeInstantiations ...any) *Statement {
 	s, err := Prepare(query, typeInstantiations...)
 	if err != nil {
@@ -65,10 +68,13 @@ func MustPrepare(query string, typeInstantiations ...any) *Statement {
 
 // Query takes a prepared SQLair Statement and returns a Query object for
 // iterating over the results.
+// Query uses QueryContext with context.Background internally.
 func (db *DB) Query(s *Statement, inputStructs ...any) (*Query, error) {
 	return db.QueryContext(s, context.Background(), inputStructs...)
 }
 
+// QueryContext takes a prepared SQLair Statement and returns a Query object for
+// iterating over the results.
 func (db *DB) QueryContext(s *Statement, ctx context.Context, inputStructs ...any) (*Query, error) {
 	ce, err := s.pe.Complete(inputStructs...)
 	if err != nil {
@@ -76,7 +82,7 @@ func (db *DB) QueryContext(s *Statement, ctx context.Context, inputStructs ...an
 	}
 
 	q := func() (*sql.Rows, error) {
-		return db.db.QueryContext(ctx, expr.GetCompletedSQL(ce), expr.GetCompletedArgs(ce)...)
+		return db.db.QueryContext(ctx, ce.CompletedSQL(), ce.CompletedArgs()...)
 	}
 
 	return &Query{pe: s.pe, q: q}, nil
@@ -93,7 +99,7 @@ func (db *DB) ExecContext(s *Statement, ctx context.Context, inputStructs ...any
 		return nil, err
 	}
 
-	res, err := db.db.ExecContext(ctx, expr.GetCompletedSQL(ce), expr.GetCompletedArgs(ce)...)
+	res, err := db.db.ExecContext(ctx, ce.CompletedSQL(), ce.CompletedArgs()...)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +133,8 @@ func (q *Query) Next() bool {
 	return ok
 }
 
-// Decode stores a result row from the query into the structs specified in its SQLair DML.
+// Decode stores a result row from the query into the structs specified in its
+// SQLair expressions.
 // outputStructs must contains all the structs mentioned in the query.
 // If an error occours during decode it will return false and Close will be called implicitly.
 // The error can be checked with Query.Err().
@@ -148,7 +155,7 @@ func (q *Query) Decode(outputStructs ...any) bool {
 }
 
 // Close finishes iteration of the results.
-func (q *Query) Close(outputStructs ...any) error {
+func (q *Query) Close() error {
 	if q.err != nil {
 		return q.err
 	}
@@ -160,13 +167,14 @@ func (q *Query) Close(outputStructs ...any) error {
 	return nil
 }
 
+// One runs a query and decodes the first row into outputStructs.
 // One is shorthand for q.Next(); q.Decode(outputStructs...); q.Close().
 func (q *Query) One(outputStructs ...any) error {
 	return q.re.One(outputStructs...)
 }
 
 // All iterates over the query and decodes all the rows.
-// It fabricates all struct instansiations needed.
+// It fabricates all struct instantiations needed.
 func (q *Query) All() ([][]any, error) {
 	return q.re.All()
 }

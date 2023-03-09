@@ -8,11 +8,11 @@ import (
 	"strings"
 )
 
-func GetCompletedSQL(ce *CompletedExpr) string {
+func (ce *CompletedExpr) CompletedSQL() string {
 	return ce.sql
 }
 
-func GetCompletedArgs(ce *CompletedExpr) []any {
+func (ce *CompletedExpr) CompletedArgs() []any {
 	return ce.args
 }
 
