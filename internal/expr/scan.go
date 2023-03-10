@@ -7,6 +7,7 @@ import (
 	"strconv"
 )
 
+// ResultExpr represents the result of a database query.
 type ResultExpr struct {
 	outputs []field
 	rows    *sql.Rows
@@ -16,13 +17,14 @@ func NewResultExpr(pe *PreparedExpr, rows *sql.Rows) *ResultExpr {
 	return &ResultExpr{outputs: pe.outputs, rows: rows}
 }
 
-func (re *ResultExpr) One(args ...any) error {
+// One runs a query and decodes the first row into outputStructs.
+func (re *ResultExpr) One(outputStructs ...any) error {
 	if ok, err := re.Next(); err != nil {
 		return err
 	} else if !ok {
 		return fmt.Errorf("cannot return one row: no results")
 	}
-	err := re.Decode(args...)
+	err := re.Decode(outputStructs...)
 	if err != nil {
 		return err
 	}
@@ -33,14 +35,14 @@ func (re *ResultExpr) One(args ...any) error {
 // getTypes returns the types mentioned in expressions in the order they appear in the query.
 func getTypes(outs []field) []reflect.Type {
 	isDup := make(map[reflect.Type]bool)
-	ts := []reflect.Type{}
+	types := []reflect.Type{}
 	for _, out := range outs {
 		if t := out.structType; !isDup[t] {
 			isDup[t] = true
-			ts = append(ts, t)
+			types = append(types, t)
 		}
 	}
-	return ts
+	return types
 }
 
 // All iterates over the query and decodes all the rows.
@@ -108,13 +110,13 @@ func (re *ResultExpr) Decode(dests ...any) (err error) {
 
 		destVal := reflect.ValueOf(dest)
 		if destVal.Kind() != reflect.Pointer {
-			return fmt.Errorf("need pointer to struct, got non-pointer")
+			return fmt.Errorf("need pointer to struct, got non-pointer of kind %s", destVal.Kind())
 		}
 
 		destVal = reflect.Indirect(destVal)
 
 		if destVal.Kind() != reflect.Struct {
-			return fmt.Errorf("need struct, got %s", destVal.Kind())
+			return fmt.Errorf("need pointer to struct, got pointer to %s", destVal.Kind())
 		}
 
 		t := destVal.Type()

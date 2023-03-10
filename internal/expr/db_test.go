@@ -222,7 +222,7 @@ func (s *DBSuite) TestDecodeErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{Person{}}},
-		err:     "cannot decode expression: need pointer to struct, got non-pointer",
+		err:     "cannot decode expression: need pointer to struct, got non-pointer of kind struct",
 	}, {
 		summary: "wrong struct",
 		query:   "SELECT * AS &Person.* FROM person",
@@ -236,7 +236,7 @@ func (s *DBSuite) TestDecodeErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{&map[string]any{}}},
-		err:     "cannot decode expression: need struct, got map",
+		err:     "cannot decode expression: need pointer to struct, got pointer to map",
 	}}
 
 	dropTables, db, err := personAndAddressDB()

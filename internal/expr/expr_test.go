@@ -16,7 +16,7 @@ type ExprSuite struct{}
 var _ = Suite(&ExprSuite{})
 
 type Address struct {
-	ID       int    `db:"id,omitempty"`
+	ID       int    `db:"id"`
 	District string `db:"district"`
 	Street   string `db:"street"`
 }

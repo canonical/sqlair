@@ -10,6 +10,7 @@ func CompletedArgs(ce *CompletedExpr) []any {
 	return ce.args
 }
 
+// TestDB allows for tests that include the whole SQLair pipeline.
 type TestDB struct {
 	db *sql.DB
 }
