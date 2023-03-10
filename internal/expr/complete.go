@@ -60,6 +60,7 @@ func (pe *PreparedExpr) Complete(args ...any) (ce *CompletedExpr, err error) {
 
 			return nil, fmt.Errorf("%s not referenced in query", t.Name())
 		}
+
 	}
 
 	// Query parameteres.
