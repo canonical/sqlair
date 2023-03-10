@@ -30,10 +30,10 @@ func (re *ResultExpr) One(args ...any) error {
 	return nil
 }
 
-// getTypes returns the types mentioned in SQLair expression of the query in the order they appear.
+// getTypes returns the types mentioned in expressions in the order they appear in the query.
 func getTypes(outs []field) []reflect.Type {
 	isDup := make(map[reflect.Type]bool)
-	ts := make([]reflect.Type, 0)
+	ts := []reflect.Type{}
 	for _, out := range outs {
 		if t := out.structType; !isDup[t] {
 			isDup[t] = true
@@ -44,11 +44,11 @@ func getTypes(outs []field) []reflect.Type {
 }
 
 // All iterates over the query and decodes all the rows.
-// It fabricates all struct instansiations needed.
+// It fabricates all struct instantiations needed.
 func (re *ResultExpr) All() ([][]any, error) {
-	var rss [][]any
+	var rows [][]any
 
-	ts := getTypes(re.outputs)
+	outputTypes := getTypes(re.outputs)
 
 	for {
 		if ok, err := re.Next(); err != nil {
@@ -57,31 +57,28 @@ func (re *ResultExpr) All() ([][]any, error) {
 			break
 		}
 
-		newStructs := make([]reflect.Value, len(ts))
+		outputStructs := make([]reflect.Value, len(outputTypes))
 
-		for i, t := range ts {
-			rp := reflect.New(t)
-			// We need to unwrap the struct inside the interface{}.
-			r := rp.Elem()
-
-			newStructs[i] = r
+		for i, t := range outputTypes {
+			// reflect.New returns a pointer to a struct. It is dereferenced with Elem().
+			outputStructs[i] = reflect.New(t).Elem()
 		}
 
-		err := re.decodeRow(newStructs...)
+		err := re.decodeRow(outputStructs...)
 		if err != nil {
 			return [][]any{}, err
 		}
 
-		rs := make([]any, len(ts))
-		for i, r := range newStructs {
-			rs[i] = r.Interface()
+		row := make([]any, len(outputTypes))
+		for i, s := range outputStructs {
+			row[i] = s.Interface()
 		}
 
-		rss = append(rss, rs)
+		rows = append(rows, row)
 	}
 
 	re.Close()
-	return rss, nil
+	return rows, nil
 }
 
 // Next prepares the next result row for reading with the Scan method.
@@ -102,25 +99,25 @@ func (re *ResultExpr) Decode(dests ...any) (err error) {
 		}
 	}()
 
-	vals := []reflect.Value{}
+	destVals := []reflect.Value{}
 
 	for _, dest := range dests {
 		if dest == nil {
 			return fmt.Errorf("need valid struct, got nil")
 		}
 
-		v := reflect.ValueOf(dest)
-		if v.Kind() != reflect.Pointer {
+		destVal := reflect.ValueOf(dest)
+		if destVal.Kind() != reflect.Pointer {
 			return fmt.Errorf("need pointer to struct, got non-pointer")
 		}
 
-		v = reflect.Indirect(v)
+		destVal = reflect.Indirect(destVal)
 
-		if v.Kind() != reflect.Struct {
-			return fmt.Errorf("need struct, got %s", v.Kind())
+		if destVal.Kind() != reflect.Struct {
+			return fmt.Errorf("need struct, got %s", destVal.Kind())
 		}
 
-		t := v.Type()
+		t := destVal.Type()
 
 		typeFound := false
 		for _, f := range re.outputs {
@@ -134,9 +131,9 @@ func (re *ResultExpr) Decode(dests ...any) (err error) {
 			return fmt.Errorf("no output expression of type %s", t.Name())
 		}
 
-		vals = append(vals, v)
+		destVals = append(destVals, destVal)
 	}
-	if err := re.decodeRow(vals...); err != nil {
+	if err := re.decodeRow(destVals...); err != nil {
 		return err
 	}
 
@@ -145,7 +142,7 @@ func (re *ResultExpr) Decode(dests ...any) (err error) {
 
 // decodeRow copies a result row into the fields of the reflect.Values in dests.
 // All the structs mentioned in the query must be in dests.
-// The reflect.Value must be of Kind reflect.Struct and must be addressable and settable.
+// All dests must be of kind reflect.Struct and must be addressable and settable.
 func (re *ResultExpr) decodeRow(dests ...reflect.Value) error {
 	cols, err := re.rows.Columns()
 	if err != nil {
