@@ -111,8 +111,8 @@ func (db *DB) ExecContext(s *Statement, ctx context.Context, inputStructs ...any
 
 // Next prepares the next row for decoding.
 // The first call to Next will execute the query.
-// If an error occours it can be checked with Query.Err(), Next will return false and Close will be called implicitly.
-// If an error has previously occoured Next will return false.
+// If an error occurs it can be checked with Query.Err(), Next will return false and Close will be called implicitly.
+// If an error has previously occured Next will return false.
 func (q *Query) Next() bool {
 	if q.err != nil {
 		return false
@@ -138,9 +138,9 @@ func (q *Query) Next() bool {
 // Decode stores a result row from the query into the structs specified in its
 // SQLair expressions.
 // outputStructs must contains all the structs mentioned in the query.
-// If an error occours during decode it will return false and Close will be called implicitly.
-// The error can be checked with Query.Err().
-// If an error has previously occoured Decode will return false.
+// If an error occurs during decode it will return false and Close will be called implicitly.
+// If an error has previously occured Decode will return false.
+// In this case the error can be checked with Query.Err().
 func (q *Query) Decode(outputStructs ...any) bool {
 	if q.err != nil {
 		return false
@@ -148,7 +148,7 @@ func (q *Query) Decode(outputStructs ...any) bool {
 	err := q.re.Decode(outputStructs...)
 	if err != nil {
 		q.err = err
-		// We must close the rows if an error occours.
+		// We must close the rows if an error occurs.
 		// The error, if any, from Rows.Close is ignored.
 		_ = q.re.Close()
 		return false

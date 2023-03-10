@@ -118,15 +118,14 @@ func (s *DBSuite) TestValidDecode(c *C) {
 		expected: [][]any{{&Person{Fullname: "Fred", PostalCode: 1000}}},
 	}}
 
-	// A Person struct with different int types
-	// Person shadows the Person struct in the tests above
+	// A Person struct that shadows the one in tests above and has different int types.
 	type Person struct {
 		ID         int32  `db:"id"`
 		Fullname   string `db:"name"`
 		PostalCode int32  `db:"address_id"`
 	}
 
-	var testsWithOtherPerson = []struct {
+	var testsWithShadowPerson = []struct {
 		summary  string
 		query    string
 		types    []any
@@ -134,7 +133,7 @@ func (s *DBSuite) TestValidDecode(c *C) {
 		outputs  [][]any
 		expected [][]any
 	}{{
-		summary:  "mistyped person",
+		summary:  "alternative type shadow person",
 		query:    "SELECT * AS &Person.* FROM person",
 		types:    []any{Person{}},
 		inputs:   []any{},
@@ -142,7 +141,7 @@ func (s *DBSuite) TestValidDecode(c *C) {
 		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{20, "Mark", 1500}}, {&Person{40, "Mary", 3500}}, {&Person{35, "James", 4500}}},
 	}}
 
-	tests = append(tests, testsWithOtherPerson...)
+	tests = append(tests, testsWithShadowPerson...)
 
 	dropTables, db, err := personAndAddressDB()
 	if err != nil {
@@ -180,7 +179,7 @@ func (s *DBSuite) TestValidDecode(c *C) {
 			if ok, err := resultExpr.Next(); err != nil {
 				c.Fatalf("test %q failed (Next):\ninput: %s\nerr: %s", t.summary, t.query, err)
 			} else if !ok {
-				c.Fatalf("test %q failed (Next):\ninput: %s\nerr: no more rows in query", t.summary, t.query)
+				c.Fatalf("test %q failed (Next):\ninput: %s\nerr: no more rows in query results", t.summary, t.query)
 			}
 			err := resultExpr.Decode(outs...)
 			if err != nil {
@@ -190,7 +189,7 @@ func (s *DBSuite) TestValidDecode(c *C) {
 				Commentf("test %q failed:\ninput: %s", t.summary, t.query))
 			for j, out := range outs {
 				c.Assert(out, DeepEquals, t.expected[i][j],
-					Commentf("test %q failed (Decode):\ninput: %s", t.summary, t.query))
+					Commentf("test %q failed (Decode):\ninput: %s\noutput row: %d\n", t.summary, t.query, j))
 			}
 		}
 		resultExpr.Close()
@@ -271,12 +270,12 @@ func (s *DBSuite) TestDecodeErrors(c *C) {
 			continue
 		}
 
-		// Get as many rows as we have lists of structs to output into.
+		// Get len(t.outputs) rows.
 		for _, outs := range t.outputs {
 			if ok, err := resultExpr.Next(); err != nil {
 				c.Fatalf("test %q failed (Next) :\ninput: %s\nerr: %s", t.summary, t.query, err)
 			} else if !ok {
-				c.Fatalf("test %q failed (Next) :\ninput: %s\nerr: no more rows in query", t.summary, t.query)
+				c.Fatalf("test %q failed (Next) :\ninput: %s\nerr: no more rows in query results", t.summary, t.query)
 			}
 			err := resultExpr.Decode(outs...)
 			c.Assert(err, ErrorMatches, t.err,
@@ -305,13 +304,13 @@ func (s *DBSuite) TestValidAll(c *C) {
 		inputs:   []any{},
 		expected: [][]any{{Person{ID: 30}, Address{ID: 1000}}, {Person{ID: 30}, Address{ID: 1500}}, {Person{ID: 30}, Address{ID: 3500}}, {Person{ID: 20}, Address{ID: 1000}}, {Person{ID: 20}, Address{ID: 1500}}, {Person{ID: 20}, Address{ID: 3500}}, {Person{ID: 40}, Address{ID: 1000}}, {Person{ID: 40}, Address{ID: 1500}}, {Person{ID: 40}, Address{ID: 3500}}, {Person{ID: 35}, Address{ID: 1000}}, {Person{ID: 35}, Address{ID: 1500}}, {Person{ID: 35}, Address{ID: 3500}}},
 	}, {
-		summary:  "simple select person",
+		summary:  "select all columns into person",
 		query:    "SELECT * AS &Person.* FROM person",
 		types:    []any{Person{}},
 		inputs:   []any{},
 		expected: [][]any{{Person{30, "Fred", 1000}}, {Person{20, "Mark", 1500}}, {Person{40, "Mary", 3500}}, {Person{35, "James", 4500}}},
 	}, {
-		summary:  "single line returned",
+		summary:  "single line of query with inputs",
 		query:    "SELECT p.* AS &Person.*, a.* AS &Address.*, p.* AS &Manager.* FROM person AS p, address AS a WHERE p.id = $Person.id AND a.id = $Address.id ",
 		types:    []any{Person{}, Address{}, Manager{}},
 		inputs:   []any{Address{ID: 1000}, Person{ID: 30}},
@@ -391,7 +390,7 @@ func (s *DBSuite) TestValidOne(c *C) {
 		outputs:  []any{&Person{}, &Address{}},
 		expected: []any{&Person{ID: 30}, &Address{ID: 1000}},
 	}, {
-		summary:  "select many",
+		summary:  "select into multiple structs, with input conditions",
 		query:    "SELECT p.* AS &Person.*, a.* AS &Address.*, p.* AS &Manager.* FROM person AS p, address AS a WHERE p.id = $Person.id AND a.id = $Address.id ",
 		types:    []any{Person{}, Address{}, Manager{}},
 		inputs:   []any{Address{ID: 1000}, Person{ID: 30}},

@@ -90,14 +90,14 @@ DROP TABLE lease_type;
 
 func (s *PackageSuite) TestJujuStore(c *C) {
 	var tests = []struct {
-		summery  string
+		summary  string
 		query    string
 		types    []any
 		inputs   []any
 		outputs  [][]any
 		expected [][]any
 	}{{
-		summery: "juju store lease group query",
+		summary: "juju store lease group query",
 		query: `
 SELECT (t.type, l.model_uuid, l.name) AS &JujuLeaseKey.*, (l.holder, l.expiry) AS &JujuLeaseInfo.*
 FROM   lease l JOIN lease_type t ON l.lease_type_id = t.id
@@ -120,24 +120,24 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 
 		stmt, err := sqlair.Prepare(t.query, t.types...)
 		if err != nil {
-			c.Errorf("test %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summery, t.query, err)
+			c.Errorf("test %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
 			continue
 		}
 
 		q, err := sqlairDB.Query(stmt, t.inputs...)
 		if err != nil {
-			c.Errorf("test %q failed (Query):\ninput: %s\nerr: %s\n", t.summery, t.query, err)
+			c.Errorf("test %q failed (Query):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
 			continue
 		}
 
 		i := 0
 		for q.Next() {
 			if i > len(t.outputs) {
-				c.Errorf("test %q failed (Next):\ninput: %s\nerr: more rows that expected\n", t.summery, t.query)
+				c.Errorf("test %q failed (Next):\ninput: %s\nerr: more rows that expected\n", t.summary, t.query)
 				break
 			}
 			if !q.Decode(t.outputs[i]...) {
-				c.Errorf("test %q failed (Decode):\ninput: %s\nerr: %s\n", t.summery, t.query, q.Err())
+				c.Errorf("test %q failed (Decode):\ninput: %s\nerr: %s\n", t.summary, t.query, q.Err())
 				break
 			}
 			i++
@@ -145,7 +145,7 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 
 		err = q.Close()
 		if err != nil {
-			c.Errorf("test %q failed (Close):\ninput: %s\nerr: %s\n", t.summery, t.query, err)
+			c.Errorf("test %q failed (Close):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
 		}
 	}
 
