@@ -29,8 +29,7 @@ type Person struct {
 
 type Manager Person
 
-type District struct {
-}
+type District struct{}
 
 type M map[string]any
 
@@ -604,7 +603,7 @@ func (s *ExprSuite) TestValidComplete(c *C) {
 			c.Fatal(err)
 		}
 
-		c.Assert(expr.CompletedArgs(completedExpr), DeepEquals, test.completeValues)
+		c.Assert(completedExpr.CompletedArgs(), DeepEquals, test.completeValues)
 	}
 }
 

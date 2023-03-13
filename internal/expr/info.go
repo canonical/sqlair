@@ -4,7 +4,9 @@ import (
 	"reflect"
 )
 
-// field represents reflection information about a field from some struct type.
+type Outputs = []field
+
+// Field represents reflection information about a field from some struct type.
 type field struct {
 	typ reflect.Type
 
@@ -17,7 +19,7 @@ type field struct {
 	index []int
 
 	// OmitEmpty is true when "omitempty" is
-	// a property of the field's "db" tag.
+	// a property of the Field's "db" tag.
 	omitEmpty bool
 }
 

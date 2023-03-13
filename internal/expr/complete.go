@@ -16,6 +16,10 @@ func (ce *CompletedExpr) CompletedArgs() []any {
 	return ce.args
 }
 
+func (pe *CompleteExpr) Outputs() Outputs {
+	return pe.outputs
+}
+
 type CompletedExpr struct {
 	outputs []field
 	sql     string
