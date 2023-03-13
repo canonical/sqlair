@@ -116,6 +116,7 @@ func (q *Query) One(outputStructs ...any) error {
 // All iterates over the query and decodes all the rows.
 // It fabricates all struct instantiations needed.
 // It returns a list of rows, each row is a list of pointers to structs.
+// The structs appear in the syntactic order they appear in the query.
 func (q *Query) All() ([][]any, error) {
 	var rows [][]any
 
@@ -133,13 +134,6 @@ func (q *Query) All() ([][]any, error) {
 			return [][]any{}, err
 		}
 
-		/*
-			row := make([]any, len(ptrs))
-			for i, p := range ptrs {
-				row[i] = *p
-			}
-			rows = append(rows, row)
-		*/
 		rows = append(rows, row)
 	}
 
@@ -225,6 +219,7 @@ func (q *Query) Decode(dests ...any) (ok bool) {
 	return true
 }
 
+// Close closes the query and returns any errors encountered during iteration.
 func (q *Query) Close() error {
 	if q.err != nil {
 		_ = q.rows.Close()
