@@ -54,7 +54,7 @@ func generateAddrs(cols []string, outputs []field, dests []reflect.Value, fabric
 		typeDest[dest.Type()] = dest
 	}
 
-	// 	sqlair columns are named as _sqlair_X, where X = 0, 1, 2,...
+	//  SQLair columns are named as _sqlair_X, where X = 0, 1, 2,...
 	//  offset is the difference between X and the index i and where column _sqlair_X is located in cols.
 	//  It allows non-sqlair columns to be returned in the results.
 	offset := 0
