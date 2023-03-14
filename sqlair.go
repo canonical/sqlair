@@ -92,7 +92,6 @@ func (db *DB) QueryContext(s *Statement, ctx context.Context, inputStructs ...an
 	q := func() (*sql.Rows, error) {
 		return db.db.QueryContext(ctx, ce.CompletedSQL(), ce.CompletedArgs()...)
 	}
-
 	return &Query{outputs: ce.OutputFields(), q: q}, nil
 }
 
@@ -161,7 +160,7 @@ func (q *Query) Next() bool {
 	return q.rows.Next()
 }
 
-// Decode decodes the current result into the dests struct values.
+// Decode decodes the current result into the structs in dests.
 // dests must contain all the structs mentioned in the query.
 // If an error occurs it will be returned with Query.Close().
 func (q *Query) Decode(dests ...any) (ok bool) {
