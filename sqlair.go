@@ -93,14 +93,14 @@ func (db *DB) QueryContext(s *Statement, ctx context.Context, inputStructs ...an
 		return db.db.QueryContext(ctx, ce.CompletedSQL(), ce.CompletedArgs()...)
 	}
 
-	return &Query{outputs: ce.Outputs(), q: q}, nil
+	return &Query{outputs: ce.OutputFields(), q: q}, nil
 }
 
 // Query holds a database query and is used to iterate over the results.
 type Query struct {
 	err     error
 	rows    *sql.Rows
-	outputs expr.Outputs
+	outputs expr.OutputFields
 	q       func() (*sql.Rows, error)
 }
 

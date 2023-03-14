@@ -16,7 +16,7 @@ func (ce *CompletedExpr) CompletedArgs() []any {
 	return ce.args
 }
 
-func (pe *CompletedExpr) Outputs() Outputs {
+func (pe *CompletedExpr) OutputFields() OutputFields {
 	return pe.outputs
 }
 

@@ -6,20 +6,20 @@ import (
 	"strconv"
 )
 
-// FabricatedOutputAddrs generates a new instace for each output struct and
-// returns the pointers to their fields for scanning the database columns into.
+// FabricatedOutputAddrs generates a new instace for each output struct.
+// It then returns these structs and a list of pointers to struct fields specified in outputs.
 func FabricatedOutputAddrs(cols []string, outputs []field) ([]any, []any, error) {
 	return generateAddrs(cols, outputs, []reflect.Value{}, true)
 }
 
-// OutputAddrs gets the pointers to the output struct fields for scanning the database columns into.
+// OutputAddrs returns list of pointers to struct fields specified in outputs.
 func OutputAddrs(cols []string, outputs []field, dests []reflect.Value) ([]any, error) {
 	addrs, _, err := generateAddrs(cols, outputs, dests, false)
 	return addrs, err
 }
 
-// generateAddrs gets the pointers to the output struct fields for scanning the database columns into.
-// It can fabricate the structs if fabricate=true.
+// generateAddrs generates the addresses to scan query columns into.
+// It can fabricate the structs needed if fabricate=true.
 // If fabricate=false all the structs mentioned in the query must be in dests.
 // All dests must be of kind reflect.Struct and must be addressable and settable.
 func generateAddrs(cols []string, outputs []field, dests []reflect.Value, fabricate bool) ([]any, []any, error) {
@@ -62,7 +62,6 @@ func generateAddrs(cols []string, outputs []field, dests []reflect.Value, fabric
 	for i, col := range cols {
 		if col == "_sqlair_"+strconv.Itoa(i-offset) {
 			field := outputs[i-offset]
-
 			dest, ok := typeDest[field.structType]
 			if !ok {
 				return []any{}, []any{}, fmt.Errorf("type %s found in query but not passed to decode", field.structType.Name())
