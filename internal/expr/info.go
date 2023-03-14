@@ -4,7 +4,7 @@ import (
 	"reflect"
 )
 
-type OutputFields struct {
+type Outputs struct {
 	structFields []field
 }
 

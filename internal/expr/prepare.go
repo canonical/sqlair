@@ -15,8 +15,8 @@ type PreparedExpr struct {
 	sql     string
 }
 
-func (pe *PreparedExpr) OutputFields() OutputFields {
-	return OutputFields{structFields: pe.outputs}
+func (pe *PreparedExpr) Outputs() Outputs {
+	return Outputs{structFields: pe.outputs}
 }
 
 // getKeys returns the keys of a string map in a deterministic order.

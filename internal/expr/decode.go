@@ -6,46 +6,19 @@ import (
 	"strconv"
 )
 
-// FabricatedOutputAddrs generates a new instace for each output struct.
-// It then returns these structs and a list of pointers to struct fields specified in outputs.
-func FabricatedOutputAddrs(cols []string, outputs OutputFields) ([]any, []any, error) {
-	return generateAddrs(cols, outputs.structFields, []reflect.Value{}, true)
-}
-
 // OutputAddrs returns list of pointers to struct fields specified in outputs.
-func OutputAddrs(cols []string, outputs OutputFields, dests []reflect.Value) ([]any, error) {
-	addrs, _, err := generateAddrs(cols, outputs.structFields, dests, false)
-	return addrs, err
-}
-
-// generateAddrs generates the addresses to scan query columns into.
-// It can fabricate the structs needed if fabricate=true.
-// If fabricate=false all the structs mentioned in the query must be in dests.
+// All the structs mentioned in the query must be in dests.
 // All dests must be of kind reflect.Struct and must be addressable and settable.
-func generateAddrs(cols []string, outputs []field, dests []reflect.Value, fabricate bool) ([]any, []any, error) {
+func OutputAddrs(cols []string, outputs Outputs, dests []reflect.Value) ([]any, error) {
 	inQuery := make(map[reflect.Type]bool)
-	queryTypes := []reflect.Type{}
-	for _, out := range outputs {
-		if t := out.structType; !inQuery[t] {
-			inQuery[t] = true
-			queryTypes = append(queryTypes, t)
-		}
+	for _, out := range outputs.structFields {
+		inQuery[out.structType] = true
 	}
 
-	var newStructs = []any{}
-	if fabricate {
-		// Generate a new instance of each output type in the query.
-		for _, t := range queryTypes {
-			newValue := reflect.New(t)
-			newStructs = append(newStructs, newValue.Interface())
-			dests = append(dests, newValue.Elem())
-		}
-	} else {
-		// Check that each dest is in the query.
-		for _, dest := range dests {
-			if !inQuery[dest.Type()] {
-				return []any{}, []any{}, fmt.Errorf("type %q does not appear as an output type in the query", dest.Type().Name())
-			}
+	// Check that each dest is in the query.
+	for _, dest := range dests {
+		if !inQuery[dest.Type()] {
+			return []any{}, fmt.Errorf("type %q does not appear as an output type in the query", dest.Type().Name())
 		}
 	}
 
@@ -61,15 +34,15 @@ func generateAddrs(cols []string, outputs []field, dests []reflect.Value, fabric
 	ptrs := []any{}
 	for i, col := range cols {
 		if col == "_sqlair_"+strconv.Itoa(i-offset) {
-			field := outputs[i-offset]
+			field := outputs.structFields[i-offset]
 			dest, ok := typeDest[field.structType]
 			if !ok {
-				return []any{}, []any{}, fmt.Errorf("type %s found in query but not passed to decode", field.structType.Name())
+				return []any{}, fmt.Errorf("type %s found in query but not passed to decode", field.structType.Name())
 			}
 
 			val := dest.FieldByIndex(field.index)
 			if !val.CanAddr() {
-				return []any{}, []any{}, fmt.Errorf("cannot address field %s of struct %s", field.name, field.structType.Name())
+				return []any{}, fmt.Errorf("cannot address field %s of struct %s", field.name, field.structType.Name())
 			}
 			ptrs = append(ptrs, val.Addr().Interface())
 		} else {
@@ -78,5 +51,5 @@ func generateAddrs(cols []string, outputs []field, dests []reflect.Value, fabric
 			offset++
 		}
 	}
-	return ptrs, newStructs, nil
+	return ptrs, nil
 }

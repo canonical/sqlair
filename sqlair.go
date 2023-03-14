@@ -58,7 +58,7 @@ func (db *DB) SQLdb() *sql.DB {
 type Query struct {
 	err     error
 	rows    *sql.Rows
-	outputs expr.OutputFields
+	outputs expr.Outputs
 	q       func() (*sql.Rows, error)
 }
 
@@ -72,7 +72,7 @@ func (db *DB) Query(s *Statement, inputStructs ...any) *Query {
 // QueryContext takes a prepared SQLair Statement and returns a Query object for
 // iterating over the results.
 func (db *DB) QueryContext(s *Statement, ctx context.Context, inputStructs ...any) *Query {
-	q := &Query{outputs: s.pe.OutputFields()}
+	q := &Query{outputs: s.pe.Outputs()}
 
 	ce, err := s.pe.Complete(inputStructs...)
 	if err != nil {
@@ -84,43 +84,13 @@ func (db *DB) QueryContext(s *Statement, ctx context.Context, inputStructs ...an
 	return q
 }
 
-// One runs a query and decodes the first row into outputValues.
-func (q *Query) One(outputValues ...any) error {
+// One runs a query and decodes the first row into outputs.
+func (q *Query) One(outputs ...any) error {
 	if !q.Next() {
 		return fmt.Errorf("cannot return one row: no results")
 	}
-	q.Decode(outputValues...)
+	q.Decode(outputs...)
 	return q.Close()
-}
-
-// All iterates over the query and decodes all the rows.
-// It fabricates all struct instantiations needed.
-// It returns a list of rows, each row is a list of pointers to structs.
-// The structs appear in the syntactic order they appear in the query.
-func (q *Query) All() ([][]any, error) {
-	var rows [][]any
-
-	for q.Next() {
-		cols, err := q.rows.Columns()
-		if err != nil {
-			return [][]any{}, err
-		}
-
-		ptrs, row, err := expr.FabricatedOutputAddrs(cols, q.outputs)
-		if err != nil {
-			return [][]any{}, err
-		}
-		if err := q.rows.Scan(ptrs...); err != nil {
-			return [][]any{}, err
-		}
-
-		rows = append(rows, row)
-	}
-
-	if err := q.Close(); err != nil {
-		return [][]any{}, err
-	}
-	return rows, nil
 }
 
 // Next prepares the next row for decoding.
@@ -142,9 +112,9 @@ func (q *Query) Next() bool {
 }
 
 // Decode decodes the current result into the structs in outputValues.
-// outputValues must contain all the structs mentioned in the query.
+// outputs must contain all the structs mentioned in the query.
 // If an error occurs it will be returned with Query.Close().
-func (q *Query) Decode(outputValues ...any) (ok bool) {
+func (q *Query) Decode(outputs ...any) (ok bool) {
 	if q.err != nil {
 		return false
 	}
@@ -159,26 +129,26 @@ func (q *Query) Decode(outputValues ...any) (ok bool) {
 		return false
 	}
 
-	destVals := []reflect.Value{}
-	for _, dest := range outputValues {
-		if dest == nil {
+	outputVals := []reflect.Value{}
+	for _, output := range outputs {
+		if output == nil {
 			q.err = fmt.Errorf("need valid struct, got nil")
 			return false
 		}
 
-		destVal := reflect.ValueOf(dest)
-		if destVal.Kind() != reflect.Pointer {
-			q.err = fmt.Errorf("need pointer to struct, got non-pointer of kind %s", destVal.Kind())
+		outputVal := reflect.ValueOf(output)
+		if outputVal.Kind() != reflect.Pointer {
+			q.err = fmt.Errorf("need pointer to struct, got non-pointer of kind %s", outputVal.Kind())
 			return false
 		}
 
-		destVal = reflect.Indirect(destVal)
-		if destVal.Kind() != reflect.Struct {
-			q.err = fmt.Errorf("need pointer to struct, got pointer to %s", destVal.Kind())
+		outputVal = reflect.Indirect(outputVal)
+		if outputVal.Kind() != reflect.Struct {
+			q.err = fmt.Errorf("need pointer to struct, got pointer to %s", outputVal.Kind())
 			return false
 		}
 
-		destVals = append(destVals, destVal)
+		outputVals = append(outputVals, outputVal)
 	}
 
 	cols, err := q.rows.Columns()
@@ -187,7 +157,7 @@ func (q *Query) Decode(outputValues ...any) (ok bool) {
 		return false
 	}
 
-	ptrs, err := expr.OutputAddrs(cols, q.outputs, destVals)
+	ptrs, err := expr.OutputAddrs(cols, q.outputs, outputVals)
 	if err != nil {
 		q.err = err
 		return false
