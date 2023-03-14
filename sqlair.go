@@ -17,15 +17,15 @@ type Statement struct {
 
 // Prepare expands the types mentioned in the SQLair expressions and checks
 // the SQLair parts of the query are well formed.
-// typeInstantiations must contain an instance of every type mentioned in the
+// typeSamples must contain an instance of every type mentioned in the
 // SQLair expressions of the query. These are used only for type information.
-func Prepare(query string, typeInstantiations ...any) (*Statement, error) {
+func Prepare(query string, typeSamples ...any) (*Statement, error) {
 	parser := expr.NewParser()
 	parsedExpr, err := parser.Parse(query)
 	if err != nil {
 		return nil, err
 	}
-	preparedExpr, err := parsedExpr.Prepare(typeInstantiations...)
+	preparedExpr, err := parsedExpr.Prepare(typeSamples...)
 	if err != nil {
 		return nil, err
 	}
@@ -33,8 +33,8 @@ func Prepare(query string, typeInstantiations ...any) (*Statement, error) {
 }
 
 // MustPrepare is the same as prepare except that it panics on error.
-func MustPrepare(query string, typeInstantiations ...any) *Statement {
-	s, err := Prepare(query, typeInstantiations...)
+func MustPrepare(query string, typeSamples ...any) *Statement {
+	s, err := Prepare(query, typeSamples...)
 	if err != nil {
 		panic(err)
 	}
@@ -50,49 +50,8 @@ func NewDB(db *sql.DB) *DB {
 }
 
 // sqlDB returns the underlying database object.
-func (db *DB) sqlDB() *sql.DB {
+func (db *DB) SQLdb() *sql.DB {
 	return db.db
-}
-
-// Exec executes an SQLair Statement without returning any rows.
-// Exec uses ExecContext with context.Background internally.
-func (db *DB) Exec(s *Statement, inputStructs ...any) (sql.Result, error) {
-	return db.ExecContext(s, context.Background())
-}
-
-// ExecContext executes an SQLair Statement without returning any rows.
-func (db *DB) ExecContext(s *Statement, ctx context.Context, inputStructs ...any) (sql.Result, error) {
-	ce, err := s.pe.Complete(inputStructs...)
-	if err != nil {
-		return nil, err
-	}
-
-	res, err := db.db.ExecContext(ctx, ce.CompletedSQL(), ce.CompletedArgs()...)
-	if err != nil {
-		return nil, err
-	}
-	return res, nil
-}
-
-// Query takes a prepared SQLair Statement and returns a Query object for
-// iterating over the results.
-// Query uses QueryContext with context.Background internally.
-func (db *DB) Query(s *Statement, inputStructs ...any) (*Query, error) {
-	return db.QueryContext(s, context.Background(), inputStructs...)
-}
-
-// QueryContext takes a prepared SQLair Statement and returns a Query object for
-// iterating over the results.
-func (db *DB) QueryContext(s *Statement, ctx context.Context, inputStructs ...any) (*Query, error) {
-	ce, err := s.pe.Complete(inputStructs...)
-	if err != nil {
-		return nil, err
-	}
-
-	q := func() (*sql.Rows, error) {
-		return db.db.QueryContext(ctx, ce.CompletedSQL(), ce.CompletedArgs()...)
-	}
-	return &Query{outputs: ce.OutputFields(), q: q}, nil
 }
 
 // Query holds a database query and is used to iterate over the results.
@@ -103,12 +62,34 @@ type Query struct {
 	q       func() (*sql.Rows, error)
 }
 
-// One runs a query and decodes the first row into outputStructs.
-func (q *Query) One(outputStructs ...any) error {
+// Query takes a prepared SQLair Statement and returns a Query object forcece
+// iterating over the results.
+// Query uses QueryContext with context.Background internally.
+func (db *DB) Query(s *Statement, inputStructs ...any) *Query {
+	return db.QueryContext(s, context.Background(), inputStructs...)
+}
+
+// QueryContext takes a prepared SQLair Statement and returns a Query object for
+// iterating over the results.
+func (db *DB) QueryContext(s *Statement, ctx context.Context, inputStructs ...any) *Query {
+	q := &Query{outputs: s.pe.OutputFields()}
+
+	ce, err := s.pe.Complete(inputStructs...)
+	if err != nil {
+		q.err = err
+	}
+	q.q = func() (*sql.Rows, error) {
+		return db.db.QueryContext(ctx, ce.CompletedSQL(), ce.CompletedArgs()...)
+	}
+	return q
+}
+
+// One runs a query and decodes the first row into outputValues.
+func (q *Query) One(outputValues ...any) error {
 	if !q.Next() {
 		return fmt.Errorf("cannot return one row: no results")
 	}
-	q.Decode(outputStructs...)
+	q.Decode(outputValues...)
 	return q.Close()
 }
 
@@ -160,10 +141,10 @@ func (q *Query) Next() bool {
 	return q.rows.Next()
 }
 
-// Decode decodes the current result into the structs in dests.
-// dests must contain all the structs mentioned in the query.
+// Decode decodes the current result into the structs in outputValues.
+// outputValues must contain all the structs mentioned in the query.
 // If an error occurs it will be returned with Query.Close().
-func (q *Query) Decode(dests ...any) (ok bool) {
+func (q *Query) Decode(outputValues ...any) (ok bool) {
 	if q.err != nil {
 		return false
 	}
@@ -174,12 +155,12 @@ func (q *Query) Decode(dests ...any) (ok bool) {
 	}()
 
 	if q.rows == nil {
-		q.err = fmt.Errorf("Decode called without calling Next")
+		q.err = fmt.Errorf("iteration ended or not started")
 		return false
 	}
 
 	destVals := []reflect.Value{}
-	for _, dest := range dests {
+	for _, dest := range outputValues {
 		if dest == nil {
 			q.err = fmt.Errorf("need valid struct, got nil")
 			return false
@@ -220,11 +201,10 @@ func (q *Query) Decode(dests ...any) (ok bool) {
 
 // Close closes the query and returns any errors encountered during iteration.
 func (q *Query) Close() error {
-	if q.err != nil {
-		_ = q.rows.Close()
-		return q.err
-	}
 	err := q.rows.Close()
 	q.rows = nil
+	if q.err != nil {
+		return q.err
+	}
 	return err
 }

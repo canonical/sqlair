@@ -16,14 +16,9 @@ func (ce *CompletedExpr) CompletedArgs() []any {
 	return ce.args
 }
 
-func (pe *CompletedExpr) OutputFields() OutputFields {
-	return pe.outputs
-}
-
 type CompletedExpr struct {
-	outputs []field
-	sql     string
-	args    []any
+	sql  string
+	args []any
 }
 
 // Complete returns a completed expression ready for execution, using the provided values to
@@ -87,5 +82,5 @@ func (pe *PreparedExpr) Complete(args ...any) (ce *CompletedExpr, err error) {
 		qargs = append(qargs, named)
 	}
 
-	return &CompletedExpr{outputs: pe.outputs, sql: pe.sql, args: qargs}, nil
+	return &CompletedExpr{sql: pe.sql, args: qargs}, nil
 }

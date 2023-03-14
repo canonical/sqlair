@@ -4,7 +4,9 @@ import (
 	"reflect"
 )
 
-type OutputFields = []field
+type OutputFields struct {
+	structFields []field
+}
 
 // field represents reflection information about a field from some struct type.
 type field struct {

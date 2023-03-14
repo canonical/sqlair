@@ -176,12 +176,8 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 			c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
 			continue
 		}
-		q, err := sqlairDB.Query(stmt, t.inputs...)
-		if err != nil {
-			c.Errorf("\ntest %q failed (Query):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			continue
-		}
 
+		q := sqlairDB.Query(stmt, t.inputs...)
 		i := 0
 		for q.Next() {
 			if i >= len(t.outputs) {
@@ -257,12 +253,8 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 			c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
 			continue
 		}
-		q, err := sqlairDB.Query(stmt, t.inputs...)
-		if err != nil {
-			c.Errorf("\ntest %q failed (Query):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			continue
-		}
 
+		q := sqlairDB.Query(stmt, t.inputs...)
 		i := 0
 		for q.Next() {
 			if i > len(t.outputs) {
@@ -332,11 +324,8 @@ func (s *PackageSuite) TestValidAll(c *C) {
 			c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
 			continue
 		}
-		q, err := sqlairDB.Query(stmt, t.inputs...)
-		if err != nil {
-			c.Errorf("\ntest %q failed (Query):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			continue
-		}
+
+		q := sqlairDB.Query(stmt, t.inputs...)
 		resRows, err := q.All()
 		if err != nil {
 			c.Errorf("\ntest %q failed (All):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
@@ -395,11 +384,8 @@ func (s *PackageSuite) TestValidOne(c *C) {
 			c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
 			continue
 		}
-		q, err := sqlairDB.Query(stmt, t.inputs...)
-		if err != nil {
-			c.Errorf("\ntest %q failed (Query):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			continue
-		}
+
+		q := sqlairDB.Query(stmt, t.inputs...)
 		err = q.One(t.outputs...)
 		if err != nil {
 			c.Errorf("\ntest %q failed (One):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
@@ -447,12 +433,8 @@ func (s *PackageSuite) TestOneErrors(c *C) {
 			c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
 			continue
 		}
-		q, err := sqlairDB.Query(stmt, t.inputs...)
-		if err != nil {
-			c.Errorf("\ntest %q failed (Query):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			continue
-		}
-		err = q.One(t.outputs...)
+
+		err = sqlairDB.Query(stmt, t.inputs...).One(t.outputs...)
 		c.Assert(err, ErrorMatches, t.err,
 			Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
 	}
@@ -546,12 +528,7 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 			continue
 		}
 
-		q, err := sqlairDB.Query(stmt, t.inputs...)
-		if err != nil {
-			c.Errorf("\ntest %q failed (Query):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			continue
-		}
-
+		q := sqlairDB.Query(stmt, t.inputs...)
 		i := 0
 		for q.Next() {
 			if i > len(t.outputs) {
@@ -570,7 +547,7 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 		}
 	}
 
-	_, err = sqlairDB.Exec(sqlair.MustPrepare(dropTables))
+	_, err = sqlairDB.SQLdb().Exec(dropTables)
 	if err != nil {
 		c.Fatal(err)
 	}

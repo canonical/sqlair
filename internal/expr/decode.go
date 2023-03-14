@@ -8,13 +8,13 @@ import (
 
 // FabricatedOutputAddrs generates a new instace for each output struct.
 // It then returns these structs and a list of pointers to struct fields specified in outputs.
-func FabricatedOutputAddrs(cols []string, outputs []field) ([]any, []any, error) {
-	return generateAddrs(cols, outputs, []reflect.Value{}, true)
+func FabricatedOutputAddrs(cols []string, outputs OutputFields) ([]any, []any, error) {
+	return generateAddrs(cols, outputs.structFields, []reflect.Value{}, true)
 }
 
 // OutputAddrs returns list of pointers to struct fields specified in outputs.
-func OutputAddrs(cols []string, outputs []field, dests []reflect.Value) ([]any, error) {
-	addrs, _, err := generateAddrs(cols, outputs, dests, false)
+func OutputAddrs(cols []string, outputs OutputFields, dests []reflect.Value) ([]any, error) {
+	addrs, _, err := generateAddrs(cols, outputs.structFields, dests, false)
 	return addrs, err
 }
 
