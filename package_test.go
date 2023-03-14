@@ -102,7 +102,7 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 		outputs  [][]any
 		expected [][]any
 	}{{
-		summary:  "double select with name clash (first 4 rows)",
+		summary:  "double select with name clash",
 		query:    "SELECT p.id AS &Person.*, a.id AS &Address.* FROM person AS p, address AS a",
 		types:    []any{Person{}, Address{}},
 		inputs:   []any{},
@@ -117,7 +117,7 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{20, "Mark", 1500}}, {&Person{40, "Mary", 3500}}, {&Person{35, "James", 4500}}},
 	}, {
 		summary:  "select multiple with extras",
-		query:    "SELECT name, * AS &Person.*, address_id AS &Address.id, * AS &Manager.*, id FROM person WHERE id = $Address.id",
+		query:    "SELECT email, * AS &Person.*, address_id AS &Address.id, * AS &Manager.*, id FROM person WHERE id = $Address.id",
 		types:    []any{Person{}, Address{}, Manager{}},
 		inputs:   []any{Address{ID: 30}},
 		outputs:  [][]any{{&Person{}, &Address{}, &Manager{}}},
