@@ -62,15 +62,15 @@ type Query struct {
 	q       func() (*sql.Rows, error)
 }
 
-// Query takes a prepared SQLair Statement and returns a Query object forcece
-// iterating over the results.
+// Query takes a prepared SQLair Statement and returns a Query object for iterating over the results.
+// If an error occurs it will be returned with Query.Close().
 // Query uses QueryContext with context.Background internally.
 func (db *DB) Query(s *Statement, inputStructs ...any) *Query {
 	return db.QueryContext(s, context.Background(), inputStructs...)
 }
 
-// QueryContext takes a prepared SQLair Statement and returns a Query object for
-// iterating over the results.
+// QueryContext takes a prepared SQLair Statement and returns a Query object for iterating over the results.
+// If an error occurs it will be returned with Query.Close().
 func (db *DB) QueryContext(s *Statement, ctx context.Context, inputStructs ...any) *Query {
 	q := &Query{outputs: s.pe.Outputs()}
 
@@ -135,19 +135,16 @@ func (q *Query) Decode(outputs ...any) (ok bool) {
 			q.err = fmt.Errorf("need valid struct, got nil")
 			return false
 		}
-
 		outputVal := reflect.ValueOf(output)
 		if outputVal.Kind() != reflect.Pointer {
-			q.err = fmt.Errorf("need pointer to struct, got non-pointer of kind %s", outputVal.Kind())
+			q.err = fmt.Errorf("need pointer to struct, got %s", outputVal.Kind())
 			return false
 		}
-
 		outputVal = reflect.Indirect(outputVal)
 		if outputVal.Kind() != reflect.Struct {
 			q.err = fmt.Errorf("need pointer to struct, got pointer to %s", outputVal.Kind())
 			return false
 		}
-
 		outputVals = append(outputVals, outputVal)
 	}
 
@@ -156,7 +153,6 @@ func (q *Query) Decode(outputs ...any) (ok bool) {
 		q.err = err
 		return false
 	}
-
 	ptrs, err := expr.OutputAddrs(cols, q.outputs, outputVals)
 	if err != nil {
 		q.err = err
