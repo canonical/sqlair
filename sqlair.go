@@ -56,40 +56,35 @@ func (db *DB) SQLdb() *sql.DB {
 
 // Query holds a database query and is used to iterate over the results.
 type Query struct {
-	err     error
-	rows    *sql.Rows
-	outputs expr.Outputs
-	q       func() (*sql.Rows, error)
+	qe   *expr.QueryExpr
+	q    func() (*sql.Rows, error)
+	rows *sql.Rows
+	err  error
 }
 
 // Query takes a prepared SQLair Statement and returns a Query object for iterating over the results.
 // If an error occurs it will be returned with Query.Close().
 // Query uses QueryContext with context.Background internally.
-func (db *DB) Query(s *Statement, inputStructs ...any) *Query {
-	return db.QueryContext(s, context.Background(), inputStructs...)
+func (db *DB) Query(s *Statement, inputArgs ...any) *Query {
+	return db.QueryContext(s, context.Background(), inputArgs...)
 }
 
 // QueryContext takes a prepared SQLair Statement and returns a Query object for iterating over the results.
 // If an error occurs it will be returned with Query.Close().
-func (db *DB) QueryContext(s *Statement, ctx context.Context, inputStructs ...any) *Query {
-	q := &Query{outputs: s.pe.Outputs()}
-
-	ce, err := s.pe.Complete(inputStructs...)
-	if err != nil {
-		q.err = err
+func (db *DB) QueryContext(s *Statement, ctx context.Context, inputArgs ...any) *Query {
+	qe, err := s.pe.Query(inputArgs...)
+	q := func() (*sql.Rows, error) {
+		return db.db.QueryContext(ctx, qe.QuerySQL(), qe.QueryArgs()...)
 	}
-	q.q = func() (*sql.Rows, error) {
-		return db.db.QueryContext(ctx, ce.CompletedSQL(), ce.CompletedArgs()...)
-	}
-	return q
+	return &Query{qe: qe, q: q, err: err}
 }
 
-// One runs a query and decodes the first row into outputs.
-func (q *Query) One(outputs ...any) error {
+// One runs a query and decodes the first row into outputArgs.
+func (q *Query) One(outputArgs ...any) error {
 	if !q.Next() {
 		return fmt.Errorf("cannot return one row: no results")
 	}
-	q.Decode(outputs...)
+	q.Decode(outputArgs...)
 	return q.Close()
 }
 
@@ -112,9 +107,9 @@ func (q *Query) Next() bool {
 }
 
 // Decode decodes the current result into the structs in outputValues.
-// outputs must contain all the structs mentioned in the query.
+// outputArgs must contain all the structs mentioned in the query.
 // If an error occurs it will be returned with Query.Close().
-func (q *Query) Decode(outputs ...any) (ok bool) {
+func (q *Query) Decode(outputArgs ...any) (ok bool) {
 	if q.err != nil {
 		return false
 	}
@@ -130,12 +125,12 @@ func (q *Query) Decode(outputs ...any) (ok bool) {
 	}
 
 	outputVals := []reflect.Value{}
-	for _, output := range outputs {
-		if output == nil {
+	for _, outputArg := range outputArgs {
+		if outputArg == nil {
 			q.err = fmt.Errorf("need valid struct, got nil")
 			return false
 		}
-		outputVal := reflect.ValueOf(output)
+		outputVal := reflect.ValueOf(outputArg)
 		if outputVal.Kind() != reflect.Pointer {
 			q.err = fmt.Errorf("need pointer to struct, got %s", outputVal.Kind())
 			return false
@@ -153,7 +148,7 @@ func (q *Query) Decode(outputs ...any) (ok bool) {
 		q.err = err
 		return false
 	}
-	ptrs, err := expr.OutputAddrs(cols, q.outputs, outputVals)
+	ptrs, err := q.qe.ScanArgs(cols, outputVals)
 	if err != nil {
 		q.err = err
 		return false

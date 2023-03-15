@@ -8,27 +8,28 @@ import (
 	"strings"
 )
 
-func (ce *CompletedExpr) CompletedSQL() string {
+func (ce *QueryExpr) QuerySQL() string {
 	return ce.sql
 }
 
-func (ce *CompletedExpr) CompletedArgs() []any {
+func (ce *QueryExpr) QueryArgs() []any {
 	return ce.args
 }
 
-type CompletedExpr struct {
-	sql  string
-	args []any
+type QueryExpr struct {
+	sql     string
+	args    []any
+	outputs []field
 }
 
-// Complete returns a completed expression ready for execution, using the provided values to
+// Query returns a query expression ready for execution, using the provided values to
 // substitute the input placeholders in the prepared expression. These placeholders use
 // the syntax "$Person.fullname", where Person would be a type such as:
 //
 //	type Person struct {
 //	        Name string `db:"fullname"`
 //	}
-func (pe *PreparedExpr) Complete(args ...any) (ce *CompletedExpr, err error) {
+func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("invalid input parameter: %s", err)
@@ -82,5 +83,5 @@ func (pe *PreparedExpr) Complete(args ...any) (ce *CompletedExpr, err error) {
 		qargs = append(qargs, named)
 	}
 
-	return &CompletedExpr{sql: pe.sql, args: qargs}, nil
+	return &QueryExpr{outputs: pe.outputs, sql: pe.sql, args: qargs}, nil
 }

@@ -15,8 +15,10 @@ type PreparedExpr struct {
 	sql     string
 }
 
-func (pe *PreparedExpr) Outputs() Outputs {
-	return Outputs{structFields: pe.outputs}
+const markerPrefix = "_sqlair_"
+
+func markerName(n int) string {
+	return markerPrefix + strconv.Itoa(n)
 }
 
 // getKeys returns the keys of a string map in a deterministic order.
@@ -212,8 +214,8 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			}
 			for i, c := range outCols {
 				sql.WriteString(c.String())
-				sql.WriteString(" AS _sqlair_")
-				sql.WriteString(strconv.Itoa(outCount))
+				sql.WriteString(" AS ")
+				sql.WriteString(markerName(outCount))
 				if i != len(outCols)-1 {
 					sql.WriteString(", ")
 				}

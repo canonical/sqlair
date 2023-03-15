@@ -4,14 +4,8 @@ import (
 	"reflect"
 )
 
-type Outputs struct {
-	structFields []field
-}
-
 // field represents reflection information about a field from some struct type.
 type field struct {
-	typ reflect.Type
-
 	name string
 
 	// The type of the containing struct.

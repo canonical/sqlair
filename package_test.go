@@ -238,6 +238,13 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 		inputs:  []any{},
 		outputs: [][]any{{&map[string]any{}}},
 		err:     "cannot decode result: need pointer to struct, got pointer to map",
+	}, {
+		summary: "missing decode value",
+		query:   "SELECT * AS &Person.* FROM person",
+		types:   []any{Person{}},
+		inputs:  []any{},
+		outputs: [][]any{{}},
+		err:     `cannot decode result: type "Person" found in query but not passed to decode`,
 	}}
 
 	dropTables, db, err := personAndAddressDB()
