@@ -44,6 +44,9 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []reflect.Value) ([]a
 			ptrs = append(ptrs, &x)
 			continue
 		}
+		if idx >= len(qe.outputs) {
+			return nil, fmt.Errorf("internal error: sqlair column not in outputs (%d>=%d)", idx, len(qe.outputs))
+		}
 		field := qe.outputs[idx]
 		outputArg, ok := typeDest[field.structType]
 		if !ok {
@@ -51,6 +54,9 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []reflect.Value) ([]a
 		}
 
 		val := outputArg.FieldByIndex(field.index)
+		if !val.CanSet() {
+			return nil, fmt.Errorf("internal error: cannot set field %s of struct %s", field.name, field.structType.Name())
+		}
 		ptrs = append(ptrs, val.Addr().Interface())
 	}
 	return ptrs, nil
