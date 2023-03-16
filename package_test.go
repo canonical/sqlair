@@ -216,7 +216,7 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{nil}},
-		err:     "cannot decode result: need valid struct, got nil",
+		err:     "cannot decode result: need pointer to struct, got nil",
 	}, {
 		summary: "non pointer parameter",
 		query:   "SELECT * AS &Person.* FROM person",

@@ -127,7 +127,7 @@ func (q *Query) Decode(outputArgs ...any) (ok bool) {
 	outputVals := []reflect.Value{}
 	for _, outputArg := range outputArgs {
 		if outputArg == nil {
-			q.err = fmt.Errorf("need valid struct, got nil")
+			q.err = fmt.Errorf("need pointer to struct, got nil")
 			return false
 		}
 		outputVal := reflect.ValueOf(outputArg)
