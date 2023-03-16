@@ -162,6 +162,9 @@ func (q *Query) Decode(outputArgs ...any) (ok bool) {
 
 // Close closes the query and returns any errors encountered during iteration.
 func (q *Query) Close() error {
+	if q.rows == nil {
+		return q.err
+	}
 	err := q.rows.Close()
 	q.rows = nil
 	if q.err != nil {
