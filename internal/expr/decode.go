@@ -19,20 +19,20 @@ func markerIndex(s string) (int, bool) {
 }
 
 // ScanArgs returns list of pointers to the struct fields that are listed in qe.outputs.
-// All the structs mentioned in the query must be in outputArgs.
-// All outputArgs must be of kind reflect.Struct.
-func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []reflect.Value) ([]any, error) {
-	// Check that each outputArg is in the query.
+// All the structs mentioned in the query must be in outputVals.
+// All outputVals must be of kind reflect.Struct.
+func (qe *QueryExpr) ScanArgs(columns []string, outputVals []reflect.Value) ([]any, error) {
+	// Check that each outputVal is in the query.
 	var inQuery = make(map[reflect.Type]bool)
 	for _, field := range qe.outputs {
 		inQuery[field.structType] = true
 	}
 	var typeDest = make(map[reflect.Type]reflect.Value)
-	for _, outputArg := range outputArgs {
-		if !inQuery[outputArg.Type()] {
-			return nil, fmt.Errorf("type %q does not appear as an output type in the query", outputArg.Type().Name())
+	for _, outputVal := range outputVals {
+		if !inQuery[outputVal.Type()] {
+			return nil, fmt.Errorf("type %q does not appear as an output type in the query", outputVal.Type().Name())
 		}
-		typeDest[outputArg.Type()] = outputArg
+		typeDest[outputVal.Type()] = outputVal
 	}
 
 	var ptrs = []any{}
@@ -48,12 +48,12 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []reflect.Value) ([]a
 			return nil, fmt.Errorf("internal error: sqlair column not in outputs (%d>=%d)", idx, len(qe.outputs))
 		}
 		field := qe.outputs[idx]
-		outputArg, ok := typeDest[field.structType]
+		outputVal, ok := typeDest[field.structType]
 		if !ok {
 			return nil, fmt.Errorf("type %q found in query but not passed to decode", field.structType.Name())
 		}
 
-		val := outputArg.FieldByIndex(field.index)
+		val := outputVal.FieldByIndex(field.index)
 		if !val.CanSet() {
 			return nil, fmt.Errorf("internal error: cannot set field %s of struct %s", field.name, field.structType.Name())
 		}
