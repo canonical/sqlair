@@ -194,6 +194,13 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 		if err != nil {
 			c.Errorf("\ntest %q failed (Close):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
 		}
+		for i, row := range t.expected {
+			for j, col := range row {
+				c.Assert(t.outputs[i][j], DeepEquals, col,
+					Commentf("\ntest %q failed:\ninput: %s\nrow: %d\n", t.summary, t.query, i))
+			}
+		}
+
 	}
 
 	_, err = db.Exec(dropTables)
