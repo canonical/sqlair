@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"reflect"
 
 	"github.com/canonical/sqlair/internal/expr"
 )
+
+// sqlair-provided M-type map.
+type M = map[string]any
 
 // Statement represents a SQL statemnt with valid SQLair expressions.
 // It is ready to be run on a SQLair DB.
@@ -123,32 +125,12 @@ func (q *Query) Decode(outputArgs ...any) (ok bool) {
 		q.err = fmt.Errorf("iteration ended or not started")
 		return false
 	}
-
-	outputVals := []reflect.Value{}
-	for _, outputArg := range outputArgs {
-		if outputArg == nil {
-			q.err = fmt.Errorf("need valid struct, got nil")
-			return false
-		}
-		outputVal := reflect.ValueOf(outputArg)
-		if outputVal.Kind() != reflect.Pointer {
-			q.err = fmt.Errorf("need pointer to struct, got %s", outputVal.Kind())
-			return false
-		}
-		outputVal = reflect.Indirect(outputVal)
-		if outputVal.Kind() != reflect.Struct {
-			q.err = fmt.Errorf("need pointer to struct, got pointer to %s", outputVal.Kind())
-			return false
-		}
-		outputVals = append(outputVals, outputVal)
-	}
-
 	cols, err := q.rows.Columns()
 	if err != nil {
 		q.err = err
 		return false
 	}
-	ptrs, err := q.qe.ScanArgs(cols, outputVals)
+	ptrs, mapDecodeInfo, err := q.qe.ScanArgs(cols, outputArgs)
 	if err != nil {
 		q.err = err
 		return false
@@ -157,11 +139,15 @@ func (q *Query) Decode(outputArgs ...any) (ok bool) {
 		q.err = err
 		return false
 	}
+	mapDecodeInfo.PopulateMap()
 	return true
 }
 
 // Close closes the query and returns any errors encountered during iteration.
 func (q *Query) Close() error {
+	if q.rows == nil {
+		return q.err
+	}
 	err := q.rows.Close()
 	q.rows = nil
 	if q.err != nil {

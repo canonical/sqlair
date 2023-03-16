@@ -4,6 +4,18 @@ import (
 	"reflect"
 )
 
+type typeElement interface {
+	elemName() string
+}
+
+type mapKey struct {
+	name string
+}
+
+func (mk mapKey) elemName() string {
+	return mk.name
+}
+
 // field represents reflection information about a field from some struct type.
 type field struct {
 	name string
@@ -17,6 +29,10 @@ type field struct {
 	// OmitEmpty is true when "omitempty" is
 	// a property of the field's "db" tag.
 	omitEmpty bool
+}
+
+func (f field) elemName() string {
+	return f.name
 }
 
 // Info represents reflected information about a struct type.

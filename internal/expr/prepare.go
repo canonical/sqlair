@@ -3,6 +3,7 @@ package expr
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -10,8 +11,8 @@ import (
 
 // PreparedExpr contains an SQL expression that is ready for execution.
 type PreparedExpr struct {
-	outputs []field
-	inputs  []field
+	outputs []typeElement
+	inputs  []typeElement
 	sql     string
 }
 
@@ -65,7 +66,11 @@ func starCheckOutput(p *outputPart) error {
 }
 
 // prepareInput checks that the input expression corresponds to a known type.
-func prepareInput(ti typeNameToInfo, p *inputPart) (field, error) {
+func prepareInput(ti typeNameToInfo, p *inputPart) (typeElement, error) {
+	if p.source.prefix == "M" {
+		return mapKey{name: p.source.name}, nil
+	}
+
 	info, ok := ti[p.source.prefix]
 	if !ok {
 		return field{}, fmt.Errorf(`type %s unknown, have: %s`, p.source.prefix, strings.Join(getKeys(ti), ", "))
@@ -80,10 +85,9 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (field, error) {
 
 // prepareOutput checks that the output expressions correspond to known types.
 // It then checks they are formatted correctly and finally generates the columns for the query.
-func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []field, error) {
-
+func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeElement, error) {
 	var outCols = make([]fullName, 0)
-	var fields = make([]field, 0)
+	var typeElements = make([]typeElement, 0)
 
 	// Check the asterisks are well formed (if present).
 	if err := starCheckOutput(p); err != nil {
@@ -95,6 +99,12 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []field, error
 	var ok bool
 
 	for _, t := range p.target {
+		if t.prefix == "M" {
+			if t.name != "*" {
+				typeElements = append(typeElements, mapKey{name: t.name})
+			}
+			continue
+		}
 		info, ok = ti[t.prefix]
 		if !ok {
 			return nil, nil, fmt.Errorf(`type %s unknown, have: %s`, t.prefix, strings.Join(getKeys(ti), ", "))
@@ -107,7 +117,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []field, error
 			}
 			// For a none star expression we record output destinations here.
 			// For a star expression we fill out the destinations as we generate the columns.
-			fields = append(fields, f)
+			typeElements = append(typeElements, f)
 		}
 	}
 
@@ -116,9 +126,11 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []field, error
 	// Case 1: Star target cases e.g. "...&P.*".
 	if p.target[0].name == "*" {
 		info, _ := ti[p.target[0].prefix]
-
 		// Case 1.1: Single star i.e. "t.* AS &P.*" or "&P.*"
 		if len(p.source) == 0 || p.source[0].name == "*" {
+			if p.target[0].prefix == "M" {
+				return nil, nil, fmt.Errorf(`map type with asterisk cannot be used without explicit columns`)
+			}
 			pref := ""
 
 			// Prepend table name. E.g. "t" in "t.* AS &P.*".
@@ -128,22 +140,29 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []field, error
 
 			for _, tag := range info.tags {
 				outCols = append(outCols, fullName{pref, tag})
-				fields = append(fields, info.tagToField[tag])
+				typeElements = append(typeElements, info.tagToField[tag])
 			}
-			return outCols, fields, nil
+			return outCols, typeElements, nil
 		}
 
 		// Case 1.2: Explicit columns e.g. "(col1, t.col2) AS &P.*".
 		if len(p.source) > 0 {
+			if p.target[0].prefix == "M" {
+				for _, c := range p.source {
+					outCols = append(outCols, c)
+					typeElements = append(typeElements, mapKey{name: c.name})
+				}
+				return outCols, typeElements, nil
+			}
 			for _, c := range p.source {
 				f, ok := info.tagToField[c.name]
 				if !ok {
 					return nil, nil, fmt.Errorf(`type %s has no %q db tag`, info.typ.Name(), c.name)
 				}
 				outCols = append(outCols, c)
-				fields = append(fields, f)
+				typeElements = append(typeElements, f)
 			}
-			return outCols, fields, nil
+			return outCols, typeElements, nil
 		}
 	}
 
@@ -154,14 +173,14 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []field, error
 		for _, c := range p.source {
 			outCols = append(outCols, c)
 		}
-		return outCols, fields, nil
+		return outCols, typeElements, nil
 	}
 
 	// Case 2.2: No columns e.g. "(&P.name, &P.id)".
 	for _, t := range p.target {
 		outCols = append(outCols, fullName{name: t.name})
 	}
-	return outCols, fields, nil
+	return outCols, typeElements, nil
 }
 
 type typeNameToInfo map[string]*info
@@ -181,11 +200,20 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 
 	// Generate and save reflection info.
 	for _, arg := range args {
-		info, err := typeInfo(arg)
-		if err != nil {
-			return nil, err
+		switch k := reflect.TypeOf(arg).Kind(); k {
+		case reflect.Struct:
+			info, err := typeInfo(arg)
+			if err != nil {
+				return nil, err
+			}
+			ti[info.typ.Name()] = info
+		case reflect.Map:
+			// Should we throw an error complaining here?
+		case reflect.Pointer:
+			return nil, fmt.Errorf("need struct, got pointer. Prepare takes structs by value as they are only used for their type information")
+		default:
+			return nil, fmt.Errorf("need struct, got %s", k)
 		}
-		ti[info.typ.Name()] = info
 	}
 
 	var sql bytes.Buffer
@@ -193,8 +221,8 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	var inCount int
 	var outCount int
 
-	var outputs = make([]field, 0)
-	var inputs = make([]field, 0)
+	var outputs = make([]typeElement, 0)
+	var inputs = make([]typeElement, 0)
 
 	// Check and expand each query part.
 	for _, part := range pe.queryParts {

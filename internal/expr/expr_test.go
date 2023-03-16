@@ -622,7 +622,7 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		sql:         "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
 		queryArgs:   []any{nil, Person{Fullname: "Monty Bingles"}},
-		err:         "invalid input parameter: need valid struct, got nil",
+		err:         "invalid input parameter: need a map or struct, got nil",
 	}, {
 		sql:         "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Address{}},
@@ -631,8 +631,8 @@ func (s *ExprSuite) TestQueryError(c *C) {
 	}, {
 		sql:         "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Address{}},
-		queryArgs:   []any{map[string]any{}},
-		err:         "invalid input parameter: need struct, got map",
+		queryArgs:   []any{[]any{}},
+		err:         "invalid input parameter: need struct, got slice",
 	}}
 
 	outerP := Person{}

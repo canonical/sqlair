@@ -136,6 +136,13 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 		inputs:   []any{Manager{PostalCode: 1000}, Address{ID: 2000}},
 		outputs:  [][]any{{&Person{}}},
 		expected: [][]any{{&Person{Fullname: "Fred", PostalCode: 1000}}},
+	}, {
+		summary:  "select into star map",
+		query:    "SELECT (name, address_id) AS &M.* FROM person WHERE address_id = $M.p1",
+		types:    []any{},
+		inputs:   []any{sqlair.M{"p1": 1000, "p2": 1500}},
+		outputs:  [][]any{{&sqlair.M{"address_id": 0}}},
+		expected: [][]any{{&sqlair.M{"name": "Fred", "address_id": 1000}}},
 	}}
 
 	// A Person struct that shadows the one in tests above and has different int types.
@@ -194,6 +201,12 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 		if err != nil {
 			c.Errorf("\ntest %q failed (Close):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
 		}
+		for i, row := range t.expected {
+			for j, col := range row {
+				c.Assert(t.outputs[i][j], DeepEquals, col,
+					Commentf("\ntest %q failed:\ninput: %s\nrow: %d\n", t.summary, t.query, i))
+			}
+		}
 	}
 
 	_, err = db.Exec(dropTables)
@@ -216,14 +229,14 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{nil}},
-		err:     "cannot decode result: need valid struct, got nil",
+		err:     "cannot decode result: need map or pointer to struct, got nil",
 	}, {
 		summary: "non pointer parameter",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{Person{}}},
-		err:     "cannot decode result: need pointer to struct, got struct",
+		err:     "cannot decode result: need map or pointer to struct, got struct",
 	}, {
 		summary: "wrong struct",
 		query:   "SELECT * AS &Person.* FROM person",
@@ -236,8 +249,8 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
-		outputs: [][]any{{&map[string]any{}}},
-		err:     "cannot decode result: need pointer to struct, got pointer to map",
+		outputs: [][]any{{&[]any{}}},
+		err:     "cannot decode result: need map or pointer to struct, got pointer to slice",
 	}, {
 		summary: "missing decode value",
 		query:   "SELECT * AS &Person.* FROM person",
