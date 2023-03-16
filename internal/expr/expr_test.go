@@ -546,6 +546,11 @@ func (s *ExprSuite) TestCompleteError(c *C) {
 		prepareArgs:  []any{Address{}, Person{}},
 		completeArgs: []any{},
 		err:          `invalid input parameter: type "Address" not found, no input structs were found`,
+	}, {
+		sql:          "SELECT street FROM t WHERE x = $Person.id, y = $Person.name",
+		prepareArgs:  []any{Person{}},
+		completeArgs: []any{Person{}, Person{}},
+		err:          `invalid input parameter: more than one instance of type "Person". To input different instances of the same struct a type alias must be used`,
 	}}
 
 	outerP := Person{}

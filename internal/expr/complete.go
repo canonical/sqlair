@@ -47,6 +47,9 @@ func (pe *PreparedExpr) Complete(args ...any) (ce *CompletedExpr, err error) {
 			return nil, fmt.Errorf("need struct, got %s", t.Kind())
 		}
 
+		if _, ok := typeValue[t]; ok {
+			return nil, fmt.Errorf("more than one instance of type %q. To input different instances of the same struct a type alias must be used", t.Name())
+		}
 		typeValue[t] = v
 		typeNames = append(typeNames, t.Name())
 
