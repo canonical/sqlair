@@ -181,10 +181,14 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 
 	// Generate and save reflection info.
 	for _, arg := range args {
-		if k := reflect.TypeOf(arg).Kind(); k != reflect.Struct {
-			if k == reflect.Pointer {
-				return nil, fmt.Errorf("need struct, got pointer. Prepare takes structs by value as they are only used for their type information")
-			}
+		if arg == nil {
+			return nil, fmt.Errorf("need struct, got nil")
+		}
+		switch k := reflect.TypeOf(arg).Kind(); k {
+		case reflect.Struct:
+		case reflect.Pointer:
+			return nil, fmt.Errorf("need struct, got pointer to %s. Prepare takes structs by value as they are only used for their type information", reflect.TypeOf(arg).Elem().Kind())
+		default:
 			return nil, fmt.Errorf("need struct, got %s", k)
 		}
 		info, err := typeInfo(arg)

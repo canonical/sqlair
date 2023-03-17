@@ -388,11 +388,15 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{&Person{}},
-		err:         `cannot prepare expression: need struct, got pointer. Prepare takes structs by value as they are only used for their type information`,
+		err:         `cannot prepare expression: need struct, got pointer to struct. Prepare takes structs by value as they are only used for their type information`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{map[string]any{}},
 		err:         `cannot prepare expression: need struct, got map`,
+	}, {
+		query:       "SELECT * AS &Person.* FROM t",
+		prepareArgs: []any{nil},
+		err:         `cannot prepare expression: need struct, got nil`,
 	}}
 
 	for i, test := range tests {
