@@ -47,7 +47,6 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	var typeValue = make(map[reflect.Type]reflect.Value)
 	var typeNames []string
 	var m map[string]any
-	var ok bool
 	for _, arg := range args {
 		if arg == nil {
 			return nil, fmt.Errorf("need a map or struct, got nil")
@@ -64,8 +63,13 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 			if m != nil {
 				return nil, fmt.Errorf(`found multiple map types`)
 			}
-			if m, ok = arg.(map[string]any); !ok {
-				return nil, fmt.Errorf(`internal error: cannot cast map type to map[string]any, have type %T`, arg)
+			switch mtype := arg.(type) {
+			case map[string]any:
+				m = mtype
+			case *map[string]any:
+				m = *mtype
+			default:
+				return nil, fmt.Errorf(`internal error: cannot cast map type to map[string]any, have type %T`, mtype)
 			}
 		case reflect.Struct:
 			typeValue[t] = v

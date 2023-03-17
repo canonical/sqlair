@@ -73,7 +73,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, *MapDe
 			case *map[string]any:
 				m = *arg
 			default:
-				return nil, nil, fmt.Errorf(`internal error: cannot cast map type to *map[string]any, have type %T`, outputArg)
+				return nil, nil, fmt.Errorf(`internal error: cannot cast map type to map[string]any, have type %T`, outputArg)
 			}
 		default:
 			return nil, nil, fmt.Errorf("need map or pointer to struct, got pointer to %s", k)

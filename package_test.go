@@ -137,6 +137,13 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 		outputs:  [][]any{{&Person{}}},
 		expected: [][]any{{&Person{Fullname: "Fred", PostalCode: 1000}}},
 	}, {
+		summary:  "select into map",
+		query:    "SELECT &M.name FROM person WHERE address_id = $M.p1 OR address_id = $M.p2",
+		types:    []any{},
+		inputs:   []any{&sqlair.M{"p1": 1000, "p2": 1500}},
+		outputs:  [][]any{{&sqlair.M{}}, {&sqlair.M{}}},
+		expected: [][]any{{&sqlair.M{"name": "Fred"}}, {&sqlair.M{"name": "Mark"}}},
+	}, {
 		summary:  "select into star map",
 		query:    "SELECT (name, address_id) AS &M.* FROM person WHERE address_id = $M.p1",
 		types:    []any{},
@@ -188,7 +195,7 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 		i := 0
 		for q.Next() {
 			if i >= len(t.outputs) {
-				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d >= %d)\n", t.summary, t.query, i, len(t.outputs))
+				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d > %d)\n", t.summary, t.query, i+1, len(t.outputs))
 				break
 			}
 			if !q.Decode(t.outputs[i]...) {
@@ -278,7 +285,7 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 		i := 0
 		for q.Next() {
 			if i > len(t.outputs) {
-				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected\n", t.summary, t.query)
+				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d > %d)\n", t.summary, t.query, i+1, len(t.outputs))
 				break
 			}
 			if !q.Decode(t.outputs[i]...) {
@@ -483,7 +490,7 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 		i := 0
 		for q.Next() {
 			if i > len(t.outputs) {
-				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected\n", t.summary, t.query)
+				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d > %d)\n", t.summary, t.query, i+1, len(t.outputs))
 				break
 			}
 			if !q.Decode(t.outputs[i]...) {

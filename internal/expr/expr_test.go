@@ -151,6 +151,12 @@ var tests = []struct {
 	[]any{Person{}, Address{}},
 	"SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2, a.district AS _sqlair_3, a.id AS _sqlair_4, a.street AS _sqlair_5 FROM person, address a WHERE name = 'Fred'",
 }, {
+	"map output",
+	"SELECT (p.name, a.id) AS &M.*, a.* AS &Address.*, &M.street FROM person, address a WHERE name = $M.name",
+	"[Bypass[SELECT ] Output[[p.name a.id] [M.*]] Bypass[, ] Output[[a.*] [Address.*]] Bypass[, ] Output[[] [M.street]] Bypass[ FROM person, address a WHERE name = ] Input[M.name]]",
+	[]any{Address{}},
+	"SELECT p.name AS _sqlair_0, a.id AS _sqlair_1, a.district AS _sqlair_2, a.id AS _sqlair_3, a.street AS _sqlair_4, street AS _sqlair_5 FROM person, address a WHERE name = @sqlair_0",
+}, {
 	"multicolumn output v1",
 	"SELECT (a.district, a.street) AS (&Address.district, &Address.street) FROM address AS a",
 	"[Bypass[SELECT ] Output[[a.district a.street] [Address.district Address.street]] Bypass[ FROM address AS a]]",
@@ -240,6 +246,12 @@ var tests = []struct {
 	"[Bypass[INSERT INTO person (name) VALUES ] Input[Person.name]]",
 	[]any{Person{}},
 	`INSERT INTO person (name) VALUES @sqlair_0`,
+}, {
+	"insert with map",
+	"INSERT INTO person (name, postalcode) VALUES ( $M.name, $M.id )",
+	"[Bypass[INSERT INTO person (name, postalcode) VALUES ( ] Input[M.name] Bypass[, ] Input[M.id] Bypass[ )]]",
+	[]any{},
+	"INSERT INTO person (name, postalcode) VALUES ( @sqlair_0, @sqlair_1 )",
 }, {
 	"ignore dollar v1",
 	"SELECT $ FROM moneytable",
