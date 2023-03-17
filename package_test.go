@@ -140,9 +140,9 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 		summary:  "select into star map",
 		query:    "SELECT (name, address_id) AS &M.* FROM person WHERE address_id = $M.p1",
 		types:    []any{},
-		inputs:   []any{sqlair.M{"p1": 1000, "p2": 1500}},
+		inputs:   []any{sqlair.M{"p1": 1000}},
 		outputs:  [][]any{{&sqlair.M{"address_id": 0}}},
-		expected: [][]any{{&sqlair.M{"name": "Fred", "address_id": 100}}},
+		expected: [][]any{{&sqlair.M{"name": "Fred", "address_id": 1000}}},
 	}}
 
 	// A Person struct that shadows the one in tests above and has different int types.
