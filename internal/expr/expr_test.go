@@ -391,6 +391,10 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 		err:         `cannot prepare expression: need struct, got pointer to struct. Prepare takes structs by value as they are only used for their type information`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
+		prepareArgs: []any{(*Person)(nil)},
+		err:         `cannot prepare expression: need struct, got pointer to struct. Prepare takes structs by value as they are only used for their type information`,
+	}, {
+		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{map[string]any{}},
 		err:         `cannot prepare expression: need struct, got map`,
 	}, {
@@ -474,6 +478,11 @@ func (s *ExprSuite) TestCompleteError(c *C) {
 		prepareArgs:  []any{Address{}, Person{}},
 		completeArgs: []any{nil, Person{Fullname: "Monty Bingles"}},
 		err:          "invalid input parameter: need struct, got nil",
+	}, {
+		query:        "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
+		prepareArgs:  []any{Address{}, Person{}},
+		completeArgs: []any{(*Person)(nil)},
+		err:          "invalid input parameter: need struct, got nil pointer",
 	}, {
 		query:        "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs:  []any{Address{}},

@@ -40,13 +40,18 @@ func (pe *PreparedExpr) Complete(args ...any) (ce *CompletedExpr, err error) {
 			return nil, fmt.Errorf("need struct, got nil")
 		}
 		v := reflect.ValueOf(arg)
-		v = reflect.Indirect(v)
-		t := v.Type()
-
-		if t.Kind() != reflect.Struct {
-			return nil, fmt.Errorf("need struct, got %s", t.Kind())
+		switch v.Kind() {
+		case reflect.Struct:
+		case reflect.Pointer:
+			if v.IsNil() {
+				return nil, fmt.Errorf("need struct, got nil pointer")
+			}
+			v = reflect.Indirect(v)
+		default:
+			return nil, fmt.Errorf("need struct, got %s", v.Kind())
 		}
 
+		t := v.Type()
 		if _, ok := typeValue[t]; ok {
 			return nil, fmt.Errorf("more than one instance of type %q. To input different instances of the same struct a type alias must be used", t.Name())
 		}
