@@ -135,6 +135,10 @@ func (q *Query) Decode(outputArgs ...any) (ok bool) {
 			q.err = fmt.Errorf("need pointer to struct, got %s", outputVal.Kind())
 			return false
 		}
+		if outputVal.IsNil() {
+			q.err = fmt.Errorf("got nil pointer")
+			return false
+		}
 		outputVal = reflect.Indirect(outputVal)
 		if outputVal.Kind() != reflect.Struct {
 			q.err = fmt.Errorf("need pointer to struct, got pointer to %s", outputVal.Kind())

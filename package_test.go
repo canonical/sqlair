@@ -225,6 +225,13 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 		outputs: [][]any{{nil}},
 		err:     "cannot decode result: need pointer to struct, got nil",
 	}, {
+		summary: "nil pointer parameter",
+		query:   "SELECT * AS &Person.* FROM person",
+		types:   []any{Person{}},
+		inputs:  []any{},
+		outputs: [][]any{{(*Person)(nil)}},
+		err:     "cannot decode result: got nil pointer",
+	}, {
 		summary: "non pointer parameter",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
