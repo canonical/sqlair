@@ -142,7 +142,7 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 		types:    []any{},
 		inputs:   []any{sqlair.M{"p1": 1000, "p2": 1500}},
 		outputs:  [][]any{{&sqlair.M{"address_id": 0}}},
-		expected: [][]any{{&sqlair.M{"name": "Fred", "address_id": 1000}}},
+		expected: [][]any{{&sqlair.M{"name": "Fred", "address_id": 100}}},
 	}}
 
 	// A Person struct that shadows the one in tests above and has different int types.

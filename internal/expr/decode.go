@@ -21,6 +21,7 @@ func markerIndex(s string) (int, bool) {
 
 type MapDecodeInfo struct {
 	valueSlice []any
+	mapPtrs    []any
 	keyIndex   map[string]int
 	m          map[string]any
 }
@@ -81,8 +82,10 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, *MapDe
 		outputVals = append(outputVals, outputVal)
 	}
 
-	var mInfo = &MapDecodeInfo{keyIndex: map[string]int{}, m: m}
+	var valueSlice = []any{}
+	var keyIndex = map[string]int{}
 	var ptrs = []any{}
+	var mapPtrs = []any{}
 	// Generate the pointers.
 	for _, column := range columns {
 		idx, ok := markerIndex(column)
@@ -111,23 +114,46 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, *MapDe
 		case mapKey:
 			v, ok := m[te.name]
 			if ok {
-				// If a value is already in a map
-				mInfo.valueSlice = append(mInfo.valueSlice, reflect.Zero(reflect.TypeOf(v)).Interface())
+				/*
+					valueSlice = append(valueSlice, reflect.Zero(reflect.TypeOf(v)).Interface())
+					val := reflect.ValueOf(&valueSlice[len(valueSlice)-1]).Elem().Elem()
+					log.Printf("The type of the val here is %s", val.Type())
+					addr := val.Addr().Interface()
+					ptrs = append(ptrs, addr)
+				*/
+				val := reflect.New(reflect.TypeOf(v)).Elem()
+				valueSlice = append(valueSlice, val.Interface())
+				addr := val.Addr().Interface()
+				ptrs = append(ptrs, addr)
+				mapPtrs = append(mapPtrs, addr)
+				log.Printf("Type of ptrs last one %T", ptrs[len(ptrs)-1])
+				log.Printf("Addrs in setting if valueSlice is %v", &valueSlice[len(valueSlice)-1])
+				log.Printf("Addrs in setting of addr is %v", addr)
+
 			} else {
-				mInfo.valueSlice = append(mInfo.valueSlice, nil)
+				valueSlice = append(valueSlice, nil)
+				ptrs = append(ptrs, &valueSlice[len(valueSlice)-1])
+				mapPtrs = append(mapPtrs, &valueSlice[len(valueSlice)-1])
 			}
-			mInfo.keyIndex[te.name] = len(mInfo.valueSlice) - 1
-			addr := reflect.Value(mInfo.valueSlice[len(mInfo.valueSlice)-1]).Elem().Addr().Interface()
-			ptrs = append(ptrs, addr)
-			log.Println(ptrs)
+			keyIndex[te.name] = len(valueSlice) - 1
 		}
 	}
-	return ptrs, mInfo, nil
+	return ptrs, &MapDecodeInfo{valueSlice: valueSlice, mapPtrs: mapPtrs, keyIndex: keyIndex, m: m}, nil
 }
 
 // PopulateMap enters the scanned values into the map.
 func (mapDecodeInfo *MapDecodeInfo) PopulateMap() {
-	for k, i := range mapDecodeInfo.keyIndex {
-		mapDecodeInfo.m[k] = mapDecodeInfo.valueSlice[i]
+	for _, i := range mapDecodeInfo.keyIndex {
+		//	mapDecodeInfo.m[k] = mapDecodeInfo.valueSlice[i]
+		log.Printf("address of valSlice is %v", &mapDecodeInfo.valueSlice[i])
 	}
+	for _, v := range mapDecodeInfo.valueSlice {
+		//	mapDecodeInfo.m[k] = mapDecodeInfo.valueSlice[i]
+		log.Printf("vals in valSlice are %v", v)
+	}
+	for k, i := range mapDecodeInfo.keyIndex {
+		log.Printf("address of mapPtr is %v", &mapDecodeInfo.mapPtrs[i])
+		mapDecodeInfo.m[k] = reflect.ValueOf(mapDecodeInfo.mapPtrs[i]).Elem().Interface()
+	}
+
 }
