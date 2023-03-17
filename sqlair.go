@@ -71,7 +71,7 @@ func (db *DB) Query(s *Statement, inputArgs ...any) *Query {
 
 // QueryContext takes a prepared SQLair Statement and returns a Query object for iterating over the results.
 // If an error occurs it will be returned with Query.Close().
-func (db *DB) QueryContext(s *Statement, ctx context.Context, inputArgs ...any) *Query {
+func (db *DB) QueryContext(ctx context.Context, s *Statement, inputArgs ...any) *Query {
 	qe, err := s.pe.Query(inputArgs...)
 	q := func() (*sql.Rows, error) {
 		return db.db.QueryContext(ctx, qe.QuerySQL(), qe.QueryArgs()...)
