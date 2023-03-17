@@ -66,7 +66,7 @@ type Query struct {
 // If an error occurs it will be returned with Query.Close().
 // Query uses QueryContext with context.Background internally.
 func (db *DB) Query(s *Statement, inputArgs ...any) *Query {
-	return db.QueryContext(s, context.Background(), inputArgs...)
+	return db.QueryContext(context.Background(), s, inputArgs...)
 }
 
 // QueryContext takes a prepared SQLair Statement and returns a Query object for iterating over the results.
