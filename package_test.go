@@ -259,6 +259,13 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 		inputs:  []any{},
 		outputs: [][]any{{}},
 		err:     `cannot decode result: type "Person" found in query but not passed to decode`,
+	}, {
+		summary: "multiple of the same type",
+		query:   "SELECT * AS &Person.* FROM person",
+		types:   []any{Person{}},
+		inputs:  []any{},
+		outputs: [][]any{{&Person{}, &Person{}}},
+		err:     `cannot decode result: type "Person" provided more than once, rename one of them`,
 	}}
 
 	dropTables, db, err := personAndAddressDB()
@@ -278,7 +285,7 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 		q := sqlairDB.Query(stmt, t.inputs...)
 		i := 0
 		for q.Next() {
-			if i > len(t.outputs) {
+			if i >= len(t.outputs) {
 				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected\n", t.summary, t.query)
 				break
 			}
@@ -483,8 +490,8 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 		q := sqlairDB.Query(stmt, t.inputs...)
 		i := 0
 		for q.Next() {
-			if i > len(t.outputs) {
-				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected\n", t.summary, t.query)
+			if i >= len(t.outputs) {
+				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d > %d)\n", t.summary, t.query, i+1, len(t.outputs))
 				break
 			}
 			if !q.Decode(t.outputs[i]...) {
@@ -499,7 +506,7 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 		}
 	}
 
-	_, err = sqlairDB.SQLdb().Exec(dropTables)
+	_, err = sqlairDB.Unwrap().Exec(dropTables)
 	if err != nil {
 		c.Fatal(err)
 	}

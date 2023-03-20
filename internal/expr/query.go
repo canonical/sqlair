@@ -119,10 +119,14 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, error)
 	}
 	var typeDest = make(map[reflect.Type]reflect.Value)
 	for _, outputVal := range outputVals {
-		if !inQuery[outputVal.Type()] {
-			return nil, fmt.Errorf("type %q does not appear as an output type in the query", outputVal.Type().Name())
+		t := outputVal.Type()
+		if !inQuery[t] {
+			return nil, fmt.Errorf("type %q does not appear as an output type in the query", t.Name())
 		}
-		typeDest[outputVal.Type()] = outputVal
+		if _, ok := typeDest[t]; ok {
+			return nil, fmt.Errorf("type %q provided more than once, rename one of them", t.Name())
+		}
+		typeDest[t] = outputVal
 	}
 
 	var ptrs = []any{}
