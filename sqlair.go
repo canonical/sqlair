@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"reflect"
 
 	"github.com/canonical/sqlair/internal/expr"
 )
@@ -124,35 +123,12 @@ func (q *Query) Decode(outputArgs ...any) (ok bool) {
 		return false
 	}
 
-	outputVals := []reflect.Value{}
-	for _, outputArg := range outputArgs {
-		if outputArg == nil {
-			q.err = fmt.Errorf("need pointer to struct, got nil")
-			return false
-		}
-		outputVal := reflect.ValueOf(outputArg)
-		if outputVal.Kind() != reflect.Pointer {
-			q.err = fmt.Errorf("need pointer to struct, got %s", outputVal.Kind())
-			return false
-		}
-		if outputVal.IsNil() {
-			q.err = fmt.Errorf("got nil pointer")
-			return false
-		}
-		outputVal = reflect.Indirect(outputVal)
-		if outputVal.Kind() != reflect.Struct {
-			q.err = fmt.Errorf("need pointer to struct, got pointer to %s", outputVal.Kind())
-			return false
-		}
-		outputVals = append(outputVals, outputVal)
-	}
-
 	cols, err := q.rows.Columns()
 	if err != nil {
 		q.err = err
 		return false
 	}
-	ptrs, err := q.qe.ScanArgs(cols, outputVals)
+	ptrs, err := q.qe.ScanArgs(cols, outputArgs)
 	if err != nil {
 		q.err = err
 		return false
