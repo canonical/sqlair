@@ -238,6 +238,13 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 		outputs: [][]any{{nil}},
 		err:     "cannot decode result: need map or pointer to struct, got nil",
 	}, {
+		summary: "nil pointer parameter",
+		query:   "SELECT * AS &Person.* FROM person",
+		types:   []any{Person{}},
+		inputs:  []any{},
+		outputs: [][]any{{(*Person)(nil)}},
+		err:     "cannot decode result: got nil pointer",
+	}, {
 		summary: "non pointer parameter",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
@@ -505,7 +512,7 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 		}
 	}
 
-	_, err = sqlairDB.SQLdb().Exec(dropTables)
+	_, err = sqlairDB.Unwrap().Exec(dropTables)
 	if err != nil {
 		c.Fatal(err)
 	}

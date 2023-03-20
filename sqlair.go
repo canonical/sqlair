@@ -51,8 +51,8 @@ func NewDB(db *sql.DB) *DB {
 	return &DB{db: db}
 }
 
-// sqlDB returns the underlying database object.
-func (db *DB) SQLdb() *sql.DB {
+// Unwrap returns the underlying database object.
+func (db *DB) Unwrap() *sql.DB {
 	return db.db
 }
 
@@ -68,12 +68,12 @@ type Query struct {
 // If an error occurs it will be returned with Query.Close().
 // Query uses QueryContext with context.Background internally.
 func (db *DB) Query(s *Statement, inputArgs ...any) *Query {
-	return db.QueryContext(s, context.Background(), inputArgs...)
+	return db.QueryContext(context.Background(), s, inputArgs...)
 }
 
 // QueryContext takes a prepared SQLair Statement and returns a Query object for iterating over the results.
 // If an error occurs it will be returned with Query.Close().
-func (db *DB) QueryContext(s *Statement, ctx context.Context, inputArgs ...any) *Query {
+func (db *DB) QueryContext(ctx context.Context, s *Statement, inputArgs ...any) *Query {
 	qe, err := s.pe.Query(inputArgs...)
 	q := func() (*sql.Rows, error) {
 		return db.db.QueryContext(ctx, qe.QuerySQL(), qe.QueryArgs()...)
