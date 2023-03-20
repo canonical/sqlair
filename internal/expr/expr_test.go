@@ -425,6 +425,9 @@ func FuzzParser(f *testing.F) {
 }
 
 func (s *ExprSuite) TestPrepareMismatchedStructName(c *C) {
+	type M struct {
+		Name string `db:"name"`
+	}
 	testList := []struct {
 		sql      string
 		structs  []any
@@ -441,6 +444,10 @@ func (s *ExprSuite) TestPrepareMismatchedStructName(c *C) {
 		sql:      "SELECT street AS &Address.id FROM t",
 		structs:  []any{Person{ID: 1}},
 		errorstr: "cannot prepare expression: type Address unknown, have: Person",
+	}, {
+		sql:      "SELECT name AS &M.* FROM person",
+		structs:  []any{M{}},
+		errorstr: `cannot prepare expression: name "M" is reserved for maps`,
 	}}
 
 	for i, test := range testList {
@@ -577,7 +584,7 @@ func (s *ExprSuite) TestPrepareMismatchedColsAndTargs(c *C) {
 	}
 }
 
-func (s *ExprSuite) TestUnsupportedMapStarOutput(c *C) {
+func (s *ExprSuite) TestPrepareUnsupportedMapStarOutput(c *C) {
 	tests := []struct {
 		summary string
 		input   string
@@ -704,19 +711,24 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		err:         "invalid input parameter: need struct, got slice",
 	}, {
 		sql:         "SELECT * AS &Address.* FROM t WHERE x = $M.Fullname",
-		prepareArgs: []any{Address{}, sqlair.M{}},
+		prepareArgs: []any{Address{}},
 		queryArgs:   []any{sqlair.M{"fullname": "Jimany Johnson"}},
 		err:         `invalid input parameter: map does not contain key "Fullname"`,
 	}, {
 		sql:         "SELECT foo FROM t WHERE x = $M.street, y = $Person.id",
-		prepareArgs: []any{Person{}, sqlair.M{}},
+		prepareArgs: []any{Person{}},
 		queryArgs:   []any{Person{ID: 666}, sqlair.M{"Street": "Highway to Hell"}},
 		err:         `invalid input parameter: map does not contain key "street"`,
 	}, {
 		sql:         "SELECT foo FROM t WHERE x = $M.street, y = $Person.id",
-		prepareArgs: []any{Person{}, sqlair.M{}},
+		prepareArgs: []any{Person{}},
 		queryArgs:   []any{Person{ID: 666}, notMapAlias{"street": "Highway to Hell"}},
 		err:         `invalid input parameter: map type must be alias of map\[string\]any, have type expr_test.notMapAlias`,
+	}, {
+		sql:         "SELECT foo FROM t WHERE x = $M.street, y = $M.id",
+		prepareArgs: []any{},
+		queryArgs:   []any{sqlair.M{"street": "Highway to Hell"}, map[string]any{"id": 1000}},
+		err:         `invalid input parameter: multiple maps`,
 	}}
 
 	outerP := Person{}

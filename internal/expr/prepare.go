@@ -16,7 +16,10 @@ type PreparedExpr struct {
 	sql     string
 }
 
-const markerPrefix = "_sqlair_"
+const (
+	markerPrefix = "_sqlair_"
+	mapName      = "M"
+)
 
 func markerName(n int) string {
 	return markerPrefix + strconv.Itoa(n)
@@ -78,7 +81,7 @@ func starCheckOutput(p *outputPart) error {
 
 // prepareInput checks that the input expression corresponds to a known type.
 func prepareInput(ti typeNameToInfo, p *inputPart) (typeElement, error) {
-	if p.source.prefix == "M" {
+	if p.source.prefix == mapName {
 		return mapKey{name: p.source.name}, nil
 	}
 
@@ -110,7 +113,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeElement,
 	var ok bool
 
 	for _, t := range p.target {
-		if t.prefix == "M" {
+		if t.prefix == mapName {
 			if t.name != "*" {
 				typeElements = append(typeElements, mapKey{name: t.name})
 			}
@@ -139,8 +142,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeElement,
 		info, _ := ti[p.target[0].prefix]
 		// Case 1.1: Single star i.e. "t.* AS &P.*" or "&P.*"
 		if len(p.source) == 0 || p.source[0].name == "*" {
-			if p.target[0].prefix == "M" {
-				return nil, nil, fmt.Errorf(`&M.* cannot be used when no column names are specified or column name is *`)
+			if p.target[0].prefix == mapName {
+				return nil, nil, fmt.Errorf(`&%s.* cannot be used when no column names are specified or column name is *`, mapName)
 			}
 			pref := ""
 
@@ -158,7 +161,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeElement,
 
 		// Case 1.2: Explicit columns e.g. "(col1, t.col2) AS &P.*".
 		if len(p.source) > 0 {
-			if p.target[0].prefix == "M" {
+			if p.target[0].prefix == mapName {
 				for _, c := range p.source {
 					outCols = append(outCols, c)
 					typeElements = append(typeElements, mapKey{name: c.name})
@@ -217,7 +220,11 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			if err != nil {
 				return nil, err
 			}
-			ti[info.typ.Name()] = info
+			name := info.typ.Name()
+			if name == mapName {
+				return nil, fmt.Errorf("name %q is reserved for maps", mapName)
+			}
+			ti[name] = info
 		case reflect.Map:
 			// Should we throw an error complaining here?
 		case reflect.Pointer:
