@@ -57,11 +57,8 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 
 		switch t.Kind() {
 		case reflect.Map:
-			if t.Key().Kind() != reflect.String {
-				return nil, fmt.Errorf(`map type %s must have key type string, found type %s`, t.Name(), t.Key().Kind())
-			}
 			if m != nil {
-				return nil, fmt.Errorf(`found multiple map types`)
+				return nil, fmt.Errorf(`multiple maps`)
 			}
 			switch mtype := arg.(type) {
 			case map[string]any:
@@ -69,7 +66,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 			case *map[string]any:
 				m = *mtype
 			default:
-				return nil, fmt.Errorf(`internal error: cannot cast map type to map[string]any, have type %T`, mtype)
+				return nil, fmt.Errorf(`map type must be alias of map[string]any, have type %T`, mtype)
 			}
 		case reflect.Struct:
 			typeValue[t] = v
@@ -104,7 +101,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		case mapKey:
 			v, ok := m[te.name]
 			if !ok {
-				return nil, fmt.Errorf(`map does not contain key %s`, te.name)
+				return nil, fmt.Errorf(`map does not contain key %q`, te.name)
 			}
 			qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(i), v))
 		default:

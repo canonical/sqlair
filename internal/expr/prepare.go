@@ -140,7 +140,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeElement,
 		// Case 1.1: Single star i.e. "t.* AS &P.*" or "&P.*"
 		if len(p.source) == 0 || p.source[0].name == "*" {
 			if p.target[0].prefix == "M" {
-				return nil, nil, fmt.Errorf(`map type with asterisk cannot be used without explicit columns`)
+				return nil, nil, fmt.Errorf(`&M.* cannot be used when no column names are specified or column name is *`)
 			}
 			pref := ""
 

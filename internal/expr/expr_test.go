@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"testing"
 
+	"github.com/canonical/sqlair"
 	"github.com/canonical/sqlair/internal/expr"
 	. "gopkg.in/check.v1"
 )
@@ -576,7 +577,42 @@ func (s *ExprSuite) TestPrepareMismatchedColsAndTargs(c *C) {
 	}
 }
 
+func (s *ExprSuite) TestUnsupportedMapStarOutput(c *C) {
+	tests := []struct {
+		summary string
+		input   string
+		args    []any
+		expect  string
+	}{{
+		"all output into map star",
+		"SELECT &M.* FROM person WHERE name = 'Fred'",
+		[]any{sqlair.M{}},
+		"cannot prepare expression: &M.* cannot be used when no column names are specified or column name is *",
+	}, {
+		"all output into map star from table star",
+		"SELECT p.* AS &M.* FROM person WHERE name = 'Fred'",
+		[]any{sqlair.M{}},
+		"cannot prepare expression: &M.* cannot be used when no column names are specified or column name is *",
+	}, {
+		"all output into map star from lone star",
+		"SELECT * AS &M.* FROM person WHERE name = 'Fred'",
+		[]any{sqlair.M{}},
+		"cannot prepare expression: &M.* cannot be used when no column names are specified or column name is *",
+	},
+	}
+	for _, test := range tests {
+		parser := expr.NewParser()
+		parsedExpr, err := parser.Parse(test.input)
+		if err != nil {
+			c.Fatal(err)
+		}
+		_, err = parsedExpr.Prepare(test.args...)
+		c.Assert(err.Error(), Equals, test.expect)
+	}
+}
+
 func (s *ExprSuite) TestValidQuery(c *C) {
+	type mapAlias = map[string]any
 	testList := []struct {
 		sql         string
 		prepareArgs []any
@@ -596,6 +632,26 @@ func (s *ExprSuite) TestValidQuery(c *C) {
 		"SELECT foo FROM t WHERE x = $Address.street, y = $Person.id",
 		[]any{Person{}, Address{}},
 		[]any{&Person{ID: 666}, &Address{Street: "Highway to Hell"}},
+		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
+	}, {
+		"SELECT * AS &Address.* FROM t WHERE x = $M.fullname",
+		[]any{Address{}, sqlair.M{}},
+		[]any{sqlair.M{"fullname": "Jimany Johnson"}},
+		[]any{sql.Named("sqlair_0", "Jimany Johnson")},
+	}, {
+		"SELECT foo FROM t WHERE x = $M.street, y = $Person.id",
+		[]any{Person{}, sqlair.M{}},
+		[]any{Person{ID: 666}, sqlair.M{"street": "Highway to Hell"}},
+		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
+	}, {
+		"SELECT * AS &Address.* FROM t WHERE x = $M.fullname",
+		[]any{Address{}, mapAlias{}},
+		[]any{mapAlias{"fullname": "Jimany Johnson"}},
+		[]any{sql.Named("sqlair_0", "Jimany Johnson")},
+	}, {
+		"SELECT foo FROM t WHERE x = $M.street, y = $Person.id",
+		[]any{Person{}, mapAlias{}},
+		[]any{Person{ID: 666}, mapAlias{"street": "Highway to Hell"}},
 		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
 	}}
 	for _, test := range testList {
@@ -620,6 +676,7 @@ func (s *ExprSuite) TestValidQuery(c *C) {
 }
 
 func (s *ExprSuite) TestQueryError(c *C) {
+	type notMapAlias map[string]any
 	testList := []struct {
 		sql         string
 		prepareArgs []any
@@ -645,6 +702,21 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		prepareArgs: []any{Address{}},
 		queryArgs:   []any{[]any{}},
 		err:         "invalid input parameter: need struct, got slice",
+	}, {
+		sql:         "SELECT * AS &Address.* FROM t WHERE x = $M.Fullname",
+		prepareArgs: []any{Address{}, sqlair.M{}},
+		queryArgs:   []any{sqlair.M{"fullname": "Jimany Johnson"}},
+		err:         `invalid input parameter: map does not contain key "Fullname"`,
+	}, {
+		sql:         "SELECT foo FROM t WHERE x = $M.street, y = $Person.id",
+		prepareArgs: []any{Person{}, sqlair.M{}},
+		queryArgs:   []any{Person{ID: 666}, sqlair.M{"Street": "Highway to Hell"}},
+		err:         `invalid input parameter: map does not contain key "street"`,
+	}, {
+		sql:         "SELECT foo FROM t WHERE x = $M.street, y = $Person.id",
+		prepareArgs: []any{Person{}, sqlair.M{}},
+		queryArgs:   []any{Person{ID: 666}, notMapAlias{"street": "Highway to Hell"}},
+		err:         `invalid input parameter: map type must be alias of map\[string\]any, have type expr_test.notMapAlias`,
 	}}
 
 	outerP := Person{}
