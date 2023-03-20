@@ -619,7 +619,8 @@ func (s *ExprSuite) TestPrepareUnsupportedMapStarOutput(c *C) {
 }
 
 func (s *ExprSuite) TestValidQuery(c *C) {
-	type mapAlias = map[string]any
+	type stringAlias = string
+	type mapAlias = map[stringAlias]any
 	testList := []struct {
 		sql         string
 		prepareArgs []any
