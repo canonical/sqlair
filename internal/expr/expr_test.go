@@ -29,8 +29,7 @@ type Person struct {
 
 type Manager Person
 
-type District struct {
-}
+type District struct{}
 
 type M map[string]any
 
@@ -565,12 +564,12 @@ func (s *ExprSuite) TestPrepareMismatchedColsAndTargs(c *C) {
 	}
 }
 
-func (s *ExprSuite) TestValidComplete(c *C) {
+func (s *ExprSuite) TestValidQuery(c *C) {
 	testList := []struct {
-		sql            string
-		prepareArgs    []any
-		completeArgs   []any
-		completeValues []any
+		sql         string
+		prepareArgs []any
+		queryArgs   []any
+		queryValues []any
 	}{{
 		"SELECT * AS &Address.* FROM t WHERE x = $Person.name",
 		[]any{Address{}, Person{}},
@@ -599,41 +598,41 @@ func (s *ExprSuite) TestValidComplete(c *C) {
 			c.Fatal(err)
 		}
 
-		completedExpr, err := preparedExpr.Complete(test.completeArgs...)
+		query, err := preparedExpr.Query(test.queryArgs...)
 		if err != nil {
 			c.Fatal(err)
 		}
 
-		c.Assert(expr.CompletedArgs(completedExpr), DeepEquals, test.completeValues)
+		c.Assert(query.QueryArgs(), DeepEquals, test.queryValues)
 	}
 }
 
-func (s *ExprSuite) TestCompleteError(c *C) {
+func (s *ExprSuite) TestQueryError(c *C) {
 	testList := []struct {
-		sql          string
-		prepareArgs  []any
-		completeArgs []any
-		err          string
+		sql         string
+		prepareArgs []any
+		queryArgs   []any
+		err         string
 	}{{
-		sql:          "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
-		prepareArgs:  []any{Address{}, Person{}},
-		completeArgs: []any{Address{Street: "Dead end road"}},
-		err:          "invalid input parameter: type Person not found, have: Address",
+		sql:         "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
+		prepareArgs: []any{Address{}, Person{}},
+		queryArgs:   []any{Address{Street: "Dead end road"}},
+		err:         "invalid input parameter: type Person not found, have: Address",
 	}, {
-		sql:          "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
-		prepareArgs:  []any{Address{}, Person{}},
-		completeArgs: []any{nil, Person{Fullname: "Monty Bingles"}},
-		err:          "invalid input parameter: need valid struct, got nil",
+		sql:         "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
+		prepareArgs: []any{Address{}, Person{}},
+		queryArgs:   []any{nil, Person{Fullname: "Monty Bingles"}},
+		err:         "invalid input parameter: need valid struct, got nil",
 	}, {
-		sql:          "SELECT street FROM t WHERE x = $Address.street",
-		prepareArgs:  []any{Address{}},
-		completeArgs: []any{8},
-		err:          "invalid input parameter: need struct, got int",
+		sql:         "SELECT street FROM t WHERE x = $Address.street",
+		prepareArgs: []any{Address{}},
+		queryArgs:   []any{8},
+		err:         "invalid input parameter: need struct, got int",
 	}, {
-		sql:          "SELECT street FROM t WHERE x = $Address.street",
-		prepareArgs:  []any{Address{}},
-		completeArgs: []any{map[string]any{}},
-		err:          "invalid input parameter: need struct, got map",
+		sql:         "SELECT street FROM t WHERE x = $Address.street",
+		prepareArgs: []any{Address{}},
+		queryArgs:   []any{map[string]any{}},
+		err:         "invalid input parameter: need struct, got map",
 	}}
 
 	outerP := Person{}
@@ -646,15 +645,15 @@ func (s *ExprSuite) TestCompleteError(c *C) {
 	shadowedP := Person{}
 
 	testListShadowed := []struct {
-		sql          string
-		prepareArgs  []any
-		completeArgs []any
-		err          string
+		sql         string
+		prepareArgs []any
+		queryArgs   []any
+		err         string
 	}{{
-		sql:          "SELECT street FROM t WHERE y = $Person.name",
-		prepareArgs:  []any{outerP},
-		completeArgs: []any{shadowedP},
-		err:          "invalid input parameter: type expr_test.Person not found, have expr_test.Person",
+		sql:         "SELECT street FROM t WHERE y = $Person.name",
+		prepareArgs: []any{outerP},
+		queryArgs:   []any{shadowedP},
+		err:         "invalid input parameter: type expr_test.Person not found, have expr_test.Person",
 	}}
 
 	testList = append(testList, testListShadowed...)
@@ -671,7 +670,7 @@ func (s *ExprSuite) TestCompleteError(c *C) {
 			c.Fatal(err)
 		}
 
-		_, err = preparedExpr.Complete(t.completeArgs...)
+		_, err = preparedExpr.Query(t.queryArgs...)
 		c.Assert(err, ErrorMatches, t.err,
 			Commentf("test %d failed:\ninput: %s", i, t.sql))
 
