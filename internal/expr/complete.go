@@ -36,24 +36,17 @@ func (pe *PreparedExpr) Complete(args ...any) (ce *CompletedExpr, err error) {
 	var typeValue = make(map[reflect.Type]reflect.Value)
 	var typeNames []string
 	for _, arg := range args {
-		if arg == nil {
+		v := reflect.ValueOf(arg)
+		if v.Kind() == reflect.Invalid || (v.Kind() == reflect.Pointer && v.IsNil()) {
 			return nil, fmt.Errorf("need struct, got nil")
 		}
-		v := reflect.ValueOf(arg)
-		switch v.Kind() {
-		case reflect.Struct:
-		case reflect.Pointer:
-			if v.IsNil() {
-				return nil, fmt.Errorf("need struct, got nil pointer")
-			}
-			v = reflect.Indirect(v)
-		default:
-			return nil, fmt.Errorf("need struct, got %s", v.Kind())
-		}
-
+		v = reflect.Indirect(v)
 		t := v.Type()
+		if t.Kind() != reflect.Struct {
+			return nil, fmt.Errorf("need struct, got %s", t.Kind())
+		}
 		if _, ok := typeValue[t]; ok {
-			return nil, fmt.Errorf("more than one instance of type %q. To input different instances of the same struct a type alias must be used", t.Name())
+			return nil, fmt.Errorf("type %q provided more than once, rename one of them", t.Name())
 		}
 		typeValue[t] = v
 		typeNames = append(typeNames, t.Name())
@@ -62,7 +55,7 @@ func (pe *PreparedExpr) Complete(args ...any) (ce *CompletedExpr, err error) {
 			// Check if we have a type with the same name from a different package.
 			for _, in := range pe.inputs {
 				if t.Name() == in.structType.Name() {
-					return nil, fmt.Errorf("type %s not found, have %s", in.structType.String(), t.String())
+					return nil, fmt.Errorf("type %s not passed as a parameter, have %s", in.structType.String(), t.String())
 				}
 			}
 			return nil, fmt.Errorf("%s not referenced in query", t.Name())
@@ -76,9 +69,9 @@ func (pe *PreparedExpr) Complete(args ...any) (ce *CompletedExpr, err error) {
 		v, ok := typeValue[in.structType]
 		if !ok {
 			if len(typeNames) == 0 {
-				return nil, fmt.Errorf(`type %q not found, no input structs were found`, in.structType.Name())
+				return nil, fmt.Errorf(`type %q not passed as a parameter`, in.structType.Name())
 			} else {
-				return nil, fmt.Errorf(`type %q not found, have: %s`, in.structType.Name(), strings.Join(typeNames, ", "))
+				return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, in.structType.Name(), strings.Join(typeNames, ", "))
 			}
 		}
 		named := sql.Named("sqlair_"+strconv.Itoa(i), v.FieldByIndex(in.index).Interface())

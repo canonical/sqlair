@@ -359,12 +359,12 @@ func (p *Parser) parseGoFullName() (fullName, bool, error) {
 
 	if id, ok := p.parseIdentifier(); ok {
 		if !p.skipByte('.') {
-			return fullName{}, false, fmt.Errorf("column %d: type %q not qualified. Types can be qualified with a db tag or an asterisk. e.g. &P.col1 or &P.*", p.pos, id)
+			return fullName{}, false, fmt.Errorf("column %d: unqualified type, expected %s.* or %s.<db tag>", p.pos, id, id)
 		}
 
 		idField, ok := p.parseIdentifierAsterisk()
 		if !ok {
-			return fullName{}, false, fmt.Errorf("column %d: invalid identifier following %q", p.pos, id)
+			return fullName{}, false, fmt.Errorf("column %d: invalid identifier suffix following %q", p.pos, id)
 		}
 		return fullName{id, idField}, true, nil
 	}

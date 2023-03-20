@@ -54,7 +54,7 @@ func starCheckOutput(p *outputPart) error {
 		return fmt.Errorf("invalid asterisk in output expression: %s", p.raw)
 	}
 	if !starTarget && (numSources > 0 && (numTargets != numSources)) {
-		return fmt.Errorf("mismatched number of cols and targets in output expression: %s", p.raw)
+		return fmt.Errorf("mismatched number of columns and targets in output expression: %s", p.raw)
 	}
 	return nil
 }
@@ -65,9 +65,9 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (field, error) {
 	if !ok {
 		ts := getKeys(ti)
 		if len(ts) == 0 {
-			return field{}, fmt.Errorf(`type %q not found, no types were passed to Prepare`, p.source.prefix)
+			return field{}, fmt.Errorf(`type %q not passed as a parameter`, p.source.prefix)
 		} else {
-			return field{}, fmt.Errorf(`type %q not found, have: %s`, p.source.prefix, strings.Join(ts, ", "))
+			return field{}, fmt.Errorf(`type %q not passed as a parameter, have: %s`, p.source.prefix, strings.Join(ts, ", "))
 		}
 	}
 	f, ok := info.tagToField[p.source.name]
@@ -97,7 +97,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []field, error
 	for _, t := range p.target {
 		info, ok = ti[t.prefix]
 		if !ok {
-			return nil, nil, fmt.Errorf(`type %q not found, have: %s`, t.prefix, strings.Join(getKeys(ti), ", "))
+			return nil, nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, t.prefix, strings.Join(getKeys(ti), ", "))
 		}
 
 		if t.name != "*" {
@@ -184,11 +184,10 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 		if arg == nil {
 			return nil, fmt.Errorf("need struct, got nil")
 		}
-		switch k := reflect.TypeOf(arg).Kind(); k {
-		case reflect.Struct:
-		case reflect.Pointer:
-			return nil, fmt.Errorf("need struct, got pointer to %s. Prepare takes structs by value as they are only used for their type information", reflect.TypeOf(arg).Elem().Kind())
-		default:
+		if k := reflect.TypeOf(arg).Kind(); k != reflect.Struct {
+			if k == reflect.Pointer {
+				return nil, fmt.Errorf("need struct, got pointer to %s", reflect.TypeOf(arg).Elem().Kind())
+			}
 			return nil, fmt.Errorf("need struct, got %s", k)
 		}
 		info, err := typeInfo(arg)

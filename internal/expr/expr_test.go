@@ -284,16 +284,16 @@ func (s *ExprSuite) TestParseErrors(c *C) {
 		err:   "cannot parse expression: column 38: missing closing quote in string literal",
 	}, {
 		query: "SELECT foo FROM t WHERE x = $Address.",
-		err:   `cannot parse expression: column 37: invalid identifier following "Address"`,
+		err:   `cannot parse expression: column 37: invalid identifier suffix following "Address"`,
 	}, {
 		query: "SELECT foo FROM t WHERE x = $Address.&d",
-		err:   `cannot parse expression: column 37: invalid identifier following "Address"`,
+		err:   `cannot parse expression: column 37: invalid identifier suffix following "Address"`,
 	}, {
 		query: "SELECT foo FROM t WHERE x = $Address.-",
-		err:   `cannot parse expression: column 37: invalid identifier following "Address"`,
+		err:   `cannot parse expression: column 37: invalid identifier suffix following "Address"`,
 	}, {
 		query: "SELECT foo FROM t WHERE x = $Address",
-		err:   `cannot parse expression: column 36: type "Address" not qualified. Types can be qualified with a db tag or an asterisk. e.g. &P.col1 or &P.*`,
+		err:   `cannot parse expression: column 36: unqualified type, expected Address.* or Address.<db tag>`,
 	}}
 
 	for _, t := range tests {
@@ -328,11 +328,11 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}{{
 		query:       "SELECT (p.name, t.id) AS &Address.id FROM t",
 		prepareArgs: []any{Address{}},
-		err:         "cannot prepare expression: mismatched number of cols and targets in output expression: (p.name, t.id) AS &Address.id",
+		err:         "cannot prepare expression: mismatched number of columns and targets in output expression: (p.name, t.id) AS &Address.id",
 	}, {
 		query:       "SELECT p.name AS (&Address.district, &Address.street) FROM t",
 		prepareArgs: []any{Address{}},
-		err:         "cannot prepare expression: mismatched number of cols and targets in output expression: p.name AS (&Address.district, &Address.street)",
+		err:         "cannot prepare expression: mismatched number of columns and targets in output expression: p.name AS (&Address.district, &Address.street)",
 	}, {
 		query:       "SELECT (&Address.*, &Address.id) FROM t",
 		prepareArgs: []any{Address{}, Person{}},
@@ -372,15 +372,15 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Person{}},
-		err:         `cannot prepare expression: type "Address" not found, have: Person`,
+		err:         `cannot prepare expression: type "Address" not passed as a parameter, have: Person`,
 	}, {
 		query:       "SELECT street AS &Address.street FROM t",
 		prepareArgs: []any{},
-		err:         `cannot prepare expression: type "Address" not found, have: `,
+		err:         `cannot prepare expression: type "Address" not passed as a parameter, have: `,
 	}, {
 		query:       "SELECT street AS &Address.id FROM t",
 		prepareArgs: []any{Person{}},
-		err:         `cannot prepare expression: type "Address" not found, have: Person`,
+		err:         `cannot prepare expression: type "Address" not passed as a parameter, have: Person`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{[]any{Person{}}},
@@ -388,11 +388,11 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{&Person{}},
-		err:         `cannot prepare expression: need struct, got pointer to struct. Prepare takes structs by value as they are only used for their type information`,
+		err:         `cannot prepare expression: need struct, got pointer to struct`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{(*Person)(nil)},
-		err:         `cannot prepare expression: need struct, got pointer to struct. Prepare takes structs by value as they are only used for their type information`,
+		err:         `cannot prepare expression: need struct, got pointer to struct`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{map[string]any{}},
@@ -472,7 +472,7 @@ func (s *ExprSuite) TestCompleteError(c *C) {
 		query:        "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs:  []any{Address{}, Person{}},
 		completeArgs: []any{Address{Street: "Dead end road"}},
-		err:          `invalid input parameter: type "Person" not found, have: Address`,
+		err:          `invalid input parameter: type "Person" not passed as a parameter, have: Address`,
 	}, {
 		query:        "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs:  []any{Address{}, Person{}},
@@ -482,7 +482,7 @@ func (s *ExprSuite) TestCompleteError(c *C) {
 		query:        "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs:  []any{Address{}, Person{}},
 		completeArgs: []any{(*Person)(nil)},
-		err:          "invalid input parameter: need struct, got nil pointer",
+		err:          "invalid input parameter: need struct, got nil",
 	}, {
 		query:        "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs:  []any{Address{}},
@@ -497,12 +497,12 @@ func (s *ExprSuite) TestCompleteError(c *C) {
 		query:        "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs:  []any{Address{}, Person{}},
 		completeArgs: []any{},
-		err:          `invalid input parameter: type "Address" not found, no input structs were found`,
+		err:          `invalid input parameter: type "Address" not passed as a parameter`,
 	}, {
 		query:        "SELECT street FROM t WHERE x = $Person.id, y = $Person.name",
 		prepareArgs:  []any{Person{}},
 		completeArgs: []any{Person{}, Person{}},
-		err:          `invalid input parameter: more than one instance of type "Person". To input different instances of the same struct a type alias must be used`,
+		err:          `invalid input parameter: type "Person" provided more than once, rename one of them`,
 	}}
 
 	outerP := Person{}
@@ -523,7 +523,7 @@ func (s *ExprSuite) TestCompleteError(c *C) {
 		query:        "SELECT street FROM t WHERE y = $Person.name",
 		prepareArgs:  []any{outerP},
 		completeArgs: []any{shadowedP},
-		err:          "invalid input parameter: type expr_test.Person not found, have expr_test.Person",
+		err:          "invalid input parameter: type expr_test.Person not passed as a parameter, have expr_test.Person",
 	}}
 
 	tests = append(tests, testsShadowed...)
