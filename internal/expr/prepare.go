@@ -226,7 +226,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			}
 			ti[name] = info
 		case reflect.Map:
-			// Should we throw an error complaining here?
+			return nil, fmt.Errorf("got map, maps do not need to be passed as parameters")
 		case reflect.Pointer:
 			return nil, fmt.Errorf("need struct, got pointer. Prepare takes structs by value as they are only used for their type information")
 		default:

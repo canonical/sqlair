@@ -593,18 +593,23 @@ func (s *ExprSuite) TestPrepareUnsupportedMapStarOutput(c *C) {
 	}{{
 		"all output into map star",
 		"SELECT &M.* FROM person WHERE name = 'Fred'",
-		[]any{sqlair.M{}},
+		[]any{},
 		"cannot prepare expression: &M.* cannot be used when no column names are specified or column name is *",
 	}, {
 		"all output into map star from table star",
 		"SELECT p.* AS &M.* FROM person WHERE name = 'Fred'",
-		[]any{sqlair.M{}},
+		[]any{},
+		"cannot prepare expression: &M.* cannot be used when no column names are specified or column name is *",
+	}, {
+		"all output into map star from lone star",
+		"SELECT * AS &M.* FROM person WHERE name = 'Fred'",
+		[]any{},
 		"cannot prepare expression: &M.* cannot be used when no column names are specified or column name is *",
 	}, {
 		"all output into map star from lone star",
 		"SELECT * AS &M.* FROM person WHERE name = 'Fred'",
 		[]any{sqlair.M{}},
-		"cannot prepare expression: &M.* cannot be used when no column names are specified or column name is *",
+		"cannot prepare expression: got map, maps do not need to be passed as parameters",
 	},
 	}
 	for _, test := range tests {
@@ -643,22 +648,22 @@ func (s *ExprSuite) TestValidQuery(c *C) {
 		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
 	}, {
 		"SELECT * AS &Address.* FROM t WHERE x = $M.fullname",
-		[]any{Address{}, sqlair.M{}},
+		[]any{Address{}},
 		[]any{sqlair.M{"fullname": "Jimany Johnson"}},
 		[]any{sql.Named("sqlair_0", "Jimany Johnson")},
 	}, {
 		"SELECT foo FROM t WHERE x = $M.street, y = $Person.id",
-		[]any{Person{}, sqlair.M{}},
+		[]any{Person{}},
 		[]any{Person{ID: 666}, sqlair.M{"street": "Highway to Hell"}},
 		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
 	}, {
 		"SELECT * AS &Address.* FROM t WHERE x = $M.fullname",
-		[]any{Address{}, mapAlias{}},
+		[]any{Address{}},
 		[]any{mapAlias{"fullname": "Jimany Johnson"}},
 		[]any{sql.Named("sqlair_0", "Jimany Johnson")},
 	}, {
 		"SELECT foo FROM t WHERE x = $M.street, y = $Person.id",
-		[]any{Person{}, mapAlias{}},
+		[]any{Person{}},
 		[]any{Person{ID: 666}, mapAlias{"street": "Highway to Hell"}},
 		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
 	}}

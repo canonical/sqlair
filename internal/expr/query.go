@@ -107,16 +107,14 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		default:
 			return nil, fmt.Errorf("internal error: field type %T not supported", te)
 		}
-
 	}
 	return &QueryExpr{outputs: pe.outputs, sql: pe.sql, args: qargs}, nil
 }
 
 type MapDecodeInfo struct {
-	valueSlice []any
-	mapPtrs    []any
-	keyIndex   map[string]int
-	m          map[string]any
+	mapPtrs  []any
+	keyIndex map[string]int
+	m        map[string]any
 }
 
 // ScanArgs returns list of pointers to the struct fields that are listed in qe.outputs.
@@ -153,13 +151,6 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, *MapDe
 			}
 			typeDest[outputVal.Type()] = outputVal
 		case reflect.Map:
-			// Should we do these two checks or just try the type assertion?
-			if outputVal.Type().Key().Kind() != reflect.String {
-				return nil, nil, fmt.Errorf(`map type %s must have key type string, found type %s`, outputVal.Type().Name(), outputVal.Type().Key().Kind())
-			}
-			if !outputVal.Type().Elem().Implements(reflect.TypeOf((*any)(nil)).Elem()) {
-				return nil, nil, fmt.Errorf(`map type %s must have value type any`, outputVal.Type().Name())
-			}
 			if m != nil {
 				return nil, nil, fmt.Errorf(`found multiple map types`)
 			}
@@ -178,8 +169,8 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, *MapDe
 	}
 
 	// Generate the pointers.
-	var keyIndex = map[string]int{}
 	var ptrs = []any{}
+	var keyIndex = map[string]int{}
 	var mapPtrs = []any{}
 	for _, column := range columns {
 		idx, ok := markerIndex(column)
@@ -207,15 +198,16 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, *MapDe
 			ptrs = append(ptrs, val.Addr().Interface())
 		case mapKey:
 			v, ok := m[te.name]
+			// If there is already an value in the map for this column name, scan into a variable of that type.
 			if ok {
 				val := reflect.New(reflect.TypeOf(v)).Elem()
 				addr := val.Addr().Interface()
 				ptrs = append(ptrs, addr)
 				mapPtrs = append(mapPtrs, addr)
 			} else {
-				var x any
-				ptrs = append(ptrs, &x)
-				mapPtrs = append(mapPtrs, &x)
+				var y any
+				ptrs = append(ptrs, &y)
+				mapPtrs = append(mapPtrs, &y)
 			}
 			keyIndex[te.name] = len(mapPtrs) - 1
 		}
