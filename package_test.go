@@ -177,20 +177,20 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 			continue
 		}
 
-		q := sqlairDB.Query(stmt, t.inputs...)
+		iter := sqlairDB.Query(stmt, t.inputs...).Iter()
 		i := 0
-		for q.Next() {
+		for iter.Next() {
 			if i >= len(t.outputs) {
 				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d >= %d)\n", t.summary, t.query, i, len(t.outputs))
 				break
 			}
-			if !q.Decode(t.outputs[i]...) {
+			if !iter.Decode(t.outputs[i]...) {
 				break
 			}
 			i++
 		}
 
-		err = q.Close()
+		err = iter.Close()
 		if err != nil {
 			c.Errorf("\ntest %q failed (Close):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
 		}
@@ -275,20 +275,20 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 			continue
 		}
 
-		q := sqlairDB.Query(stmt, t.inputs...)
+		iter := sqlairDB.Query(stmt, t.inputs...).Iter()
 		i := 0
-		for q.Next() {
+		for iter.Next() {
 			if i > len(t.outputs) {
 				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected\n", t.summary, t.query)
 				break
 			}
-			if !q.Decode(t.outputs[i]...) {
+			if !iter.Decode(t.outputs[i]...) {
 				break
 			}
 			i++
 		}
 
-		err = q.Close()
+		err = iter.Close()
 		c.Assert(err, ErrorMatches, t.err,
 			Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
 	}
@@ -480,26 +480,26 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 			continue
 		}
 
-		q := sqlairDB.Query(stmt, t.inputs...)
+		iter := sqlairDB.Query(stmt, t.inputs...).Iter()
 		i := 0
-		for q.Next() {
+		for iter.Next() {
 			if i > len(t.outputs) {
 				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected\n", t.summary, t.query)
 				break
 			}
-			if !q.Decode(t.outputs[i]...) {
+			if !iter.Decode(t.outputs[i]...) {
 				break
 			}
 			i++
 		}
 
-		err = q.Close()
+		err = iter.Close()
 		if err != nil {
 			c.Errorf("\ntest %q failed (Close):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
 		}
 	}
 
-	_, err = sqlairDB.SQLdb().Exec(dropTables)
+	_, err = sqlairDB.Unwrap().Exec(dropTables)
 	if err != nil {
 		c.Fatal(err)
 	}
