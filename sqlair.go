@@ -102,11 +102,11 @@ func (q *Query) Iter() *Iterator {
 // Next prepares the next row for decoding.
 // The first call to Next will execute the query.
 // If an error occurs it will be returned with Iter.Close().
-func (i *Iterator) Next() bool {
-	if i.err != nil {
+func (iter *Iterator) Next() bool {
+	if iter.err != nil || iter.rows == nil {
 		return false
 	}
-	return i.rows.Next()
+	return iter.rows.Next()
 }
 
 // Decode decodes the current result into the structs in outputValues.
@@ -140,14 +140,14 @@ func (iter *Iterator) Decode(outputArgs ...any) (ok bool) {
 }
 
 // Close finishes the iteration and returns any errors encountered.
-func (i *Iterator) Close() error {
-	if i.rows == nil {
-		return i.err
+func (iter *Iterator) Close() error {
+	if iter.rows == nil {
+		return iter.err
 	}
-	err := i.rows.Close()
-	i.rows = nil
-	if i.err != nil {
-		return i.err
+	err := iter.rows.Close()
+	iter.rows = nil
+	if iter.err != nil {
+		return iter.err
 	}
 	return err
 }
