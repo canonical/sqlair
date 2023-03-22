@@ -201,11 +201,15 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 		if arg == nil {
 			return nil, fmt.Errorf("need struct, got nil")
 		}
-		if k := reflect.TypeOf(arg).Kind(); k != reflect.Struct {
-			if k == reflect.Pointer {
-				return nil, fmt.Errorf("need struct, got pointer to %s", reflect.TypeOf(arg).Elem().Kind())
+		t := reflect.TypeOf(arg)
+		if t.Kind() != reflect.Struct {
+			if t.Kind() == reflect.Pointer {
+				return nil, fmt.Errorf("need struct, got pointer to %s", t.Elem().Kind())
 			}
-			return nil, fmt.Errorf("need struct, got %s", k)
+			return nil, fmt.Errorf("need struct, got %s", t.Kind())
+		}
+		if t.Name() == "" {
+			return nil, fmt.Errorf("cannot use annoymous %s", t.Kind())
 		}
 		info, err := typeInfo(arg)
 		if err != nil {

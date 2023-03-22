@@ -400,6 +400,10 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{nil},
 		err:         `cannot prepare expression: need struct, got nil`,
+	}, {
+		query:       "SELECT * AS &.* FROM t",
+		prepareArgs: []any{struct{ f int }{f: 1}},
+		err:         `cannot prepare expression: cannot use annoymous struct`,
 	}}
 
 	for i, test := range tests {
