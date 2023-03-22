@@ -113,15 +113,19 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, error)
 	}
 
 	// Check that each outputVal is in the query.
+	var typesInQuery = []string{}
 	var inQuery = make(map[reflect.Type]bool)
 	for _, field := range qe.outputs {
-		inQuery[field.structType] = true
+		if ok := inQuery[field.structType]; !ok {
+			inQuery[field.structType] = true
+			typesInQuery = append(typesInQuery, field.structType.Name())
+		}
 	}
 	var typeDest = make(map[reflect.Type]reflect.Value)
 	for _, outputVal := range outputVals {
 		t := outputVal.Type()
 		if !inQuery[t] {
-			return nil, fmt.Errorf("type %q does not appear as an output type in the query", t.Name())
+			return nil, fmt.Errorf("type %q does not appear in query, have: %s", t.Name(), strings.Join(typesInQuery, ", "))
 		}
 		if _, ok := typeDest[t]; ok {
 			return nil, fmt.Errorf("type %q provided more than once, rename one of them", t.Name())

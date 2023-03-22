@@ -244,7 +244,7 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{&Address{}}},
-		err:     `cannot decode result: type "Address" does not appear as an output type in the query`,
+		err:     `cannot decode result: type "Address" does not appear in query, have: Person`,
 	}, {
 		summary: "not a struct",
 		query:   "SELECT * AS &Person.* FROM person",
