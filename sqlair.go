@@ -3,13 +3,12 @@ package sqlair
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 
 	"github.com/canonical/sqlair/internal/expr"
 )
 
-var ErrNoRows = errors.New("no rows in query result")
+var ErrNoRows = sql.ErrNoRows
 
 // Statement represents a SQL statemnt with valid SQLair expressions.
 // It is ready to be run on a SQLair DB.

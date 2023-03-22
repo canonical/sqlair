@@ -370,7 +370,7 @@ func (s *PackageSuite) TestOneErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: []any{&Person{}},
-		err:     "cannot return row: no rows in query result",
+		err:     "cannot return row: sql: no rows in result set",
 	}}
 
 	dropTables, db, err := personAndAddressDB()
@@ -408,7 +408,10 @@ func (s *PackageSuite) TestPackageErrors(c *C) {
 	stmt := sqlair.MustPrepare("SELECT * AS &Person.* FROM person WHERE id=12312", Person{})
 	err = sqlairDB.Query(stmt).One(&Person{})
 	if !errors.Is(err, sqlair.ErrNoRows) {
-		c.Errorf("test failed, error %q not found", sqlair.ErrNoRows)
+		c.Errorf("test failed, error %q not the same as %q", err, sqlair.ErrNoRows)
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		c.Errorf("test failed, error %q not the same as %q", err, sql.ErrNoRows)
 	}
 
 	_, err = db.Exec(dropTables)
