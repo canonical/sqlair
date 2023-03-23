@@ -16,10 +16,7 @@ type PreparedExpr struct {
 	sql     string
 }
 
-const (
-	markerPrefix = "_sqlair_"
-	mapName      = "M"
-)
+const markerPrefix = "_sqlair_"
 
 func markerName(n int) string {
 	return markerPrefix + strconv.Itoa(n)
@@ -81,20 +78,22 @@ func starCheckOutput(p *outputPart) error {
 
 // prepareInput checks that the input expression corresponds to a known type.
 func prepareInput(ti typeNameToInfo, p *inputPart) (typeElement, error) {
-	if p.source.prefix == mapName {
-		return mapKey{name: p.source.name}, nil
-	}
-
 	info, ok := ti[p.source.prefix]
 	if !ok {
-		return field{}, fmt.Errorf(`type %s unknown, have: %s`, p.source.prefix, strings.Join(getKeys(ti), ", "))
+		return nil, fmt.Errorf(`type %s unknown, have: %s`, p.source.prefix, strings.Join(getKeys(ti), ", "))
 	}
-	f, ok := info.tagToField[p.source.name]
-	if !ok {
-		return field{}, fmt.Errorf(`type %s has no %q db tag`, info.typ.Name(), p.source.name)
+	switch info := info.(type) {
+	case *mapInfo:
+		return mapKey{name: p.source.name, mapType: info.typ()}, nil
+	case *structInfo:
+		f, ok := info.tagToField[p.source.name]
+		if !ok {
+			return nil, fmt.Errorf(`type %s has no %q db tag`, info.typ().Name(), p.source.name)
+		}
+		return f, nil
+	default:
+		return nil, fmt.Errorf(`internal error: unknow info type: %T`, info)
 	}
-
-	return f, nil
 }
 
 // prepareOutput checks that the output expressions correspond to known types.
@@ -109,29 +108,27 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeElement,
 	}
 
 	// Check target struct type and its tags are valid.
-	var info *info
+	var info info
 	var ok bool
 
 	for _, t := range p.target {
-		if t.prefix == mapName {
-			if t.name != "*" {
-				typeElements = append(typeElements, mapKey{name: t.name})
-			}
-			continue
-		}
 		info, ok = ti[t.prefix]
 		if !ok {
 			return nil, nil, fmt.Errorf(`type %s unknown, have: %s`, t.prefix, strings.Join(getKeys(ti), ", "))
 		}
-
 		if t.name != "*" {
-			f, ok := info.tagToField[t.name]
-			if !ok {
-				return nil, nil, fmt.Errorf(`type %s has no %q db tag`, info.typ.Name(), t.name)
-			}
 			// For a none star expression we record output destinations here.
 			// For a star expression we fill out the destinations as we generate the columns.
-			typeElements = append(typeElements, f)
+			switch info := info.(type) {
+			case *mapInfo:
+				typeElements = append(typeElements, mapKey{name: t.name, mapType: info.typ()})
+			case *structInfo:
+				f, ok := info.tagToField[t.name]
+				if !ok {
+					return nil, nil, fmt.Errorf(`type %s has no %q db tag`, info.typ().Name(), t.name)
+				}
+				typeElements = append(typeElements, f)
+			}
 		}
 	}
 
@@ -142,41 +139,45 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeElement,
 		info, _ := ti[p.target[0].prefix]
 		// Case 1.1: Single star i.e. "t.* AS &P.*" or "&P.*"
 		if len(p.source) == 0 || p.source[0].name == "*" {
-			if p.target[0].prefix == mapName {
-				return nil, nil, fmt.Errorf(`&%s.* cannot be used when no column names are specified or column name is *`, mapName)
-			}
-			pref := ""
+			switch info := info.(type) {
+			case *mapInfo:
+				return nil, nil, fmt.Errorf(`&%s.* cannot be used with a map when no column names are specified or column name is *`, info.typ().Name())
+			case *structInfo:
+				pref := ""
 
-			// Prepend table name. E.g. "t" in "t.* AS &P.*".
-			if len(p.source) > 0 {
-				pref = p.source[0].prefix
-			}
+				// Prepend table name. E.g. "t" in "t.* AS &P.*".
+				if len(p.source) > 0 {
+					pref = p.source[0].prefix
+				}
 
-			for _, tag := range info.tags {
-				outCols = append(outCols, fullName{pref, tag})
-				typeElements = append(typeElements, info.tagToField[tag])
+				for _, tag := range info.tags {
+					outCols = append(outCols, fullName{pref, tag})
+					typeElements = append(typeElements, info.tagToField[tag])
+				}
+				return outCols, typeElements, nil
 			}
-			return outCols, typeElements, nil
 		}
 
 		// Case 1.2: Explicit columns e.g. "(col1, t.col2) AS &P.*".
 		if len(p.source) > 0 {
-			if p.target[0].prefix == mapName {
+			switch info := info.(type) {
+			case *mapInfo:
 				for _, c := range p.source {
 					outCols = append(outCols, c)
-					typeElements = append(typeElements, mapKey{name: c.name})
+					typeElements = append(typeElements, mapKey{name: c.name, mapType: info.typ()})
+				}
+				return outCols, typeElements, nil
+			case *structInfo:
+				for _, c := range p.source {
+					f, ok := info.tagToField[c.name]
+					if !ok {
+						return nil, nil, fmt.Errorf(`type %s has no %q db tag`, info.typ().Name(), c.name)
+					}
+					outCols = append(outCols, c)
+					typeElements = append(typeElements, f)
 				}
 				return outCols, typeElements, nil
 			}
-			for _, c := range p.source {
-				f, ok := info.tagToField[c.name]
-				if !ok {
-					return nil, nil, fmt.Errorf(`type %s has no %q db tag`, info.typ.Name(), c.name)
-				}
-				outCols = append(outCols, c)
-				typeElements = append(typeElements, f)
-			}
-			return outCols, typeElements, nil
 		}
 	}
 
@@ -197,7 +198,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeElement,
 	return outCols, typeElements, nil
 }
 
-type typeNameToInfo map[string]*info
+type typeNameToInfo map[string]info
 
 // Prepare takes a parsed expression and struct instantiations of all the types
 // mentioned in it.
@@ -214,23 +215,22 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 
 	// Generate and save reflection info.
 	for _, arg := range args {
-		switch k := reflect.TypeOf(arg).Kind(); k {
-		case reflect.Struct:
+		t := reflect.TypeOf(arg)
+		switch t.Kind() {
+		case reflect.Struct, reflect.Map:
 			info, err := typeInfo(arg)
 			if err != nil {
 				return nil, err
 			}
-			name := info.typ.Name()
-			if name == mapName {
-				return nil, fmt.Errorf("name %q is reserved for maps", mapName)
+			if dupeInfo, ok := ti[t.Name()]; ok {
+				if dupeInfo.typ() == t {
+					return nil, fmt.Errorf("found multiple instances of type %q", t.Name())
+				}
+				return nil, fmt.Errorf("two types found with name %q: %q and %q", t.Name(), dupeInfo.typ().String(), t.String())
 			}
-			ti[name] = info
-		case reflect.Map:
-			return nil, fmt.Errorf("got map, maps do not need to be passed as parameters")
-		case reflect.Pointer:
-			return nil, fmt.Errorf("need struct, got pointer. Prepare takes structs by value as they are only used for their type information")
+			ti[t.Name()] = info
 		default:
-			return nil, fmt.Errorf("need struct, got %s", k)
+			return nil, fmt.Errorf("need struct, got %s", t.Kind())
 		}
 	}
 

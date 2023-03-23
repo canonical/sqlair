@@ -38,140 +38,119 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 
 	var inQuery = make(map[reflect.Type]bool)
 	for _, typeElement := range pe.inputs {
-		switch te := typeElement.(type) {
-		case field:
-			inQuery[te.structType] = true
-		}
+		inQuery[typeElement.outerType()] = true
 	}
 
 	var typeValue = make(map[reflect.Type]reflect.Value)
 	var typeNames []string
-	var m map[string]any
 	for _, arg := range args {
 		if arg == nil {
-			return nil, fmt.Errorf("need a map or struct, got nil")
+			return nil, fmt.Errorf("need map or struct, got nil")
 		}
 		v := reflect.ValueOf(arg)
 		v = reflect.Indirect(v)
 		t := v.Type()
+		if v.Kind() != reflect.Struct && v.Kind() != reflect.Map {
+			return nil, fmt.Errorf("need map or struct, got %s", t.Kind())
+		}
 
-		switch t.Kind() {
-		case reflect.Map:
-			if m != nil {
-				return nil, fmt.Errorf(`multiple maps`)
-			}
-			switch mtype := arg.(type) {
-			case map[string]any:
-				m = mtype
-			case *map[string]any:
-				m = *mtype
-			default:
-				return nil, fmt.Errorf(`map type must be alias of map[string]any, have type %T`, mtype)
-			}
-		case reflect.Struct:
-			typeValue[t] = v
-			typeNames = append(typeNames, t.Name())
-			if !inQuery[t] {
-				// Check if we have a type with the same name from a different package.
-				for _, typeElement := range pe.inputs {
-					switch te := typeElement.(type) {
-					case field:
-						if t.Name() == te.structType.Name() {
-							return nil, fmt.Errorf("type %s not found, have %s", te.structType.String(), t.String())
-						}
-					}
+		typeValue[t] = v
+		typeNames = append(typeNames, t.Name())
+		if !inQuery[t] {
+			// Check if we have a type with the same name from a different package.
+			for _, typeElement := range pe.inputs {
+				if t.Name() == typeElement.outerType().Name() {
+					return nil, fmt.Errorf("type %s not found, have %s", typeElement.outerType().String(), t.String())
 				}
-				return nil, fmt.Errorf("%s not referenced in query", t.Name())
 			}
-		default:
-			return nil, fmt.Errorf("need struct, got %s", t.Kind())
+			return nil, fmt.Errorf("%s not referenced in query", t.Name())
 		}
 	}
 
 	// Query parameteres.
 	qargs := []any{}
 	for i, typeElement := range pe.inputs {
+		v, ok := typeValue[typeElement.outerType()]
+		if !ok {
+			return nil, fmt.Errorf(`type %s not found, have: %s`, typeElement.outerType().Name(), strings.Join(typeNames, ", "))
+		}
 		switch te := typeElement.(type) {
 		case field:
-			v, ok := typeValue[te.structType]
-			if !ok {
-				return nil, fmt.Errorf(`type %s not found, have: %s`, te.structType.Name(), strings.Join(typeNames, ", "))
-			}
 			qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(i), v.FieldByIndex(te.index).Interface()))
 		case mapKey:
-			v, ok := m[te.name]
-			if !ok {
+			// MapIndex returns a zero value of the key is not in the map so we
+			// need to check the MapKeys().
+			var val reflect.Value
+			for _, key := range v.MapKeys() {
+				if key.String() == te.name {
+					val = v.MapIndex(reflect.ValueOf(te.name))
+					break
+				}
+			}
+			if !val.IsValid() {
 				return nil, fmt.Errorf(`map does not contain key %q`, te.name)
 			}
-			qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(i), v))
-		default:
-			return nil, fmt.Errorf("internal error: field type %T not supported", te)
+			qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(i), val.Interface()))
 		}
 	}
 	return &QueryExpr{outputs: pe.outputs, sql: pe.sql, args: qargs}, nil
 }
 
 type MapDecodeInfo struct {
-	mapPtrs  []any
-	keyIndex map[string]int
-	m        map[string]any
+	m         reflect.Value
+	valuePtrs []any
+	keyIndex  map[string]int
 }
 
 // ScanArgs returns list of pointers to the struct fields that are listed in qe.outputs.
 // All the structs mentioned in the query must be in outputArgs.
 // All outputArgs must be structs.
-func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, *MapDecodeInfo, error) {
+func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, []*MapDecodeInfo, error) {
+	var typesInQuery = []string{}
 	var inQuery = make(map[reflect.Type]bool)
 	for _, typeElement := range qe.outputs {
-		switch te := typeElement.(type) {
-		case field:
-			inQuery[te.structType] = true
+		if ok := inQuery[typeElement.outerType()]; !ok {
+			inQuery[typeElement.outerType()] = true
+			typesInQuery = append(typesInQuery, typeElement.outerType().Name())
 		}
 	}
 
+	var mapDecodeInfos = make(map[reflect.Type]*MapDecodeInfo)
 	var typeDest = make(map[reflect.Type]reflect.Value)
-	var m map[string]any
 	outputVals := []reflect.Value{}
 	for _, outputArg := range outputArgs {
 		if outputArg == nil {
 			return nil, nil, fmt.Errorf("need map or pointer to struct, got nil")
 		}
 		outputVal := reflect.ValueOf(outputArg)
-		if outputVal.Kind() != reflect.Pointer {
-			return nil, nil, fmt.Errorf("need map or pointer to struct, got %s", outputVal.Kind())
-		}
-		if outputVal.IsNil() {
-			return nil, nil, fmt.Errorf("got nil pointer")
-		}
-		outputVal = reflect.Indirect(outputVal)
-		switch k := outputVal.Kind(); k {
-		case reflect.Struct:
-			if !inQuery[outputVal.Type()] {
-				return nil, nil, fmt.Errorf("type %q does not appear as an output type in the query", outputVal.Type().Name())
+		k := outputVal.Kind()
+		if k != reflect.Map {
+			if k != reflect.Pointer {
+				return nil, nil, fmt.Errorf("need map or pointer to struct, got %s", k)
 			}
+			if outputVal.IsNil() {
+				return nil, nil, fmt.Errorf("got nil pointer")
+			}
+			outputVal = outputVal.Elem()
+			k = outputVal.Kind()
+			if k != reflect.Struct && k != reflect.Map {
+				return nil, nil, fmt.Errorf("need map or pointer to struct, got pointer to %s", k)
+			}
+		}
+		if !inQuery[outputVal.Type()] {
+			return nil, nil, fmt.Errorf("type %q does not appear in query, have: %s", outputVal.Type().Name(), strings.Join(typesInQuery, ", "))
+
+		}
+		if outputVal.Kind() == reflect.Map {
+			mapDecodeInfos[outputVal.Type()] = &MapDecodeInfo{m: outputVal, keyIndex: map[string]int{}}
+		} else {
 			typeDest[outputVal.Type()] = outputVal
-		case reflect.Map:
-			if m != nil {
-				return nil, nil, fmt.Errorf(`found multiple map types`)
-			}
-			switch arg := outputArg.(type) {
-			case map[string]any:
-				m = arg
-			case *map[string]any:
-				m = *arg
-			default:
-				return nil, nil, fmt.Errorf(`internal error: cannot cast map type to map[string]any, have type %T`, outputArg)
-			}
-		default:
-			return nil, nil, fmt.Errorf("need map or pointer to struct, got pointer to %s", k)
 		}
 		outputVals = append(outputVals, outputVal)
 	}
 
 	// Generate the pointers.
 	var ptrs = []any{}
-	var keyIndex = map[string]int{}
-	var mapPtrs = []any{}
 	for _, column := range columns {
 		idx, ok := markerIndex(column)
 		if !ok {
@@ -190,34 +169,36 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, *MapDe
 			if !ok {
 				return nil, nil, fmt.Errorf("type %q found in query but not passed to decode", te.structType.Name())
 			}
-
 			val := outputVal.FieldByIndex(te.index)
 			if !val.CanSet() {
 				return nil, nil, fmt.Errorf("internal error: cannot set field %s of struct %s", te.name, te.structType.Name())
 			}
 			ptrs = append(ptrs, val.Addr().Interface())
 		case mapKey:
-			v, ok := m[te.name]
-			// If there is already an value in the map for this column name, scan into a variable of that type.
-			if ok {
-				val := reflect.New(reflect.TypeOf(v)).Elem()
-				addr := val.Addr().Interface()
-				ptrs = append(ptrs, addr)
-				mapPtrs = append(mapPtrs, addr)
-			} else {
-				var y any
-				ptrs = append(ptrs, &y)
-				mapPtrs = append(mapPtrs, &y)
+			mapDecodeInfo, ok := mapDecodeInfos[te.mapType]
+			if !ok {
+				return nil, nil, fmt.Errorf("type %q found in query but not passed to decode", te.mapType.Name())
 			}
-			keyIndex[te.name] = len(mapPtrs) - 1
+			// Scan in to a new variable with the type of the maps value
+			val := reflect.New(te.mapType.Elem()).Elem()
+			addr := val.Addr().Interface()
+			ptrs = append(ptrs, addr)
+			mapDecodeInfo.valuePtrs = append(mapDecodeInfo.valuePtrs, addr)
+			mapDecodeInfo.keyIndex[te.name] = len(mapDecodeInfo.valuePtrs) - 1
 		}
 	}
-	return ptrs, &MapDecodeInfo{mapPtrs: mapPtrs, keyIndex: keyIndex, m: m}, nil
+	var mapInfoSlice = []*MapDecodeInfo{}
+	for _, v := range mapDecodeInfos {
+		mapInfoSlice = append(mapInfoSlice, v)
+	}
+	return ptrs, mapInfoSlice, nil
 }
 
-// PopulateMap enters the scanned values into the map.
-func (mapDecodeInfo *MapDecodeInfo) PopulateMap() {
+// Populate puts scanned values into the map.
+func (mapDecodeInfo *MapDecodeInfo) Populate() {
 	for k, i := range mapDecodeInfo.keyIndex {
-		mapDecodeInfo.m[k] = reflect.ValueOf(mapDecodeInfo.mapPtrs[i]).Elem().Interface()
+		// Is there a better way to pass the set values here than their
+		// pointers?
+		mapDecodeInfo.m.SetMapIndex(reflect.ValueOf(k), reflect.ValueOf(mapDecodeInfo.valuePtrs[i]).Elem())
 	}
 }

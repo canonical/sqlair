@@ -5,15 +5,16 @@ import (
 )
 
 type typeElement interface {
-	elemName() string
+	outerType() reflect.Type
 }
 
 type mapKey struct {
-	name string
+	name    string
+	mapType reflect.Type
 }
 
-func (mk mapKey) elemName() string {
-	return mk.name
+func (mk mapKey) outerType() reflect.Type {
+	return mk.mapType
 }
 
 // field represents reflection information about a field from some struct type.
@@ -31,16 +32,31 @@ type field struct {
 	omitEmpty bool
 }
 
-func (f field) elemName() string {
-	return f.name
+func (f field) outerType() reflect.Type {
+	return f.structType
 }
 
-// Info represents reflected information about a struct type.
-type info struct {
-	typ reflect.Type
+type info interface {
+	typ() reflect.Type
+}
+
+type structInfo struct {
+	structType reflect.Type
 
 	// Ordered list of tags
 	tags []string
 
 	tagToField map[string]field
+}
+
+func (si *structInfo) typ() reflect.Type {
+	return si.structType
+}
+
+type mapInfo struct {
+	mapType reflect.Type
+}
+
+func (mi *mapInfo) typ() reflect.Type {
+	return mi.mapType
 }

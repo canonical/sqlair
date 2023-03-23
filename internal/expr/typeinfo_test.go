@@ -27,20 +27,23 @@ func (e *ExprInternalSuite) TestReflectStruct(c *C) {
 	info, err := typeInfo(s)
 	c.Assert(err, IsNil)
 
-	c.Assert(reflect.Struct, Equals, info.typ.Kind())
-	c.Assert(reflect.TypeOf(s), Equals, info.typ)
+	switch info := info.(type) {
+	case *structInfo:
+		c.Assert(reflect.Struct, Equals, info.structType.Kind())
+		c.Assert(reflect.TypeOf(s), Equals, info.structType)
 
-	c.Assert(info.tagToField, HasLen, 2)
+		c.Assert(info.tagToField, HasLen, 2)
 
-	id, ok := info.tagToField["id"]
-	c.Assert(ok, Equals, true)
-	c.Assert("ID", Equals, id.name)
-	c.Assert(id.omitEmpty, Equals, false)
+		id, ok := info.tagToField["id"]
+		c.Assert(ok, Equals, true)
+		c.Assert("ID", Equals, id.name)
+		c.Assert(id.omitEmpty, Equals, false)
 
-	name, ok := info.tagToField["name"]
-	c.Assert(ok, Equals, true)
-	c.Assert("Name", Equals, name.name)
-	c.Assert(name.omitEmpty, Equals, true)
+		name, ok := info.tagToField["name"]
+		c.Assert(ok, Equals, true)
+		c.Assert("Name", Equals, name.name)
+		c.Assert(name.omitEmpty, Equals, true)
+	}
 }
 
 func (s *ExprInternalSuite) TestReflectSimpleConcurrent(c *C) {
@@ -74,12 +77,9 @@ func (s *ExprInternalSuite) TestReflectSimpleConcurrent(c *C) {
 }
 
 func (s *ExprInternalSuite) TestReflectNonStructType(c *C) {
-	type mymap map[int]int
 	var nonStructs = []any{
-		mymap{},
 		int(0),
 		string(""),
-		map[string]string{},
 	}
 
 	for _, value := range nonStructs {

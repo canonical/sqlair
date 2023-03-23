@@ -10,11 +10,11 @@ import (
 )
 
 var cacheMutex sync.RWMutex
-var cache = make(map[reflect.Type]*info)
+var cache = make(map[reflect.Type]info)
 
 // Reflect will return the info of a given type,
 // generating and caching as required.
-func typeInfo(value any) (*info, error) {
+func typeInfo(value any) (info, error) {
 	if value == (any)(nil) {
 		return nil, fmt.Errorf("cannot reflect nil value")
 	}
@@ -42,46 +42,51 @@ func typeInfo(value any) (*info, error) {
 
 // generate produces and returns reflection information for the input
 // reflect.Value that is specifically required for SQLAir operation.
-func generate(t reflect.Type) (*info, error) {
-	// Reflection information is only generated for structs.
-	if t.Kind() != reflect.Struct {
-		return nil, fmt.Errorf("internal error: attempted to obtain struct information for something that is not a struct: %s.", t)
-	}
-
-	info := info{
-		tagToField: make(map[string]field),
-		typ:        t,
-	}
-	tags := []string{}
-
-	for i := 0; i < t.NumField(); i++ {
-		f := t.Field(i)
-		// Fields without a "db" tag are outside of SQLAir's remit.
-		tag := f.Tag.Get("db")
-		if tag == "" {
-			continue
+func generate(t reflect.Type) (info, error) {
+	switch t.Kind() {
+	case reflect.Map:
+		if t.Key().Kind() != reflect.String {
+			return nil, fmt.Errorf(`map type %s must have key type string, found type %s`, t.Name(), t.Key().Kind())
 		}
-		if !f.IsExported() {
-			return nil, fmt.Errorf("field %q of struct %s not exported", f.Name, t.Name())
-		}
-
-		tag, omitEmpty, err := parseTag(tag)
-		if err != nil {
-			return nil, fmt.Errorf("cannot parse tag for field %s.%s: %s", t.Name(), f.Name, err)
-		}
-		tags = append(tags, tag)
-		info.tagToField[tag] = field{
-			name:       f.Name,
-			index:      f.Index,
-			omitEmpty:  omitEmpty,
+		return &mapInfo{mapType: t}, nil
+	case reflect.Struct:
+		structInfo := structInfo{
+			tagToField: make(map[string]field),
 			structType: t,
 		}
+		tags := []string{}
+
+		for i := 0; i < t.NumField(); i++ {
+			f := t.Field(i)
+			// Fields without a "db" tag are outside of SQLAir's remit.
+			tag := f.Tag.Get("db")
+			if tag == "" {
+				continue
+			}
+			if !f.IsExported() {
+				return nil, fmt.Errorf("field %q of struct %s not exported", f.Name, t.Name())
+			}
+
+			tag, omitEmpty, err := parseTag(tag)
+			if err != nil {
+				return nil, fmt.Errorf("cannot parse tag for field %s.%s: %s", t.Name(), f.Name, err)
+			}
+			tags = append(tags, tag)
+			structInfo.tagToField[tag] = field{
+				name:       f.Name,
+				index:      f.Index,
+				omitEmpty:  omitEmpty,
+				structType: t,
+			}
+		}
+
+		sort.Strings(tags)
+		structInfo.tags = tags
+
+		return &structInfo, nil
+	default:
+		return nil, fmt.Errorf("internal error: attempted to obtain struct information for something that is not a struct: %s.", t)
 	}
-
-	sort.Strings(tags)
-	info.tags = tags
-
-	return &info, nil
 }
 
 // This expression should be aligned with the bytes we allow in isNameByte in

@@ -9,7 +9,17 @@ import (
 )
 
 // sqlair-provided M-type map.
-type M = map[string]any
+// The M type can be used in querys to pass arbitrary values referenced by their key.
+//
+// For example:
+//
+//  stmt := sqlair.MustPrepare("SELECT (name, postcode) AS &M.* FROM p WHERE id = $M.id", sqlair.M{})
+//  q := db.Query(stmt, sqlair.M{"id": 10})
+//  var resultMap = sqlair.M{}
+//  err := q.One{resultMap}
+//  // resultMap == sqlair.M{"name": "Fred", "postcode": 10031}
+
+type M map[string]any
 
 // Statement represents a SQL statemnt with valid SQLair expressions.
 // It is ready to be run on a SQLair DB.
@@ -130,7 +140,7 @@ func (q *Query) Decode(outputArgs ...any) (ok bool) {
 		q.err = err
 		return false
 	}
-	ptrs, mapDecodeInfo, err := q.qe.ScanArgs(cols, outputArgs)
+	ptrs, mapDecodeInfos, err := q.qe.ScanArgs(cols, outputArgs)
 	if err != nil {
 		q.err = err
 		return false
@@ -139,7 +149,9 @@ func (q *Query) Decode(outputArgs ...any) (ok bool) {
 		q.err = err
 		return false
 	}
-	mapDecodeInfo.PopulateMap()
+	for _, m := range mapDecodeInfos {
+		m.Populate()
+	}
 	return true
 }
 

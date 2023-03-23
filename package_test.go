@@ -94,7 +94,11 @@ DROP TABLE address;
 }
 
 func (s *PackageSuite) TestValidDecode(c *C) {
-	type CustomMap = map[string]any
+	type CustomMap map[string]any
+	type StringMap map[string]string
+	type M struct {
+		F string `db:"id"`
+	}
 	var tests = []struct {
 		summary  string
 		query    string
@@ -140,24 +144,31 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 	}, {
 		summary:  "select into map",
 		query:    "SELECT &M.name FROM person WHERE address_id = $M.p1 OR address_id = $M.p2",
-		types:    []any{},
-		inputs:   []any{&sqlair.M{"p1": 1000, "p2": 1500}},
-		outputs:  [][]any{{&sqlair.M{}}, {&sqlair.M{}}},
-		expected: [][]any{{&sqlair.M{"name": "Fred"}}, {&sqlair.M{"name": "Mark"}}},
+		types:    []any{sqlair.M{}},
+		inputs:   []any{sqlair.M{"p1": 1000, "p2": 1500}},
+		outputs:  [][]any{{sqlair.M{}}, {sqlair.M{}}},
+		expected: [][]any{{sqlair.M{"name": "Fred"}}, {sqlair.M{"name": "Mark"}}},
 	}, {
 		summary:  "select into star map",
 		query:    "SELECT (name, address_id) AS &M.* FROM person WHERE address_id = $M.p1",
-		types:    []any{},
+		types:    []any{sqlair.M{}},
 		inputs:   []any{sqlair.M{"p1": 1000}},
 		outputs:  [][]any{{&sqlair.M{"address_id": 0}}},
-		expected: [][]any{{&sqlair.M{"name": "Fred", "address_id": 1000}}},
+		expected: [][]any{{&sqlair.M{"name": "Fred", "address_id": int64(1000)}}},
 	}, {
 		summary:  "select into custom map",
-		query:    "SELECT (name, address_id) AS &M.* FROM person WHERE address_id IN ( $M.address_id, $M.district)",
-		types:    []any{},
+		query:    "SELECT (name, address_id) AS &CustomMap.* FROM person WHERE address_id IN ( $CustomMap.address_id, $CustomMap.district)",
+		types:    []any{CustomMap{}},
 		inputs:   []any{CustomMap{"address_id": 1000, "district": 2000}},
 		outputs:  [][]any{{&CustomMap{"address_id": 0}}},
-		expected: [][]any{{&CustomMap{"name": "Fred", "address_id": 1000}}},
+		expected: [][]any{{&CustomMap{"name": "Fred", "address_id": int64(1000)}}},
+	}, {
+		summary:  "multiple maps",
+		query:    "SELECT name AS &StringMap.*, id AS &CustomMap.* FROM person WHERE address_id = $M.address_id AND id = $StringMap.id",
+		types:    []any{StringMap{}, sqlair.M{}, CustomMap{}},
+		inputs:   []any{sqlair.M{"address_id": "1000"}, &StringMap{"id": "30"}},
+		outputs:  [][]any{{&StringMap{}, CustomMap{}}},
+		expected: [][]any{{&StringMap{"name": "Fred"}, CustomMap{"id": int64(30)}}},
 	}}
 
 	// A Person struct that shadows the one in tests above and has different int types.
@@ -231,6 +242,7 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 }
 
 func (s *PackageSuite) TestDecodeErrors(c *C) {
+	type SliceMap map[string][]string
 	var tests = []struct {
 		summary string
 		query   string
@@ -265,7 +277,7 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{&Address{}}},
-		err:     `cannot decode result: type "Address" does not appear as an output type in the query`,
+		err:     `cannot decode result: type "Address" does not appear in query, have: Person`,
 	}, {
 		summary: "not a struct",
 		query:   "SELECT * AS &Person.* FROM person",
@@ -299,7 +311,7 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 		q := sqlairDB.Query(stmt, t.inputs...)
 		i := 0
 		for q.Next() {
-			if i > len(t.outputs) {
+			if i >= len(t.outputs) {
 				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d > %d)\n", t.summary, t.query, i+1, len(t.outputs))
 				break
 			}
