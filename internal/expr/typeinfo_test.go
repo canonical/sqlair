@@ -84,7 +84,7 @@ func (s *ExprInternalSuite) TestReflectNonStructType(c *C) {
 
 	for _, value := range nonStructs {
 		i, err := typeInfo(value)
-		c.Assert(err, ErrorMatches, "internal error: attempted to obtain struct information for something that is not a struct: .*")
+		c.Assert(err, ErrorMatches, "internal error: cannot obtain type information for type that is not map or struct: .*")
 		c.Assert(i, IsNil)
 	}
 }

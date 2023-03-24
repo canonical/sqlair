@@ -85,7 +85,7 @@ func generate(t reflect.Type) (info, error) {
 
 		return &structInfo, nil
 	default:
-		return nil, fmt.Errorf("internal error: attempted to obtain struct information for something that is not a struct: %s.", t)
+		return nil, fmt.Errorf("internal error: cannot obtain type information for type that is not map or struct: %s.", t)
 	}
 }
 
