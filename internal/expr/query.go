@@ -47,8 +47,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		if arg == nil {
 			return nil, fmt.Errorf("need map or struct, got nil")
 		}
-		v := reflect.ValueOf(arg)
-		v = reflect.Indirect(v)
+		v := reflect.Indirect(reflect.ValueOf(arg))
 		t := v.Type()
 		if v.Kind() != reflect.Struct && v.Kind() != reflect.Map {
 			return nil, fmt.Errorf("need map or struct, got %s", t.Kind())
@@ -78,7 +77,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		case field:
 			qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(i), v.FieldByIndex(tm.index).Interface()))
 		case mapKey:
-			// MapIndex returns a zero value of the key is not in the map so we
+			// MapIndex returns a zero value if the key is not in the map so we
 			// need to check the MapKeys().
 			var val reflect.Value
 			for _, key := range v.MapKeys() {
@@ -103,8 +102,7 @@ type MapDecodeInfo struct {
 }
 
 // ScanArgs returns list of pointers to the struct fields that are listed in qe.outputs.
-// All the structs mentioned in the query must be in outputArgs.
-// All outputArgs must be structs.
+// All the structs and maps mentioned in the query must be in outputArgs.
 func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, []*MapDecodeInfo, error) {
 	var typesInQuery = []string{}
 	var inQuery = make(map[reflect.Type]bool)

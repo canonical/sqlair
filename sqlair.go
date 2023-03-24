@@ -117,8 +117,8 @@ func (q *Query) Next() bool {
 	return q.rows.Next()
 }
 
-// Decode decodes the current result into the structs in outputValues.
-// outputArgs must contain all the structs mentioned in the query.
+// Decode decodes the current result into the maps and structs in outputValues.
+// outputArgs must contain all the maps and structs mentioned in the query.
 // If an error occurs it will be returned with Query.Close().
 func (q *Query) Decode(outputArgs ...any) (ok bool) {
 	if q.err != nil {
