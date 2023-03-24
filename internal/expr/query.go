@@ -96,9 +96,9 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 }
 
 type MapDecodeInfo struct {
-	m         reflect.Value
-	valuePtrs []any
-	keyIndex  map[string]int
+	m      reflect.Value
+	keys   []string
+	values []reflect.Value
 }
 
 // ScanArgs returns list of pointers to the struct fields that are listed in qe.outputs.
@@ -140,7 +140,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, []*Map
 
 		}
 		if outputVal.Kind() == reflect.Map {
-			mapDecodeInfos[outputVal.Type()] = &MapDecodeInfo{m: outputVal, keyIndex: map[string]int{}}
+			mapDecodeInfos[outputVal.Type()] = &MapDecodeInfo{m: outputVal}
 		} else {
 			typeDest[outputVal.Type()] = outputVal
 		}
@@ -177,12 +177,10 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, []*Map
 			if !ok {
 				return nil, nil, fmt.Errorf("type %q found in query but not passed to decode", tm.mapType.Name())
 			}
-			// Scan in to a new variable with the type of the maps value
-			val := reflect.New(tm.mapType.Elem()).Elem()
-			addr := val.Addr().Interface()
-			ptrs = append(ptrs, addr)
-			mapDecodeInfo.valuePtrs = append(mapDecodeInfo.valuePtrs, addr)
-			mapDecodeInfo.keyIndex[tm.name] = len(mapDecodeInfo.valuePtrs) - 1
+			// Scan in to a new value with the type of the maps value
+			mapDecodeInfo.keys = append(mapDecodeInfo.keys, tm.name)
+			mapDecodeInfo.values = append(mapDecodeInfo.values, reflect.New(tm.mapType.Elem()).Elem())
+			ptrs = append(ptrs, mapDecodeInfo.values[len(mapDecodeInfo.values)-1].Addr().Interface())
 		}
 	}
 	var mapInfoSlice = []*MapDecodeInfo{}
@@ -194,9 +192,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, []*Map
 
 // Populate puts scanned values into the map.
 func (mapDecodeInfo *MapDecodeInfo) Populate() {
-	for k, i := range mapDecodeInfo.keyIndex {
-		// Is there a better way to pass the set values here than their
-		// pointers?
-		mapDecodeInfo.m.SetMapIndex(reflect.ValueOf(k), reflect.ValueOf(mapDecodeInfo.valuePtrs[i]).Elem())
+	for i, k := range mapDecodeInfo.keys {
+		mapDecodeInfo.m.SetMapIndex(reflect.ValueOf(k), mapDecodeInfo.values[i])
 	}
 }
