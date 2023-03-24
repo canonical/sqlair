@@ -4,7 +4,7 @@ import (
 	"reflect"
 )
 
-type typeElement interface {
+type typeMember interface {
 	outerType() reflect.Type
 }
 

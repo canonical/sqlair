@@ -34,7 +34,7 @@ type District struct{}
 
 type M map[string]any
 
-type OtherMap map[string]any
+type OtherMap map[string]int
 
 type StringMap map[string]string
 
@@ -156,11 +156,11 @@ var tests = []struct {
 	[]any{Person{}, Address{}},
 	"SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2, a.district AS _sqlair_3, a.id AS _sqlair_4, a.street AS _sqlair_5 FROM person, address a WHERE name = 'Fred'",
 }, {
-	"map output",
-	"SELECT (p.name, a.id) AS &M.*, street AS &StringMap.*, &OtherMap.street FROM person, address a WHERE name = $M.name",
-	"[Bypass[SELECT ] Output[[p.name a.id] [M.*]] Bypass[, ] Output[[street] [StringMap.*]] Bypass[, ] Output[[] [OtherMap.street]] Bypass[ FROM person, address a WHERE name = ] Input[M.name]]",
+	"map input and output",
+	"SELECT (p.name, a.id) AS &M.*, street AS &StringMap.*, &OtherMap.id FROM person, address a WHERE name = $M.name",
+	"[Bypass[SELECT ] Output[[p.name a.id] [M.*]] Bypass[, ] Output[[street] [StringMap.*]] Bypass[, ] Output[[] [OtherMap.id]] Bypass[ FROM person, address a WHERE name = ] Input[M.name]]",
 	[]any{sqlair.M{}, OtherMap{}, StringMap{}},
-	"SELECT p.name AS _sqlair_0, a.id AS _sqlair_1, street AS _sqlair_2, street AS _sqlair_3 FROM person, address a WHERE name = @sqlair_0",
+	"SELECT p.name AS _sqlair_0, a.id AS _sqlair_1, street AS _sqlair_2, id AS _sqlair_3 FROM person, address a WHERE name = @sqlair_0",
 }, {
 	"multicolumn output v1",
 	"SELECT (a.district, a.street) AS (&Address.district, &Address.street) FROM address AS a",
@@ -252,7 +252,7 @@ var tests = []struct {
 	[]any{Person{}},
 	`INSERT INTO person (name) VALUES @sqlair_0`,
 }, {
-	"insert with map",
+	"insert with map inputs",
 	"INSERT INTO person (name, postalcode) VALUES ( $M.name, $M.id )",
 	"[Bypass[INSERT INTO person (name, postalcode) VALUES ( ] Input[M.name] Bypass[, ] Input[M.id] Bypass[ )]]",
 	[]any{sqlair.M{}},
@@ -599,24 +599,24 @@ func (s *ExprSuite) TestPrepareMapError(c *C) {
 		"all output into map star",
 		"SELECT &M.* FROM person WHERE name = 'Fred'",
 		[]any{sqlair.M{}},
-		"cannot prepare expression: &M.* cannot be used with a map when no column names are specified or column name is *",
+		"cannot prepare expression: &M.* cannot be used with a map output when no column names are specified or column name is *",
 	}, {
 		"all output into map star from table star",
 		"SELECT p.* AS &M.* FROM person WHERE name = 'Fred'",
 		[]any{sqlair.M{}},
-		"cannot prepare expression: &M.* cannot be used with a map when no column names are specified or column name is *",
+		"cannot prepare expression: &M.* cannot be used with a map output when no column names are specified or column name is *",
 	}, {
 		"all output into map star from lone star",
 		"SELECT * AS &CustomMap.* FROM person WHERE name = 'Fred'",
 		[]any{CustomMap{}},
-		"cannot prepare expression: &CustomMap.* cannot be used with a map when no column names are specified or column name is *",
+		"cannot prepare expression: &CustomMap.* cannot be used with a map output when no column names are specified or column name is *",
 	}, {
 		"invalid map",
 		"SELECT * AS &invalidMap.* FROM person WHERE name = 'Fred'",
 		[]any{invalidMap{}},
 		"cannot prepare expression: map type invalidMap must have key type string, found type int",
 	}, {
-		"clashing names",
+		"clashing map and struct names",
 		"SELECT * AS &M.* FROM person WHERE name = $M.id",
 		[]any{M{}, sqlair.M{}},
 		`cannot prepare expression: two types found with name "M": "expr_test.M" and "sqlair.M"`,

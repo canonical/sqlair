@@ -19,7 +19,7 @@ func (ce *QueryExpr) QueryArgs() []any {
 type QueryExpr struct {
 	sql     string
 	args    []any
-	outputs []typeElement
+	outputs []typeMember
 }
 
 // Query returns a query expression ready for execution, using the provided values to
@@ -37,8 +37,8 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	}()
 
 	var inQuery = make(map[reflect.Type]bool)
-	for _, typeElement := range pe.inputs {
-		inQuery[typeElement.outerType()] = true
+	for _, typeMember := range pe.inputs {
+		inQuery[typeMember.outerType()] = true
 	}
 
 	var typeValue = make(map[reflect.Type]reflect.Value)
@@ -58,9 +58,9 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		typeNames = append(typeNames, t.Name())
 		if !inQuery[t] {
 			// Check if we have a type with the same name from a different package.
-			for _, typeElement := range pe.inputs {
-				if t.Name() == typeElement.outerType().Name() {
-					return nil, fmt.Errorf("type %s not found, have %s", typeElement.outerType().String(), t.String())
+			for _, typeMember := range pe.inputs {
+				if t.Name() == typeMember.outerType().Name() {
+					return nil, fmt.Errorf("type %s not found, have %s", typeMember.outerType().String(), t.String())
 				}
 			}
 			return nil, fmt.Errorf("%s not referenced in query", t.Name())
@@ -69,26 +69,26 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 
 	// Query parameteres.
 	qargs := []any{}
-	for i, typeElement := range pe.inputs {
-		v, ok := typeValue[typeElement.outerType()]
+	for i, typeMember := range pe.inputs {
+		v, ok := typeValue[typeMember.outerType()]
 		if !ok {
-			return nil, fmt.Errorf(`type %s not found, have: %s`, typeElement.outerType().Name(), strings.Join(typeNames, ", "))
+			return nil, fmt.Errorf(`type %s not found, have: %s`, typeMember.outerType().Name(), strings.Join(typeNames, ", "))
 		}
-		switch te := typeElement.(type) {
+		switch tm := typeMember.(type) {
 		case field:
-			qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(i), v.FieldByIndex(te.index).Interface()))
+			qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(i), v.FieldByIndex(tm.index).Interface()))
 		case mapKey:
 			// MapIndex returns a zero value of the key is not in the map so we
 			// need to check the MapKeys().
 			var val reflect.Value
 			for _, key := range v.MapKeys() {
-				if key.String() == te.name {
-					val = v.MapIndex(reflect.ValueOf(te.name))
+				if key.String() == tm.name {
+					val = v.MapIndex(reflect.ValueOf(tm.name))
 					break
 				}
 			}
 			if !val.IsValid() {
-				return nil, fmt.Errorf(`map does not contain key %q`, te.name)
+				return nil, fmt.Errorf(`map does not contain key %q`, tm.name)
 			}
 			qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(i), val.Interface()))
 		}
@@ -108,10 +108,10 @@ type MapDecodeInfo struct {
 func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, []*MapDecodeInfo, error) {
 	var typesInQuery = []string{}
 	var inQuery = make(map[reflect.Type]bool)
-	for _, typeElement := range qe.outputs {
-		if ok := inQuery[typeElement.outerType()]; !ok {
-			inQuery[typeElement.outerType()] = true
-			typesInQuery = append(typesInQuery, typeElement.outerType().Name())
+	for _, typeMember := range qe.outputs {
+		if ok := inQuery[typeMember.outerType()]; !ok {
+			inQuery[typeMember.outerType()] = true
+			typesInQuery = append(typesInQuery, typeMember.outerType().Name())
 		}
 	}
 
@@ -162,29 +162,29 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, []*Map
 		if idx >= len(qe.outputs) {
 			return nil, nil, fmt.Errorf("internal error: sqlair column not in outputs (%d>=%d)", idx, len(qe.outputs))
 		}
-		typeElement := qe.outputs[idx]
-		switch te := typeElement.(type) {
+		typeMember := qe.outputs[idx]
+		switch tm := typeMember.(type) {
 		case field:
-			outputVal, ok := typeDest[te.structType]
+			outputVal, ok := typeDest[tm.structType]
 			if !ok {
-				return nil, nil, fmt.Errorf("type %q found in query but not passed to decode", te.structType.Name())
+				return nil, nil, fmt.Errorf("type %q found in query but not passed to decode", tm.structType.Name())
 			}
-			val := outputVal.FieldByIndex(te.index)
+			val := outputVal.FieldByIndex(tm.index)
 			if !val.CanSet() {
-				return nil, nil, fmt.Errorf("internal error: cannot set field %s of struct %s", te.name, te.structType.Name())
+				return nil, nil, fmt.Errorf("internal error: cannot set field %s of struct %s", tm.name, tm.structType.Name())
 			}
 			ptrs = append(ptrs, val.Addr().Interface())
 		case mapKey:
-			mapDecodeInfo, ok := mapDecodeInfos[te.mapType]
+			mapDecodeInfo, ok := mapDecodeInfos[tm.mapType]
 			if !ok {
-				return nil, nil, fmt.Errorf("type %q found in query but not passed to decode", te.mapType.Name())
+				return nil, nil, fmt.Errorf("type %q found in query but not passed to decode", tm.mapType.Name())
 			}
 			// Scan in to a new variable with the type of the maps value
-			val := reflect.New(te.mapType.Elem()).Elem()
+			val := reflect.New(tm.mapType.Elem()).Elem()
 			addr := val.Addr().Interface()
 			ptrs = append(ptrs, addr)
 			mapDecodeInfo.valuePtrs = append(mapDecodeInfo.valuePtrs, addr)
-			mapDecodeInfo.keyIndex[te.name] = len(mapDecodeInfo.valuePtrs) - 1
+			mapDecodeInfo.keyIndex[tm.name] = len(mapDecodeInfo.valuePtrs) - 1
 		}
 	}
 	var mapInfoSlice = []*MapDecodeInfo{}

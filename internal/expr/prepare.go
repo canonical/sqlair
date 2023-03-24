@@ -11,8 +11,8 @@ import (
 
 // PreparedExpr contains an SQL expression that is ready for execution.
 type PreparedExpr struct {
-	outputs []typeElement
-	inputs  []typeElement
+	outputs []typeMember
+	inputs  []typeMember
 	sql     string
 }
 
@@ -77,7 +77,7 @@ func starCheckOutput(p *outputPart) error {
 }
 
 // prepareInput checks that the input expression corresponds to a known type.
-func prepareInput(ti typeNameToInfo, p *inputPart) (typeElement, error) {
+func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
 	info, ok := ti[p.source.prefix]
 	if !ok {
 		return nil, fmt.Errorf(`type %s unknown, have: %s`, p.source.prefix, strings.Join(getKeys(ti), ", "))
@@ -98,9 +98,9 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (typeElement, error) {
 
 // prepareOutput checks that the output expressions correspond to known types.
 // It then checks they are formatted correctly and finally generates the columns for the query.
-func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeElement, error) {
+func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, error) {
 	var outCols = make([]fullName, 0)
-	var typeElements = make([]typeElement, 0)
+	var typeMembers = make([]typeMember, 0)
 
 	// Check the asterisks are well formed (if present).
 	if err := starCheckOutput(p); err != nil {
@@ -121,13 +121,13 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeElement,
 			// For a star expression we fill out the destinations as we generate the columns.
 			switch info := info.(type) {
 			case *mapInfo:
-				typeElements = append(typeElements, mapKey{name: t.name, mapType: info.typ()})
+				typeMembers = append(typeMembers, mapKey{name: t.name, mapType: info.typ()})
 			case *structInfo:
 				f, ok := info.tagToField[t.name]
 				if !ok {
 					return nil, nil, fmt.Errorf(`type %s has no %q db tag`, info.typ().Name(), t.name)
 				}
-				typeElements = append(typeElements, f)
+				typeMembers = append(typeMembers, f)
 			}
 		}
 	}
@@ -141,7 +141,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeElement,
 		if len(p.source) == 0 || p.source[0].name == "*" {
 			switch info := info.(type) {
 			case *mapInfo:
-				return nil, nil, fmt.Errorf(`&%s.* cannot be used with a map when no column names are specified or column name is *`, info.typ().Name())
+				return nil, nil, fmt.Errorf(`&%s.* cannot be used with a map output when no column names are specified or column name is *`, info.typ().Name())
 			case *structInfo:
 				pref := ""
 
@@ -152,9 +152,9 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeElement,
 
 				for _, tag := range info.tags {
 					outCols = append(outCols, fullName{pref, tag})
-					typeElements = append(typeElements, info.tagToField[tag])
+					typeMembers = append(typeMembers, info.tagToField[tag])
 				}
-				return outCols, typeElements, nil
+				return outCols, typeMembers, nil
 			}
 		}
 
@@ -164,9 +164,9 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeElement,
 			case *mapInfo:
 				for _, c := range p.source {
 					outCols = append(outCols, c)
-					typeElements = append(typeElements, mapKey{name: c.name, mapType: info.typ()})
+					typeMembers = append(typeMembers, mapKey{name: c.name, mapType: info.typ()})
 				}
-				return outCols, typeElements, nil
+				return outCols, typeMembers, nil
 			case *structInfo:
 				for _, c := range p.source {
 					f, ok := info.tagToField[c.name]
@@ -174,9 +174,9 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeElement,
 						return nil, nil, fmt.Errorf(`type %s has no %q db tag`, info.typ().Name(), c.name)
 					}
 					outCols = append(outCols, c)
-					typeElements = append(typeElements, f)
+					typeMembers = append(typeMembers, f)
 				}
-				return outCols, typeElements, nil
+				return outCols, typeMembers, nil
 			}
 		}
 	}
@@ -188,14 +188,14 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeElement,
 		for _, c := range p.source {
 			outCols = append(outCols, c)
 		}
-		return outCols, typeElements, nil
+		return outCols, typeMembers, nil
 	}
 
 	// Case 2.2: No columns e.g. "(&P.name, &P.id)".
 	for _, t := range p.target {
 		outCols = append(outCols, fullName{name: t.name})
 	}
-	return outCols, typeElements, nil
+	return outCols, typeMembers, nil
 }
 
 type typeNameToInfo map[string]info
@@ -239,8 +239,8 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	var inCount int
 	var outCount int
 
-	var outputs = make([]typeElement, 0)
-	var inputs = make([]typeElement, 0)
+	var outputs = make([]typeMember, 0)
+	var inputs = make([]typeMember, 0)
 
 	// Check and expand each query part.
 	for _, part := range pe.queryParts {
