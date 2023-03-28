@@ -606,7 +606,7 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $Person.id, y = $Person.name",
 		prepareArgs: []any{Person{}},
 		queryArgs:   []any{Person{}, Person{}},
-		err:         `invalid input parameter: type "Person" provided more than once, rename one of them`,
+		err:         `invalid input parameter: type "Person" provided more than once`,
 	}}
 
 	outerP := Person{}

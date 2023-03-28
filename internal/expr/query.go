@@ -54,7 +54,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 			return nil, fmt.Errorf("need map or struct, got %s", t.Kind())
 		}
 		if _, ok := typeValue[t]; ok {
-			return nil, fmt.Errorf("type %q provided more than once, rename one of them", t.Name())
+			return nil, fmt.Errorf("type %q provided more than once", t.Name())
 		}
 		typeValue[t] = v
 		typeNames = append(typeNames, t.Name())
