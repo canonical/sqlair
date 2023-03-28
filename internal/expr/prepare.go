@@ -68,10 +68,10 @@ func starCheckOutput(p *outputPart) error {
 
 	if targetStars > 1 || sourceStars > 1 || (sourceStars == 1 && targetStars == 0) ||
 		(starTarget && numTargets > 1) || (starSource && numSources > 1) {
-		return fmt.Errorf("invalid asterisk in output expression: %s", p)
+		return fmt.Errorf("invalid asterisk in output expression: %s", p.raw)
 	}
 	if !starTarget && (numSources > 0 && (numTargets != numSources)) {
-		return fmt.Errorf("mismatched number of cols and targets in output expression: %s", p)
+		return fmt.Errorf("mismatched number of columns and targets in output expression: %s", p.raw)
 	}
 	return nil
 }
@@ -80,7 +80,12 @@ func starCheckOutput(p *outputPart) error {
 func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
 	info, ok := ti[p.source.prefix]
 	if !ok {
-		return nil, fmt.Errorf(`type %s unknown, have: %s`, p.source.prefix, strings.Join(getKeys(ti), ", "))
+		ts := getKeys(ti)
+		if len(ts) == 0 {
+			return nil, fmt.Errorf(`type %q not passed as a parameter`, p.source.prefix)
+		} else {
+			return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, p.source.prefix, strings.Join(ts, ", "))
+		}
 	}
 	switch info := info.(type) {
 	case *mapInfo:
@@ -88,7 +93,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
 	case *structInfo:
 		f, ok := info.tagToField[p.source.name]
 		if !ok {
-			return nil, fmt.Errorf(`type %s has no %q db tag`, info.typ().Name(), p.source.name)
+			return nil, fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), p.source.name)
 		}
 		return f, nil
 	default:
@@ -114,7 +119,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 	for _, t := range p.target {
 		info, ok = ti[t.prefix]
 		if !ok {
-			return nil, nil, fmt.Errorf(`type %s unknown, have: %s`, t.prefix, strings.Join(getKeys(ti), ", "))
+			return nil, nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, t.prefix, strings.Join(getKeys(ti), ", "))
 		}
 		if t.name != "*" {
 			// For a none star expression we record output destinations here.
@@ -125,7 +130,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 			case *structInfo:
 				f, ok := info.tagToField[t.name]
 				if !ok {
-					return nil, nil, fmt.Errorf(`type %s has no %q db tag`, info.typ().Name(), t.name)
+					return nil, nil, fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), t.name)
 				}
 				typeMembers = append(typeMembers, f)
 			}
@@ -171,7 +176,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 				for _, c := range p.source {
 					f, ok := info.tagToField[c.name]
 					if !ok {
-						return nil, nil, fmt.Errorf(`type %s has no %q db tag`, info.typ().Name(), c.name)
+						return nil, nil, fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), c.name)
 					}
 					outCols = append(outCols, c)
 					typeMembers = append(typeMembers, f)
@@ -215,9 +220,15 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 
 	// Generate and save reflection info.
 	for _, arg := range args {
+		if arg == nil {
+			return nil, fmt.Errorf("need map or struct, got nil")
+		}
 		t := reflect.TypeOf(arg)
 		switch t.Kind() {
 		case reflect.Struct, reflect.Map:
+			if t.Name() == "" {
+				return nil, fmt.Errorf("cannot use anonymous %s", t.Kind())
+			}
 			info, err := typeInfo(arg)
 			if err != nil {
 				return nil, err
@@ -229,8 +240,10 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 				return nil, fmt.Errorf("two types found with name %q: %q and %q", t.Name(), dupeInfo.typ().String(), t.String())
 			}
 			ti[t.Name()] = info
+		case reflect.Pointer:
+			return nil, fmt.Errorf("need map or struct, got pointer to %s", t.Elem().Kind())
 		default:
-			return nil, fmt.Errorf("need struct, got %s", t.Kind())
+			return nil, fmt.Errorf("need map or struct, got %s", t.Kind())
 		}
 	}
 

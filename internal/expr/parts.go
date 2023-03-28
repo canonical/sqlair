@@ -33,6 +33,7 @@ func (fn fullName) String() string {
 // while performing the query.
 type inputPart struct {
 	source fullName
+	raw    string
 }
 
 func (p *inputPart) String() string {
@@ -46,6 +47,7 @@ func (p *inputPart) part() {}
 type outputPart struct {
 	source []fullName
 	target []fullName
+	raw    string
 }
 
 func (p *outputPart) String() string {

@@ -44,22 +44,25 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	var typeValue = make(map[reflect.Type]reflect.Value)
 	var typeNames []string
 	for _, arg := range args {
-		if arg == nil {
+		v := reflect.ValueOf(arg)
+		if v.Kind() == reflect.Invalid || (v.Kind() == reflect.Pointer && v.IsNil()) {
 			return nil, fmt.Errorf("need map or struct, got nil")
 		}
-		v := reflect.Indirect(reflect.ValueOf(arg))
+		v = reflect.Indirect(v)
 		t := v.Type()
 		if v.Kind() != reflect.Struct && v.Kind() != reflect.Map {
 			return nil, fmt.Errorf("need map or struct, got %s", t.Kind())
 		}
-
+		if _, ok := typeValue[t]; ok {
+			return nil, fmt.Errorf("type %q provided more than once, rename one of them", t.Name())
+		}
 		typeValue[t] = v
 		typeNames = append(typeNames, t.Name())
 		if !inQuery[t] {
 			// Check if we have a type with the same name from a different package.
 			for _, typeMember := range pe.inputs {
 				if t.Name() == typeMember.outerType().Name() {
-					return nil, fmt.Errorf("type %s not found, have %s", typeMember.outerType().String(), t.String())
+					return nil, fmt.Errorf("type %s not passed as a parameter, have %s", typeMember.outerType().String(), t.String())
 				}
 			}
 			return nil, fmt.Errorf("%s not referenced in query", t.Name())
@@ -71,7 +74,11 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	for i, typeMember := range pe.inputs {
 		v, ok := typeValue[typeMember.outerType()]
 		if !ok {
-			return nil, fmt.Errorf(`type %s not found, have: %s`, typeMember.outerType().Name(), strings.Join(typeNames, ", "))
+			if len(typeNames) == 0 {
+				return nil, fmt.Errorf(`type %q not passed as a parameter`, typeMember.outerType().Name())
+			} else {
+				return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, typeMember.outerType().Name(), strings.Join(typeNames, ", "))
+			}
 		}
 		switch tm := typeMember.(type) {
 		case structField:
@@ -140,11 +147,13 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, []*Map
 		}
 		if !inQuery[outputVal.Type()] {
 			return nil, nil, fmt.Errorf("type %q does not appear in query, have: %s", outputVal.Type().Name(), strings.Join(typesInQuery, ", "))
-
 		}
 		if outputVal.Kind() == reflect.Map {
 			mapDecodeInfos[outputVal.Type()] = &MapDecodeInfo{m: outputVal}
 		} else {
+			if _, ok := typeDest[outputVal.Type()]; ok {
+				return nil, nil, fmt.Errorf("type %q provided more than once, rename one of them", outputVal.Type().Name())
+			}
 			typeDest[outputVal.Type()] = outputVal
 		}
 		outputVals = append(outputVals, outputVal)
