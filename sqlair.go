@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"reflect"
 
 	"github.com/canonical/sqlair/internal/expr"
 )
@@ -162,4 +163,64 @@ func (q *Query) One(outputArgs ...any) error {
 	}
 	iter.Decode(outputArgs...)
 	return iter.Close()
+}
+
+// All iterates over the query and decodes all the rows.
+// resultColumns must contain pointers to slices of each of the query arguments e.g.
+// > q.All(&[]*Person{}, &[]*Address{}) or q.All(&[]Address{}, &[]Person{})
+// It fabricates all structs as needed.
+func (q *Query) All(slicePointers ...any) error {
+	if q.err != nil {
+		return q.err
+	}
+
+	// Check slice inputs
+	var slicePtrVals = []reflect.Value{}
+	var sliceVals = []reflect.Value{}
+	for _, ptr := range slicePointers {
+		ptrVal := reflect.ValueOf(ptr)
+		if ptrVal.Kind() != reflect.Pointer {
+			return fmt.Errorf("need pointer to slice, got %s", ptrVal.Kind())
+		}
+		if ptrVal.IsNil() {
+			return fmt.Errorf("need pointer to slice, got nil")
+		}
+		slicePtrVals = append(slicePtrVals, ptrVal)
+		sliceVal := ptrVal.Elem()
+		if sliceVal.Kind() != reflect.Slice {
+			return fmt.Errorf("need pointer to slice, got pointer to %s", sliceVal.Kind())
+		}
+		sliceVals = append(sliceVals, sliceVal)
+	}
+
+	iter := q.Iter()
+	for iter.Next() {
+		var outputArgs = []any{}
+		for _, sliceVal := range sliceVals {
+			// Can we combine these lines?
+			elemType := sliceVal.Type().Elem()
+			if elemType.Kind() != reflect.Pointer {
+				return fmt.Errorf("need pointer to slice of pointers, got pointer to slice of %s", elemType.Kind())
+			}
+			outputArg := reflect.New(elemType.Elem())
+			outputArgs = append(outputArgs, outputArg.Interface())
+		}
+		if !iter.Decode(outputArgs...) {
+			break
+		}
+		for i, outputArg := range outputArgs {
+			sliceVals[i] = reflect.Append(sliceVals[i], reflect.ValueOf(outputArg))
+		}
+	}
+	err := iter.Close()
+	if err != nil {
+		return err
+	}
+
+	// Do we need this?
+	for i, ptrVal := range slicePtrVals {
+		ptrVal.Elem().Set(sliceVals[i])
+	}
+
+	return nil
 }

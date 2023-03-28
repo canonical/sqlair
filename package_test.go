@@ -266,7 +266,7 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{&Person{}, &Person{}}},
-		err:     `cannot decode result: type "Person" provided more than once, rename one of them`,
+		err:     `cannot decode result: type "Person" provided more than once`,
 	}}
 
 	dropTables, db, err := personAndAddressDB()
@@ -422,6 +422,146 @@ func (s *PackageSuite) TestErrNoRows(c *C) {
 	}
 
 	_, err = db.Exec(dropTables)
+	if err != nil {
+		c.Fatal(err)
+	}
+}
+
+func (s *PackageSuite) TestValidAll(c *C) {
+	var tests = []struct {
+		summary  string
+		query    string
+		types    []any
+		inputs   []any
+		slices   []any
+		expected []any
+	}{{
+		summary:  "double select with name clash",
+		query:    "SELECT p.id AS &Person.*, a.id AS &Address.* FROM person AS p, address AS a",
+		types:    []any{Person{}, Address{}},
+		inputs:   []any{},
+		slices:   []any{&[]*Person{}, &[]*Address{}},
+		expected: []any{&[]*Person{&Person{ID: 30}, &Person{ID: 30}, &Person{ID: 30}, &Person{ID: 20}, &Person{ID: 20}, &Person{ID: 20}, &Person{ID: 40}, &Person{ID: 40}, &Person{ID: 40}, &Person{ID: 35}, &Person{ID: 35}, &Person{ID: 35}}, &[]*Address{&Address{ID: 1000}, &Address{ID: 1500}, &Address{ID: 3500}, &Address{ID: 1000}, &Address{ID: 1500}, &Address{ID: 3500}, &Address{ID: 1000}, &Address{ID: 1500}, &Address{ID: 3500}, &Address{ID: 1000}, &Address{ID: 1500}, &Address{ID: 3500}}},
+	}, {
+		summary:  "select all columns into person",
+		query:    "SELECT * AS &Person.* FROM person",
+		types:    []any{Person{}},
+		inputs:   []any{},
+		slices:   []any{&[]*Person{}},
+		expected: []any{&[]*Person{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "James", 4500}}},
+	}, {
+		summary:  "single line of query with inputs",
+		query:    "SELECT p.* AS &Person.*, a.* AS &Address.*, p.* AS &Manager.* FROM person AS p, address AS a WHERE p.id = $Person.id AND a.id = $Address.id ",
+		types:    []any{Person{}, Address{}, Manager{}},
+		inputs:   []any{Address{ID: 1000}, Person{ID: 30}},
+		slices:   []any{&[]*Manager{}, &[]*Person{}, &[]*Address{}},
+		expected: []any{&[]*Manager{{30, "Fred", 1000}}, &[]*Person{{30, "Fred", 1000}}, &[]*Address{{1000, "Happy Land", "Main Street"}}},
+	}, {
+		summary:  "nothing returned",
+		query:    "SELECT &Person.* FROM person WHERE id = $Person.id",
+		types:    []any{Person{}},
+		inputs:   []any{Person{ID: 1243321}},
+		slices:   []any{&[]*Person{}},
+		expected: []any{},
+	}}
+
+	dropTables, db, err := personAndAddressDB()
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	sqlairDB := sqlair.NewDB(db)
+
+	for _, t := range tests {
+		stmt, err := sqlair.Prepare(t.query, t.types...)
+		if err != nil {
+			c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+			continue
+		}
+
+		q := sqlairDB.Query(stmt, t.inputs...)
+		err = q.All(t.slices...)
+		if err != nil {
+			c.Errorf("\ntest %q failed (All):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+			continue
+		}
+		for i, column := range t.expected {
+			c.Assert(t.slices[i], DeepEquals, column,
+				Commentf("\ntest %q failed:\ninput: %s", t.summary, t.query))
+		}
+	}
+
+	_, err = db.Exec(dropTables)
+	if err != nil {
+		c.Fatal(err)
+	}
+}
+
+func (s *PackageSuite) TestAllErrors(c *C) {
+	var tests = []struct {
+		summary string
+		query   string
+		types   []any
+		inputs  []any
+		slices  []any
+		err     string
+	}{{
+		summary: "nil argument",
+		query:   "SELECT * AS &Person.* FROM person",
+		types:   []any{Person{}},
+		inputs:  []any{},
+		slices:  []any{nil},
+		err:     "need pointer to slice, got invalid",
+	}, {
+		summary: "nil pointer argument",
+		query:   "SELECT * AS &Person.* FROM person",
+		types:   []any{Person{}},
+		inputs:  []any{},
+		slices:  []any{(*[]Person)(nil)},
+		err:     "need pointer to slice, got nil",
+	}, {
+		summary: "none slice argument",
+		query:   "SELECT * AS &Person.* FROM person",
+		types:   []any{Person{}},
+		inputs:  []any{},
+		slices:  []any{Person{}},
+		err:     "need pointer to slice, got struct",
+	}, {
+		summary: "none slice pointer argument",
+		query:   "SELECT * AS &Person.* FROM person",
+		types:   []any{Person{}},
+		inputs:  []any{},
+		slices:  []any{&Person{}},
+		err:     "need pointer to slice, got pointer to struct",
+	}, {
+		summary: "wrong struct argument",
+		query:   "SELECT * AS &Person.* FROM person",
+		types:   []any{Person{}},
+		inputs:  []any{},
+		slices:  []any{&[]*Address{}},
+		err:     `cannot decode result: type "Address" does not appear in query, have: Person`,
+	}}
+
+	dropTables, sqldb, err := personAndAddressDB()
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	db := sqlair.NewDB(sqldb)
+
+	for _, t := range tests {
+		stmt, err := sqlair.Prepare(t.query, t.types...)
+		if err != nil {
+			c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+			continue
+		}
+
+		err = db.Query(stmt, t.inputs...).All(t.slices...)
+		c.Assert(err, ErrorMatches, t.err,
+			Commentf("\ntest %q failed:\ninput: %s\nslices: %s", t.summary, t.query, t.slices))
+	}
+
+	_, err = db.Unwrap().Exec(dropTables)
 	if err != nil {
 		c.Fatal(err)
 	}

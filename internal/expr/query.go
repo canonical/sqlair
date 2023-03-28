@@ -89,7 +89,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	return &QueryExpr{outputs: pe.outputs, sql: pe.sql, args: qargs}, nil
 }
 
-// ScanArgs returns list of pointers to the struct fields that are listed in qe.outputs.
+// ScanArgs returns list of pointers to the struct fields outputArgs that are listed in qe.outputs.
 // All the structs mentioned in the query must be in outputArgs.
 // All outputArgs must be structs.
 func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, error) {
@@ -128,7 +128,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, error)
 			return nil, fmt.Errorf("type %q does not appear in query, have: %s", t.Name(), strings.Join(typesInQuery, ", "))
 		}
 		if _, ok := typeDest[t]; ok {
-			return nil, fmt.Errorf("type %q provided more than once, rename one of them", t.Name())
+			return nil, fmt.Errorf("type %q provided more than once", t.Name())
 		}
 		typeDest[t] = outputVal
 	}
