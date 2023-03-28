@@ -370,7 +370,7 @@ func (s *PackageSuite) TestOneErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: []any{&Person{}},
-		err:     "one error: no rows returned by query",
+		err:     "cannot return row: no rows in query result",
 	}}
 
 	dropTables, db, err := personAndAddressDB()

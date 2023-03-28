@@ -9,7 +9,7 @@ import (
 	"github.com/canonical/sqlair/internal/expr"
 )
 
-var ErrNoRows = errors.New("no rows returned by query")
+var ErrNoRows = errors.New("no rows in query result")
 
 // Statement represents a SQL statemnt with valid SQLair expressions.
 // It is ready to be run on a SQLair DB.
@@ -159,7 +159,7 @@ func (iter *Iterator) Close() error {
 func (q *Query) One(outputArgs ...any) error {
 	iter := q.Iter()
 	if !iter.Next() {
-		return fmt.Errorf("one error: %w", ErrNoRows)
+		return fmt.Errorf("cannot return row: %w", ErrNoRows)
 	}
 	iter.Decode(outputArgs...)
 	return iter.Close()
