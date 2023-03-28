@@ -245,7 +245,7 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{&Address{}}},
-		err:     `cannot decode result: type "Address" does not appear as an output type in the query`,
+		err:     `cannot decode result: type "Address" does not appear in query, have: Person`,
 	}, {
 		summary: "not a struct",
 		query:   "SELECT * AS &Person.* FROM person",
@@ -260,6 +260,13 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 		inputs:  []any{},
 		outputs: [][]any{{}},
 		err:     `cannot decode result: type "Person" found in query but not passed to decode`,
+	}, {
+		summary: "multiple of the same type",
+		query:   "SELECT * AS &Person.* FROM person",
+		types:   []any{Person{}},
+		inputs:  []any{},
+		outputs: [][]any{{&Person{}, &Person{}}},
+		err:     `cannot decode result: type "Person" provided more than once, rename one of them`,
 	}}
 
 	dropTables, db, err := personAndAddressDB()
@@ -506,8 +513,8 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 		iter := sqlairDB.Query(stmt, t.inputs...).Iter()
 		i := 0
 		for iter.Next() {
-			if i > len(t.outputs) {
-				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected\n", t.summary, t.query)
+			if i >= len(t.outputs) {
+				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d > %d)\n", t.summary, t.query, i+1, len(t.outputs))
 				break
 			}
 			if !iter.Decode(t.outputs[i]...) {

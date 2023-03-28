@@ -359,12 +359,12 @@ func (p *Parser) parseGoFullName() (fullName, bool, error) {
 
 	if id, ok := p.parseIdentifier(); ok {
 		if !p.skipByte('.') {
-			return fullName{}, false, fmt.Errorf("column %d: type not qualified", p.pos)
+			return fullName{}, false, fmt.Errorf("column %d: unqualified type, expected %s.* or %s.<db tag>", p.pos, id, id)
 		}
 
 		idField, ok := p.parseIdentifierAsterisk()
 		if !ok {
-			return fullName{}, false, fmt.Errorf("column %d: invalid identifier", p.pos)
+			return fullName{}, false, fmt.Errorf("column %d: invalid identifier suffix following %q", p.pos, id)
 		}
 		return fullName{id, idField}, true, nil
 	}
@@ -397,7 +397,7 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 			return nil, false, nil
 		} else {
 			// On subsequent items we return an error.
-			return nil, false, fmt.Errorf("column %d: invalid expression", p.pos)
+			return nil, false, fmt.Errorf("column %d: invalid expression in list", p.pos)
 		}
 
 		p.skipBlanks()
@@ -450,12 +450,17 @@ func (p *Parser) parseTargets() ([]fullName, bool, error) {
 // parseOutputExpression requires that the ampersand before the identifiers must
 // be followed by a name byte.
 func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
+	start := p.pos
 
 	// Case 1: There are no columns e.g. "&Person.*".
 	if targets, ok, err := p.parseTargets(); err != nil {
 		return nil, false, err
 	} else if ok {
-		return &outputPart{[]fullName{}, targets}, true, nil
+		return &outputPart{
+			source: []fullName{},
+			target: targets,
+			raw:    p.input[start:p.pos],
+		}, true, nil
 	}
 
 	cp := p.save()
@@ -468,7 +473,11 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 			if targets, ok, err := p.parseTargets(); err != nil {
 				return nil, false, err
 			} else if ok {
-				return &outputPart{cols, targets}, true, nil
+				return &outputPart{
+					source: cols,
+					target: targets,
+					raw:    p.input[start:p.pos],
+				}, true, nil
 			}
 		}
 	}
@@ -484,10 +493,9 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 	if p.skipByte('$') {
 		if fn, ok, err := p.parseGoFullName(); ok {
 			if fn.name == "*" {
-				return nil, false, fmt.Errorf("asterisk not allowed "+
-					"in expression near %d", p.pos)
+				return nil, false, fmt.Errorf(`asterisk not allowed in input expression "$%s"`, fn)
 			}
-			return &inputPart{fn}, true, nil
+			return &inputPart{source: fn, raw: p.input[cp.pos:p.pos]}, true, nil
 		} else if err != nil {
 			return nil, false, err
 		}

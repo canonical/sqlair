@@ -44,17 +44,18 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	var typeValue = make(map[reflect.Type]reflect.Value)
 	var typeNames []string
 	for _, arg := range args {
-		if arg == nil {
-			return nil, fmt.Errorf("need valid struct, got nil")
-		}
 		v := reflect.ValueOf(arg)
+		if v.Kind() == reflect.Invalid || (v.Kind() == reflect.Pointer && v.IsNil()) {
+			return nil, fmt.Errorf("need struct, got nil")
+		}
 		v = reflect.Indirect(v)
 		t := v.Type()
-
 		if t.Kind() != reflect.Struct {
 			return nil, fmt.Errorf("need struct, got %s", t.Kind())
 		}
-
+		if _, ok := typeValue[t]; ok {
+			return nil, fmt.Errorf("type %q provided more than once, rename one of them", t.Name())
+		}
 		typeValue[t] = v
 		typeNames = append(typeNames, t.Name())
 
@@ -62,13 +63,11 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 			// Check if we have a type with the same name from a different package.
 			for _, in := range pe.inputs {
 				if t.Name() == in.structType.Name() {
-					return nil, fmt.Errorf("type %s not found, have %s", in.structType.String(), t.String())
+					return nil, fmt.Errorf("type %s not passed as a parameter, have %s", in.structType.String(), t.String())
 				}
 			}
-
 			return nil, fmt.Errorf("%s not referenced in query", t.Name())
 		}
-
 	}
 
 	// Query parameteres.
@@ -77,7 +76,11 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	for i, in := range pe.inputs {
 		v, ok := typeValue[in.structType]
 		if !ok {
-			return nil, fmt.Errorf(`type %s not found, have: %s`, in.structType.Name(), strings.Join(typeNames, ", "))
+			if len(typeNames) == 0 {
+				return nil, fmt.Errorf(`type %q not passed as a parameter`, in.structType.Name())
+			} else {
+				return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, in.structType.Name(), strings.Join(typeNames, ", "))
+			}
 		}
 		named := sql.Named("sqlair_"+strconv.Itoa(i), v.FieldByIndex(in.index).Interface())
 		qargs = append(qargs, named)
@@ -110,16 +113,24 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, error)
 	}
 
 	// Check that each outputVal is in the query.
+	var typesInQuery = []string{}
 	var inQuery = make(map[reflect.Type]bool)
 	for _, field := range qe.outputs {
-		inQuery[field.structType] = true
+		if ok := inQuery[field.structType]; !ok {
+			inQuery[field.structType] = true
+			typesInQuery = append(typesInQuery, field.structType.Name())
+		}
 	}
 	var typeDest = make(map[reflect.Type]reflect.Value)
 	for _, outputVal := range outputVals {
-		if !inQuery[outputVal.Type()] {
-			return nil, fmt.Errorf("type %q does not appear as an output type in the query", outputVal.Type().Name())
+		t := outputVal.Type()
+		if !inQuery[t] {
+			return nil, fmt.Errorf("type %q does not appear in query, have: %s", t.Name(), strings.Join(typesInQuery, ", "))
 		}
-		typeDest[outputVal.Type()] = outputVal
+		if _, ok := typeDest[t]; ok {
+			return nil, fmt.Errorf("type %q provided more than once, rename one of them", t.Name())
+		}
+		typeDest[t] = outputVal
 	}
 
 	var ptrs = []any{}
