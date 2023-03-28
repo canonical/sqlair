@@ -398,7 +398,7 @@ func (s *PackageSuite) TestOneErrors(c *C) {
 	}
 }
 
-func (s *PackageSuite) TestPackageErrors(c *C) {
+func (s *PackageSuite) TestErrNoRows(c *C) {
 	dropTables, db, err := personAndAddressDB()
 	if err != nil {
 		c.Fatal(err)
