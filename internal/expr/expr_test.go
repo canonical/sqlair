@@ -403,7 +403,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT * AS &.* FROM t",
 		prepareArgs: []any{struct{ f int }{f: 1}},
-		err:         `cannot prepare expression: cannot use annoymous struct`,
+		err:         `cannot prepare expression: cannot use anonymous struct`,
 	}}
 
 	for i, test := range tests {
