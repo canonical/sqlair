@@ -74,7 +74,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 			return nil, fmt.Errorf(`type %s not found, have: %s`, typeMember.outerType().Name(), strings.Join(typeNames, ", "))
 		}
 		switch tm := typeMember.(type) {
-		case field:
+		case structField:
 			qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(i), v.FieldByIndex(tm.index).Interface()))
 		case mapKey:
 			// MapIndex returns a zero value if the key is not in the map so we
@@ -95,6 +95,9 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	return &QueryExpr{outputs: pe.outputs, sql: pe.sql, args: qargs}, nil
 }
 
+// MapDecodeInfo stores a map and the results to go in it.
+// Once values have been scanned into the values slice Populate() must be called
+// to set the values in the map.
 type MapDecodeInfo struct {
 	m      reflect.Value
 	keys   []string
@@ -162,7 +165,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, []*Map
 		}
 		typeMember := qe.outputs[idx]
 		switch tm := typeMember.(type) {
-		case field:
+		case structField:
 			outputVal, ok := typeDest[tm.structType]
 			if !ok {
 				return nil, nil, fmt.Errorf("type %q found in query but not passed to decode", tm.structType.Name())

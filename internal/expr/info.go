@@ -17,8 +17,8 @@ func (mk mapKey) outerType() reflect.Type {
 	return mk.mapType
 }
 
-// field represents reflection information about a field from some struct type.
-type field struct {
+// structField represents reflection information about a field from some struct type.
+type structField struct {
 	name string
 
 	// The type of the containing struct.
@@ -32,7 +32,7 @@ type field struct {
 	omitEmpty bool
 }
 
-func (f field) outerType() reflect.Type {
+func (f structField) outerType() reflect.Type {
 	return f.structType
 }
 
@@ -46,7 +46,7 @@ type structInfo struct {
 	// Ordered list of tags
 	tags []string
 
-	tagToField map[string]field
+	tagToField map[string]structField
 }
 
 func (si *structInfo) typ() reflect.Type {

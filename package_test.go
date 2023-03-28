@@ -96,6 +96,7 @@ DROP TABLE address;
 func (s *PackageSuite) TestValidDecode(c *C) {
 	type CustomMap map[string]any
 	type StringMap map[string]string
+	type lowerCaseMap map[string]any
 	type M struct {
 		F string `db:"id"`
 	}
@@ -169,6 +170,13 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 		inputs:   []any{sqlair.M{"address_id": "1000"}, &StringMap{"id": "30"}},
 		outputs:  [][]any{{&StringMap{}, CustomMap{}}},
 		expected: [][]any{{&StringMap{"name": "Fred"}, CustomMap{"id": int64(30)}}},
+	}, {
+		summary:  "lower case map",
+		query:    "SELECT name AS &lowerCaseMap.*, id AS &lowerCaseMap.* FROM person WHERE address_id = $lowerCaseMap.address_id",
+		types:    []any{lowerCaseMap{}},
+		inputs:   []any{lowerCaseMap{"address_id": "1000"}},
+		outputs:  [][]any{{&lowerCaseMap{}}},
+		expected: [][]any{{&lowerCaseMap{"name": "Fred", "id": int64(30)}}},
 	}}
 
 	// A Person struct that shadows the one in tests above and has different int types.

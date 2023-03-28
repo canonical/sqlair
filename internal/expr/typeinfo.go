@@ -51,7 +51,7 @@ func generate(t reflect.Type) (info, error) {
 		return &mapInfo{mapType: t}, nil
 	case reflect.Struct:
 		structInfo := structInfo{
-			tagToField: make(map[string]field),
+			tagToField: make(map[string]structField),
 			structType: t,
 		}
 		tags := []string{}
@@ -72,7 +72,7 @@ func generate(t reflect.Type) (info, error) {
 				return nil, fmt.Errorf("cannot parse tag for field %s.%s: %s", t.Name(), f.Name, err)
 			}
 			tags = append(tags, tag)
-			structInfo.tagToField[tag] = field{
+			structInfo.tagToField[tag] = structField{
 				name:       f.Name,
 				index:      f.Index,
 				omitEmpty:  omitEmpty,

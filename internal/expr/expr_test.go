@@ -34,9 +34,10 @@ type District struct{}
 
 type M map[string]any
 
-type OtherMap map[string]int
+type IntMap map[string]int
 
-type StringMap map[string]string
+type stringType string
+type StringMap map[stringType]string
 
 var tests = []struct {
 	summery          string
@@ -157,9 +158,9 @@ var tests = []struct {
 	"SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2, a.district AS _sqlair_3, a.id AS _sqlair_4, a.street AS _sqlair_5 FROM person, address a WHERE name = 'Fred'",
 }, {
 	"map input and output",
-	"SELECT (p.name, a.id) AS &M.*, street AS &StringMap.*, &OtherMap.id FROM person, address a WHERE name = $M.name",
-	"[Bypass[SELECT ] Output[[p.name a.id] [M.*]] Bypass[, ] Output[[street] [StringMap.*]] Bypass[, ] Output[[] [OtherMap.id]] Bypass[ FROM person, address a WHERE name = ] Input[M.name]]",
-	[]any{sqlair.M{}, OtherMap{}, StringMap{}},
+	"SELECT (p.name, a.id) AS &M.*, street AS &StringMap.*, &IntMap.id FROM person, address a WHERE name = $M.name",
+	"[Bypass[SELECT ] Output[[p.name a.id] [M.*]] Bypass[, ] Output[[street] [StringMap.*]] Bypass[, ] Output[[] [IntMap.id]] Bypass[ FROM person, address a WHERE name = ] Input[M.name]]",
+	[]any{sqlair.M{}, IntMap{}, StringMap{}},
 	"SELECT p.name AS _sqlair_0, a.id AS _sqlair_1, street AS _sqlair_2, id AS _sqlair_3 FROM person, address a WHERE name = @sqlair_0",
 }, {
 	"multicolumn output v1",
@@ -634,8 +635,6 @@ func (s *ExprSuite) TestPrepareMapError(c *C) {
 }
 
 func (s *ExprSuite) TestValidQuery(c *C) {
-	type stringType string
-	type mapType map[stringType]any
 	testList := []struct {
 		sql         string
 		prepareArgs []any
@@ -667,14 +666,14 @@ func (s *ExprSuite) TestValidQuery(c *C) {
 		[]any{Person{ID: 666}, sqlair.M{"street": "Highway to Hell"}},
 		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
 	}, {
-		"SELECT * AS &Address.* FROM t WHERE x = $mapType.fullname",
-		[]any{Address{}, mapType{}},
-		[]any{mapType{"fullname": "Jimany Johnson"}},
+		"SELECT * AS &Address.* FROM t WHERE x = $StringMap.fullname",
+		[]any{Address{}, StringMap{}},
+		[]any{StringMap{"fullname": "Jimany Johnson"}},
 		[]any{sql.Named("sqlair_0", "Jimany Johnson")},
 	}, {
-		"SELECT foo FROM t WHERE x = $mapType.street, y = $Person.id",
-		[]any{Person{}, mapType{}},
-		[]any{Person{ID: 666}, mapType{"street": "Highway to Hell"}},
+		"SELECT foo FROM t WHERE x = $StringMap.street, y = $Person.id",
+		[]any{Person{}, StringMap{}},
+		[]any{Person{ID: 666}, StringMap{"street": "Highway to Hell"}},
 		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
 	}}
 	for _, test := range testList {
