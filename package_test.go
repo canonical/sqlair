@@ -266,7 +266,7 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{&Person{}, &Person{}}},
-		err:     `cannot decode result: type "Person" provided more than once`,
+		err:     `cannot decode result: type "Person" provided more than once, rename one of them`,
 	}}
 
 	dropTables, db, err := personAndAddressDB()
