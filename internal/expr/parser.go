@@ -109,6 +109,61 @@ func (p *Parser) add(part queryPart) {
 	p.partStart = p.pos
 }
 
+// removeComments passes over the input removing comments.
+// It does not allow for nested comments.
+func (p *Parser) removeComments() error {
+	var res bytes.Buffer
+	var textStart = p.pos
+	var textEnd int
+
+	for p.pos < len(p.input) {
+		textEnd = p.pos
+		// Ignore comment chars in string literals.
+		if ok, err := p.skipStringLiteral(); err != nil {
+			return err
+		} else if ok {
+			continue
+		}
+
+		if p.skipByte('-') || p.skipByte('/') {
+			c := p.input[p.pos-1]
+			if (c == '-' && p.skipByte('-')) || (c == '/' && p.skipByte('*')) {
+				var end byte
+				if c == '-' {
+					end = '\n'
+				} else {
+					end = '*'
+				}
+				for p.pos < len(p.input) {
+					if p.input[p.pos] == end {
+						// if end == '\n' (i.e. its a -- comment) dont p.pos++ to keep the newline.
+						if end == '*' {
+							p.pos++
+							if !p.skipByte('/') {
+								continue
+							}
+						}
+						break
+					}
+					p.pos++
+				}
+
+				res.WriteString(p.input[textStart:textEnd])
+				textStart = p.pos
+				continue
+			}
+		} else {
+			// If we have skiped '-' or '/' but not found a comment don't do p.pos++.
+			p.pos++
+		}
+	}
+	// Add any remaining input
+	res.WriteString(p.input[textStart:])
+
+	p.init(res.String())
+	return nil
+}
+
 // Parse takes an input string and parses the input and output parts. It returns
 // a pointer to a ParsedExpr.
 func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
@@ -119,6 +174,11 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 	}()
 
 	p.init(input)
+
+	if err := p.removeComments(); err != nil {
+		return nil, err
+	}
+
 	for {
 		// Advance the parser to the start of the next expression.
 		if err := p.advance(); err != nil {

@@ -79,6 +79,32 @@ var tests = []struct {
 		and
 		x = y`,
 }, {
+	"comments",
+	`SELECT &Person.* -- The line with &Person.* on it
+FROM person /* The start of a multi line comment
+It keeps going here with some weird chars /-*"/
+And now it stops */ WHERE "x" = /-*'' -- The "WHERE" line
+AND y =/* And now we have " */ "-- /* */" /* " some comments strings */
+AND z = $Person.id -- The line with $Person.id on it
+`,
+	`[Bypass[SELECT ] Output[[] [Person.*]] Bypass[ 
+FROM person  WHERE "x" = /-*'' 
+AND y = "-- /* */" 
+AND z = ] Input[Person.id] Bypass[ 
+]]`,
+	[]any{Person{}},
+	`SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 
+FROM person  WHERE "x" = /-*'' 
+AND y = "-- /* */" 
+AND z = @sqlair_0 
+`,
+}, {
+	"comments v2",
+	`SELECT (&Person.name, /* ... */ &Person.id), (&Person.id /* ... */, &Person.name) FROM p -- End of the line`,
+	`[Bypass[SELECT ] Output[[] [Person.name Person.id]] Bypass[, ] Output[[] [Person.id Person.name]] Bypass[ FROM p ]]`,
+	[]any{Person{}},
+	`SELECT name AS _sqlair_0, id AS _sqlair_1, id AS _sqlair_2, name AS _sqlair_3 FROM p `,
+}, {
 	"quoted io expressions",
 	`SELECT "&notAnOutput.Expression" '&notAnotherOutputExpresion.*' AS literal FROM t WHERE bar = '$NotAn.Input' AND baz = "$NotAnother.Input"`,
 	`[Bypass[SELECT "&notAnOutput.Expression" '&notAnotherOutputExpresion.*' AS literal FROM t WHERE bar = '$NotAn.Input' AND baz = "$NotAnother.Input"]]`,

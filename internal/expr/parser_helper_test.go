@@ -132,3 +132,65 @@ func (s *ExprInternalSuite) TestUnfinishedQuote(c *C) {
 		}
 	}
 }
+
+func (s *ExprInternalSuite) TestRemoveComments(c *C) {
+	testList := []struct {
+		input    string
+		expected string
+	}{{
+		input:    `-- Single line comment`,
+		expected: ``,
+	}, {
+		input: `-- Single line comment with line break
+		`,
+		expected: `
+		`,
+	}, {
+		input: `/* multi
+		 line */`,
+		expected: ``,
+	}, {
+		input:    `/* unfinished multiline`,
+		expected: ``,
+	}, {
+		input:    `/* -- */`,
+		expected: ``,
+	}, {
+		input:    `-- */`,
+		expected: ``,
+	}, {
+		input:    `--`,
+		expected: ``,
+	}, {
+		input:    `/*`,
+		expected: ``,
+	}, {
+		input:    `- not comment`,
+		expected: `- not comment`,
+	}, {
+		input:    `- - not comment`,
+		expected: `- - not comment`,
+	}, {
+		input:    `/ * not comment */`,
+		expected: `/ * not comment */`,
+	}, {
+		input:    `*/ not comment`,
+		expected: `*/ not comment`,
+	}, {
+		input:    `/- not comment "`,
+		expected: `/- not comment "`,
+	}, {
+		input:    `-* not comment`,
+		expected: `-* not comment`,
+	}, {
+		input:    `/ not comment */`,
+		expected: `/ not comment */`,
+	}}
+
+	var p = NewParser()
+	for _, t := range testList {
+		p.init(t.input)
+		p.removeComments()
+		c.Assert(p.input, Equals, t.expected)
+	}
+}
