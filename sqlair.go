@@ -158,7 +158,7 @@ func (iter *Iterator) Close() error {
 func (q *Query) One(outputArgs ...any) error {
 	iter := q.Iter()
 	if !iter.Next() {
-		return fmt.Errorf("cannot return row: %w", ErrNoRows)
+		return ErrNoRows
 	}
 	iter.Decode(outputArgs...)
 	return iter.Close()

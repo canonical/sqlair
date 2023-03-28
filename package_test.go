@@ -370,7 +370,7 @@ func (s *PackageSuite) TestOneErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: []any{&Person{}},
-		err:     "cannot return row: sql: no rows in result set",
+		err:     "sql: no rows in result set",
 	}}
 
 	dropTables, db, err := personAndAddressDB()
