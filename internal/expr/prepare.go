@@ -209,7 +209,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			return nil, fmt.Errorf("need struct, got %s", t.Kind())
 		}
 		if t.Name() == "" {
-			return nil, fmt.Errorf("cannot use annoymous %s", t.Kind())
+			return nil, fmt.Errorf("cannot use anonymous %s", t.Kind())
 		}
 		info, err := typeInfo(arg)
 		if err != nil {

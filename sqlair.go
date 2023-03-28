@@ -8,6 +8,8 @@ import (
 	"github.com/canonical/sqlair/internal/expr"
 )
 
+var ErrNoRows = sql.ErrNoRows
+
 // Statement represents a SQL statemnt with valid SQLair expressions.
 // It is ready to be run on a SQLair DB.
 type Statement struct {
@@ -53,11 +55,19 @@ func (db *DB) Unwrap() *sql.DB {
 	return db.db
 }
 
-// Query holds a database query and is used to iterate over the results.
+// Query holds the results of a database query.
 type Query struct {
 	qe   *expr.QueryExpr
 	q    func() (*sql.Rows, error)
 	rows *sql.Rows
+	err  error
+}
+
+// Iterator is used to iterate over the results of the query.
+type Iterator struct {
+	qe   *expr.QueryExpr
+	rows *sql.Rows
+	cols []string
 	err  error
 }
 
@@ -78,77 +88,78 @@ func (db *DB) QueryContext(ctx context.Context, s *Statement, inputArgs ...any) 
 	return &Query{qe: qe, q: q, err: err}
 }
 
-// One runs a query and decodes the first row into outputArgs.
-func (q *Query) One(outputArgs ...any) error {
-	if !q.Next() {
-		return fmt.Errorf("cannot return one row: no results")
+// Iter returns an Iterator to iterate through the results row by row.
+func (q *Query) Iter() *Iterator {
+	rows, err := q.q()
+	if err != nil {
+		return &Iterator{err: err}
 	}
-	q.Decode(outputArgs...)
-	return q.Close()
+	cols, err := rows.Columns()
+	if err != nil {
+		return &Iterator{err: err}
+	}
+	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err}
 }
 
 // Next prepares the next row for decoding.
 // The first call to Next will execute the query.
-// If an error occurs it will be returned with Query.Close().
-func (q *Query) Next() bool {
-	if q.err != nil {
+// If an error occurs it will be returned with Iter.Close().
+func (iter *Iterator) Next() bool {
+	if iter.err != nil || iter.rows == nil {
 		return false
 	}
-	if q.rows == nil {
-		rows, err := q.q()
-		if err != nil {
-			q.err = err
-			return false
-		}
-		q.rows = rows
-	}
-	return q.rows.Next()
+	return iter.rows.Next()
 }
 
 // Decode decodes the current result into the structs in outputValues.
 // outputArgs must contain all the structs mentioned in the query.
-// If an error occurs it will be returned with Query.Close().
-func (q *Query) Decode(outputArgs ...any) (ok bool) {
-	if q.err != nil {
+// If an error occurs it will be returned with Iter.Close().
+func (iter *Iterator) Decode(outputArgs ...any) (ok bool) {
+	if iter.err != nil {
 		return false
 	}
 	defer func() {
 		if !ok {
-			q.err = fmt.Errorf("cannot decode result: %s", q.err)
+			iter.err = fmt.Errorf("cannot decode result: %s", iter.err)
 		}
 	}()
 
-	if q.rows == nil {
-		q.err = fmt.Errorf("iteration ended or not started")
+	if iter.rows == nil {
+		iter.err = fmt.Errorf("iteration ended or not started")
 		return false
 	}
 
-	cols, err := q.rows.Columns()
+	ptrs, err := iter.qe.ScanArgs(iter.cols, outputArgs)
 	if err != nil {
-		q.err = err
+		iter.err = err
 		return false
 	}
-	ptrs, err := q.qe.ScanArgs(cols, outputArgs)
-	if err != nil {
-		q.err = err
-		return false
-	}
-	if err := q.rows.Scan(ptrs...); err != nil {
-		q.err = err
+	if err := iter.rows.Scan(ptrs...); err != nil {
+		iter.err = err
 		return false
 	}
 	return true
 }
 
-// Close closes the query and returns any errors encountered during iteration.
-func (q *Query) Close() error {
-	if q.rows == nil {
-		return q.err
+// Close finishes the iteration and returns any errors encountered.
+func (iter *Iterator) Close() error {
+	if iter.rows == nil {
+		return iter.err
 	}
-	err := q.rows.Close()
-	q.rows = nil
-	if q.err != nil {
-		return q.err
+	err := iter.rows.Close()
+	iter.rows = nil
+	if iter.err != nil {
+		return iter.err
 	}
 	return err
+}
+
+// One runs a query and decodes the first row into outputArgs.
+func (q *Query) One(outputArgs ...any) error {
+	iter := q.Iter()
+	if !iter.Next() {
+		return ErrNoRows
+	}
+	iter.Decode(outputArgs...)
+	return iter.Close()
 }
