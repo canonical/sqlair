@@ -8,6 +8,8 @@ import (
 	"github.com/canonical/sqlair/internal/expr"
 )
 
+var ErrNoRows = sql.ErrNoRows
+
 // Statement represents a SQL statemnt with valid SQLair expressions.
 // It is ready to be run on a SQLair DB.
 type Statement struct {
@@ -156,7 +158,7 @@ func (iter *Iterator) Close() error {
 func (q *Query) One(outputArgs ...any) error {
 	iter := q.Iter()
 	if !iter.Next() {
-		return fmt.Errorf("cannot return one row: no results")
+		return ErrNoRows
 	}
 	iter.Decode(outputArgs...)
 	return iter.Close()

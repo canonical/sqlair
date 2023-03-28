@@ -2,6 +2,7 @@ package sqlair_test
 
 import (
 	"database/sql"
+	"errors"
 	"testing"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -369,7 +370,7 @@ func (s *PackageSuite) TestOneErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: []any{&Person{}},
-		err:     "cannot return one row: no results",
+		err:     "sql: no rows in result set",
 	}}
 
 	dropTables, db, err := personAndAddressDB()
@@ -389,6 +390,28 @@ func (s *PackageSuite) TestOneErrors(c *C) {
 		err = sqlairDB.Query(stmt, t.inputs...).One(t.outputs...)
 		c.Assert(err, ErrorMatches, t.err,
 			Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
+	}
+
+	_, err = db.Exec(dropTables)
+	if err != nil {
+		c.Fatal(err)
+	}
+}
+
+func (s *PackageSuite) TestErrNoRows(c *C) {
+	dropTables, db, err := personAndAddressDB()
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	sqlairDB := sqlair.NewDB(db)
+	stmt := sqlair.MustPrepare("SELECT * AS &Person.* FROM person WHERE id=12312", Person{})
+	err = sqlairDB.Query(stmt).One(&Person{})
+	if !errors.Is(err, sqlair.ErrNoRows) {
+		c.Errorf("test failed, error %q not the same as %q", err, sqlair.ErrNoRows)
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		c.Errorf("test failed, error %q not the same as %q", err, sql.ErrNoRows)
 	}
 
 	_, err = db.Exec(dropTables)
