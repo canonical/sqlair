@@ -197,7 +197,6 @@ func (q *Query) All(slicePointers ...any) error {
 	for iter.Next() {
 		var outputArgs = []any{}
 		for _, sliceVal := range sliceVals {
-			// Can we combine these lines?
 			elemType := sliceVal.Type().Elem()
 			if elemType.Kind() != reflect.Pointer {
 				return fmt.Errorf("need pointer to slice of pointers, got pointer to slice of %s", elemType.Kind())
@@ -217,7 +216,6 @@ func (q *Query) All(slicePointers ...any) error {
 		return err
 	}
 
-	// Do we need this?
 	for i, ptrVal := range slicePtrVals {
 		ptrVal.Elem().Set(sliceVals[i])
 	}
