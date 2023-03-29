@@ -58,10 +58,12 @@ func (db *DB) PlainDB() *sql.DB {
 
 // Query holds the results of a database query.
 type Query struct {
-	qe   *expr.QueryExpr
-	q    func() (*sql.Rows, error)
-	rows *sql.Rows
-	err  error
+	qe      *expr.QueryExpr
+	outcome *Outcome
+	closed  bool
+
+	q func() (*sql.Rows, error)
+	e func() (sql.Result, error)
 }
 
 // Iterator is used to iterate over the results of the query.
@@ -79,15 +81,52 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		ctx = context.Background()
 	}
 
+	var outcome *Outcome
+	if len(inputArgs) > 0 {
+		if oc, ok := inputArgs[0].(*Outcome); ok {
+			outcome = oc
+			inputArgs = inputArgs[1:]
+		}
+	}
+
 	qe, err := s.pe.Query(inputArgs...)
 	q := func() (*sql.Rows, error) {
+		if err != nil {
+			return nil, err
+		}
 		return db.db.QueryContext(ctx, qe.QuerySQL(), qe.QueryArgs()...)
 	}
-	return &Query{qe: qe, q: q, err: err}
+	e := func() (sql.Result, error) {
+		if err != nil {
+			return nil, err
+		}
+		return db.db.ExecContext(ctx, qe.QuerySQL(), qe.QueryArgs()...)
+	}
+
+	return &Query{qe: qe, outcome: outcome, closed: false, q: q, e: e}
+}
+
+func (q *Query) Run() error {
+	if q.closed {
+		return fmt.Errorf("cannot run: query closed")
+	}
+	res, err := q.e()
+	if err != nil {
+		return err
+	}
+	if q.outcome != nil {
+		q.outcome.result = res
+	}
+	q.closed = true
+	return nil
 }
 
 // Iter returns an Iterator to iterate through the results row by row.
 func (q *Query) Iter() *Iterator {
+	if q.closed {
+		return &Iterator{err: fmt.Errorf("cannot iterate: query closed")}
+	}
+
 	rows, err := q.q()
 	if err != nil {
 		return &Iterator{err: err}
@@ -96,6 +135,7 @@ func (q *Query) Iter() *Iterator {
 	if err != nil {
 		return &Iterator{err: err}
 	}
+	q.closed = true
 	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err}
 }
 
@@ -152,8 +192,21 @@ func (iter *Iterator) Close() error {
 	return err
 }
 
+// A pointer to an outcome can be passed as the first variadic argument to Query.
+// It will be populated with the outcome of the query, if available.
+type Outcome struct {
+	result sql.Result
+}
+
+func (o *Outcome) Result() sql.Result {
+	return o.result
+}
+
 // One runs a query and decodes the first row into outputArgs.
 func (q *Query) One(outputArgs ...any) error {
+	if q.closed {
+		return fmt.Errorf("cannot decode result: query closed")
+	}
 	iter := q.Iter()
 	if !iter.Next() {
 		return ErrNoRows
@@ -172,14 +225,15 @@ func (q *Query) One(outputArgs ...any) error {
 //
 // sliceArgs must contain pointers to slices of each of the output types.
 func (q *Query) All(sliceArgs ...any) (err error) {
-	if q.err != nil {
-		return q.err
-	}
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("cannot populate slice: %s", err)
 		}
 	}()
+
+	if q.closed {
+		return fmt.Errorf("query closed")
+	}
 
 	// Check slice inputs
 	var slicePtrVals = []reflect.Value{}

@@ -204,7 +204,7 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 
 	}
 
-	_, err = db.PlainDB().Exec(dropTables)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -301,7 +301,7 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 			Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
 	}
 
-	_, err = db.PlainDB().Exec(dropTables)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -357,7 +357,7 @@ func (s *PackageSuite) TestValidOne(c *C) {
 		}
 	}
 
-	_, err = db.PlainDB().Exec(dropTables)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -399,7 +399,7 @@ func (s *PackageSuite) TestOneErrors(c *C) {
 			Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
 	}
 
-	_, err = db.PlainDB().Exec(dropTables)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -421,7 +421,7 @@ func (s *PackageSuite) TestErrNoRows(c *C) {
 		c.Errorf("test failed, error %q not the same as %q", err, sql.ErrNoRows)
 	}
 
-	_, err = db.PlainDB().Exec(dropTables)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -498,7 +498,7 @@ func (s *PackageSuite) TestValidAll(c *C) {
 		}
 	}
 
-	_, err = db.PlainDB().Exec(dropTables)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -575,10 +575,63 @@ func (s *PackageSuite) TestAllErrors(c *C) {
 			Commentf("\ntest %q failed:\ninput: %s\nslices: %s", t.summary, t.query, t.slices))
 	}
 
-	_, err = db.PlainDB().Exec(dropTables)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	if err != nil {
 		c.Fatal(err)
 	}
+}
+
+func (s *PackageSuite) TestQueryMethodOrder(c *C) {
+	dropTables, sqldb, err := personAndAddressDB()
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	db := sqlair.NewDB(sqldb)
+
+	var p = Person{}
+	var ps = []Person{}
+	stmt := sqlair.MustPrepare("SELECT &Person.* FROM person", Person{})
+
+	// Check query closed errors.
+	q := db.Query(nil, stmt)
+	err = q.One(&p)
+	if err != nil {
+		c.Fatal(err)
+	}
+	err = q.All(&ps)
+	c.Assert(err, ErrorMatches, "cannot populate slice: query closed")
+
+	q = db.Query(nil, stmt)
+	err = q.All(&ps)
+	if err != nil {
+		c.Fatal(err)
+	}
+	err = q.Iter().Close()
+	c.Assert(err, ErrorMatches, "cannot iterate: query closed")
+
+	q = db.Query(nil, stmt)
+	err = q.Iter().Close()
+	if err != nil {
+		c.Fatal(err)
+	}
+	err = q.Run()
+	c.Assert(err, ErrorMatches, "cannot run: query closed")
+
+	q = db.Query(nil, stmt)
+	err = q.Run()
+	if err != nil {
+		c.Fatal(err)
+	}
+	err = q.One()
+	c.Assert(err, ErrorMatches, "cannot decode result: query closed")
+	_ = q.Iter().Close()
+
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	if err != nil {
+		c.Fatal(err)
+	}
+
 }
 
 type JujuLeaseKey struct {
@@ -683,7 +736,7 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 		}
 	}
 
-	_, err = db.PlainDB().Exec(dropTables)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	if err != nil {
 		c.Fatal(err)
 	}
