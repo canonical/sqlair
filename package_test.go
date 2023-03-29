@@ -450,6 +450,13 @@ func (s *PackageSuite) TestValidAll(c *C) {
 		slices:   []any{&[]*Person{}},
 		expected: []any{&[]*Person{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "James", 4500}}},
 	}, {
+		summary:  "select all columns into person with no pointers",
+		query:    "SELECT * AS &Person.* FROM person",
+		types:    []any{Person{}},
+		inputs:   []any{},
+		slices:   []any{&[]Person{}},
+		expected: []any{&[]Person{Person{30, "Fred", 1000}, Person{20, "Mark", 1500}, Person{40, "Mary", 3500}, Person{35, "James", 4500}}},
+	}, {
 		summary:  "single line of query with inputs",
 		query:    "SELECT p.* AS &Person.*, a.* AS &Address.*, p.* AS &Manager.* FROM person AS p, address AS a WHERE p.id = $Person.id AND a.id = $Address.id ",
 		types:    []any{Person{}, Address{}, Manager{}},
@@ -511,35 +518,42 @@ func (s *PackageSuite) TestAllErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		slices:  []any{nil},
-		err:     "need pointer to slice, got invalid",
+		err:     "cannot populate slice: need pointer to slice, got invalid",
 	}, {
 		summary: "nil pointer argument",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
 		slices:  []any{(*[]Person)(nil)},
-		err:     "need pointer to slice, got nil",
+		err:     "cannot populate slice: need pointer to slice, got nil",
 	}, {
 		summary: "none slice argument",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
 		slices:  []any{Person{}},
-		err:     "need pointer to slice, got struct",
+		err:     "cannot populate slice: need pointer to slice, got struct",
 	}, {
 		summary: "none slice pointer argument",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
 		slices:  []any{&Person{}},
-		err:     "need pointer to slice, got pointer to struct",
+		err:     "cannot populate slice: need pointer to slice, got pointer to struct",
 	}, {
 		summary: "wrong struct argument",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
 		slices:  []any{&[]*Address{}},
-		err:     `cannot decode result: type "Address" does not appear in query, have: Person`,
+		err:     `cannot populate slice: cannot decode result: type "Address" does not appear in query, have: Person`,
+	}, {
+		summary: "wrong struct argument",
+		query:   "SELECT * AS &Person.* FROM person",
+		types:   []any{Person{}},
+		inputs:  []any{},
+		slices:  []any{&[]int{}},
+		err:     `cannot populate slice: need slice of struct, got slice of int`,
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()
