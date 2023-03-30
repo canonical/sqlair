@@ -172,6 +172,8 @@ func (q *Query) One(outputArgs ...any) error {
 //	var pslice []Person
 //	var aslice []*Address
 //	err := query.All(&pslice, &aslice)
+//
+// sliceArgs must contain pointers to slices of each of the output types.
 func (q *Query) All(sliceArgs ...any) (err error) {
 	if q.err != nil {
 		return q.err
@@ -227,6 +229,9 @@ func (q *Query) All(sliceArgs ...any) (err error) {
 				sliceVals[i] = reflect.Append(sliceVals[i], reflect.ValueOf(outputArg))
 			case reflect.Struct:
 				sliceVals[i] = reflect.Append(sliceVals[i], reflect.ValueOf(outputArg).Elem())
+			default:
+				iter.Close()
+				return fmt.Errorf("internal error: output arg has unexpected kind %s", sliceVals[i].Type().Elem().Kind())
 			}
 		}
 	}
