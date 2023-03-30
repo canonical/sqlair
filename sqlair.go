@@ -224,14 +224,14 @@ func (q *Query) All(sliceArgs ...any) (err error) {
 			break
 		}
 		for i, outputArg := range outputArgs {
-			switch sliceVals[i].Type().Elem().Kind() {
+			switch k := sliceVals[i].Type().Elem().Kind(); k {
 			case reflect.Pointer:
 				sliceVals[i] = reflect.Append(sliceVals[i], reflect.ValueOf(outputArg))
 			case reflect.Struct:
 				sliceVals[i] = reflect.Append(sliceVals[i], reflect.ValueOf(outputArg).Elem())
 			default:
 				iter.Close()
-				return fmt.Errorf("internal error: output arg has unexpected kind %s", sliceVals[i].Type().Elem().Kind())
+				return fmt.Errorf("internal error: output arg has unexpected kind %s", k)
 			}
 		}
 	}
