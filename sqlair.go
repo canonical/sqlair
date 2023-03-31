@@ -72,16 +72,13 @@ type Iterator struct {
 	err  error
 }
 
-// Query takes a prepared SQLair Statement and returns a Query object for iterating over the results.
-// If an error occurs it will be returned with Query.Close().
-// Query uses QueryContext with context.Background internally.
-func (db *DB) Query(s *Statement, inputArgs ...any) *Query {
-	return db.QueryContext(context.Background(), s, inputArgs...)
-}
+// Query takes a context, prepared SQLair Statement and the structs mentioned in the query arguments.
+// It returns a Query object for iterating over the results.
+func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
-// QueryContext takes a prepared SQLair Statement and returns a Query object for iterating over the results.
-// If an error occurs it will be returned with Query.Close().
-func (db *DB) QueryContext(ctx context.Context, s *Statement, inputArgs ...any) *Query {
 	qe, err := s.pe.Query(inputArgs...)
 	q := func() (*sql.Rows, error) {
 		return db.db.QueryContext(ctx, qe.QuerySQL(), qe.QueryArgs()...)
