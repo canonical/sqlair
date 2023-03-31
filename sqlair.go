@@ -174,6 +174,9 @@ func (iter *Iterator) Close() error {
 
 // One runs a query and decodes the first row into outputArgs.
 func (q *Query) One(outputArgs ...any) error {
+	if q.err != nil {
+		return q.err
+	}
 	iter := q.Iter()
 	if !iter.Next() {
 		if iter.err != nil {
@@ -265,4 +268,51 @@ func (q *Query) All(sliceArgs ...any) (err error) {
 	}
 
 	return nil
+}
+
+type TX struct {
+	tx *sql.Tx
+}
+
+func (db *DB) NewTX(tx *sql.Tx) *TX {
+	return &TX{tx: tx}
+}
+
+func (db *DB) Begin(ctx context.Context, opts *TXOptions) (*TX, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	tx, err := db.db.BeginTx(ctx, opts.plainTXOptions())
+	return db.NewTX(tx), err
+}
+
+func (tx *TX) Commit() error {
+	return tx.tx.Commit()
+}
+
+func (tx *TX) Rollback() error {
+	return tx.tx.Rollback()
+}
+
+type TXOptions struct {
+	Isolation sql.IsolationLevel
+	ReadOnly  bool
+}
+
+func (txopts *TXOptions) plainTXOptions() *sql.TxOptions {
+	if txopts == nil {
+		return nil
+	}
+	return &sql.TxOptions{Isolation: txopts.Isolation, ReadOnly: txopts.ReadOnly}
+}
+
+// Query takes a context, prepared SQLair Statement and the structs mentioned in the query arguments.
+// It returns a Query object for iterating over the results.
+func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	qe, err := s.pe.Query(ctx, inputArgs...)
+	return &Query{qs: tx.tx, qe: qe, err: err}
 }

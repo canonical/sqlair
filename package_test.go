@@ -415,10 +415,10 @@ func (s *PackageSuite) TestErrNoRows(c *C) {
 	stmt := sqlair.MustPrepare("SELECT * AS &Person.* FROM person WHERE id=12312", Person{})
 	err = db.Query(nil, stmt).One(&Person{})
 	if !errors.Is(err, sqlair.ErrNoRows) {
-		c.Errorf("test failed, error %q not the same as %q", err, sqlair.ErrNoRows)
+		c.Errorf("expected %q, got %q", sqlair.ErrNoRows, err)
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
-		c.Errorf("test failed, error %q not the same as %q", err, sql.ErrNoRows)
+		c.Errorf("expected %q, got %q", sql.ErrNoRows, err)
 	}
 
 	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
@@ -694,10 +694,63 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	c.Assert(err, IsNil)
 
 	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
+}
+
+func (s *PackageSuite) TestTransactions(c *C) {
+	dropTables, sqldb, err := personAndAddressDB()
+	c.Assert(err, IsNil)
+
+	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE address_id = $Person.address_id", Person{})
+	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'fred@email.com');", Person{})
+	var derek = Person{ID: 85, Fullname: "Derek", PostalCode: 8000}
+
+	db := sqlair.NewDB(sqldb)
+	tx, err := db.Begin(nil, nil)
 	if err != nil {
 		c.Fatal(err)
 	}
+	// Insert derek then rollback.
+	q := tx.Query(nil, insertStmt, &derek)
+	// TODO: replace this with q.Run() or equivlent.
+	iter := q.Iter()
+	iter.Next()
+	err = iter.Close()
+	c.Assert(err, IsNil)
+	err = tx.Rollback()
+	c.Assert(err, IsNil)
 
+	// Check derek isnt in db, insert derek; commit.
+	tx, err = db.Begin(nil, nil)
+	if err != nil {
+		c.Fatal(err)
+	}
+	var derekCheck = Person{}
+	err = tx.Query(nil, selectStmt, &derek).One(&derekCheck)
+	if !errors.Is(err, sqlair.ErrNoRows) {
+		c.Fatalf("got err %s, expected %s", err, sqlair.ErrNoRows)
+	}
+	q = tx.Query(nil, insertStmt, &derek)
+	err = q.Run()
+	c.Assert(err, IsNil)
+
+	err = tx.Commit()
+	c.Assert(err, IsNil)
+
+	// Check derek is now in the db.
+	tx, err = db.Begin(nil, nil)
+	c.Assert(err, IsNil)
+
+	err = tx.Query(nil, selectStmt, &derek).One(&derekCheck)
+	c.Assert(err, IsNil)
+	c.Assert(derek, Equals, derekCheck)
+	err = tx.Commit()
+	c.Assert(err, IsNil)
+
+	_, err = db.PlainDB().Exec(dropTables)
+	if err != nil {
+		c.Fatal(err)
+	}
 }
 
 type JujuLeaseKey struct {
