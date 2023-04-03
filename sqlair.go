@@ -51,8 +51,8 @@ func NewDB(db *sql.DB) *DB {
 	return &DB{db: db}
 }
 
-// Unwrap returns the underlying database object.
-func (db *DB) Unwrap() *sql.DB {
+// PlainDB returns the underlying database object.
+func (db *DB) PlainDB() *sql.DB {
 	return db.db
 }
 

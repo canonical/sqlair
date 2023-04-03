@@ -164,12 +164,12 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 
 	tests = append(tests, testsWithShadowPerson...)
 
-	dropTables, db, err := personAndAddressDB()
+	dropTables, sqldb, err := personAndAddressDB()
 	if err != nil {
 		c.Fatal(err)
 	}
 
-	sqlairDB := sqlair.NewDB(db)
+	db := sqlair.NewDB(sqldb)
 
 	for _, t := range tests {
 		stmt, err := sqlair.Prepare(t.query, t.types...)
@@ -178,7 +178,7 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 			continue
 		}
 
-		iter := sqlairDB.Query(nil, stmt, t.inputs...).Iter()
+		iter := db.Query(nil, stmt, t.inputs...).Iter()
 		i := 0
 		for iter.Next() {
 			if i >= len(t.outputs) {
@@ -204,7 +204,7 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 
 	}
 
-	_, err = db.Exec(dropTables)
+	_, err = db.PlainDB().Exec(dropTables)
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -269,12 +269,12 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 		err:     `cannot decode result: type "Person" provided more than once, rename one of them`,
 	}}
 
-	dropTables, db, err := personAndAddressDB()
+	dropTables, sqldb, err := personAndAddressDB()
 	if err != nil {
 		c.Fatal(err)
 	}
 
-	sqlairDB := sqlair.NewDB(db)
+	db := sqlair.NewDB(sqldb)
 
 	for _, t := range tests {
 		stmt, err := sqlair.Prepare(t.query, t.types...)
@@ -283,7 +283,7 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 			continue
 		}
 
-		iter := sqlairDB.Query(nil, stmt, t.inputs...).Iter()
+		iter := db.Query(nil, stmt, t.inputs...).Iter()
 		i := 0
 		for iter.Next() {
 			if i > len(t.outputs) {
@@ -301,7 +301,7 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 			Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
 	}
 
-	_, err = db.Exec(dropTables)
+	_, err = db.PlainDB().Exec(dropTables)
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -331,12 +331,12 @@ func (s *PackageSuite) TestValidOne(c *C) {
 		expected: []any{&Person{30, "Fred", 1000}, &Address{1000, "Happy Land", "Main Street"}, &Manager{30, "Fred", 1000}},
 	}}
 
-	dropTables, db, err := personAndAddressDB()
+	dropTables, sqldb, err := personAndAddressDB()
 	if err != nil {
 		c.Fatal(err)
 	}
 
-	sqlairDB := sqlair.NewDB(db)
+	db := sqlair.NewDB(sqldb)
 
 	for _, t := range tests {
 		stmt, err := sqlair.Prepare(t.query, t.types...)
@@ -345,7 +345,7 @@ func (s *PackageSuite) TestValidOne(c *C) {
 			continue
 		}
 
-		q := sqlairDB.Query(nil, stmt, t.inputs...)
+		q := db.Query(nil, stmt, t.inputs...)
 		err = q.One(t.outputs...)
 		if err != nil {
 			c.Errorf("\ntest %q failed (One):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
@@ -357,7 +357,7 @@ func (s *PackageSuite) TestValidOne(c *C) {
 		}
 	}
 
-	_, err = db.Exec(dropTables)
+	_, err = db.PlainDB().Exec(dropTables)
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -380,12 +380,12 @@ func (s *PackageSuite) TestOneErrors(c *C) {
 		err:     "sql: no rows in result set",
 	}}
 
-	dropTables, db, err := personAndAddressDB()
+	dropTables, sqldb, err := personAndAddressDB()
 	if err != nil {
 		c.Fatal(err)
 	}
 
-	sqlairDB := sqlair.NewDB(db)
+	db := sqlair.NewDB(sqldb)
 
 	for _, t := range tests {
 		stmt, err := sqlair.Prepare(t.query, t.types...)
@@ -394,26 +394,26 @@ func (s *PackageSuite) TestOneErrors(c *C) {
 			continue
 		}
 
-		err = sqlairDB.Query(nil, stmt, t.inputs...).One(t.outputs...)
+		err = db.Query(nil, stmt, t.inputs...).One(t.outputs...)
 		c.Assert(err, ErrorMatches, t.err,
 			Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
 	}
 
-	_, err = db.Exec(dropTables)
+	_, err = db.PlainDB().Exec(dropTables)
 	if err != nil {
 		c.Fatal(err)
 	}
 }
 
 func (s *PackageSuite) TestErrNoRows(c *C) {
-	dropTables, db, err := personAndAddressDB()
+	dropTables, sqldb, err := personAndAddressDB()
 	if err != nil {
 		c.Fatal(err)
 	}
 
-	sqlairDB := sqlair.NewDB(db)
+	db := sqlair.NewDB(sqldb)
 	stmt := sqlair.MustPrepare("SELECT * AS &Person.* FROM person WHERE id=12312", Person{})
-	err = sqlairDB.Query(nil, stmt).One(&Person{})
+	err = db.Query(nil, stmt).One(&Person{})
 	if !errors.Is(err, sqlair.ErrNoRows) {
 		c.Errorf("test failed, error %q not the same as %q", err, sqlair.ErrNoRows)
 	}
@@ -421,7 +421,7 @@ func (s *PackageSuite) TestErrNoRows(c *C) {
 		c.Errorf("test failed, error %q not the same as %q", err, sql.ErrNoRows)
 	}
 
-	_, err = db.Exec(dropTables)
+	_, err = db.PlainDB().Exec(dropTables)
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -472,12 +472,12 @@ func (s *PackageSuite) TestValidAll(c *C) {
 		expected: []any{},
 	}}
 
-	dropTables, db, err := personAndAddressDB()
+	dropTables, sqldb, err := personAndAddressDB()
 	if err != nil {
 		c.Fatal(err)
 	}
 
-	sqlairDB := sqlair.NewDB(db)
+	db := sqlair.NewDB(sqldb)
 
 	for _, t := range tests {
 		stmt, err := sqlair.Prepare(t.query, t.types...)
@@ -486,7 +486,7 @@ func (s *PackageSuite) TestValidAll(c *C) {
 			continue
 		}
 
-		q := sqlairDB.Query(nil, stmt, t.inputs...)
+		q := db.Query(nil, stmt, t.inputs...)
 		err = q.All(t.slices...)
 		if err != nil {
 			c.Errorf("\ntest %q failed (All):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
@@ -498,7 +498,7 @@ func (s *PackageSuite) TestValidAll(c *C) {
 		}
 	}
 
-	_, err = db.Exec(dropTables)
+	_, err = db.PlainDB().Exec(dropTables)
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -575,7 +575,7 @@ func (s *PackageSuite) TestAllErrors(c *C) {
 			Commentf("\ntest %q failed:\ninput: %s\nslices: %s", t.summary, t.query, t.slices))
 	}
 
-	_, err = db.Unwrap().Exec(dropTables)
+	_, err = db.PlainDB().Exec(dropTables)
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -649,12 +649,12 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 		expected: [][]any{{&JujuLeaseKey{Namespace: "type1", ModelUUID: "uuid1", Lease: "name1"}, &JujuLeaseInfo{Holder: "holder1", Expiry: 1}}},
 	}}
 
-	dropTables, db, err := JujuStoreLeaseDB()
+	dropTables, sqldb, err := JujuStoreLeaseDB()
 	if err != nil {
 		c.Fatal(err)
 	}
 
-	sqlairDB := sqlair.NewDB(db)
+	db := sqlair.NewDB(sqldb)
 
 	for _, t := range tests {
 
@@ -664,7 +664,7 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 			continue
 		}
 
-		iter := sqlairDB.Query(nil, stmt, t.inputs...).Iter()
+		iter := db.Query(nil, stmt, t.inputs...).Iter()
 		i := 0
 		for iter.Next() {
 			if i >= len(t.outputs) {
@@ -683,7 +683,7 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 		}
 	}
 
-	_, err = sqlairDB.Unwrap().Exec(dropTables)
+	_, err = db.PlainDB().Exec(dropTables)
 	if err != nil {
 		c.Fatal(err)
 	}
