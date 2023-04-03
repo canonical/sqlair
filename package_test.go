@@ -178,7 +178,7 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 			continue
 		}
 
-		iter := db.Query(stmt, t.inputs...).Iter()
+		iter := db.Query(nil, stmt, t.inputs...).Iter()
 		i := 0
 		for iter.Next() {
 			if i >= len(t.outputs) {
@@ -283,7 +283,7 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 			continue
 		}
 
-		iter := db.Query(stmt, t.inputs...).Iter()
+		iter := db.Query(nil, stmt, t.inputs...).Iter()
 		i := 0
 		for iter.Next() {
 			if i > len(t.outputs) {
@@ -345,7 +345,7 @@ func (s *PackageSuite) TestValidOne(c *C) {
 			continue
 		}
 
-		q := db.Query(stmt, t.inputs...)
+		q := db.Query(nil, stmt, t.inputs...)
 		err = q.One(t.outputs...)
 		if err != nil {
 			c.Errorf("\ntest %q failed (One):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
@@ -394,7 +394,7 @@ func (s *PackageSuite) TestOneErrors(c *C) {
 			continue
 		}
 
-		err = db.Query(stmt, t.inputs...).One(t.outputs...)
+		err = db.Query(nil, stmt, t.inputs...).One(t.outputs...)
 		c.Assert(err, ErrorMatches, t.err,
 			Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
 	}
@@ -413,7 +413,7 @@ func (s *PackageSuite) TestErrNoRows(c *C) {
 
 	db := sqlair.NewDB(sqldb)
 	stmt := sqlair.MustPrepare("SELECT * AS &Person.* FROM person WHERE id=12312", Person{})
-	err = db.Query(stmt).One(&Person{})
+	err = db.Query(nil, stmt).One(&Person{})
 	if !errors.Is(err, sqlair.ErrNoRows) {
 		c.Errorf("test failed, error %q not the same as %q", err, sqlair.ErrNoRows)
 	}
@@ -486,7 +486,7 @@ func (s *PackageSuite) TestValidAll(c *C) {
 			continue
 		}
 
-		q := db.Query(stmt, t.inputs...)
+		q := db.Query(nil, stmt, t.inputs...)
 		err = q.All(t.slices...)
 		if err != nil {
 			c.Errorf("\ntest %q failed (All):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
@@ -570,7 +570,7 @@ func (s *PackageSuite) TestAllErrors(c *C) {
 			continue
 		}
 
-		err = db.Query(stmt, t.inputs...).All(t.slices...)
+		err = db.Query(nil, stmt, t.inputs...).All(t.slices...)
 		c.Assert(err, ErrorMatches, t.err,
 			Commentf("\ntest %q failed:\ninput: %s\nslices: %s", t.summary, t.query, t.slices))
 	}
@@ -664,7 +664,7 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 			continue
 		}
 
-		iter := db.Query(stmt, t.inputs...).Iter()
+		iter := db.Query(nil, stmt, t.inputs...).Iter()
 		i := 0
 		for iter.Next() {
 			if i >= len(t.outputs) {
