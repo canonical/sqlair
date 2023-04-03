@@ -81,6 +81,9 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 
 	qe, err := s.pe.Query(inputArgs...)
 	q := func() (*sql.Rows, error) {
+		if err != nil {
+			return nil, err
+		}
 		return db.db.QueryContext(ctx, qe.QuerySQL(), qe.QueryArgs()...)
 	}
 	return &Query{qe: qe, q: q, err: err}
@@ -113,7 +116,7 @@ func (iter *Iterator) Next() bool {
 // outputArgs must contain all the structs mentioned in the query.
 // If an error occurs it will be returned with Iter.Close().
 func (iter *Iterator) Decode(outputArgs ...any) (ok bool) {
-	if iter.err != nil {
+	if iter.err != nil || iter.rows == nil {
 		return false
 	}
 	defer func() {
@@ -156,6 +159,9 @@ func (iter *Iterator) Close() error {
 func (q *Query) One(outputArgs ...any) error {
 	iter := q.Iter()
 	if !iter.Next() {
+		if iter.err != nil {
+			return iter.err
+		}
 		return ErrNoRows
 	}
 	iter.Decode(outputArgs...)
@@ -172,9 +178,6 @@ func (q *Query) One(outputArgs ...any) error {
 //
 // sliceArgs must contain pointers to slices of each of the output types.
 func (q *Query) All(sliceArgs ...any) (err error) {
-	if q.err != nil {
-		return q.err
-	}
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("cannot populate slice: %s", err)

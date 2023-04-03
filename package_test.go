@@ -94,7 +94,7 @@ DROP TABLE address;
 	return dropTables, db, nil
 }
 
-func (s *PackageSuite) TestValidDecode(c *C) {
+func (s *PackageSuite) TestValidIter(c *C) {
 	var tests = []struct {
 		summary  string
 		query    string
@@ -210,7 +210,7 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 	}
 }
 
-func (s *PackageSuite) TestDecodeErrors(c *C) {
+func (s *PackageSuite) TestIterErrors(c *C) {
 	var tests = []struct {
 		summary string
 		query   string
@@ -307,6 +307,91 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 	}
 }
 
+func (s *PackageSuite) TestIterMethodOrder(c *C) {
+	dropTables, sqldb, err := personAndAddressDB()
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	db := sqlair.NewDB(sqldb)
+
+	var p = Person{}
+	stmt := sqlair.MustPrepare("SELECT &Person.* FROM person", Person{})
+
+	// Check query closed errors.
+	iter := db.Query(stmt).Iter()
+	err = iter.Close()
+	if err != nil {
+		c.Fatal(err)
+	}
+	if iter.Next() {
+		c.Fatal("expected false, got true")
+	}
+	if iter.Decode(&p) {
+		c.Fatal("expected false, got true")
+	}
+	err = iter.Close()
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	iter = db.Query(stmt).Iter()
+	err = iter.Close()
+	if err != nil {
+		c.Fatal(err)
+	}
+	if iter.Decode(&p) {
+		c.Fatal("expected false, got true")
+	}
+	if iter.Next() {
+		c.Fatal("expected false, got true")
+	}
+	err = iter.Close()
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	iter = db.Query(stmt).Iter()
+	err = iter.Close()
+	if err != nil {
+		c.Fatal(err)
+	}
+	err = iter.Close()
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	iter = db.Query(stmt).Iter()
+	if !iter.Next() {
+		c.Fatal("expected true, got false")
+	}
+	if !iter.Decode(&p) {
+		c.Fatal("expected true, got false")
+	}
+	err = iter.Close()
+	if err != nil {
+		c.Fatal(err)
+	}
+	if iter.Decode(&p) {
+		c.Fatal("expected false, got true")
+	}
+
+	/*
+		q := db.Query(nil, stmt)
+		err = q.All(&ps)
+		if err != nil {
+			c.Fatal(err)
+		}
+		err = q.Iter().Close()
+		c.Assert(err, ErrorMatches, "cannot iterate: query closed")
+	*/
+
+	_, err = db.Unwrap().Exec(dropTables)
+	if err != nil {
+		c.Fatal(err)
+	}
+}
+
 func (s *PackageSuite) TestValidOne(c *C) {
 	var tests = []struct {
 		summary  string
@@ -378,6 +463,13 @@ func (s *PackageSuite) TestOneErrors(c *C) {
 		inputs:  []any{},
 		outputs: []any{&Person{}},
 		err:     "sql: no rows in result set",
+	}, {
+		summary: "missing parameter",
+		query:   "SELECT * AS &Person.* FROM person WHERE id = $Person.id",
+		types:   []any{Person{}},
+		inputs:  []any{},
+		outputs: []any{&Person{}},
+		err:     `invalid input parameter: type "Person" not passed as a parameter`,
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()
