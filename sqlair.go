@@ -58,9 +58,8 @@ func (db *DB) PlainDB() *sql.DB {
 
 // Query holds the results of a database query.
 type Query struct {
-	qe      *expr.QueryExpr
-	outcome *Outcome
-	closed  bool
+	qe     *expr.QueryExpr
+	closed bool
 
 	q func() (*sql.Rows, error)
 	e func() (sql.Result, error)
@@ -81,14 +80,6 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		ctx = context.Background()
 	}
 
-	var outcome *Outcome
-	if len(inputArgs) > 0 {
-		if oc, ok := inputArgs[0].(*Outcome); ok {
-			outcome = oc
-			inputArgs = inputArgs[1:]
-		}
-	}
-
 	qe, err := s.pe.Query(inputArgs...)
 	q := func() (*sql.Rows, error) {
 		if err != nil {
@@ -103,19 +94,16 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return db.db.ExecContext(ctx, qe.QuerySQL(), qe.QueryArgs()...)
 	}
 
-	return &Query{qe: qe, outcome: outcome, closed: false, q: q, e: e}
+	return &Query{qe: qe, closed: false, q: q, e: e}
 }
 
 func (q *Query) Run() error {
 	if q.closed {
 		return fmt.Errorf("cannot run: query closed")
 	}
-	res, err := q.e()
+	_, err := q.e()
 	if err != nil {
 		return err
-	}
-	if q.outcome != nil {
-		q.outcome.result = res
 	}
 	q.closed = true
 	return nil
@@ -192,16 +180,6 @@ func (iter *Iterator) Close() error {
 	return err
 }
 
-// A pointer to an outcome can be passed as the first variadic argument to Query.
-// It will be populated with the outcome of the query, if available.
-type Outcome struct {
-	result sql.Result
-}
-
-func (o *Outcome) Result() sql.Result {
-	return o.result
-}
-
 // One runs a query and decodes the first row into outputArgs.
 func (q *Query) One(outputArgs ...any) error {
 	if q.closed {
@@ -209,6 +187,9 @@ func (q *Query) One(outputArgs ...any) error {
 	}
 	iter := q.Iter()
 	if !iter.Next() {
+		if iter.err != nil {
+			return iter.Close()
+		}
 		return ErrNoRows
 	}
 	iter.Decode(outputArgs...)

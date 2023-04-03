@@ -581,6 +581,40 @@ func (s *PackageSuite) TestAllErrors(c *C) {
 	}
 }
 
+func (s *PackageSuite) TestRun(c *C) {
+	dropTables, sqldb, err := personAndAddressDB()
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	var jim = Person{
+		ID:         70,
+		Fullname:   "Jim",
+		PostalCode: 500,
+	}
+
+	db := sqlair.NewDB(sqldb)
+
+	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
+	err = db.Query(nil, insertStmt, &jim).Run()
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE id = $Person.id", Person{})
+	var jimCheck = Person{}
+	err = db.Query(nil, selectStmt, &jim).One(&jimCheck)
+	if err != nil {
+		c.Fatal(err)
+	}
+	c.Assert(jimCheck, Equals, jim)
+
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	if err != nil {
+		c.Fatal(err)
+	}
+}
+
 func (s *PackageSuite) TestQueryMethodOrder(c *C) {
 	dropTables, sqldb, err := personAndAddressDB()
 	if err != nil {
