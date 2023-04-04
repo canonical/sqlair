@@ -615,51 +615,83 @@ func (s *PackageSuite) TestRun(c *C) {
 	}
 }
 
-func (s *PackageSuite) TestQueryMethodOrder(c *C) {
+func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
+	allOutput := &[]*Person{}
+	allExpected := &[]*Person{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "James", 4500}}
+
+	iterOutputs := []any{&Person{}, &Person{}, &Person{}, &Person{}}
+	iterExpected := []any{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "James", 4500}}
+
+	oneOutput := &Person{}
+	oneExpected := &Person{30, "Fred", 1000}
+
 	dropTables, sqldb, err := personAndAddressDB()
 	if err != nil {
 		c.Fatal(err)
 	}
 
 	db := sqlair.NewDB(sqldb)
-
-	var p = Person{}
-	var ps = []Person{}
 	stmt := sqlair.MustPrepare("SELECT &Person.* FROM person", Person{})
 
-	// Check query closed errors.
+	// Run different Query methods.
 	q := db.Query(nil, stmt)
-	err = q.One(&p)
-	if err != nil {
-		c.Fatal(err)
-	}
-	err = q.All(&ps)
-	c.Assert(err, ErrorMatches, "cannot populate slice: query closed")
+	err = q.One(oneOutput)
+	c.Assert(err, IsNil)
+	c.Assert(oneExpected, DeepEquals, oneOutput)
 
-	q = db.Query(nil, stmt)
-	err = q.All(&ps)
-	if err != nil {
-		c.Fatal(err)
-	}
-	err = q.Iter().Close()
-	c.Assert(err, ErrorMatches, "cannot iterate: query closed")
+	err = q.All(allOutput)
+	c.Assert(err, IsNil)
+	c.Assert(allOutput, DeepEquals, allExpected)
 
-	q = db.Query(nil, stmt)
-	err = q.Iter().Close()
-	if err != nil {
-		c.Fatal(err)
-	}
 	err = q.Run()
-	c.Assert(err, ErrorMatches, "cannot run: query closed")
+	c.Assert(err, IsNil)
+
+	iter := q.Iter()
+	i := 0
+	for iter.Next() {
+		if i >= len(iterOutputs) {
+			c.Fatalf("expected %d rows, got more", len(iterOutputs))
+		}
+		if !iter.Decode(iterOutputs[i]) {
+			break
+		}
+		i++
+	}
+	err = iter.Close()
+	c.Assert(err, IsNil)
+	c.Assert(iterOutputs, DeepEquals, iterExpected)
+
+	// Run them all again for good measure.
+	allOutput = &[]*Person{}
+	iterOutputs = []any{&Person{}, &Person{}, &Person{}, &Person{}}
+	oneOutput = &Person{}
+
+	err = q.All(allOutput)
+	c.Assert(err, IsNil)
+	c.Assert(allOutput, DeepEquals, allExpected)
+
+	iter = q.Iter()
+	i = 0
+	for iter.Next() {
+		if i >= len(iterOutputs) {
+			c.Fatalf("expected %d rows, got more", len(iterOutputs))
+		}
+		if !iter.Decode(iterOutputs[i]) {
+			break
+		}
+		i++
+	}
+	err = iter.Close()
+	c.Assert(err, IsNil)
+	c.Assert(iterOutputs, DeepEquals, iterExpected)
 
 	q = db.Query(nil, stmt)
+	err = q.One(oneOutput)
+	c.Assert(err, IsNil)
+	c.Assert(oneExpected, DeepEquals, oneOutput)
+
 	err = q.Run()
-	if err != nil {
-		c.Fatal(err)
-	}
-	err = q.One()
-	c.Assert(err, ErrorMatches, "cannot decode result: query closed")
-	_ = q.Iter().Close()
+	c.Assert(err, IsNil)
 
 	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	if err != nil {

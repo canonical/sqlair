@@ -56,13 +56,18 @@ func (db *DB) PlainDB() *sql.DB {
 	return db.db
 }
 
+// querySubstrate abstracts the different surfaces that the query can be run on.
+// For example, the database or a transaction.
+type querySubstrate interface {
+	QueryContext(ctx context.Context, sql string, args ...any) (*sql.Rows, error)
+	ExecContext(ctx context.Context, sql string, args ...any) (sql.Result, error)
+}
+
 // Query holds the results of a database query.
 type Query struct {
-	qe     *expr.QueryExpr
-	closed bool
-
-	q func() (*sql.Rows, error)
-	e func() (sql.Result, error)
+	qe  *expr.QueryExpr
+	qs  querySubstrate
+	err error
 }
 
 // Iterator is used to iterate over the results of the query.
@@ -80,42 +85,30 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		ctx = context.Background()
 	}
 
-	qe, err := s.pe.Query(inputArgs...)
-	q := func() (*sql.Rows, error) {
-		if err != nil {
-			return nil, err
-		}
-		return db.db.QueryContext(ctx, qe.QuerySQL(), qe.QueryArgs()...)
-	}
-	e := func() (sql.Result, error) {
-		if err != nil {
-			return nil, err
-		}
-		return db.db.ExecContext(ctx, qe.QuerySQL(), qe.QueryArgs()...)
-	}
-
-	return &Query{qe: qe, closed: false, q: q, e: e}
+	qe, err := s.pe.Query(ctx, inputArgs...)
+	return &Query{qs: db.db, qe: qe, err: err}
 }
 
+// Run will execute the query.
+// Any rows returned by the query are ignored.
 func (q *Query) Run() error {
-	if q.closed {
-		return fmt.Errorf("cannot run: query closed")
+	if q.err != nil {
+		return q.err
 	}
-	_, err := q.e()
+	_, err := q.qs.ExecContext(q.qe.QueryContext(), q.qe.QuerySQL(), q.qe.QueryArgs()...)
 	if err != nil {
 		return err
 	}
-	q.closed = true
 	return nil
 }
 
 // Iter returns an Iterator to iterate through the results row by row.
 func (q *Query) Iter() *Iterator {
-	if q.closed {
-		return &Iterator{err: fmt.Errorf("cannot iterate: query closed")}
+	if q.err != nil {
+		return &Iterator{err: q.err}
 	}
 
-	rows, err := q.q()
+	rows, err := q.qs.QueryContext(q.qe.QueryContext(), q.qe.QuerySQL(), q.qe.QueryArgs()...)
 	if err != nil {
 		return &Iterator{err: err}
 	}
@@ -123,7 +116,6 @@ func (q *Query) Iter() *Iterator {
 	if err != nil {
 		return &Iterator{err: err}
 	}
-	q.closed = true
 	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err}
 }
 
@@ -141,7 +133,7 @@ func (iter *Iterator) Next() bool {
 // outputArgs must contain all the structs mentioned in the query.
 // If an error occurs it will be returned with Iter.Close().
 func (iter *Iterator) Decode(outputArgs ...any) (ok bool) {
-	if iter.err != nil {
+	if iter.err != nil || iter.rows == nil {
 		return false
 	}
 	defer func() {
@@ -182,9 +174,6 @@ func (iter *Iterator) Close() error {
 
 // One runs a query and decodes the first row into outputArgs.
 func (q *Query) One(outputArgs ...any) error {
-	if q.closed {
-		return fmt.Errorf("cannot decode result: query closed")
-	}
 	iter := q.Iter()
 	if !iter.Next() {
 		if iter.err != nil {
@@ -206,15 +195,14 @@ func (q *Query) One(outputArgs ...any) error {
 //
 // sliceArgs must contain pointers to slices of each of the output types.
 func (q *Query) All(sliceArgs ...any) (err error) {
+	if q.err != nil {
+		return q.err
+	}
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("cannot populate slice: %s", err)
 		}
 	}()
-
-	if q.closed {
-		return fmt.Errorf("query closed")
-	}
 
 	// Check slice inputs
 	var slicePtrVals = []reflect.Value{}
