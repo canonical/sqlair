@@ -583,9 +583,7 @@ func (s *PackageSuite) TestAllErrors(c *C) {
 
 func (s *PackageSuite) TestRunAndOutcome(c *C) {
 	dropTables, sqldb, err := personAndAddressDB()
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 
 	var jim = Person{
 		ID:         70,
@@ -599,9 +597,7 @@ func (s *PackageSuite) TestRunAndOutcome(c *C) {
 
 	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
 	err = db.Query(nil, insertStmt, &outcome, &jim).Run()
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 
 	if outcome.Result() == nil {
 		c.Errorf("result in outcome is nil")
@@ -615,9 +611,7 @@ func (s *PackageSuite) TestRunAndOutcome(c *C) {
 	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE id = $Person.id", Person{})
 	var jimCheck = Person{}
 	err = db.Query(nil, selectStmt, &jim).One(&jimCheck)
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 	c.Assert(jimCheck, Equals, jim)
 
 	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
@@ -635,9 +629,7 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	oneExpected := &Person{30, "Fred", 1000}
 
 	dropTables, sqldb, err := personAndAddressDB()
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
 	stmt := sqlair.MustPrepare("SELECT &Person.* FROM person", Person{})
@@ -703,10 +695,7 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	c.Assert(err, IsNil)
 
 	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
-	if err != nil {
-		c.Fatal(err)
-	}
-
+	c.Assert(err, IsNil)
 }
 
 type JujuLeaseKey struct {
