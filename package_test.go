@@ -581,7 +581,7 @@ func (s *PackageSuite) TestAllErrors(c *C) {
 	}
 }
 
-func (s *PackageSuite) TestRun(c *C) {
+func (s *PackageSuite) TestRunAndOutcome(c *C) {
 	dropTables, sqldb, err := personAndAddressDB()
 	if err != nil {
 		c.Fatal(err)
@@ -595,10 +595,21 @@ func (s *PackageSuite) TestRun(c *C) {
 
 	db := sqlair.NewDB(sqldb)
 
+	var outcome = sqlair.Outcome{}
+
 	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
-	err = db.Query(nil, insertStmt, &jim).Run()
+	err = db.Query(nil, insertStmt, &outcome, &jim).Run()
 	if err != nil {
 		c.Fatal(err)
+	}
+
+	if outcome.Result() == nil {
+		c.Errorf("result in outcome is nil")
+	}
+	rowsAffected, err := outcome.Result().RowsAffected()
+	c.Assert(err, IsNil)
+	if rowsAffected != 1 {
+		c.Errorf("got %d for rowsAffected, expected 1", rowsAffected)
 	}
 
 	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE id = $Person.id", Person{})
@@ -610,9 +621,7 @@ func (s *PackageSuite) TestRun(c *C) {
 	c.Assert(jimCheck, Equals, jim)
 
 	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 }
 
 func (s *PackageSuite) TestQueryMultipleRuns(c *C) {

@@ -86,8 +86,15 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		ctx = context.Background()
 	}
 
+	var outcome *Outcome
+	if len(inputArgs) > 0 {
+		if oc, ok := inputArgs[0].(*Outcome); ok {
+			outcome = oc
+			inputArgs = inputArgs[1:]
+		}
+	}
 	qe, err := s.pe.Query(ctx, inputArgs...)
-	return &Query{qs: db.db, qe: qe, err: err}
+	return &Query{qs: db.db, qe: qe, outcome: outcome, err: err}
 }
 
 // Run will execute the query.
@@ -101,7 +108,10 @@ func (q *Query) Run() error {
 		return err
 	}
 	if q.outcome != nil {
-		q.outcome.result = &res
+		q.outcome.result = res
+	}
+	if q.outcome != nil {
+		q.outcome.result = res
 	}
 	return nil
 }
@@ -116,11 +126,11 @@ func (q *Query) Iter() *Iterator {
 	if err != nil {
 		return &Iterator{err: err}
 	}
-	cols, err := q.rows.Columns()
+	cols, err := rows.Columns()
 	if err != nil {
 		return &Iterator{err: err}
 	}
-	return &Iterator{qe: q.qe, rows: q.rows, cols: cols, err: err}
+	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err}
 }
 
 // Next prepares the next row for decoding.
@@ -179,10 +189,10 @@ func (iter *Iterator) Close() error {
 // A pointer to an outcome can be passed as the first variadic argument to Query.
 // It will be populated with the outcome of the query, if available.
 type Outcome struct {
-	result *sql.Result
+	result sql.Result
 }
 
-func (o *Outcome) Result() *sql.Result {
+func (o *Outcome) Result() sql.Result {
 	return o.result
 }
 
