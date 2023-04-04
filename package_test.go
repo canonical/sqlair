@@ -583,9 +583,7 @@ func (s *PackageSuite) TestAllErrors(c *C) {
 
 func (s *PackageSuite) TestRun(c *C) {
 	dropTables, sqldb, err := personAndAddressDB()
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 
 	var jim = Person{
 		ID:         70,
@@ -597,22 +595,16 @@ func (s *PackageSuite) TestRun(c *C) {
 
 	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
 	err = db.Query(nil, insertStmt, &jim).Run()
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 
 	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE id = $Person.id", Person{})
 	var jimCheck = Person{}
 	err = db.Query(nil, selectStmt, &jim).One(&jimCheck)
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 	c.Assert(jimCheck, Equals, jim)
 
 	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 }
 
 func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
@@ -626,9 +618,7 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	oneExpected := &Person{30, "Fred", 1000}
 
 	dropTables, sqldb, err := personAndAddressDB()
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
 	stmt := sqlair.MustPrepare("SELECT &Person.* FROM person", Person{})
@@ -707,31 +697,23 @@ func (s *PackageSuite) TestTransactions(c *C) {
 
 	db := sqlair.NewDB(sqldb)
 	tx, err := db.Begin(nil, nil)
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
+
 	// Insert derek then rollback.
-	q := tx.Query(nil, insertStmt, &derek)
-	// TODO: replace this with q.Run() or equivlent.
-	iter := q.Iter()
-	iter.Next()
-	err = iter.Close()
+	err = tx.Query(nil, insertStmt, &derek).Run()
 	c.Assert(err, IsNil)
 	err = tx.Rollback()
 	c.Assert(err, IsNil)
 
 	// Check derek isnt in db, insert derek; commit.
 	tx, err = db.Begin(nil, nil)
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 	var derekCheck = Person{}
 	err = tx.Query(nil, selectStmt, &derek).One(&derekCheck)
 	if !errors.Is(err, sqlair.ErrNoRows) {
 		c.Fatalf("got err %s, expected %s", err, sqlair.ErrNoRows)
 	}
-	q = tx.Query(nil, insertStmt, &derek)
-	err = q.Run()
+	err = tx.Query(nil, insertStmt, &derek).Run()
 	c.Assert(err, IsNil)
 
 	err = tx.Commit()
@@ -747,10 +729,8 @@ func (s *PackageSuite) TestTransactions(c *C) {
 	err = tx.Commit()
 	c.Assert(err, IsNil)
 
-	_, err = db.PlainDB().Exec(dropTables)
-	if err != nil {
-		c.Fatal(err)
-	}
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
 }
 
 type JujuLeaseKey struct {

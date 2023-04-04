@@ -274,10 +274,12 @@ type TX struct {
 	tx *sql.Tx
 }
 
+// NewTX creates a SQLair transaction from a sql transaction.
 func (db *DB) NewTX(tx *sql.Tx) *TX {
 	return &TX{tx: tx}
 }
 
+// Begin starts a transaction.
 func (db *DB) Begin(ctx context.Context, opts *TXOptions) (*TX, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -286,15 +288,20 @@ func (db *DB) Begin(ctx context.Context, opts *TXOptions) (*TX, error) {
 	return db.NewTX(tx), err
 }
 
+// Commit commits the transaction.
 func (tx *TX) Commit() error {
 	return tx.tx.Commit()
 }
 
+// Rollback aborts the transaction.
 func (tx *TX) Rollback() error {
 	return tx.tx.Rollback()
 }
 
+// TXOptions holds the transaction options to be used in DB.Begin.
 type TXOptions struct {
+	// Isolation is the transaction isolation level.
+	// If zero, the driver or database's default level is used.
 	Isolation sql.IsolationLevel
 	ReadOnly  bool
 }

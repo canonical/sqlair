@@ -21,10 +21,6 @@ func (qe *QueryExpr) QueryContext() context.Context {
 	return qe.ctx
 }
 
-func (qe *QueryExpr) HasOutputs() bool {
-	return len(qe.outputs) > 0
-}
-
 type QueryExpr struct {
 	sql     string
 	args    []any
