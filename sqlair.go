@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"reflect"
 
 	"github.com/canonical/sqlair/internal/expr"
 )
@@ -62,8 +63,8 @@ func NewDB(db *sql.DB) *DB {
 	return &DB{db: db}
 }
 
-// Unwrap returns the underlying database object.
-func (db *DB) Unwrap() *sql.DB {
+// PlainDB returns the underlying database object.
+func (db *DB) PlainDB() *sql.DB {
 	return db.db
 }
 
@@ -83,16 +84,13 @@ type Iterator struct {
 	err  error
 }
 
-// Query takes a prepared SQLair Statement and returns a Query object for iterating over the results.
-// If an error occurs it will be returned with Query.Close().
-// Query uses QueryContext with context.Background internally.
-func (db *DB) Query(s *Statement, inputArgs ...any) *Query {
-	return db.QueryContext(context.Background(), s, inputArgs...)
-}
+// Query takes a context, prepared SQLair Statement and the structs mentioned in the query arguments.
+// It returns a Query object for iterating over the results.
+func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
-// QueryContext takes a prepared SQLair Statement and returns a Query object for iterating over the results.
-// If an error occurs it will be returned with Query.Close().
-func (db *DB) QueryContext(ctx context.Context, s *Statement, inputArgs ...any) *Query {
 	qe, err := s.pe.Query(inputArgs...)
 	q := func() (*sql.Rows, error) {
 		return db.db.QueryContext(ctx, qe.QuerySQL(), qe.QueryArgs()...)
@@ -177,4 +175,86 @@ func (q *Query) One(outputArgs ...any) error {
 	}
 	iter.Decode(outputArgs...)
 	return iter.Close()
+}
+
+// All iterates over the query and decodes all rows into the provided slices.
+//
+// For example:
+//
+//	var pslice []Person
+//	var aslice []*Address
+//	err := query.All(&pslice, &aslice)
+//
+// sliceArgs must contain pointers to slices of each of the output types.
+func (q *Query) All(sliceArgs ...any) (err error) {
+	if q.err != nil {
+		return q.err
+	}
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("cannot populate slice: %s", err)
+		}
+	}()
+
+	// Check slice inputs
+	var slicePtrVals = []reflect.Value{}
+	var sliceVals = []reflect.Value{}
+	for _, ptr := range sliceArgs {
+		ptrVal := reflect.ValueOf(ptr)
+		if ptrVal.Kind() != reflect.Pointer {
+			return fmt.Errorf("need pointer to slice, got %s", ptrVal.Kind())
+		}
+		if ptrVal.IsNil() {
+			return fmt.Errorf("need pointer to slice, got nil")
+		}
+		slicePtrVals = append(slicePtrVals, ptrVal)
+		sliceVal := ptrVal.Elem()
+		if sliceVal.Kind() != reflect.Slice {
+			return fmt.Errorf("need pointer to slice, got pointer to %s", sliceVal.Kind())
+		}
+		sliceVals = append(sliceVals, sliceVal)
+	}
+
+	iter := q.Iter()
+	for iter.Next() {
+		var outputArgs = []any{}
+		for _, sliceVal := range sliceVals {
+			elemType := sliceVal.Type().Elem()
+			var outputArg reflect.Value
+			switch elemType.Kind() {
+			case reflect.Pointer:
+				outputArg = reflect.New(elemType.Elem())
+			case reflect.Struct:
+				outputArg = reflect.New(elemType)
+			default:
+				iter.Close()
+				return fmt.Errorf("need slice of struct, got slice of %s", elemType.Kind())
+			}
+			outputArgs = append(outputArgs, outputArg.Interface())
+		}
+		if !iter.Decode(outputArgs...) {
+			break
+		}
+		for i, outputArg := range outputArgs {
+			switch k := sliceVals[i].Type().Elem().Kind(); k {
+			case reflect.Pointer:
+				sliceVals[i] = reflect.Append(sliceVals[i], reflect.ValueOf(outputArg))
+			case reflect.Struct:
+				sliceVals[i] = reflect.Append(sliceVals[i], reflect.ValueOf(outputArg).Elem())
+			default:
+				iter.Close()
+				return fmt.Errorf("internal error: output arg has unexpected kind %s", k)
+			}
+		}
+	}
+	err = iter.Close()
+	if err != nil {
+		return err
+	}
+
+	for i, ptrVal := range slicePtrVals {
+		ptrVal.Elem().Set(sliceVals[i])
+	}
+
+	return nil
 }
