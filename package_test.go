@@ -94,7 +94,7 @@ DROP TABLE address;
 	return dropTables, db, nil
 }
 
-func (s *PackageSuite) TestValidDecode(c *C) {
+func (s *PackageSuite) TestValidIter(c *C) {
 	var tests = []struct {
 		summary  string
 		query    string
@@ -165,9 +165,7 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 	tests = append(tests, testsWithShadowPerson...)
 
 	dropTables, sqldb, err := personAndAddressDB()
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
 
@@ -205,12 +203,10 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 	}
 
 	_, err = db.PlainDB().Exec(dropTables)
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 }
 
-func (s *PackageSuite) TestDecodeErrors(c *C) {
+func (s *PackageSuite) TestIterErrors(c *C) {
 	var tests = []struct {
 		summary string
 		query   string
@@ -266,13 +262,11 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{&Person{}, &Person{}}},
-		err:     `cannot decode result: type "Person" provided more than once, rename one of them`,
+		err:     `cannot decode result: type "Person" provided more than once`,
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
 
@@ -302,9 +296,7 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 	}
 
 	_, err = db.PlainDB().Exec(dropTables)
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 }
 
 func (s *PackageSuite) TestValidOne(c *C) {
@@ -332,9 +324,7 @@ func (s *PackageSuite) TestValidOne(c *C) {
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
 
@@ -358,9 +348,7 @@ func (s *PackageSuite) TestValidOne(c *C) {
 	}
 
 	_, err = db.PlainDB().Exec(dropTables)
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 }
 
 func (s *PackageSuite) TestOneErrors(c *C) {
@@ -381,9 +369,7 @@ func (s *PackageSuite) TestOneErrors(c *C) {
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
 
@@ -400,16 +386,12 @@ func (s *PackageSuite) TestOneErrors(c *C) {
 	}
 
 	_, err = db.PlainDB().Exec(dropTables)
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 }
 
 func (s *PackageSuite) TestErrNoRows(c *C) {
 	dropTables, sqldb, err := personAndAddressDB()
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
 	stmt := sqlair.MustPrepare("SELECT * AS &Person.* FROM person WHERE id=12312", Person{})
@@ -422,9 +404,7 @@ func (s *PackageSuite) TestErrNoRows(c *C) {
 	}
 
 	_, err = db.PlainDB().Exec(dropTables)
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 }
 
 func (s *PackageSuite) TestValidAll(c *C) {
@@ -473,9 +453,7 @@ func (s *PackageSuite) TestValidAll(c *C) {
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
 
@@ -499,9 +477,7 @@ func (s *PackageSuite) TestValidAll(c *C) {
 	}
 
 	_, err = db.PlainDB().Exec(dropTables)
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 }
 
 func (s *PackageSuite) TestAllErrors(c *C) {
@@ -557,9 +533,7 @@ func (s *PackageSuite) TestAllErrors(c *C) {
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
 
@@ -576,9 +550,7 @@ func (s *PackageSuite) TestAllErrors(c *C) {
 	}
 
 	_, err = db.PlainDB().Exec(dropTables)
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 }
 
 type JujuLeaseKey struct {
@@ -650,9 +622,7 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 	}}
 
 	dropTables, sqldb, err := JujuStoreLeaseDB()
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
 
@@ -684,7 +654,5 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 	}
 
 	_, err = db.PlainDB().Exec(dropTables)
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 }

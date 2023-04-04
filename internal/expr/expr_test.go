@@ -409,9 +409,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	for i, test := range tests {
 		parser := expr.NewParser()
 		parsedExpr, err := parser.Parse(test.query)
-		if err != nil {
-			c.Fatal(err)
-		}
+		c.Assert(err, IsNil)
 		_, err = parsedExpr.Prepare(test.prepareArgs...)
 		if err != nil {
 			c.Assert(err.Error(), Equals, test.err,
@@ -447,19 +445,13 @@ func (s *ExprSuite) TestValidQuery(c *C) {
 	for _, t := range tests {
 		parser := expr.NewParser()
 		parsedExpr, err := parser.Parse(t.query)
-		if err != nil {
-			c.Fatal(err)
-		}
+		c.Assert(err, IsNil)
 
 		preparedExpr, err := parsedExpr.Prepare(t.prepareArgs...)
-		if err != nil {
-			c.Fatal(err)
-		}
+		c.Assert(err, IsNil)
 
 		query, err := preparedExpr.Query(t.queryArgs...)
-		if err != nil {
-			c.Fatal(err)
-		}
+		c.Assert(err, IsNil)
 
 		c.Assert(query.QueryArgs(), DeepEquals, t.queryValues)
 	}
@@ -505,7 +497,7 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $Person.id, y = $Person.name",
 		prepareArgs: []any{Person{}},
 		queryArgs:   []any{Person{}, Person{}},
-		err:         `invalid input parameter: type "Person" provided more than once, rename one of them`,
+		err:         `invalid input parameter: type "Person" provided more than once`,
 	}}
 
 	outerP := Person{}
@@ -534,14 +526,10 @@ func (s *ExprSuite) TestQueryError(c *C) {
 	for i, t := range tests {
 		parser := expr.NewParser()
 		parsedExpr, err := parser.Parse(t.query)
-		if err != nil {
-			c.Fatal(err)
-		}
+		c.Assert(err, IsNil)
 
 		preparedExpr, err := parsedExpr.Prepare(t.prepareArgs...)
-		if err != nil {
-			c.Fatal(err)
-		}
+		c.Assert(err, IsNil)
 
 		_, err = preparedExpr.Query(t.queryArgs...)
 		c.Assert(err, ErrorMatches, t.err,

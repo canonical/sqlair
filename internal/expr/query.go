@@ -54,7 +54,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 			return nil, fmt.Errorf("need struct, got %s", t.Kind())
 		}
 		if _, ok := typeValue[t]; ok {
-			return nil, fmt.Errorf("type %q provided more than once, rename one of them", t.Name())
+			return nil, fmt.Errorf("type %q provided more than once", t.Name())
 		}
 		typeValue[t] = v
 		typeNames = append(typeNames, t.Name())
@@ -128,7 +128,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, error)
 			return nil, fmt.Errorf("type %q does not appear in query, have: %s", t.Name(), strings.Join(typesInQuery, ", "))
 		}
 		if _, ok := typeDest[t]; ok {
-			return nil, fmt.Errorf("type %q provided more than once, rename one of them", t.Name())
+			return nil, fmt.Errorf("type %q provided more than once", t.Name())
 		}
 		typeDest[t] = outputVal
 	}
