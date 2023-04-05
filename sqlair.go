@@ -81,6 +81,9 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 
 	qe, err := s.pe.Query(inputArgs...)
 	q := func() (*sql.Rows, error) {
+		if err != nil {
+			return nil, err
+		}
 		return db.db.QueryContext(ctx, qe.QuerySQL(), qe.QueryArgs()...)
 	}
 	return &Query{qe: qe, q: q, err: err}
@@ -129,10 +132,12 @@ func (iter *Iterator) Decode(outputArgs ...any) (ok bool) {
 
 	ptrs, err := iter.qe.ScanArgs(iter.cols, outputArgs)
 	if err != nil {
+		iter.rows.Close()
 		iter.err = err
 		return false
 	}
 	if err := iter.rows.Scan(ptrs...); err != nil {
+		iter.rows.Close()
 		iter.err = err
 		return false
 	}
@@ -156,6 +161,9 @@ func (iter *Iterator) Close() error {
 func (q *Query) One(outputArgs ...any) error {
 	iter := q.Iter()
 	if !iter.Next() {
+		if iter.err != nil {
+			return iter.err
+		}
 		return ErrNoRows
 	}
 	iter.Decode(outputArgs...)

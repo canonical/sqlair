@@ -366,6 +366,13 @@ func (s *PackageSuite) TestOneErrors(c *C) {
 		inputs:  []any{},
 		outputs: []any{&Person{}},
 		err:     "sql: no rows in result set",
+	}, {
+		summary: "missing parameter",
+		query:   "SELECT * AS &Person.* FROM person WHERE id = $Person.id",
+		types:   []any{Person{}},
+		inputs:  []any{},
+		outputs: []any{&Person{}},
+		err:     `invalid input parameter: type "Person" not passed as a parameter`,
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()
@@ -547,6 +554,93 @@ func (s *PackageSuite) TestAllErrors(c *C) {
 		err = db.Query(nil, stmt, t.inputs...).All(t.slices...)
 		c.Assert(err, ErrorMatches, t.err,
 			Commentf("\ntest %q failed:\ninput: %s\nslices: %s", t.summary, t.query, t.slices))
+	}
+
+	_, err = db.PlainDB().Exec(dropTables)
+	c.Assert(err, IsNil)
+}
+
+func (s *PackageSuite) TestIterMethodOrder(c *C) {
+	dropTables, sqldb, err := personAndAddressDB()
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	db := sqlair.NewDB(sqldb)
+
+	var p = Person{}
+	stmt := sqlair.MustPrepare("SELECT &Person.* FROM person", Person{})
+
+	// Check immidiate Decode.
+	iter := db.Query(nil, stmt).Iter()
+	if iter.Decode(&p) {
+		c.Fatal("expected false, got true")
+	}
+	err = iter.Close()
+	c.Assert(err, ErrorMatches, "cannot decode result: sql: Scan called without calling Next")
+
+	// Check Next after closing.
+	iter = db.Query(nil, stmt).Iter()
+	err = iter.Close()
+	c.Assert(err, IsNil)
+	if iter.Next() {
+		c.Fatal("expected false, got true")
+	}
+	err = iter.Close()
+	c.Assert(err, IsNil)
+
+	// Check Decode after closing.
+	iter = db.Query(nil, stmt).Iter()
+	err = iter.Close()
+	c.Assert(err, IsNil)
+	if iter.Decode(&p) {
+		c.Fatal("expected false, got true")
+	}
+	err = iter.Close()
+	c.Assert(err, ErrorMatches, "cannot decode result: iteration ended or not started")
+
+	// Check multiple closes.
+	iter = db.Query(nil, stmt).Iter()
+	err = iter.Close()
+	c.Assert(err, IsNil)
+	err = iter.Close()
+	c.Assert(err, IsNil)
+
+	// Check SQL Scan error (scanning string into an int).
+	badTypesStmt := sqlair.MustPrepare("SELECT name AS &Person.id FROM person", Person{})
+	iter = db.Query(nil, badTypesStmt).Iter()
+	if !iter.Next() {
+		c.Fatal("expected true, got false")
+	}
+	// SQL scan error, try to
+	if iter.Decode(&p) {
+		c.Fatal("expected false, got true")
+	}
+	err = iter.Close()
+	c.Assert(err, ErrorMatches, `cannot decode result: sql: Scan error on column index 0, name "_sqlair_0": converting driver.Value type string \("Fred"\) to a int: invalid syntax`)
+
+	// Check rows close properly if we get a decode error.
+	// If they do not close properly we will not be able to
+	// drop the table as the connection will not be closed.
+
+	// SQLair error in decode
+	iter = db.Query(nil, stmt).Iter()
+	if !iter.Next() {
+		c.Fatal("expected true, got false")
+	}
+	// Decode is missing output struct (SQLair throws an error).
+	if iter.Decode() {
+		c.Fatal("expected false, got true")
+	}
+
+	// SQL error in decode
+	iter = db.Query(nil, badTypesStmt).Iter()
+	if !iter.Next() {
+		c.Fatal("expected true, got false")
+	}
+	// SQL scan error, try to scan string into an int.
+	if iter.Decode(&p) {
+		c.Fatal("expected false, got true")
 	}
 
 	_, err = db.PlainDB().Exec(dropTables)
