@@ -129,10 +129,12 @@ func (iter *Iterator) Decode(outputArgs ...any) (ok bool) {
 
 	ptrs, err := iter.qe.ScanArgs(iter.cols, outputArgs)
 	if err != nil {
+		iter.rows.Close()
 		iter.err = err
 		return false
 	}
 	if err := iter.rows.Scan(ptrs...); err != nil {
+		iter.rows.Close()
 		iter.err = err
 		return false
 	}
