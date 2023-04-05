@@ -1,7 +1,6 @@
 package expr_test
 
 import (
-	"context"
 	"database/sql"
 	"testing"
 
@@ -457,7 +456,7 @@ func (s *ExprSuite) TestValidQuery(c *C) {
 			c.Fatal(err)
 		}
 
-		query, err := preparedExpr.Query(context.Background(), t.queryArgs...)
+		query, err := preparedExpr.Query(t.queryArgs...)
 		if err != nil {
 			c.Fatal(err)
 		}
@@ -544,7 +543,7 @@ func (s *ExprSuite) TestQueryError(c *C) {
 			c.Fatal(err)
 		}
 
-		_, err = preparedExpr.Query(context.Background(), t.queryArgs...)
+		_, err = preparedExpr.Query(t.queryArgs...)
 		c.Assert(err, ErrorMatches, t.err,
 			Commentf("test %d failed:\ninput: %s", i, t.query))
 	}
