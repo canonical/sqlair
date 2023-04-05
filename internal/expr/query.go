@@ -134,6 +134,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, error)
 	}
 
 	var ptrs = []any{}
+	var columnInResult = make(map[int]bool)
 	for _, column := range columns {
 		idx, ok := markerIndex(column)
 		if !ok {
@@ -145,6 +146,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, error)
 		if idx >= len(qe.outputs) {
 			return nil, fmt.Errorf("internal error: sqlair column not in outputs (%d>=%d)", idx, len(qe.outputs))
 		}
+		columnInResult[idx] = true
 		field := qe.outputs[idx]
 		outputVal, ok := typeDest[field.structType]
 		if !ok {
@@ -156,6 +158,11 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, error)
 			return nil, fmt.Errorf("internal error: cannot set field %s of struct %s", field.name, field.structType.Name())
 		}
 		ptrs = append(ptrs, val.Addr().Interface())
+	}
+	for i := 0; i < len(qe.outputs); i++ {
+		if !columnInResult[i] {
+			return nil, fmt.Errorf("column for %s.%s not found in results", qe.outputs[i].structType.Name(), qe.outputs[i].tag)
+		}
 	}
 	return ptrs, nil
 }

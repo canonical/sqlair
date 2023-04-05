@@ -263,6 +263,18 @@ func (s *PackageSuite) TestIterErrors(c *C) {
 		inputs:  []any{},
 		outputs: [][]any{{&Person{}, &Person{}}},
 		err:     `cannot decode result: type "Person" provided more than once`,
+	}, {
+		summary: "output expr in a with clause",
+		query: `WITH averageID(avgid) AS
+  (SELECT &Person.id
+   FROM person)
+  SELECT id
+  FROM person, averageID
+  WHERE id > averageID.avgid`,
+		types:   []any{Person{}},
+		inputs:  []any{},
+		outputs: [][]any{{&Person{}}},
+		err:     "cannot decode result: column for Person.id not found in results",
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()

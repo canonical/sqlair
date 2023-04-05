@@ -8,6 +8,8 @@ import (
 type field struct {
 	name string
 
+	tag string
+
 	// The type of the containing struct.
 	structType reflect.Type
 
