@@ -1,7 +1,6 @@
 package expr
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"reflect"
@@ -21,8 +20,6 @@ type QueryExpr struct {
 	sql     string
 	args    []any
 	outputs []field
-
-	ctx context.Context
 }
 
 // Query returns a query expression ready for execution, using the provided values to
