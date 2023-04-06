@@ -204,7 +204,7 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 
 	}
 
-	_, err = db.PlainDB().Exec(dropTables)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -304,7 +304,7 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 		}
 	}
 
-	_, err = db.PlainDB().Exec(dropTables)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -360,7 +360,7 @@ func (s *PackageSuite) TestValidOne(c *C) {
 		}
 	}
 
-	_, err = db.PlainDB().Exec(dropTables)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -402,7 +402,7 @@ func (s *PackageSuite) TestOneErrors(c *C) {
 			Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
 	}
 
-	_, err = db.PlainDB().Exec(dropTables)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -424,7 +424,7 @@ func (s *PackageSuite) TestErrNoRows(c *C) {
 		c.Errorf("test failed, error %q not the same as %q", err, sql.ErrNoRows)
 	}
 
-	_, err = db.PlainDB().Exec(dropTables)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -501,7 +501,7 @@ func (s *PackageSuite) TestValidAll(c *C) {
 		}
 	}
 
-	_, err = db.PlainDB().Exec(dropTables)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -578,10 +578,121 @@ func (s *PackageSuite) TestAllErrors(c *C) {
 			Commentf("\ntest %q failed:\ninput: %s\nslices: %s", t.summary, t.query, t.slices))
 	}
 
-	_, err = db.PlainDB().Exec(dropTables)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	if err != nil {
 		c.Fatal(err)
 	}
+}
+
+func (s *PackageSuite) TestRun(c *C) {
+	dropTables, sqldb, err := personAndAddressDB()
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	var jim = Person{
+		ID:         70,
+		Fullname:   "Jim",
+		PostalCode: 500,
+	}
+
+	db := sqlair.NewDB(sqldb)
+
+	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
+	err = db.Query(nil, insertStmt, &jim).Run()
+	c.Assert(err, IsNil)
+
+	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE id = $Person.id", Person{})
+	var jimCheck = Person{}
+	err = db.Query(nil, selectStmt, &jim).One(&jimCheck)
+	c.Assert(err, IsNil)
+	c.Assert(jimCheck, Equals, jim)
+
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
+}
+
+func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
+	allOutput := &[]*Person{}
+	allExpected := &[]*Person{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "James", 4500}}
+
+	iterOutputs := []any{&Person{}, &Person{}, &Person{}, &Person{}}
+	iterExpected := []any{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "James", 4500}}
+
+	oneOutput := &Person{}
+	oneExpected := &Person{30, "Fred", 1000}
+
+	dropTables, sqldb, err := personAndAddressDB()
+	c.Assert(err, IsNil)
+
+	db := sqlair.NewDB(sqldb)
+	stmt := sqlair.MustPrepare("SELECT &Person.* FROM person", Person{})
+
+	// Run different Query methods.
+	q := db.Query(nil, stmt)
+	err = q.One(oneOutput)
+	c.Assert(err, IsNil)
+	c.Assert(oneExpected, DeepEquals, oneOutput)
+
+	err = q.All(allOutput)
+	c.Assert(err, IsNil)
+	c.Assert(allOutput, DeepEquals, allExpected)
+
+	err = q.Run()
+	c.Assert(err, IsNil)
+
+	iter := q.Iter()
+	i := 0
+	for iter.Next() {
+		if i >= len(iterOutputs) {
+			c.Fatalf("expected %d rows, got more", len(iterOutputs))
+		}
+		if err := iter.Decode(iterOutputs[i]); err != nil {
+			iter.Close()
+			c.Fatal(err)
+		}
+		i++
+	}
+	err = iter.Close()
+	c.Assert(err, IsNil)
+	c.Assert(iterOutputs, DeepEquals, iterExpected)
+
+	// Run them all again for good measure.
+	allOutput = &[]*Person{}
+	iterOutputs = []any{&Person{}, &Person{}, &Person{}, &Person{}}
+	oneOutput = &Person{}
+
+	err = q.All(allOutput)
+	c.Assert(err, IsNil)
+	c.Assert(allOutput, DeepEquals, allExpected)
+
+	iter = q.Iter()
+	i = 0
+	for iter.Next() {
+		if i >= len(iterOutputs) {
+			c.Fatalf("expected %d rows, got more", len(iterOutputs))
+		}
+		if err := iter.Decode(iterOutputs[i]); err != nil {
+			iter.Close()
+			c.Fatal(err)
+		}
+		i++
+	}
+	err = iter.Close()
+	c.Assert(err, IsNil)
+	c.Assert(iterOutputs, DeepEquals, iterExpected)
+
+	q = db.Query(nil, stmt)
+	err = q.One(oneOutput)
+	c.Assert(err, IsNil)
+	c.Assert(oneExpected, DeepEquals, oneOutput)
+
+	err = q.Run()
+	c.Assert(err, IsNil)
+
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
+
 }
 
 type JujuLeaseKey struct {
@@ -745,7 +856,7 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 		}
 	}
 
-	_, err = db.PlainDB().Exec(dropTables)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	if err != nil {
 		c.Fatal(err)
 	}

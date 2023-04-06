@@ -56,12 +56,19 @@ func (db *DB) PlainDB() *sql.DB {
 	return db.db
 }
 
+// querySubstrate abstracts the different surfaces that the query can be run on.
+// For example, the database or a transaction.
+type querySubstrate interface {
+	QueryContext(ctx context.Context, sql string, args ...any) (*sql.Rows, error)
+	ExecContext(ctx context.Context, sql string, args ...any) (sql.Result, error)
+}
+
 // Query holds the results of a database query.
 type Query struct {
-	qe   *expr.QueryExpr
-	q    func() (*sql.Rows, error)
-	rows *sql.Rows
-	err  error
+	qe  *expr.QueryExpr
+	qs  querySubstrate
+	ctx context.Context
+	err error
 }
 
 // Iterator is used to iterate over the results of the query.
@@ -80,15 +87,29 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 	}
 
 	qe, err := s.pe.Query(inputArgs...)
-	q := func() (*sql.Rows, error) {
-		return db.db.QueryContext(ctx, qe.QuerySQL(), qe.QueryArgs()...)
+	return &Query{qs: db.db, qe: qe, err: err, ctx: ctx}
+}
+
+// Run will execute the query.
+// Any rows returned by the query are ignored.
+func (q *Query) Run() error {
+	if q.err != nil {
+		return q.err
 	}
-	return &Query{qe: qe, q: q, err: err}
+	_, err := q.qs.ExecContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // Iter returns an Iterator to iterate through the results row by row.
 func (q *Query) Iter() *Iterator {
-	rows, err := q.q()
+	if q.err != nil {
+		return &Iterator{err: q.err}
+	}
+
+	rows, err := q.qs.QueryContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
 	if err != nil {
 		return &Iterator{err: err}
 	}
@@ -152,14 +173,14 @@ func (iter *Iterator) Close() error {
 // One runs a query and decodes the first row into outputArgs.
 func (q *Query) One(outputArgs ...any) error {
 	iter := q.Iter()
-	if !iter.Next() {
-		return ErrNoRows
+	err := ErrNoRows
+	if iter.Next() {
+		err = iter.Decode(outputArgs...)
 	}
-	err := iter.Decode(outputArgs...)
-	if err != nil {
-		return err
+	if cerr := iter.Close(); cerr != nil {
+		return cerr
 	}
-	return iter.Close()
+	return err
 }
 
 // All iterates over the query and decodes all rows into the provided slices.
