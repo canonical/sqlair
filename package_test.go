@@ -185,8 +185,8 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d >= %d)\n", t.summary, t.query, i, len(t.outputs))
 				break
 			}
-			if !iter.Decode(t.outputs[i]...) {
-				break
+			if err := iter.Decode(t.outputs[i]...); err != nil {
+				c.Errorf("\ntest %q failed (Decode):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
 			}
 			i++
 		}
@@ -286,19 +286,22 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 		iter := db.Query(nil, stmt, t.inputs...).Iter()
 		i := 0
 		for iter.Next() {
-			if i > len(t.outputs) {
+			if i >= len(t.outputs) {
 				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected\n", t.summary, t.query)
 				break
 			}
-			if !iter.Decode(t.outputs[i]...) {
+			if err := iter.Decode(t.outputs[i]...); err != nil {
+				c.Assert(err, ErrorMatches, t.err,
+					Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
+				iter.Close()
 				break
 			}
 			i++
 		}
-
 		err = iter.Close()
-		c.Assert(err, ErrorMatches, t.err,
-			Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
+		if err != nil {
+			c.Errorf("\ntest %q failed (Close):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+		}
 	}
 
 	_, err = db.PlainDB().Exec(dropTables)
@@ -641,11 +644,10 @@ func (s *PackageSuite) TestIterMethodOrder(c *C) {
 
 	// Check immidiate Decode.
 	iter := db.Query(nil, stmt).Iter()
-	if iter.Decode(&p) {
-		c.Fatal("expected false, got true")
-	}
-	err = iter.Close()
+	err = iter.Decode(&p)
 	c.Assert(err, ErrorMatches, "cannot decode result: sql: Scan called without calling Next")
+	err = iter.Close()
+	c.Assert(err, IsNil)
 
 	// Check Next after closing.
 	iter = db.Query(nil, stmt).Iter()
@@ -661,11 +663,10 @@ func (s *PackageSuite) TestIterMethodOrder(c *C) {
 	iter = db.Query(nil, stmt).Iter()
 	err = iter.Close()
 	c.Assert(err, IsNil)
-	if iter.Decode(&p) {
-		c.Fatal("expected false, got true")
-	}
-	err = iter.Close()
+	err = iter.Decode(&p)
 	c.Assert(err, ErrorMatches, "cannot decode result: iteration ended or not started")
+	err = iter.Close()
+	c.Assert(err, IsNil)
 
 	// Check multiple closes.
 	iter = db.Query(nil, stmt).Iter()
@@ -680,36 +681,10 @@ func (s *PackageSuite) TestIterMethodOrder(c *C) {
 	if !iter.Next() {
 		c.Fatal("expected true, got false")
 	}
-	// SQL scan error, try to
-	if iter.Decode(&p) {
-		c.Fatal("expected false, got true")
-	}
-	err = iter.Close()
+	err = iter.Decode(&p)
 	c.Assert(err, ErrorMatches, `cannot decode result: sql: Scan error on column index 0, name "_sqlair_0": converting driver.Value type string \("Fred"\) to a int: invalid syntax`)
-
-	// Check rows close properly if we get a decode error.
-	// If they do not close properly we will not be able to
-	// drop the table as the connection will not be closed.
-
-	// SQLair error in decode
-	iter = db.Query(nil, stmt).Iter()
-	if !iter.Next() {
-		c.Fatal("expected true, got false")
-	}
-	// Decode is missing output struct (SQLair throws an error).
-	if iter.Decode() {
-		c.Fatal("expected false, got true")
-	}
-
-	// SQL error in decode
-	iter = db.Query(nil, badTypesStmt).Iter()
-	if !iter.Next() {
-		c.Fatal("expected true, got false")
-	}
-	// SQL scan error, try to scan string into an int.
-	if iter.Decode(&p) {
-		c.Fatal("expected false, got true")
-	}
+	err = iter.Close()
+	c.Assert(err, IsNil)
 
 	_, err = db.PlainDB().Exec(dropTables)
 	c.Assert(err, IsNil)
@@ -758,8 +733,8 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d > %d)\n", t.summary, t.query, i+1, len(t.outputs))
 				break
 			}
-			if !iter.Decode(t.outputs[i]...) {
-				break
+			if err := iter.Decode(t.outputs[i]...); err != nil {
+				c.Errorf("\ntest %q failed (Decode):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
 			}
 			i++
 		}
