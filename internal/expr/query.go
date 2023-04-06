@@ -1,7 +1,6 @@
 package expr
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"reflect"
@@ -17,16 +16,10 @@ func (qe *QueryExpr) QueryArgs() []any {
 	return qe.args
 }
 
-func (qe *QueryExpr) QueryContext() context.Context {
-	return qe.ctx
-}
-
 type QueryExpr struct {
 	sql     string
 	args    []any
 	outputs []field
-
-	ctx context.Context
 }
 
 // Query returns a query expression ready for execution, using the provided values to
@@ -36,7 +29,7 @@ type QueryExpr struct {
 //	type Person struct {
 //	        Name string `db:"fullname"`
 //	}
-func (pe *PreparedExpr) Query(ctx context.Context, args ...any) (ce *QueryExpr, err error) {
+func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("invalid input parameter: %s", err)
@@ -93,7 +86,7 @@ func (pe *PreparedExpr) Query(ctx context.Context, args ...any) (ce *QueryExpr, 
 		qargs = append(qargs, named)
 	}
 
-	return &QueryExpr{ctx: ctx, outputs: pe.outputs, sql: pe.sql, args: qargs}, nil
+	return &QueryExpr{outputs: pe.outputs, sql: pe.sql, args: qargs}, nil
 }
 
 // ScanArgs returns list of pointers to the struct fields that are listed in qe.outputs.

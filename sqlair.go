@@ -67,8 +67,9 @@ type querySubstrate interface {
 type Query struct {
 	qe      *expr.QueryExpr
 	qs      querySubstrate
-	err     error
+	ctx     context.Context
 	outcome *Outcome
+	err     error
 }
 
 // Iterator is used to iterate over the results of the query.
@@ -93,8 +94,8 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 			inputArgs = inputArgs[1:]
 		}
 	}
-	qe, err := s.pe.Query(ctx, inputArgs...)
-	return &Query{qs: db.db, qe: qe, outcome: outcome, err: err}
+	qe, err := s.pe.Query(inputArgs...)
+	return &Query{qs: db.db, qe: qe, ctx: ctx, outcome: outcome, err: err}
 }
 
 // Run will execute the query.
@@ -103,16 +104,14 @@ func (q *Query) Run() error {
 	if q.err != nil {
 		return q.err
 	}
-	res, err := q.qs.ExecContext(q.qe.QueryContext(), q.qe.QuerySQL(), q.qe.QueryArgs()...)
+	res, err := q.qs.ExecContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
 	if err != nil {
 		return err
 	}
 	if q.outcome != nil {
 		q.outcome.result = res
 	}
-	if q.outcome != nil {
-		q.outcome.result = res
-	}
+
 	return nil
 }
 
@@ -122,7 +121,7 @@ func (q *Query) Iter() *Iterator {
 		return &Iterator{err: q.err}
 	}
 
-	rows, err := q.qs.QueryContext(q.qe.QueryContext(), q.qe.QuerySQL(), q.qe.QueryArgs()...)
+	rows, err := q.qs.QueryContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
 	if err != nil {
 		return &Iterator{err: err}
 	}
@@ -198,15 +197,16 @@ func (o *Outcome) Result() sql.Result {
 
 // One runs a query and decodes the first row into outputArgs.
 func (q *Query) One(outputArgs ...any) error {
+	err := ErrNoRows
 	iter := q.Iter()
-	if !iter.Next() {
-		if iter.err != nil {
-			return iter.Close()
-		}
-		return ErrNoRows
+	if iter.Next() {
+		iter.Decode(outputArgs...)
+		err = nil
 	}
-	iter.Decode(outputArgs...)
-	return iter.Close()
+	if cerr := iter.Close(); cerr != nil {
+		return cerr
+	}
+	return err
 }
 
 // All iterates over the query and decodes all rows into the provided slices.
