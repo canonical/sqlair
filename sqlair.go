@@ -103,6 +103,20 @@ func (q *Query) Run() error {
 	return nil
 }
 
+func (db *DB) RunQuery(ctx context.Context, query string, inputArgs ...any) error {
+	// Deference input args to use as type samples in prepare
+	var prepArgs = []any{}
+	for _, inputArg := range inputArgs {
+		prepArgs = append(prepArgs, reflect.Indirect(reflect.ValueOf(inputArg)).Interface())
+	}
+
+	stmt, err := Prepare(query, prepArgs...)
+	if err != nil {
+		return err
+	}
+	return db.Query(ctx, stmt, inputArgs...).Run()
+}
+
 // Iter returns an Iterator to iterate through the results row by row.
 func (q *Query) Iter() *Iterator {
 	if q.err != nil {

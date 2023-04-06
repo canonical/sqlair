@@ -687,7 +687,46 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 
 	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	c.Assert(err, IsNil)
+}
 
+func (s *PackageSuite) TestRunQuery(c *C) {
+	dropTables, sqldb, err := personAndAddressDB()
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	var jim = Person{
+		ID:         70,
+		Fullname:   "Jim",
+		PostalCode: 500,
+	}
+
+	var clive = Person{
+		ID:         90,
+		Fullname:   "Clive",
+		PostalCode: 510,
+	}
+
+	db := sqlair.NewDB(sqldb)
+
+	err = db.RunQuery(nil, "INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", &jim)
+	c.Assert(err, IsNil)
+
+	err = db.RunQuery(nil, "INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'clive@email.com');", clive)
+	c.Assert(err, IsNil)
+
+	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE id = $Person.id", Person{})
+	var jimCheck = Person{}
+	err = db.Query(nil, selectStmt, &jim).One(&jimCheck)
+	c.Assert(err, IsNil)
+	c.Assert(jimCheck, Equals, jim)
+	var cliveCheck = Person{}
+	err = db.Query(nil, selectStmt, &clive).One(&cliveCheck)
+	c.Assert(err, IsNil)
+	c.Assert(cliveCheck, Equals, clive)
+
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
 }
 
 type JujuLeaseKey struct {
