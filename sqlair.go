@@ -103,6 +103,7 @@ func (q *Query) Run() error {
 	return nil
 }
 
+// RunQuery is shorthand for preparing a statement, building a query, then doing Query.Run.
 func (db *DB) RunQuery(ctx context.Context, query string, inputArgs ...any) error {
 	// Deference input args to use as type samples in prepare
 	var prepArgs = []any{}
