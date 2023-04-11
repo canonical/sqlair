@@ -99,7 +99,7 @@ func (db *DB) Query(ctx context.Context, s any, inputArgs ...any) *Query {
 	case *Statement:
 		stmt = s
 	default:
-		return &Query{err: fmt.Errorf("unexpected query type")}
+		return &Query{err: fmt.Errorf("unexpected query type %T, expected string or *Statement", s)}
 	}
 
 	if ctx == nil {
@@ -307,16 +307,25 @@ func (db *DB) With(typeSamples ...any) *dbWithSamples {
 
 // Query takes a context, a query string and the structs mentioned in the query arguments.
 // It returns a Query object for iterating over the results.
-func (dbw *dbWithSamples) Query(ctx context.Context, s string, inputArgs ...any) *Query {
-	// Deference input args to use as type samples in prepare
-	var prepArgs = dbw.typeSamples
-	for _, inputArg := range inputArgs {
-		prepArgs = append(prepArgs, reflect.Indirect(reflect.ValueOf(inputArg)).Interface())
-	}
+func (dbw *dbWithSamples) Query(ctx context.Context, s any, inputArgs ...any) *Query {
+	var stmt *Statement
+	var err error
+	switch s := s.(type) {
+	case string:
+		// Deference input args to use as type samples in prepare
+		var prepArgs = dbw.typeSamples
+		for _, inputArg := range inputArgs {
+			prepArgs = append(prepArgs, reflect.Indirect(reflect.ValueOf(inputArg)).Interface())
+		}
 
-	stmt, err := Prepare(s, prepArgs...)
-	if err != nil {
-		return &Query{err: err}
+		stmt, err = Prepare(s, prepArgs...)
+		if err != nil {
+			return &Query{err: err}
+		}
+	case *Statement:
+		stmt = stmt
+	default:
+		return &Query{err: fmt.Errorf("unexpected query type %T, expected string or *Statement", s)}
 	}
 	return dbw.db.Query(ctx, stmt, inputArgs...)
 }
