@@ -1,9 +1,15 @@
 package sqlair_test
 
 import (
+	"context"
 	"database/sql"
 	"errors"
+
+	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/canonical/go-dqlite/app"
 
 	_ "github.com/mattn/go-sqlite3"
 	. "gopkg.in/check.v1"
@@ -18,28 +24,39 @@ type PackageSuite struct{}
 
 var _ = Suite(&PackageSuite{})
 
-func setupDB() (*sql.DB, error) {
-	return sql.Open("sqlite3", ":memory:")
-}
+var dbs = []*sql.DB{}
 
-func createExampleDB(createTables string, inserts []string) (*sql.DB, error) {
-	db, err := setupDB()
+func (s *PackageSuite) SetUpSuite(c *C) {
+	// Setup SQLite database
+	sqlite, err := sql.Open("sqlite3", ":memory:")
 	if err != nil {
-		return nil, err
+		c.Fatal(err)
 	}
 
-	_, err = db.Exec(createTables)
+	dbs = append(dbs, sqlite)
+
+	// Setup DQLite database
+	var db_address = "127.0.0.1:9001"
+	var dir = "/tmp/dqlite-test"
+	dir = filepath.Join(dir, db_address)
+	err = os.MkdirAll(dir, 0755)
 	if err != nil {
-		return nil, err
+		c.Fatalf("can't create %s", dir)
 	}
-	for _, insert := range inserts {
-		_, err := db.Exec(insert)
-		if err != nil {
-			return nil, err
-		}
+	options := []app.Option{} //app.WithAddress(db_address)}
+	dqliteApp, err := app.New(dir, options...)
+	if err != nil {
+		c.Fatal(err)
+	}
+	if err := dqliteApp.Ready(context.Background()); err != nil {
+		c.Fatal(err)
 	}
 
-	return db, nil
+	dqlite, err := dqliteApp.Open(context.Background(), "test_db")
+	if err != nil {
+		c.Fatal(err)
+	}
+	dbs = append(dbs, dqlite)
 }
 
 type Address struct {
@@ -58,7 +75,7 @@ type Manager Person
 
 type District struct{}
 
-func personAndAddressDB() (string, *sql.DB, error) {
+func buildPersonAndAddressSchema(db *sql.DB) (string, error) {
 	createTables := `
 CREATE TABLE person (
 	name text,
@@ -87,11 +104,17 @@ DROP TABLE address;
 		"INSERT INTO address VALUES (3500, 'Ambivalent Commons', 'Station Lane');",
 	}
 
-	db, err := createExampleDB(createTables, inserts)
+	_, err := db.Exec(createTables)
 	if err != nil {
-		return "", nil, err
+		return "", err
 	}
-	return dropTables, db, nil
+	for _, insert := range inserts {
+		_, err := db.Exec(insert)
+		if err != nil {
+			return "", err
+		}
+	}
+	return dropTables, nil
 }
 
 func (s *PackageSuite) TestValidDecode(c *C) {
@@ -164,49 +187,53 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 
 	tests = append(tests, testsWithShadowPerson...)
 
-	dropTables, sqldb, err := personAndAddressDB()
-	if err != nil {
-		c.Fatal(err)
-	}
-
-	db := sqlair.NewDB(sqldb)
-
-	for _, t := range tests {
-		stmt, err := sqlair.Prepare(t.query, t.types...)
+	var dropTables string
+	var err error
+	for _, sqldb := range dbs {
+		dropTables, err = buildPersonAndAddressSchema(sqldb)
 		if err != nil {
-			c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			continue
+			c.Fatal(err)
 		}
 
-		iter := db.Query(nil, stmt, t.inputs...).Iter()
-		i := 0
-		for iter.Next() {
-			if i >= len(t.outputs) {
-				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d >= %d)\n", t.summary, t.query, i, len(t.outputs))
-				break
+		db := sqlair.NewDB(sqldb)
+
+		for _, t := range tests {
+			stmt, err := sqlair.Prepare(t.query, t.types...)
+			if err != nil {
+				c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+				continue
 			}
-			if !iter.Decode(t.outputs[i]...) {
-				break
+
+			iter := db.Query(nil, stmt, t.inputs...).Iter()
+			i := 0
+			for iter.Next() {
+				if i >= len(t.outputs) {
+					c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d >= %d)\n", t.summary, t.query, i, len(t.outputs))
+					break
+				}
+				if !iter.Decode(t.outputs[i]...) {
+					break
+				}
+				i++
 			}
-			i++
+
+			err = iter.Close()
+			if err != nil {
+				c.Errorf("\ntest %q failed (Close):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+			}
+			for i, row := range t.expected {
+				for j, col := range row {
+					c.Assert(t.outputs[i][j], DeepEquals, col,
+						Commentf("\ntest %q failed:\ninput: %s\nrow: %d\n", t.summary, t.query, i))
+				}
+			}
+
 		}
 
-		err = iter.Close()
+		err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 		if err != nil {
-			c.Errorf("\ntest %q failed (Close):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+			c.Fatal(err)
 		}
-		for i, row := range t.expected {
-			for j, col := range row {
-				c.Assert(t.outputs[i][j], DeepEquals, col,
-					Commentf("\ntest %q failed:\ninput: %s\nrow: %d\n", t.summary, t.query, i))
-			}
-		}
-
-	}
-
-	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
-	if err != nil {
-		c.Fatal(err)
 	}
 }
 
@@ -269,41 +296,45 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 		err:     `cannot decode result: type "Person" provided more than once, rename one of them`,
 	}}
 
-	dropTables, sqldb, err := personAndAddressDB()
-	if err != nil {
-		c.Fatal(err)
-	}
-
-	db := sqlair.NewDB(sqldb)
-
-	for _, t := range tests {
-		stmt, err := sqlair.Prepare(t.query, t.types...)
+	var dropTables string
+	var err error
+	for i, sqldb := range dbs {
+		dropTables, err = buildPersonAndAddressSchema(sqldb)
 		if err != nil {
-			c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			continue
+			c.Fatalf("db is %d, err: %s", i, err)
 		}
 
-		iter := db.Query(nil, stmt, t.inputs...).Iter()
-		i := 0
-		for iter.Next() {
-			if i > len(t.outputs) {
-				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected\n", t.summary, t.query)
-				break
+		db := sqlair.NewDB(sqldb)
+
+		for _, t := range tests {
+			stmt, err := sqlair.Prepare(t.query, t.types...)
+			if err != nil {
+				c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+				continue
 			}
-			if !iter.Decode(t.outputs[i]...) {
-				break
+
+			iter := db.Query(nil, stmt, t.inputs...).Iter()
+			i := 0
+			for iter.Next() {
+				if i > len(t.outputs) {
+					c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected\n", t.summary, t.query)
+					break
+				}
+				if !iter.Decode(t.outputs[i]...) {
+					break
+				}
+				i++
 			}
-			i++
+
+			err = iter.Close()
+			c.Assert(err, ErrorMatches, t.err,
+				Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
 		}
 
-		err = iter.Close()
-		c.Assert(err, ErrorMatches, t.err,
-			Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
-	}
-
-	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
-	if err != nil {
-		c.Fatal(err)
+		err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+		if err != nil {
+			c.Fatal(err)
+		}
 	}
 }
 
@@ -331,35 +362,39 @@ func (s *PackageSuite) TestValidOne(c *C) {
 		expected: []any{&Person{30, "Fred", 1000}, &Address{1000, "Happy Land", "Main Street"}, &Manager{30, "Fred", 1000}},
 	}}
 
-	dropTables, sqldb, err := personAndAddressDB()
-	if err != nil {
-		c.Fatal(err)
-	}
-
-	db := sqlair.NewDB(sqldb)
-
-	for _, t := range tests {
-		stmt, err := sqlair.Prepare(t.query, t.types...)
+	var dropTables string
+	var err error
+	for _, sqldb := range dbs {
+		dropTables, err = buildPersonAndAddressSchema(sqldb)
 		if err != nil {
-			c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			continue
+			c.Fatal(err)
 		}
 
-		q := db.Query(nil, stmt, t.inputs...)
-		err = q.One(t.outputs...)
+		db := sqlair.NewDB(sqldb)
+
+		for _, t := range tests {
+			stmt, err := sqlair.Prepare(t.query, t.types...)
+			if err != nil {
+				c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+				continue
+			}
+
+			q := db.Query(nil, stmt, t.inputs...)
+			err = q.One(t.outputs...)
+			if err != nil {
+				c.Errorf("\ntest %q failed (One):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+				continue
+			}
+			for i, s := range t.expected {
+				c.Assert(t.outputs[i], DeepEquals, s,
+					Commentf("\ntest %q failed:\ninput: %s", t.summary, t.query))
+			}
+		}
+
+		err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 		if err != nil {
-			c.Errorf("\ntest %q failed (One):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			continue
+			c.Fatal(err)
 		}
-		for i, s := range t.expected {
-			c.Assert(t.outputs[i], DeepEquals, s,
-				Commentf("\ntest %q failed:\ninput: %s", t.summary, t.query))
-		}
-	}
-
-	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
-	if err != nil {
-		c.Fatal(err)
 	}
 }
 
@@ -380,50 +415,58 @@ func (s *PackageSuite) TestOneErrors(c *C) {
 		err:     "sql: no rows in result set",
 	}}
 
-	dropTables, sqldb, err := personAndAddressDB()
-	if err != nil {
-		c.Fatal(err)
-	}
-
-	db := sqlair.NewDB(sqldb)
-
-	for _, t := range tests {
-		stmt, err := sqlair.Prepare(t.query, t.types...)
+	var dropTables string
+	var err error
+	for _, sqldb := range dbs {
+		dropTables, err = buildPersonAndAddressSchema(sqldb)
 		if err != nil {
-			c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			continue
+			c.Fatal(err)
 		}
 
-		err = db.Query(nil, stmt, t.inputs...).One(t.outputs...)
-		c.Assert(err, ErrorMatches, t.err,
-			Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
-	}
+		db := sqlair.NewDB(sqldb)
 
-	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
-	if err != nil {
-		c.Fatal(err)
+		for _, t := range tests {
+			stmt, err := sqlair.Prepare(t.query, t.types...)
+			if err != nil {
+				c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+				continue
+			}
+
+			err = db.Query(nil, stmt, t.inputs...).One(t.outputs...)
+			c.Assert(err, ErrorMatches, t.err,
+				Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
+		}
+
+		err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+		if err != nil {
+			c.Fatal(err)
+		}
 	}
 }
 
 func (s *PackageSuite) TestErrNoRows(c *C) {
-	dropTables, sqldb, err := personAndAddressDB()
-	if err != nil {
-		c.Fatal(err)
-	}
+	var dropTables string
+	var err error
+	for _, sqldb := range dbs {
+		dropTables, err = buildPersonAndAddressSchema(sqldb)
+		if err != nil {
+			c.Fatal(err)
+		}
 
-	db := sqlair.NewDB(sqldb)
-	stmt := sqlair.MustPrepare("SELECT * AS &Person.* FROM person WHERE id=12312", Person{})
-	err = db.Query(nil, stmt).One(&Person{})
-	if !errors.Is(err, sqlair.ErrNoRows) {
-		c.Errorf("test failed, error %q not the same as %q", err, sqlair.ErrNoRows)
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		c.Errorf("test failed, error %q not the same as %q", err, sql.ErrNoRows)
-	}
+		db := sqlair.NewDB(sqldb)
+		stmt := sqlair.MustPrepare("SELECT * AS &Person.* FROM person WHERE id=12312", Person{})
+		err = db.Query(nil, stmt).One(&Person{})
+		if !errors.Is(err, sqlair.ErrNoRows) {
+			c.Errorf("test failed, error %q not the same as %q", err, sqlair.ErrNoRows)
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			c.Errorf("test failed, error %q not the same as %q", err, sql.ErrNoRows)
+		}
 
-	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
-	if err != nil {
-		c.Fatal(err)
+		err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+		if err != nil {
+			c.Fatal(err)
+		}
 	}
 }
 
@@ -472,35 +515,39 @@ func (s *PackageSuite) TestValidAll(c *C) {
 		expected: []any{},
 	}}
 
-	dropTables, sqldb, err := personAndAddressDB()
-	if err != nil {
-		c.Fatal(err)
-	}
-
-	db := sqlair.NewDB(sqldb)
-
-	for _, t := range tests {
-		stmt, err := sqlair.Prepare(t.query, t.types...)
+	var dropTables string
+	var err error
+	for _, sqldb := range dbs {
+		dropTables, err = buildPersonAndAddressSchema(sqldb)
 		if err != nil {
-			c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			continue
+			c.Fatal(err)
 		}
 
-		q := db.Query(nil, stmt, t.inputs...)
-		err = q.All(t.slices...)
+		db := sqlair.NewDB(sqldb)
+
+		for _, t := range tests {
+			stmt, err := sqlair.Prepare(t.query, t.types...)
+			if err != nil {
+				c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+				continue
+			}
+
+			q := db.Query(nil, stmt, t.inputs...)
+			err = q.All(t.slices...)
+			if err != nil {
+				c.Errorf("\ntest %q failed (All):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+				continue
+			}
+			for i, column := range t.expected {
+				c.Assert(t.slices[i], DeepEquals, column,
+					Commentf("\ntest %q failed:\ninput: %s", t.summary, t.query))
+			}
+		}
+
+		err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 		if err != nil {
-			c.Errorf("\ntest %q failed (All):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			continue
+			c.Fatal(err)
 		}
-		for i, column := range t.expected {
-			c.Assert(t.slices[i], DeepEquals, column,
-				Commentf("\ntest %q failed:\ninput: %s", t.summary, t.query))
-		}
-	}
-
-	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
-	if err != nil {
-		c.Fatal(err)
 	}
 }
 
@@ -556,57 +603,65 @@ func (s *PackageSuite) TestAllErrors(c *C) {
 		err:     `cannot populate slice: need slice of struct, got slice of int`,
 	}}
 
-	dropTables, sqldb, err := personAndAddressDB()
-	if err != nil {
-		c.Fatal(err)
-	}
-
-	db := sqlair.NewDB(sqldb)
-
-	for _, t := range tests {
-		stmt, err := sqlair.Prepare(t.query, t.types...)
+	var dropTables string
+	var err error
+	for _, sqldb := range dbs {
+		dropTables, err = buildPersonAndAddressSchema(sqldb)
 		if err != nil {
-			c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			continue
+			c.Fatal(err)
 		}
 
-		err = db.Query(nil, stmt, t.inputs...).All(t.slices...)
-		c.Assert(err, ErrorMatches, t.err,
-			Commentf("\ntest %q failed:\ninput: %s\nslices: %s", t.summary, t.query, t.slices))
-	}
+		db := sqlair.NewDB(sqldb)
 
-	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
-	if err != nil {
-		c.Fatal(err)
+		for _, t := range tests {
+			stmt, err := sqlair.Prepare(t.query, t.types...)
+			if err != nil {
+				c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+				continue
+			}
+
+			err = db.Query(nil, stmt, t.inputs...).All(t.slices...)
+			c.Assert(err, ErrorMatches, t.err,
+				Commentf("\ntest %q failed:\ninput: %s\nslices: %s", t.summary, t.query, t.slices))
+		}
+
+		err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+		if err != nil {
+			c.Fatal(err)
+		}
 	}
 }
 
 func (s *PackageSuite) TestRun(c *C) {
-	dropTables, sqldb, err := personAndAddressDB()
-	if err != nil {
-		c.Fatal(err)
+	var dropTables string
+	var err error
+	for _, sqldb := range dbs {
+		dropTables, err = buildPersonAndAddressSchema(sqldb)
+		if err != nil {
+			c.Fatal(err)
+		}
+
+		var jim = Person{
+			ID:         70,
+			Fullname:   "Jim",
+			PostalCode: 500,
+		}
+
+		db := sqlair.NewDB(sqldb)
+
+		insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
+		err = db.Query(nil, insertStmt, &jim).Run()
+		c.Assert(err, IsNil)
+
+		selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE id = $Person.id", Person{})
+		var jimCheck = Person{}
+		err = db.Query(nil, selectStmt, &jim).One(&jimCheck)
+		c.Assert(err, IsNil)
+		c.Assert(jimCheck, Equals, jim)
+
+		err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+		c.Assert(err, IsNil)
 	}
-
-	var jim = Person{
-		ID:         70,
-		Fullname:   "Jim",
-		PostalCode: 500,
-	}
-
-	db := sqlair.NewDB(sqldb)
-
-	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
-	err = db.Query(nil, insertStmt, &jim).Run()
-	c.Assert(err, IsNil)
-
-	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE id = $Person.id", Person{})
-	var jimCheck = Person{}
-	err = db.Query(nil, selectStmt, &jim).One(&jimCheck)
-	c.Assert(err, IsNil)
-	c.Assert(jimCheck, Equals, jim)
-
-	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
-	c.Assert(err, IsNil)
 }
 
 func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
@@ -619,75 +674,81 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	oneOutput := &Person{}
 	oneExpected := &Person{30, "Fred", 1000}
 
-	dropTables, sqldb, err := personAndAddressDB()
-	c.Assert(err, IsNil)
-
-	db := sqlair.NewDB(sqldb)
-	stmt := sqlair.MustPrepare("SELECT &Person.* FROM person", Person{})
-
-	// Run different Query methods.
-	q := db.Query(nil, stmt)
-	err = q.One(oneOutput)
-	c.Assert(err, IsNil)
-	c.Assert(oneExpected, DeepEquals, oneOutput)
-
-	err = q.All(allOutput)
-	c.Assert(err, IsNil)
-	c.Assert(allOutput, DeepEquals, allExpected)
-
-	err = q.Run()
-	c.Assert(err, IsNil)
-
-	iter := q.Iter()
-	i := 0
-	for iter.Next() {
-		if i >= len(iterOutputs) {
-			c.Fatalf("expected %d rows, got more", len(iterOutputs))
+	var dropTables string
+	var err error
+	for _, sqldb := range dbs {
+		dropTables, err = buildPersonAndAddressSchema(sqldb)
+		if err != nil {
+			c.Fatal(err)
 		}
-		if !iter.Decode(iterOutputs[i]) {
-			break
+		db := sqlair.NewDB(sqldb)
+
+		stmt := sqlair.MustPrepare("SELECT &Person.* FROM person", Person{})
+
+		// Run different Query methods.
+		q := db.Query(nil, stmt)
+		err = q.One(oneOutput)
+		c.Assert(err, IsNil)
+		c.Assert(oneExpected, DeepEquals, oneOutput)
+
+		err = q.All(allOutput)
+		c.Assert(err, IsNil)
+		c.Assert(allOutput, DeepEquals, allExpected)
+
+		err = q.Run()
+		c.Assert(err, IsNil)
+
+		iter := q.Iter()
+		i := 0
+		for iter.Next() {
+			if i >= len(iterOutputs) {
+				c.Fatalf("expected %d rows, got more", len(iterOutputs))
+			}
+			if !iter.Decode(iterOutputs[i]) {
+				break
+			}
+			i++
 		}
-		i++
+		err = iter.Close()
+		c.Assert(err, IsNil)
+		c.Assert(iterOutputs, DeepEquals, iterExpected)
+
+		// Run them all again for good measure.
+		allOutput = &[]*Person{}
+		iterOutputs = []any{&Person{}, &Person{}, &Person{}, &Person{}}
+		oneOutput = &Person{}
+
+		err = q.All(allOutput)
+		c.Assert(err, IsNil)
+		c.Assert(allOutput, DeepEquals, allExpected)
+
+		iter = q.Iter()
+		i = 0
+		for iter.Next() {
+			if i >= len(iterOutputs) {
+				c.Fatalf("expected %d rows, got more", len(iterOutputs))
+			}
+			if !iter.Decode(iterOutputs[i]) {
+				break
+			}
+			i++
+		}
+		err = iter.Close()
+		c.Assert(err, IsNil)
+		c.Assert(iterOutputs, DeepEquals, iterExpected)
+
+		q = db.Query(nil, stmt)
+		err = q.One(oneOutput)
+		c.Assert(err, IsNil)
+		c.Assert(oneExpected, DeepEquals, oneOutput)
+
+		err = q.Run()
+		c.Assert(err, IsNil)
+
+		err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+		c.Assert(err, IsNil)
+
 	}
-	err = iter.Close()
-	c.Assert(err, IsNil)
-	c.Assert(iterOutputs, DeepEquals, iterExpected)
-
-	// Run them all again for good measure.
-	allOutput = &[]*Person{}
-	iterOutputs = []any{&Person{}, &Person{}, &Person{}, &Person{}}
-	oneOutput = &Person{}
-
-	err = q.All(allOutput)
-	c.Assert(err, IsNil)
-	c.Assert(allOutput, DeepEquals, allExpected)
-
-	iter = q.Iter()
-	i = 0
-	for iter.Next() {
-		if i >= len(iterOutputs) {
-			c.Fatalf("expected %d rows, got more", len(iterOutputs))
-		}
-		if !iter.Decode(iterOutputs[i]) {
-			break
-		}
-		i++
-	}
-	err = iter.Close()
-	c.Assert(err, IsNil)
-	c.Assert(iterOutputs, DeepEquals, iterExpected)
-
-	q = db.Query(nil, stmt)
-	err = q.One(oneOutput)
-	c.Assert(err, IsNil)
-	c.Assert(oneExpected, DeepEquals, oneOutput)
-
-	err = q.Run()
-	c.Assert(err, IsNil)
-
-	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
-	c.Assert(err, IsNil)
-
 }
 
 type JujuLeaseKey struct {
@@ -701,7 +762,7 @@ type JujuLeaseInfo struct {
 	Expiry int    `db:"expiry"`
 }
 
-func JujuStoreLeaseDB() (string, *sql.DB, error) {
+func JujuStoreLeaseSchema(db *sql.DB) (string, error) {
 	createTables := `
 CREATE TABLE lease (
 	model_uuid text,
@@ -729,12 +790,17 @@ DROP TABLE lease_type;
 		"INSERT INTO lease_type VALUES ('type_id2', 'type2');",
 	}
 
-	db, err := createExampleDB(createTables, inserts)
+	_, err := db.Exec(createTables)
 	if err != nil {
-		return "", nil, err
+		return "", err
 	}
-	return dropTables, db, nil
-
+	for _, insert := range inserts {
+		_, err := db.Exec(insert)
+		if err != nil {
+			return "", err
+		}
+	}
+	return dropTables, nil
 }
 
 func (s *PackageSuite) TestJujuStore(c *C) {
@@ -758,42 +824,46 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 		expected: [][]any{{&JujuLeaseKey{Namespace: "type1", ModelUUID: "uuid1", Lease: "name1"}, &JujuLeaseInfo{Holder: "holder1", Expiry: 1}}},
 	}}
 
-	dropTables, sqldb, err := JujuStoreLeaseDB()
-	if err != nil {
-		c.Fatal(err)
-	}
-
-	db := sqlair.NewDB(sqldb)
-
-	for _, t := range tests {
-
-		stmt, err := sqlair.Prepare(t.query, t.types...)
+	var dropTables string
+	var err error
+	for _, sqldb := range dbs {
+		dropTables, err = JujuStoreLeaseSchema(sqldb)
 		if err != nil {
-			c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			continue
+			c.Fatal(err)
 		}
 
-		iter := db.Query(nil, stmt, t.inputs...).Iter()
-		i := 0
-		for iter.Next() {
-			if i >= len(t.outputs) {
-				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d > %d)\n", t.summary, t.query, i+1, len(t.outputs))
-				break
+		db := sqlair.NewDB(sqldb)
+
+		for _, t := range tests {
+
+			stmt, err := sqlair.Prepare(t.query, t.types...)
+			if err != nil {
+				c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+				continue
 			}
-			if !iter.Decode(t.outputs[i]...) {
-				break
+
+			iter := db.Query(nil, stmt, t.inputs...).Iter()
+			i := 0
+			for iter.Next() {
+				if i >= len(t.outputs) {
+					c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d > %d)\n", t.summary, t.query, i+1, len(t.outputs))
+					break
+				}
+				if !iter.Decode(t.outputs[i]...) {
+					break
+				}
+				i++
 			}
-			i++
+
+			err = iter.Close()
+			if err != nil {
+				c.Errorf("\ntest %q failed (Close):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+			}
 		}
 
-		err = iter.Close()
+		err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 		if err != nil {
-			c.Errorf("\ntest %q failed (Close):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+			c.Fatal(err)
 		}
-	}
-
-	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
-	if err != nil {
-		c.Fatal(err)
 	}
 }
