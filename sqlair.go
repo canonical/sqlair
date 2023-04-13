@@ -44,7 +44,8 @@ func MustPrepare(query string, typeSamples ...any) *Statement {
 }
 
 type DB struct {
-	db *sql.DB
+	db          *sql.DB
+	typeSamples []any
 }
 
 func NewDB(db *sql.DB) *DB {
@@ -54,6 +55,17 @@ func NewDB(db *sql.DB) *DB {
 // PlainDB returns the underlying database object.
 func (db *DB) PlainDB() *sql.DB {
 	return db.db
+}
+
+// With is used to provide typeSamples to SQLair when building a query without first preparing.
+//
+// For example:
+//
+//	q := db.With(Person{}).Query(ctx, "SELECT &Person.* FROM table")
+//
+// typeSamples must contain structs and not pointers to structs.
+func (db *DB) With(typeSamples ...any) {
+	db.typeSamples = append(db.typeSamples, typeSamples)
 }
 
 // querySubstrate abstracts the different surfaces that the query can be run on.
@@ -88,7 +100,7 @@ func (db *DB) Query(ctx context.Context, s any, inputArgs ...any) *Query {
 	switch s := s.(type) {
 	case string:
 		// Deference input args to use as type samples in prepare
-		var prepArgs = []any{}
+		var prepArgs = db.typeSamples
 		for _, inputArg := range inputArgs {
 			prepArgs = append(prepArgs, reflect.Indirect(reflect.ValueOf(inputArg)).Interface())
 		}
@@ -287,45 +299,4 @@ func (q *Query) All(sliceArgs ...any) (err error) {
 	}
 
 	return nil
-}
-
-type dbWithSamples struct {
-	db          *DB
-	typeSamples []any
-}
-
-// With is used to provide typeSamples to SQLair when building a query without first preparing.
-//
-// For example:
-//
-//	q := db.With(Person{}).Query(ctx, "SELECT &Person.* FROM table")
-//
-// typeSamples must contain structs and not pointers to structs.
-func (db *DB) With(typeSamples ...any) *dbWithSamples {
-	return &dbWithSamples{db: db, typeSamples: typeSamples}
-}
-
-// Query takes a context, a query string and the structs mentioned in the query arguments.
-// It returns a Query object for iterating over the results.
-func (dbw *dbWithSamples) Query(ctx context.Context, s any, inputArgs ...any) *Query {
-	var stmt *Statement
-	var err error
-	switch s := s.(type) {
-	case string:
-		// Deference input args to use as type samples in prepare
-		var prepArgs = dbw.typeSamples
-		for _, inputArg := range inputArgs {
-			prepArgs = append(prepArgs, reflect.Indirect(reflect.ValueOf(inputArg)).Interface())
-		}
-
-		stmt, err = Prepare(s, prepArgs...)
-		if err != nil {
-			return &Query{err: err}
-		}
-	case *Statement:
-		stmt = stmt
-	default:
-		return &Query{err: fmt.Errorf("unexpected query type %T, expected string or *Statement", s)}
-	}
-	return dbw.db.Query(ctx, stmt, inputArgs...)
 }
