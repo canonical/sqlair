@@ -76,26 +76,40 @@ err := iter.Close()
 For a full example see [the demo](demo/demo.go).
 
 ## Writing the SQL
-### Input Expressions
 To specify SQLair inputs and outputs, the characters `$` and `&` are used.
-
-For now, input expressions are limited to `$Type.col_name`. In the case of the `Person` struct above we could write:
+## Input Expressions
+Input expressions are limited to the form `$Type.col_name`. In the case of the `Person` struct above we could write:
 ```SQL
 SELECT name_col FROM person WHERE id_col = $Person.id_col
 ```
-When we run `DB.Query(ctx, stmt, &person) the value in the `ID` field will be used as the query argument.
+When we run `DB.Query(ctx, stmt, &person)` the value in the `ID` field will be used as the query argument.
  
 ### Output Expressions
-With output expressions we can do much more. 
+With output expressions we can do much more. Below is a full table of the different forms of output expression.
 
 |Output expressions| Result |
 | --- | --- |
-| &Person.name\_col | The Name field of Person is set to the result from the name column |
-| &Person.\* | All columns mentioned in the field tags of Person are set to the result of their tagged column |
-| t.\* AS &Person.\* | All columns mentioned in the field tags of Person are set to the results of the tagged column from table `t` |
-| (client\_name, client\_id) AS (&Person.name\_col, &Person.id\_col) | The Name and ID fields of Person will be set with the results from client\_name and client\_id |
-| (gender\_col, name\_col) AS &Person.\* | The Gender and Name fields of Person will be set with the results from gender\_col and name\_col |
+| `&Person.name_col` | The `Name` field of `Person` is set to the result from the name column |
+| `&Person.*` | All columns mentioned in the field tags of `Person` are set to the result of their tagged column |
+| `t.* AS &Person.*` | All columns mentioned in the field tags of `Person` are set to the results of the tagged column from table `t` |
+| `(client_name, client_id) AS (&Person.name_col, &Person.id_col)` | The `Name` and `ID` fields of `Person` will be set with the results from `client_name` and `client_id` |
+| `(gender_col, name_col) AS &Person.*` | The `Gender` and `Name` fields of `Person` will be set with the results from `gender_col` and `name_col` |
 
+Take, for example, this SQLair query:
+```Go
+stmt, err := sqlair.Prepare(`
+SELECT p.* AS &Person.*, a.* AS &Address.*
+FROM person AS p, address AS a`,
+Person{}, Address{})
+```
+This query will select columns from table `p` that are mentioned in the tags of the `Person` struct and columns from table `a` that are mentioned in the tags of the `Address` struct.
+
+To retrive the first row of results of this query you would do:
+```Go
+var p1 = Person{}
+var a1 = Address{}
+err := db.Query(ctx, stmt).One(&p1, &a1)
+```
 # FAQ
 
 
