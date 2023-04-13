@@ -4,6 +4,10 @@ SQLair is a package for Go that acts as a compatibility layer between Go and SQL
 
 SQLair allows you to write SQL with SQLair input/output expressions included where mapping is needed. These expressions indicate the Go objects to map the database arguments/results into. SQLair is not an ORM and will leave all parts of the query outside of the expressions untouched.
 
+The API can be found at [pkg.go.dev](https://pkg.go.dev/github.com/canonical/sqlair).
+A demo can be found at [demo/demo.go](demo/demo.go).
+
+There will also soon be a full tutorial but that is currently a work in progress.
 ### Motivation
 When writing an SQL query with `database/sql` in Go there are multiple points of redundency/failure:
 
@@ -72,9 +76,6 @@ for iter.Next() {
 }
 err := iter.Close()
 ```
-### Example
-For a full example see [the demo](demo/demo.go).
-
 ## Writing the SQL
 To specify SQLair inputs and outputs, the characters `$` and `&` are used.
 ## Input Expressions
@@ -116,4 +117,3 @@ err := db.Query(ctx, stmt).One(&p1, &a1)
 ## Contributing
 
 See our [code and contribution guidelines](CONTRIBUTING.md)
-
