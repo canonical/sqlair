@@ -4,6 +4,24 @@ SQLair is a package for Go that acts as a compatibility layer between Go and SQL
 
 SQLair allows you to write SQL with SQLair input/output expressions included where mapping is needed. These expressions indicate the Go objects to map the database arguments/results into. SQLair is not an ORM and will leave all parts of the query outside of the expressions untouched.
 
+### Motivation
+When writing an SQL query with `database/sql` in Go there are multiple points of redundency/failure:
+
+- The order of the columns in the Query must match the order of columns in `Scan`
+- The columns from the Query must be manuelly match to their destinations
+- If the columns needed change all queries must be changed
+
+For example, when selecting a particular `Person` from a database, instead of the query: 
+```SQL
+SELECT name_col, id_col, gender_col FROM person WHERE manager_col = ?
+```
+In SQLair you could write:
+```SQL
+SELECT &Person.* FROM person WHERE manager_col = $Manager.name
+```
+This results from this second query could then be directly decoded in the the `Person` struct.
+
+
 # Usage
 The first step when using SQLair is to tag your structs. The "`db`" tag is used to map between the database column names and struct fields.
 
@@ -54,8 +72,10 @@ for iter.Next() {
 }
 err := iter.Close()
 ```
+### Example
+For a full example see [the demo](demo/demo.go).
 
-## Input and Output Expressions
+## Writing the SQL
 ### Input Expressions
 To specify SQLair inputs and outputs, the characters `$` and `&` are used.
 
@@ -75,134 +95,6 @@ With output expressions we can do much more.
 | t.\* AS &Person.\* | All columns mentioned in the field tags of Person are set to the results of the tagged column from table `t` |
 | (client\_name, client\_id) AS (&Person.name\_col, &Person.id\_col) | The Name and ID fields of Person will be set with the results from client\_name and client\_id |
 | (gender\_col, name\_col) AS &Person.\* | The Gender and Name fields of Person will be set with the results from gender\_col and name\_col |
-
-# Example
-```Go
-package main
-
-import (
-	"context"
-	"database/sql"
-	"fmt"
-
-	_ "github.com/mattn/go-sqlite3"
-
-	"github.com/canonical/sqlair"
-)
-
-type Person struct {
-	Name     string `db:"name"`
-	Height   int    `db:"height_cm"`
-	HomeTown string `db:"home_town"`
-}
-
-type Place struct {
-	Name       string `db:"town_name"`
-	Population int    `db:"population"`
-}
-
-func example() error {
-	sqldb, err := sql.Open("sqlite3", ":memory:")
-	if err != nil {
-		return err
-	}
-	db := sqlair.NewDB(sqldb)
-	createPerson := sqlair.MustPrepare(`
-		CREATE TABLE people (
-			name text,
-			height_cm integer,
-			home_town text
-		);`,
-	)
-	createPlace := sqlair.MustPrepare(`
-		CREATE TABLE location (
-			town_name text,
-			population integer
-		);`,
-	)
-	insertPerson := sqlair.MustPrepare(`
-		INSERT INTO people (name, height_cm, home_town)
-		VALUES ( $Person.name, $Person.height_cm, $Person.home_town);`,
-		Person{},
-	)
-	insertPlace := sqlair.MustPrepare(`
-		INSERT INTO location (town_name, population)
-		VALUES ( $Place.town_name, $Place.population);`,
-		Place{},
-	)
-	tallerThan := sqlair.MustPrepare(`
-		SELECT &Person.*
-		FROM people AS p
-		WHERE height_cm > $Person.height_cm`,
-		Person{},
-	)
-	tallerCity := sqlair.MustPrepare(`
-		SELECT p.* AS &Person.*, l.* AS &Place.*
-		FROM people AS p, location AS l
-		WHERE p.home_town = l.town_name
-		AND p.height_cm > $Person.height_cm;`,
-		Person{},
-		Place{},
-	)
-	var people = []Person{{"Jim", 150, "Kabul"}, {"Saba", 162, "Berlin"}, {"Dave", 169, "Brasília"}, {"Sophie", 174, "Berlin"}, {"Kiri", 168, "Cape Town"}}
-	var places = []Place{{"Kabul", 13000000}, {"Berlin", 3677472}, {"Brasília", 3039444}, {"Cape Town", 4710000}}
-
-	err = db.Query(context.Background(), createPerson).Run()
-	if err != nil {
-		return err
-	}
-	err = db.Query(context.Background(), createPlace).Run()
-	if err != nil {
-		return err
-	}
-
-	for _, person := range people {
-		err := db.Query(context.Background(), insertPerson, person).Run()
-		if err != nil {
-			return err
-		}
-	}
-
-	for _, place := range places {
-		err := db.Query(context.Background(), insertPlace, place).Run()
-		if err != nil {
-			return err
-		}
-	}
-
-	jim := people[0]
-	q := db.Query(context.Background(), tallerThan, jim)
-	iter := q.Iter()
-	for iter.Next() {
-		p := Person{}
-		if !iter.Decode(&p) {
-			break
-		}
-		fmt.Printf("%s is taller than %s.\n", p.Name, jim.Name)
-	}
-	err = iter.Close()
-	if err != nil {
-		return err
-	}
-
-	tallCities := []Place{}
-	tallPeople := []Person{}
-	err = db.Query(context.Background(), tallerCity, jim).All(&tallCities, &tallPeople)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("This is a list of cities with people taller than Jim: %v\n", tallCities)
-	fmt.Printf("This is a list of people taller than Jim: %v\n", tallPeople)
-	return nil
-}
-
-func main() {
-	err := example()
-	if err != nil {
-		panic(err)
-	}
-}
-```
 
 # FAQ
 
