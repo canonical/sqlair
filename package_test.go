@@ -455,46 +455,46 @@ func (s *PackageSuite) TestErrNoRows(c *C) {
 }
 
 func (s *PackageSuite) TestValidAll(c *C) {
-	var tests = []struct {
-		summary  string
-		query    string
-		types    []any
-		inputs   []any
-		slices   []any
-		expected []any
-	}{{
-		summary:  "select all columns into person with no pointers",
-		query:    "SELECT * AS &Person.* FROM person",
-		types:    []any{Person{}},
-		inputs:   []any{},
-		slices:   []any{&[]Person{}},
-		expected: []any{&[]Person{Person{30, "Fred", 1000}, Person{20, "Mark", 1500}, Person{40, "Mary", 3500}, Person{35, "James", 4500}}},
-	}, {
-		summary:  "double select with name clash",
-		query:    "SELECT p.id AS &Person.*, a.id AS &Address.* FROM person AS p, address AS a",
-		types:    []any{Person{}, Address{}},
-		inputs:   []any{},
-		slices:   []any{&[]*Person{}, &[]*Address{}},
-		expected: []any{&[]*Person{&Person{ID: 30}, &Person{ID: 30}, &Person{ID: 30}, &Person{ID: 20}, &Person{ID: 20}, &Person{ID: 20}, &Person{ID: 40}, &Person{ID: 40}, &Person{ID: 40}, &Person{ID: 35}, &Person{ID: 35}, &Person{ID: 35}}, &[]*Address{&Address{ID: 1000}, &Address{ID: 1500}, &Address{ID: 3500}, &Address{ID: 1000}, &Address{ID: 1500}, &Address{ID: 3500}, &Address{ID: 1000}, &Address{ID: 1500}, &Address{ID: 3500}, &Address{ID: 1000}, &Address{ID: 1500}, &Address{ID: 3500}}},
-	}, {
-		summary:  "single line of query with inputs",
-		query:    "SELECT p.* AS &Person.*, a.* AS &Address.*, p.* AS &Manager.* FROM person AS p, address AS a WHERE p.id = $Person.id AND a.id = $Address.id ",
-		types:    []any{Person{}, Address{}, Manager{}},
-		inputs:   []any{Address{ID: 1000}, Person{ID: 30}},
-		slices:   []any{&[]*Manager{}, &[]*Person{}, &[]*Address{}},
-		expected: []any{&[]*Manager{{30, "Fred", 1000}}, &[]*Person{{30, "Fred", 1000}}, &[]*Address{{1000, "Happy Land", "Main Street"}}},
-	}, {
-		summary:  "nothing returned",
-		query:    "SELECT &Person.* FROM person WHERE id = $Person.id",
-		types:    []any{Person{}},
-		inputs:   []any{Person{ID: 1243321}},
-		slices:   []any{&[]*Person{}},
-		expected: []any{},
-	}}
-
 	var dropTables string
 	var err error
 	for dbi, sqldb := range dbs {
+		var tests = []struct {
+			summary  string
+			query    string
+			types    []any
+			inputs   []any
+			slices   []any
+			expected []any
+		}{{
+			summary:  "select all columns into person with no pointers",
+			query:    "SELECT * AS &Person.* FROM person",
+			types:    []any{Person{}},
+			inputs:   []any{},
+			slices:   []any{&[]Person{}},
+			expected: []any{&[]Person{Person{30, "Fred", 1000}, Person{20, "Mark", 1500}, Person{40, "Mary", 3500}, Person{35, "James", 4500}}},
+		}, {
+			summary:  "double select with name clash",
+			query:    "SELECT p.id AS &Person.*, a.id AS &Address.* FROM person AS p, address AS a",
+			types:    []any{Person{}, Address{}},
+			inputs:   []any{},
+			slices:   []any{&[]*Person{}, &[]*Address{}},
+			expected: []any{&[]*Person{&Person{ID: 30}, &Person{ID: 30}, &Person{ID: 30}, &Person{ID: 20}, &Person{ID: 20}, &Person{ID: 20}, &Person{ID: 40}, &Person{ID: 40}, &Person{ID: 40}, &Person{ID: 35}, &Person{ID: 35}, &Person{ID: 35}}, &[]*Address{&Address{ID: 1000}, &Address{ID: 1500}, &Address{ID: 3500}, &Address{ID: 1000}, &Address{ID: 1500}, &Address{ID: 3500}, &Address{ID: 1000}, &Address{ID: 1500}, &Address{ID: 3500}, &Address{ID: 1000}, &Address{ID: 1500}, &Address{ID: 3500}}},
+		}, {
+			summary:  "single line of query with inputs",
+			query:    "SELECT p.* AS &Person.*, a.* AS &Address.*, p.* AS &Manager.* FROM person AS p, address AS a WHERE p.id = $Person.id AND a.id = $Address.id ",
+			types:    []any{Person{}, Address{}, Manager{}},
+			inputs:   []any{Address{ID: 1000}, Person{ID: 30}},
+			slices:   []any{&[]*Manager{}, &[]*Person{}, &[]*Address{}},
+			expected: []any{&[]*Manager{{30, "Fred", 1000}}, &[]*Person{{30, "Fred", 1000}}, &[]*Address{{1000, "Happy Land", "Main Street"}}},
+		}, {
+			summary:  "nothing returned",
+			query:    "SELECT &Person.* FROM person WHERE id = $Person.id",
+			types:    []any{Person{}},
+			inputs:   []any{Person{ID: 1243321}},
+			slices:   []any{&[]*Person{}},
+			expected: []any{},
+		}}
+
 		dropTables, err = buildPersonAndAddressSchema(sqldb)
 		c.Assert(err, IsNil)
 		db := sqlair.NewDB(sqldb)
@@ -632,18 +632,18 @@ func (s *PackageSuite) TestRun(c *C) {
 }
 
 func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
-	allOutput := &[]*Person{}
-	allExpected := &[]*Person{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "James", 4500}}
-
-	iterOutputs := []any{&Person{}, &Person{}, &Person{}, &Person{}}
-	iterExpected := []any{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "James", 4500}}
-
-	oneOutput := &Person{}
-	oneExpected := &Person{30, "Fred", 1000}
-
 	var dropTables string
 	var err error
 	for _, sqldb := range dbs {
+		allOutput := &[]*Person{}
+		allExpected := &[]*Person{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "James", 4500}}
+
+		iterOutputs := []any{&Person{}, &Person{}, &Person{}, &Person{}}
+		iterExpected := []any{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "James", 4500}}
+
+		oneOutput := &Person{}
+		oneExpected := &Person{30, "Fred", 1000}
+
 		dropTables, err = buildPersonAndAddressSchema(sqldb)
 		c.Assert(err, IsNil)
 		db := sqlair.NewDB(sqldb)
