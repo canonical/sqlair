@@ -96,9 +96,18 @@ func (q *Query) Run() error {
 	if q.err != nil {
 		return q.err
 	}
-	_, err := q.qs.ExecContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
-	if err != nil {
-		return err
+	// Some drivers will error if we execute a SELECT with Exec
+	if q.qe.HasOutputs() {
+		rows, err := q.qs.QueryContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
+		rows.Close()
+		if err != nil {
+			return err
+		}
+	} else {
+		_, err := q.qs.ExecContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
