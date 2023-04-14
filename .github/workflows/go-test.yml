@@ -15,6 +15,14 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
 
+      - name: Setup DQLite
+        env:
+          CGO_LDFLAGS_ALLOW: "-Wl,-z,now"
+        run: |
+          sudo add-apt-repository ppa:dqlite/dev -y
+          sudo apt update
+          sudo apt install -y libdqlite-dev
+
       - name: Install dependencies
         run: go get .
 
