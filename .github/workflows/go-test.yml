@@ -25,9 +25,9 @@ jobs:
         run: go get .
 
       - name: Build
-        env:
-          CGO_LDFLAGS_ALLOW: "-Wl,-z,now"
         run: go build -v ./...
 
       - name: Test
+        env:
+          CGO_LDFLAGS_ALLOW: "-Wl,-z,now"
         run: go test -v ./...
