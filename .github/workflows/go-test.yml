@@ -16,8 +16,6 @@ jobs:
           go-version: ${{ matrix.go-version }}
 
       - name: Setup DQLite
-        env:
-          CGO_LDFLAGS_ALLOW: "-Wl,-z,now"
         run: |
           sudo add-apt-repository ppa:dqlite/dev -y
           sudo apt update
@@ -27,6 +25,8 @@ jobs:
         run: go get .
 
       - name: Build
+        env:
+          CGO_LDFLAGS_ALLOW: "-Wl,-z,now"
         run: go build -v ./...
 
       - name: Test
