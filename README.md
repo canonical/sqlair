@@ -77,6 +77,7 @@ SELECT name_col FROM person WHERE id_col = $Person.id_col
 ```
 When we run `DB.Query(ctx, stmt, &person)` the value in the `ID` field will be used as the query argument.
  
+_There are future plans to allow more intergrated use of Go objects in `INSERT` statements._ 
 ### Output Expressions
 With output expressions we can do much more. Below is a full table of the different forms of output expression.
 
@@ -122,7 +123,8 @@ The SQLair function `Prepare` has the signiture:
 ```Go
 sqlair.Prepare(query string, typeSamples ...any) (*Statement, error)
 ```
-This function is used to prepare a SQLair query for execution. It can be done at any point and does not depend on the database so queries can be prepared long before they are needed.
+
+**Note:** This function does **not** prepare the query on the database. _In the future we intend to support preparing on the database as a backend optimisation once a query is created._
 
 The `typeSamples` are samples of all the structs that are mentioned in the query. For example, in the query:
 ```Go
@@ -183,7 +185,7 @@ var address := Address{}
 err := q.One(&person, &address)
 ```
 ### All
-`All` will decode all the rows returned by the query into slices of each of the objects mentioned in the output expressions.
+`A#l` will decode all the rows returned by the query into slices of each of the objects mentioned in the output expressions.
 ```Go
 var people := []Person{}
 var addresses := []Address{}
