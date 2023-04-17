@@ -58,8 +58,8 @@ func starCount(fns []fullName) int {
 // starCheckOutput checks that the statement is well formed with regard to
 // asterisks and the number of sources and targets.
 func starCheckOutput(p *outputPart) error {
-	numSources := len(p.source)
-	numTargets := len(p.target)
+	numSources := len(p.columns)
+	numTargets := len(p.types)
 
 	targetStars := starCount(p.target)
 	sourceStars := starCount(p.source)

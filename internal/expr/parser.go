@@ -344,16 +344,15 @@ func (p *Parser) parseColumn() (fullName, bool, error) {
 	return fullName{}, false, nil
 }
 
-func (p *Parser) parseTarget() (fullName, bool, error) {
+func (p *Parser) parseOutputType() (fullName, bool, error) {
 	if p.skipByte('&') {
 		return p.parseGoFullName()
 	}
-
 	return fullName{}, false, nil
 }
 
 // parseGoFullName parses a Go type name qualified by a tag name (or asterisk)
-// of the form "&TypeName.col_name".
+// of the form "TypeName.col_name".
 func (p *Parser) parseGoFullName() (fullName, bool, error) {
 	cp := p.save()
 
@@ -376,13 +375,20 @@ func (p *Parser) parseGoFullName() (fullName, bool, error) {
 // parseList takes a parsing function that returns a fullName and parses a
 // bracketed, comma seperated, list.
 func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]fullName, bool, error) {
+	// Case 1: Unbracketed singleton
+	if obj, ok, err := parseFn(p); err != nil {
+		return nil, false, err
+	} else if ok {
+		return []fullName{obj}, true, nil
+	}
+
+	//Case 2: Bracketed list
 	cp := p.save()
 	if !p.skipByte('(') {
 		return nil, false, nil
 	}
 
 	parenPos := p.pos
-
 	nextItem := true
 	var objs []fullName
 	for i := 0; nextItem; i++ {
@@ -413,94 +419,89 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 // parseColumns parses a list of columns. For lists of more than one column the
 // columns must be enclosed in brackets e.g. "(col1, col2) AS &Person.*".
 func (p *Parser) parseColumns() ([]fullName, bool) {
-
-	// Case 1: A single column e.g. "p.name".
-	if col, ok, _ := p.parseColumn(); ok {
-		return []fullName{col}, true
-	}
-
-	// Case 2: Multiple columns e.g. "(p.name, p.id)".
 	if cols, ok, _ := p.parseList((*Parser).parseColumn); ok {
 		return cols, true
 	}
-
 	return nil, false
-}
-
-// parseTargets parses the part of the output expression following the
-// ampersand. This can be one or more references to Go types.
-func (p *Parser) parseTargets() ([]fullName, bool, error) {
-	// Case 1: A single target e.g. "&Person.name".
-	if target, ok, err := p.parseTarget(); err != nil {
-		return nil, false, err
-	} else if ok {
-		return []fullName{target}, true, nil
-	}
-
-	// Case 2: Multiple targets e.g. "(&Person.name, &Person.id)".
-	if targets, ok, err := p.parseList((*Parser).parseTarget); err != nil {
-		return nil, false, err
-	} else if ok {
-		return targets, true, nil
-	}
-
-	return nil, false, nil
 }
 
 // parseOutputExpression requires that the ampersand before the identifiers must
 // be followed by a name byte.
 func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 	start := p.pos
-
 	// Case 1: There are no columns e.g. "&Person.*".
-	if targets, ok, err := p.parseTargets(); err != nil {
+	if targets, ok, err := p.parseList((*Parser).parseOutputType); err != nil {
 		return nil, false, err
 	} else if ok {
 		return &outputPart{
-			source: []fullName{},
-			target: targets,
-			raw:    p.input[start:p.pos],
+			columns: []fullName{},
+			types:   targets,
+			raw:     p.input[start:p.pos],
 		}, true, nil
 	}
 
 	cp := p.save()
-
 	// Case 2: There are columns e.g. "p.col1 AS &Person.*".
 	if cols, ok := p.parseColumns(); ok {
 		p.skipBlanks()
 		if p.skipString("AS") {
 			p.skipBlanks()
-			if targets, ok, err := p.parseTargets(); err != nil {
+			if targets, ok, err := p.parseList((*Parser).parseOutputType); err != nil {
 				return nil, false, err
 			} else if ok {
 				return &outputPart{
-					source: cols,
-					target: targets,
-					raw:    p.input[start:p.pos],
+					columns: cols,
+					types:   targets,
+					raw:     p.input[start:p.pos],
 				}, true, nil
 			}
 		}
 	}
-
 	cp.restore()
 	return nil, false, nil
 }
 
+func (p *Parser) parseInputType() (fullName, bool, error) {
+	if p.skipByte('$') {
+		return p.parseGoFullName()
+	}
+	return fullName{}, false, nil
+}
+
 // parseInputExpression parses an input expression of the form "$Type.name".
 func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
-	cp := p.save()
-
-	if p.skipByte('$') {
-		if fn, ok, err := p.parseGoFullName(); ok {
-			if fn.name == "*" {
-				return nil, false, fmt.Errorf(`asterisk not allowed in input expression "$%s"`, fn)
-			}
-			return &inputPart{source: fn, raw: p.input[cp.pos:p.pos]}, true, nil
-		} else if err != nil {
-			return nil, false, err
+	start := p.pos
+	// Case 1: Standalone input expression e.g. "$Type.col".
+	if fn, ok, err := p.parseInputType(); err != nil {
+		return nil, false, err
+	} else if ok {
+		if fn.name == "*" {
+			return nil, false, fmt.Errorf(`asterisk not allowed in standalone input expression "$%s"`, fn)
 		}
+		return &inputPart{
+			columns: []fullName{},
+			types:   []fullName{fn},
+			raw:     p.input[start:p.pos],
+		}, true, nil
 	}
 
+	cp := p.save()
+	// Case 2: INSERT VALUES statement e.g. "(name, id) VALUES $Person.*".
+	if columns, ok := p.parseColumns(); ok {
+		p.skipBlanks()
+		if p.skipString("VALUES") {
+			p.skipBlanks()
+			if sources, ok, err := p.parseList((*Parser).parseInputType); err != nil {
+				return nil, false, err
+			} else if ok {
+				return &inputPart{
+					columns: columns,
+					types:   sources,
+					raw:     p.input[start:p.pos],
+				}, true, nil
+			}
+		}
+	}
 	cp.restore()
 	return nil, false, nil
 }
