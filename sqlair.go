@@ -145,34 +145,31 @@ func (iter *Iterator) Next() bool {
 // Decode decodes the current result into the maps and structs in outputValues.
 // outputArgs must contain all the maps and structs mentioned in the query.
 // If an error occurs it will be returned with Iter.Close().
-func (iter *Iterator) Decode(outputArgs ...any) (ok bool) {
-	if iter.err != nil || iter.rows == nil {
-		return false
+func (iter *Iterator) Decode(outputArgs ...any) (err error) {
+	if iter.err != nil {
+		return iter.err
 	}
 	defer func() {
-		if !ok {
-			iter.err = fmt.Errorf("cannot decode result: %s", iter.err)
+		if err != nil {
+			err = fmt.Errorf("cannot decode result: %s", err)
 		}
 	}()
 
 	if iter.rows == nil {
-		iter.err = fmt.Errorf("iteration ended or not started")
-		return false
+		return fmt.Errorf("iteration ended or not started")
 	}
 
 	ptrs, mapDecodeInfos, err := iter.qe.ScanArgs(iter.cols, outputArgs)
 	if err != nil {
-		iter.err = err
-		return false
+		return err
 	}
 	if err := iter.rows.Scan(ptrs...); err != nil {
-		iter.err = err
-		return false
+		return err
 	}
 	for _, m := range mapDecodeInfos {
 		m.Populate()
 	}
-	return true
+	return nil
 }
 
 // Close finishes the iteration and returns any errors encountered.
@@ -190,11 +187,10 @@ func (iter *Iterator) Close() error {
 
 // One runs a query and decodes the first row into outputArgs.
 func (q *Query) One(outputArgs ...any) error {
-	err := ErrNoRows
 	iter := q.Iter()
+	err := ErrNoRows
 	if iter.Next() {
-		iter.Decode(outputArgs...)
-		err = nil
+		err = iter.Decode(outputArgs...)
 	}
 	if cerr := iter.Close(); cerr != nil {
 		return cerr
@@ -257,8 +253,9 @@ func (q *Query) All(sliceArgs ...any) (err error) {
 			}
 			outputArgs = append(outputArgs, outputArg.Interface())
 		}
-		if !iter.Decode(outputArgs...) {
-			break
+		if err := iter.Decode(outputArgs...); err != nil {
+			iter.Close()
+			return err
 		}
 		for i, outputArg := range outputArgs {
 			switch k := sliceVals[i].Type().Elem().Kind(); k {
