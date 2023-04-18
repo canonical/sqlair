@@ -8,12 +8,12 @@ import (
 	"strings"
 )
 
-func (ce *QueryExpr) QuerySQL() string {
-	return ce.sql
+func (qe *QueryExpr) QuerySQL() string {
+	return qe.sql
 }
 
-func (ce *QueryExpr) QueryArgs() []any {
-	return ce.args
+func (qe *QueryExpr) QueryArgs() []any {
+	return qe.args
 }
 
 type QueryExpr struct {

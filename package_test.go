@@ -1,6 +1,7 @@
 package sqlair_test
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"testing"
@@ -204,7 +205,7 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 
 	}
 
-	_, err = db.PlainDB().Exec(dropTables)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -301,7 +302,7 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 			Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
 	}
 
-	_, err = db.PlainDB().Exec(dropTables)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -357,7 +358,7 @@ func (s *PackageSuite) TestValidOne(c *C) {
 		}
 	}
 
-	_, err = db.PlainDB().Exec(dropTables)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -399,7 +400,7 @@ func (s *PackageSuite) TestOneErrors(c *C) {
 			Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
 	}
 
-	_, err = db.PlainDB().Exec(dropTables)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -415,13 +416,13 @@ func (s *PackageSuite) TestErrNoRows(c *C) {
 	stmt := sqlair.MustPrepare("SELECT * AS &Person.* FROM person WHERE id=12312", Person{})
 	err = db.Query(nil, stmt).One(&Person{})
 	if !errors.Is(err, sqlair.ErrNoRows) {
-		c.Errorf("test failed, error %q not the same as %q", err, sqlair.ErrNoRows)
+		c.Errorf("expected %q, got %q", sqlair.ErrNoRows, err)
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
-		c.Errorf("test failed, error %q not the same as %q", err, sql.ErrNoRows)
+		c.Errorf("expected %q, got %q", sql.ErrNoRows, err)
 	}
 
-	_, err = db.PlainDB().Exec(dropTables)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -498,7 +499,7 @@ func (s *PackageSuite) TestValidAll(c *C) {
 		}
 	}
 
-	_, err = db.PlainDB().Exec(dropTables)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -575,10 +576,198 @@ func (s *PackageSuite) TestAllErrors(c *C) {
 			Commentf("\ntest %q failed:\ninput: %s\nslices: %s", t.summary, t.query, t.slices))
 	}
 
-	_, err = db.PlainDB().Exec(dropTables)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	if err != nil {
 		c.Fatal(err)
 	}
+}
+
+func (s *PackageSuite) TestRun(c *C) {
+	dropTables, sqldb, err := personAndAddressDB()
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	var jim = Person{
+		ID:         70,
+		Fullname:   "Jim",
+		PostalCode: 500,
+	}
+
+	db := sqlair.NewDB(sqldb)
+
+	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
+	err = db.Query(nil, insertStmt, &jim).Run()
+	c.Assert(err, IsNil)
+
+	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE id = $Person.id", Person{})
+	var jimCheck = Person{}
+	err = db.Query(nil, selectStmt, &jim).One(&jimCheck)
+	c.Assert(err, IsNil)
+	c.Assert(jimCheck, Equals, jim)
+
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
+}
+
+func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
+	allOutput := &[]*Person{}
+	allExpected := &[]*Person{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "James", 4500}}
+
+	iterOutputs := []any{&Person{}, &Person{}, &Person{}, &Person{}}
+	iterExpected := []any{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "James", 4500}}
+
+	oneOutput := &Person{}
+	oneExpected := &Person{30, "Fred", 1000}
+
+	dropTables, sqldb, err := personAndAddressDB()
+	c.Assert(err, IsNil)
+
+	db := sqlair.NewDB(sqldb)
+	stmt := sqlair.MustPrepare("SELECT &Person.* FROM person", Person{})
+
+	// Run different Query methods.
+	q := db.Query(nil, stmt)
+	err = q.One(oneOutput)
+	c.Assert(err, IsNil)
+	c.Assert(oneExpected, DeepEquals, oneOutput)
+
+	err = q.All(allOutput)
+	c.Assert(err, IsNil)
+	c.Assert(allOutput, DeepEquals, allExpected)
+
+	err = q.Run()
+	c.Assert(err, IsNil)
+
+	iter := q.Iter()
+	i := 0
+	for iter.Next() {
+		if i >= len(iterOutputs) {
+			c.Fatalf("expected %d rows, got more", len(iterOutputs))
+		}
+		if !iter.Decode(iterOutputs[i]) {
+			break
+		}
+		i++
+	}
+	err = iter.Close()
+	c.Assert(err, IsNil)
+	c.Assert(iterOutputs, DeepEquals, iterExpected)
+
+	// Run them all again for good measure.
+	allOutput = &[]*Person{}
+	iterOutputs = []any{&Person{}, &Person{}, &Person{}, &Person{}}
+	oneOutput = &Person{}
+
+	err = q.All(allOutput)
+	c.Assert(err, IsNil)
+	c.Assert(allOutput, DeepEquals, allExpected)
+
+	iter = q.Iter()
+	i = 0
+	for iter.Next() {
+		if i >= len(iterOutputs) {
+			c.Fatalf("expected %d rows, got more", len(iterOutputs))
+		}
+		if !iter.Decode(iterOutputs[i]) {
+			break
+		}
+		i++
+	}
+	err = iter.Close()
+	c.Assert(err, IsNil)
+	c.Assert(iterOutputs, DeepEquals, iterExpected)
+
+	q = db.Query(nil, stmt)
+	err = q.One(oneOutput)
+	c.Assert(err, IsNil)
+	c.Assert(oneExpected, DeepEquals, oneOutput)
+
+	err = q.Run()
+	c.Assert(err, IsNil)
+
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
+}
+
+func (s *PackageSuite) TestTransactions(c *C) {
+	dropTables, sqldb, err := personAndAddressDB()
+	c.Assert(err, IsNil)
+
+	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE address_id = $Person.address_id", Person{})
+	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'fred@email.com');", Person{})
+	var derek = Person{ID: 85, Fullname: "Derek", PostalCode: 8000}
+	ctx := context.Background()
+
+	db := sqlair.NewDB(sqldb)
+	tx, err := db.Begin(ctx, nil)
+	c.Assert(err, IsNil)
+
+	// Insert derek then rollback.
+	err = tx.Query(ctx, insertStmt, &derek).Run()
+	c.Assert(err, IsNil)
+	err = tx.Rollback()
+	c.Assert(err, IsNil)
+
+	// Check derek isnt in db; insert derek; commit.
+	tx, err = db.Begin(ctx, nil)
+	c.Assert(err, IsNil)
+	var derekCheck = Person{}
+	err = tx.Query(ctx, selectStmt, &derek).One(&derekCheck)
+	if !errors.Is(err, sqlair.ErrNoRows) {
+		c.Fatalf("got err %s, expected %s", err, sqlair.ErrNoRows)
+	}
+	err = tx.Query(ctx, insertStmt, &derek).Run()
+	c.Assert(err, IsNil)
+
+	err = tx.Commit()
+	c.Assert(err, IsNil)
+
+	// Check derek is now in the db.
+	tx, err = db.Begin(ctx, nil)
+	c.Assert(err, IsNil)
+
+	err = tx.Query(ctx, selectStmt, &derek).One(&derekCheck)
+	c.Assert(err, IsNil)
+	c.Assert(derek, Equals, derekCheck)
+	err = tx.Commit()
+	c.Assert(err, IsNil)
+
+	err = db.Query(ctx, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
+}
+
+func (s *PackageSuite) TestTransactionErrors(c *C) {
+	dropTables, sqldb, err := personAndAddressDB()
+	c.Assert(err, IsNil)
+
+	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'fred@email.com');", Person{})
+	var derek = Person{ID: 85, Fullname: "Derek", PostalCode: 8000}
+	ctx := context.Background()
+
+	// Test running query after commit.
+	db := sqlair.NewDB(sqldb)
+	tx, err := db.Begin(ctx, nil)
+	c.Assert(err, IsNil)
+
+	q := tx.Query(ctx, insertStmt, &derek)
+	err = tx.Commit()
+	c.Assert(err, IsNil)
+	err = q.Run()
+	c.Assert(err, ErrorMatches, "sql: transaction has already been committed or rolled back")
+
+	// Test running query after rollback.
+	tx, err = db.Begin(ctx, nil)
+	c.Assert(err, IsNil)
+
+	q = tx.Query(ctx, insertStmt, &derek)
+	err = tx.Rollback()
+	c.Assert(err, IsNil)
+	err = q.Run()
+	c.Assert(err, ErrorMatches, "sql: transaction has already been committed or rolled back")
+
+	err = db.Query(ctx, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
 }
 
 type JujuLeaseKey struct {
@@ -683,7 +872,7 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 		}
 	}
 
-	_, err = db.PlainDB().Exec(dropTables)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	if err != nil {
 		c.Fatal(err)
 	}
