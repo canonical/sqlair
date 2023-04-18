@@ -581,7 +581,33 @@ func (s *PackageSuite) TestAllErrors(c *C) {
 	}
 }
 
-func (s *PackageSuite) TestRunAndOutcome(c *C) {
+func (s *PackageSuite) TestRun(c *C) {
+	dropTables, sqldb, err := personAndAddressDB()
+	c.Assert(err, IsNil)
+
+	var jim = Person{
+		ID:         70,
+		Fullname:   "Jim",
+		PostalCode: 500,
+	}
+
+	db := sqlair.NewDB(sqldb)
+
+	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
+	err = db.Query(nil, insertStmt, &jim).Run()
+	c.Assert(err, IsNil)
+
+	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE id = $Person.id", Person{})
+	var jimCheck = Person{}
+	err = db.Query(nil, selectStmt, &jim).One(&jimCheck)
+	c.Assert(err, IsNil)
+	c.Assert(jimCheck, Equals, jim)
+
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
+}
+
+func (s *PackageSuite) TestOutcome(c *C) {
 	dropTables, sqldb, err := personAndAddressDB()
 	c.Assert(err, IsNil)
 
@@ -596,7 +622,7 @@ func (s *PackageSuite) TestRunAndOutcome(c *C) {
 	var outcome = sqlair.Outcome{}
 
 	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
-	err = db.Query(nil, insertStmt, &outcome, &jim).Run()
+	err = db.Query(nil, insertStmt, &jim).Run(&outcome)
 	c.Assert(err, IsNil)
 
 	if outcome.Result() == nil {
@@ -607,12 +633,6 @@ func (s *PackageSuite) TestRunAndOutcome(c *C) {
 	if rowsAffected != 1 {
 		c.Errorf("got %d for rowsAffected, expected 1", rowsAffected)
 	}
-
-	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE id = $Person.id", Person{})
-	var jimCheck = Person{}
-	err = db.Query(nil, selectStmt, &jim).One(&jimCheck)
-	c.Assert(err, IsNil)
-	c.Assert(jimCheck, Equals, jim)
 
 	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	c.Assert(err, IsNil)

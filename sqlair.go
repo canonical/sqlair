@@ -65,11 +65,10 @@ type querySubstrate interface {
 
 // Query holds the results of a database query.
 type Query struct {
-	qe      *expr.QueryExpr
-	qs      querySubstrate
-	ctx     context.Context
-	outcome *Outcome
-	err     error
+	qe  *expr.QueryExpr
+	qs  querySubstrate
+	ctx context.Context
+	err error
 }
 
 // Iterator is used to iterate over the results of the query.
@@ -87,20 +86,15 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		ctx = context.Background()
 	}
 
-	var outcome *Outcome
-	if len(inputArgs) > 0 {
-		if oc, ok := inputArgs[0].(*Outcome); ok {
-			outcome = oc
-			inputArgs = inputArgs[1:]
-		}
-	}
 	qe, err := s.pe.Query(inputArgs...)
-	return &Query{qs: db.db, qe: qe, ctx: ctx, outcome: outcome, err: err}
+	return &Query{qs: db.db, qe: qe, ctx: ctx, err: err}
 }
 
 // Run will execute the query.
 // Any rows returned by the query are ignored.
-func (q *Query) Run() error {
+// An Outcome struct can be passed which will be populated with the results of the query.
+// Only the first arguement will be populated.
+func (q *Query) Run(outcomes ...*Outcome) error {
 	if q.err != nil {
 		return q.err
 	}
@@ -108,10 +102,9 @@ func (q *Query) Run() error {
 	if err != nil {
 		return err
 	}
-	if q.outcome != nil {
-		q.outcome.result = res
+	if len(outcomes) > 0 {
+		outcomes[0].result = res
 	}
-
 	return nil
 }
 
@@ -185,8 +178,8 @@ func (iter *Iterator) Close() error {
 	return err
 }
 
-// A pointer to an outcome can be passed as the first variadic argument to Query.
-// It will be populated with the outcome of the query, if available.
+// A pointer to an outcome can be passed as the first variadic argument to Run.
+// It will be populated with the outcome of the query execution.
 type Outcome struct {
 	result sql.Result
 }
