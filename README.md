@@ -135,6 +135,35 @@ db := sqlair.NewDB(sqldb)
 ```
 It is still possible to access the underlying `sqldb` with `db.PlainDB()` for any further configuration needed. 
 
+#### Transactions
+SQLair databases support transacitons. A `Query` can be created on a transaction in the same way it can on a `DB`.
+
+Options can be passed to a transaction with `TXOptions`. `opts` can be `nil` if no options are needed. If `ctx` is `nil` `context.Background()` is used.
+
+An exisiting transaction can be wrapped with `NewTX` mirroring the `NewDB` method for the database.
+
+Transactions on the database can be created in SQLair with `tx, err := db.Begin(ctx, opts)` and `Query`, `Commit` or `Rollback` can be executed on the transaction.
+
+For example: 
+
+```Go
+opts := sqlair.TXOptions{Isolation: 0, ReadOnly: false}
+
+tx, err := db.Begin(ctx, opts)
+if err != nil {...}
+err = tx.Query(ctx, stmt).Run()
+if err != nil {...}
+err = tx.Rollback()
+if err != nil {...}
+
+tx, err = db.Begin(ctx, nil)
+if err != nil {...}
+err = tx.Query(ctx, stmt).Run()
+if err != nil {...}
+err = tx.Commit()
+```
+
+For more details, see the [API](https://pkg.go.dev/github.com/canonical/sqlair).
 ## Prepare
 `Prepare` parses and prepares the SQLair query for passing to the database. It checks the SQLair expressions in the query for correctness, saves information about the query, and generates the pure SQL.
 
@@ -163,11 +192,11 @@ Prepare uses the `reflect` library to gather information about the types and the
 
 There is also a function `sqlair.MustPrepare` which is the same in all respects but will panic on error.
 ## Query
-A SQLair `Query` object captures all the opterations assosiated with running SQL on a database. It should be created when the query is ready to be run on the database. 
+A SQLair `Query` object captures all the opterations assosiated with running SQL on a database/transaction. It should be created when the query is ready to be run on the database/transaction. 
 
-A new `Query` object can be created with:
+A new `Query` object can be created on a database or transaction with:
 ```Go
-DB.Query(ctx Context, stmt *Statement, inputArgs ...any) *Query
+Query(ctx Context, stmt *Statement, inputArgs ...any) *Query
 ```
 If `ctx` is `nil`, `context.Background()` will be used.
 The `stmt` is the prepared statement from before, and the `inputArgs` must contain all the Go objects mentioned in the SQLair input expressions of the `Statement`. The  query arguments will be extracted from these objects and passed the the database. 
