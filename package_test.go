@@ -1,6 +1,7 @@
 package sqlair_test
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"testing"
@@ -179,14 +180,15 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 		}
 
 		iter := db.Query(nil, stmt, t.inputs...).Iter()
+		defer iter.Close()
 		i := 0
 		for iter.Next() {
 			if i >= len(t.outputs) {
 				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d >= %d)\n", t.summary, t.query, i, len(t.outputs))
 				break
 			}
-			if !iter.Decode(t.outputs[i]...) {
-				break
+			if err := iter.Decode(t.outputs[i]...); err != nil {
+				c.Errorf("\ntest %q failed (Decode):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
 			}
 			i++
 		}
@@ -284,21 +286,25 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 		}
 
 		iter := db.Query(nil, stmt, t.inputs...).Iter()
+		defer iter.Close()
 		i := 0
 		for iter.Next() {
-			if i > len(t.outputs) {
+			if i >= len(t.outputs) {
 				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected\n", t.summary, t.query)
 				break
 			}
-			if !iter.Decode(t.outputs[i]...) {
+			if err := iter.Decode(t.outputs[i]...); err != nil {
+				c.Assert(err, ErrorMatches, t.err,
+					Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
+				iter.Close()
 				break
 			}
 			i++
 		}
-
 		err = iter.Close()
-		c.Assert(err, ErrorMatches, t.err,
-			Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
+		if err != nil {
+			c.Errorf("\ntest %q failed (Close):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+		}
 	}
 
 	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
@@ -415,10 +421,10 @@ func (s *PackageSuite) TestErrNoRows(c *C) {
 	stmt := sqlair.MustPrepare("SELECT * AS &Person.* FROM person WHERE id=12312", Person{})
 	err = db.Query(nil, stmt).One(&Person{})
 	if !errors.Is(err, sqlair.ErrNoRows) {
-		c.Errorf("test failed, error %q not the same as %q", err, sqlair.ErrNoRows)
+		c.Errorf("expected %q, got %q", sqlair.ErrNoRows, err)
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
-		c.Errorf("test failed, error %q not the same as %q", err, sql.ErrNoRows)
+		c.Errorf("expected %q, got %q", sql.ErrNoRows, err)
 	}
 
 	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
@@ -639,13 +645,14 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	c.Assert(err, IsNil)
 
 	iter := q.Iter()
+	defer iter.Close()
 	i := 0
 	for iter.Next() {
 		if i >= len(iterOutputs) {
 			c.Fatalf("expected %d rows, got more", len(iterOutputs))
 		}
-		if !iter.Decode(iterOutputs[i]) {
-			break
+		if err := iter.Decode(iterOutputs[i]); err != nil {
+			c.Fatal(err)
 		}
 		i++
 	}
@@ -663,13 +670,14 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	c.Assert(allOutput, DeepEquals, allExpected)
 
 	iter = q.Iter()
+	defer iter.Close()
 	i = 0
 	for iter.Next() {
 		if i >= len(iterOutputs) {
 			c.Fatalf("expected %d rows, got more", len(iterOutputs))
 		}
-		if !iter.Decode(iterOutputs[i]) {
-			break
+		if err := iter.Decode(iterOutputs[i]); err != nil {
+			c.Fatal(err)
 		}
 		i++
 	}
@@ -687,7 +695,86 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 
 	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	c.Assert(err, IsNil)
+}
 
+func (s *PackageSuite) TestTransactions(c *C) {
+	dropTables, sqldb, err := personAndAddressDB()
+	c.Assert(err, IsNil)
+
+	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE address_id = $Person.address_id", Person{})
+	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'fred@email.com');", Person{})
+	var derek = Person{ID: 85, Fullname: "Derek", PostalCode: 8000}
+	ctx := context.Background()
+
+	db := sqlair.NewDB(sqldb)
+	tx, err := db.Begin(ctx, nil)
+	c.Assert(err, IsNil)
+
+	// Insert derek then rollback.
+	err = tx.Query(ctx, insertStmt, &derek).Run()
+	c.Assert(err, IsNil)
+	err = tx.Rollback()
+	c.Assert(err, IsNil)
+
+	// Check derek isnt in db; insert derek; commit.
+	tx, err = db.Begin(ctx, nil)
+	c.Assert(err, IsNil)
+	var derekCheck = Person{}
+	err = tx.Query(ctx, selectStmt, &derek).One(&derekCheck)
+	if !errors.Is(err, sqlair.ErrNoRows) {
+		c.Fatalf("got err %s, expected %s", err, sqlair.ErrNoRows)
+	}
+	err = tx.Query(ctx, insertStmt, &derek).Run()
+	c.Assert(err, IsNil)
+
+	err = tx.Commit()
+	c.Assert(err, IsNil)
+
+	// Check derek is now in the db.
+	tx, err = db.Begin(ctx, nil)
+	c.Assert(err, IsNil)
+
+	err = tx.Query(ctx, selectStmt, &derek).One(&derekCheck)
+	c.Assert(err, IsNil)
+	c.Assert(derek, Equals, derekCheck)
+	err = tx.Commit()
+	c.Assert(err, IsNil)
+
+	err = db.Query(ctx, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
+}
+
+func (s *PackageSuite) TestTransactionErrors(c *C) {
+	dropTables, sqldb, err := personAndAddressDB()
+	c.Assert(err, IsNil)
+
+	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'fred@email.com');", Person{})
+	var derek = Person{ID: 85, Fullname: "Derek", PostalCode: 8000}
+	ctx := context.Background()
+
+	// Test running query after commit.
+	db := sqlair.NewDB(sqldb)
+	tx, err := db.Begin(ctx, nil)
+	c.Assert(err, IsNil)
+
+	q := tx.Query(ctx, insertStmt, &derek)
+	err = tx.Commit()
+	c.Assert(err, IsNil)
+	err = q.Run()
+	c.Assert(err, ErrorMatches, "sql: transaction has already been committed or rolled back")
+
+	// Test running query after rollback.
+	tx, err = db.Begin(ctx, nil)
+	c.Assert(err, IsNil)
+
+	q = tx.Query(ctx, insertStmt, &derek)
+	err = tx.Rollback()
+	c.Assert(err, IsNil)
+	err = q.Run()
+	c.Assert(err, ErrorMatches, "sql: transaction has already been committed or rolled back")
+
+	err = db.Query(ctx, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
 }
 
 type JujuLeaseKey struct {
@@ -737,6 +824,65 @@ DROP TABLE lease_type;
 
 }
 
+func (s *PackageSuite) TestIterMethodOrder(c *C) {
+	dropTables, sqldb, err := personAndAddressDB()
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	db := sqlair.NewDB(sqldb)
+
+	var p = Person{}
+	stmt := sqlair.MustPrepare("SELECT &Person.* FROM person", Person{})
+
+	// Check immidiate Decode.
+	iter := db.Query(nil, stmt).Iter()
+	err = iter.Decode(&p)
+	c.Assert(err, ErrorMatches, "cannot decode result: sql: Scan called without calling Next")
+	err = iter.Close()
+	c.Assert(err, IsNil)
+
+	// Check Next after closing.
+	iter = db.Query(nil, stmt).Iter()
+	err = iter.Close()
+	c.Assert(err, IsNil)
+	if iter.Next() {
+		c.Fatal("expected false, got true")
+	}
+	err = iter.Close()
+	c.Assert(err, IsNil)
+
+	// Check Decode after closing.
+	iter = db.Query(nil, stmt).Iter()
+	err = iter.Close()
+	c.Assert(err, IsNil)
+	err = iter.Decode(&p)
+	c.Assert(err, ErrorMatches, "cannot decode result: iteration ended or not started")
+	err = iter.Close()
+	c.Assert(err, IsNil)
+
+	// Check multiple closes.
+	iter = db.Query(nil, stmt).Iter()
+	err = iter.Close()
+	c.Assert(err, IsNil)
+	err = iter.Close()
+	c.Assert(err, IsNil)
+
+	// Check SQL Scan error (scanning string into an int).
+	badTypesStmt := sqlair.MustPrepare("SELECT name AS &Person.id FROM person", Person{})
+	iter = db.Query(nil, badTypesStmt).Iter()
+	if !iter.Next() {
+		c.Fatal("expected true, got false")
+	}
+	err = iter.Decode(&p)
+	c.Assert(err, ErrorMatches, `cannot decode result: sql: Scan error on column index 0, name "_sqlair_0": converting driver.Value type string \("Fred"\) to a int: invalid syntax`)
+	err = iter.Close()
+	c.Assert(err, IsNil)
+
+	_, err = db.PlainDB().Exec(dropTables)
+	c.Assert(err, IsNil)
+}
+
 func (s *PackageSuite) TestJujuStore(c *C) {
 	var tests = []struct {
 		summary  string
@@ -774,14 +920,15 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 		}
 
 		iter := db.Query(nil, stmt, t.inputs...).Iter()
+		defer iter.Close()
 		i := 0
 		for iter.Next() {
 			if i >= len(t.outputs) {
 				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d > %d)\n", t.summary, t.query, i+1, len(t.outputs))
 				break
 			}
-			if !iter.Decode(t.outputs[i]...) {
-				break
+			if err := iter.Decode(t.outputs[i]...); err != nil {
+				c.Errorf("\ntest %q failed (Decode):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
 			}
 			i++
 		}
