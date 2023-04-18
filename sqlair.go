@@ -95,7 +95,7 @@ func (q *Query) Run() error {
 }
 
 // Get will run the query.
-// The first row (if it exists) can be decoded into the outputArgs.
+// The first row (if it exists) will be scanned into the outputArgs.
 // An Outcome struct can be passed as the first argument
 // It will be populated with the outcome of the query.
 func (q *Query) Get(outputArgs ...any) error {
@@ -152,7 +152,7 @@ func (q *Query) Iter() *Iterator {
 	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err}
 }
 
-// Next prepares the next row for decoding.
+// Next prepares the next row for Get.
 // The first call to Next will execute the query.
 // If an error occurs it will be returned with Iter.Close().
 func (iter *Iterator) Next() bool {
@@ -162,7 +162,7 @@ func (iter *Iterator) Next() bool {
 	return iter.rows.Next()
 }
 
-// Get decodes the current result into the structs in outputValues.
+// Get scans the current result into the structs in outputValues.
 // outputArgs must contain all the structs mentioned in the query.
 // If an error occurs it will be returned with Iter.Close().
 func (iter *Iterator) Get(outputArgs ...any) (err error) {
@@ -212,20 +212,7 @@ func (o *Outcome) Result() sql.Result {
 	return o.result
 }
 
-// One runs a query and decodes the first row into outputArgs.
-func (q *Query) One(outputArgs ...any) error {
-	iter := q.Iter()
-	err := ErrNoRows
-	if iter.Next() {
-		err = iter.Get(outputArgs...)
-	}
-	if cerr := iter.Close(); cerr != nil {
-		return cerr
-	}
-	return err
-}
-
-// GetAll iterates over the query and decodes all rows into the provided slices.
+// GetAll iterates over the query and scans all rows into the provided slices.
 //
 // For example:
 //
