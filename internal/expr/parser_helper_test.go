@@ -134,63 +134,38 @@ func (s *ExprInternalSuite) TestUnfinishedQuote(c *C) {
 }
 
 func (s *ExprInternalSuite) TestRemoveComments(c *C) {
-	testList := []struct {
-		input    string
-		expected string
-	}{{
-		input:    `-- Single line comment`,
-		expected: ``,
-	}, {
-		input: `-- Single line comment with line break
+	validComments := []string{
+		`-- Single line comment`,
+		`-- Single line comment with line break
 		`,
-		expected: `
-		`,
-	}, {
-		input: `/* multi
+		`/* multi
 		 line */`,
-		expected: ``,
-	}, {
-		input:    `/* unfinished multiline`,
-		expected: ``,
-	}, {
-		input:    `/* -- */`,
-		expected: ``,
-	}, {
-		input:    `-- */`,
-		expected: ``,
-	}, {
-		input:    `--`,
-		expected: ``,
-	}, {
-		input:    `/*`,
-		expected: ``,
-	}, {
-		input:    `- not comment`,
-		expected: `- not comment`,
-	}, {
-		input:    `- - not comment`,
-		expected: `- - not comment`,
-	}, {
-		input:    `/ * not comment */`,
-		expected: `/ * not comment */`,
-	}, {
-		input:    `*/ not comment`,
-		expected: `*/ not comment`,
-	}, {
-		input:    `/- not comment "`,
-		expected: `/- not comment "`,
-	}, {
-		input:    `-* not comment`,
-		expected: `-* not comment`,
-	}, {
-		input:    `/ not comment */`,
-		expected: `/ not comment */`,
-	}}
+		`/* unfinished multiline`,
+		`/* -- */`,
+		`-- */`,
+		`--`,
+		`/*`}
+	invalidComments := []string{
+		`- not comment`,
+		`- - not comment`,
+		`/ * not comment */`,
+		`*/ not comment`,
+		`/- not comment "`,
+		`-* not comment`,
+		`/ not comment */`,
+	}
 
 	var p = NewParser()
-	for _, t := range testList {
-		p.init(t.input)
-		p.removeComments()
-		c.Assert(p.input, Equals, t.expected)
+	for _, s := range validComments {
+		p.init(s)
+		if ok := p.skipComment(); !ok {
+			c.Errorf("comment %s not parsed as comment", s)
+		}
+	}
+	for _, s := range invalidComments {
+		p.init(s)
+		if ok := p.skipComment(); ok {
+			c.Errorf("comment %s parsed as comment when it should not be", s)
+		}
 	}
 }

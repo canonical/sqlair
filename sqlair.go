@@ -56,12 +56,19 @@ func (db *DB) PlainDB() *sql.DB {
 	return db.db
 }
 
+// querySubstrate abstracts the different surfaces that the query can be run on.
+// For example, the database or a transaction.
+type querySubstrate interface {
+	QueryContext(ctx context.Context, sql string, args ...any) (*sql.Rows, error)
+	ExecContext(ctx context.Context, sql string, args ...any) (sql.Result, error)
+}
+
 // Query holds the results of a database query.
 type Query struct {
-	qe   *expr.QueryExpr
-	q    func() (*sql.Rows, error)
-	rows *sql.Rows
-	err  error
+	qe  *expr.QueryExpr
+	qs  querySubstrate
+	ctx context.Context
+	err error
 }
 
 // Iterator is used to iterate over the results of the query.
@@ -80,15 +87,29 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 	}
 
 	qe, err := s.pe.Query(inputArgs...)
-	q := func() (*sql.Rows, error) {
-		return db.db.QueryContext(ctx, qe.QuerySQL(), qe.QueryArgs()...)
+	return &Query{qs: db.db, qe: qe, err: err, ctx: ctx}
+}
+
+// Run will execute the query.
+// Any rows returned by the query are ignored.
+func (q *Query) Run() error {
+	if q.err != nil {
+		return q.err
 	}
-	return &Query{qe: qe, q: q, err: err}
+	_, err := q.qs.ExecContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // Iter returns an Iterator to iterate through the results row by row.
 func (q *Query) Iter() *Iterator {
-	rows, err := q.q()
+	if q.err != nil {
+		return &Iterator{err: q.err}
+	}
+
+	rows, err := q.qs.QueryContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
 	if err != nil {
 		return &Iterator{err: err}
 	}
@@ -113,7 +134,7 @@ func (iter *Iterator) Next() bool {
 // outputArgs must contain all the structs mentioned in the query.
 // If an error occurs it will be returned with Iter.Close().
 func (iter *Iterator) Decode(outputArgs ...any) (ok bool) {
-	if iter.err != nil {
+	if iter.err != nil || iter.rows == nil {
 		return false
 	}
 	defer func() {
@@ -154,12 +175,16 @@ func (iter *Iterator) Close() error {
 
 // One runs a query and decodes the first row into outputArgs.
 func (q *Query) One(outputArgs ...any) error {
+	err := ErrNoRows
 	iter := q.Iter()
-	if !iter.Next() {
-		return ErrNoRows
+	if iter.Next() {
+		iter.Decode(outputArgs...)
+		err = nil
 	}
-	iter.Decode(outputArgs...)
-	return iter.Close()
+	if cerr := iter.Close(); cerr != nil {
+		return cerr
+	}
+	return err
 }
 
 // All iterates over the query and decodes all rows into the provided slices.
@@ -242,4 +267,58 @@ func (q *Query) All(sliceArgs ...any) (err error) {
 	}
 
 	return nil
+}
+
+type TX struct {
+	tx *sql.Tx
+}
+
+// NewTX creates a SQLair transaction from a sql transaction.
+func (db *DB) NewTX(tx *sql.Tx) *TX {
+	return &TX{tx: tx}
+}
+
+// Begin starts a transaction.
+func (db *DB) Begin(ctx context.Context, opts *TXOptions) (*TX, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	tx, err := db.db.BeginTx(ctx, opts.plainTXOptions())
+	return db.NewTX(tx), err
+}
+
+// Commit commits the transaction.
+func (tx *TX) Commit() error {
+	return tx.tx.Commit()
+}
+
+// Rollback aborts the transaction.
+func (tx *TX) Rollback() error {
+	return tx.tx.Rollback()
+}
+
+// TXOptions holds the transaction options to be used in DB.Begin.
+type TXOptions struct {
+	// Isolation is the transaction isolation level.
+	// If zero, the driver or database's default level is used.
+	Isolation sql.IsolationLevel
+	ReadOnly  bool
+}
+
+func (txopts *TXOptions) plainTXOptions() *sql.TxOptions {
+	if txopts == nil {
+		return nil
+	}
+	return &sql.TxOptions{Isolation: txopts.Isolation, ReadOnly: txopts.ReadOnly}
+}
+
+// Query takes a context, prepared SQLair Statement and the structs mentioned in the query arguments.
+// It returns a Query object for iterating over the results.
+func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	qe, err := s.pe.Query(inputArgs...)
+	return &Query{qs: tx.tx, qe: qe, ctx: ctx, err: err}
 }

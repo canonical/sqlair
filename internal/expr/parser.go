@@ -109,59 +109,39 @@ func (p *Parser) add(part queryPart) {
 	p.partStart = p.pos
 }
 
-// removeComments passes over the input removing comments.
-// It does not allow for nested comments.
-func (p *Parser) removeComments() error {
-	var res bytes.Buffer
-	var textStart = p.pos
-	var textEnd int
-
-	for p.pos < len(p.input) {
-		textEnd = p.pos
-		// Ignore comment chars in string literals.
-		if ok, err := p.skipStringLiteral(); err != nil {
-			return err
-		} else if ok {
-			continue
-		}
-
-		if p.skipByte('-') || p.skipByte('/') {
-			c := p.input[p.pos-1]
-			if (c == '-' && p.skipByte('-')) || (c == '/' && p.skipByte('*')) {
-				var end byte
-				if c == '-' {
-					end = '\n'
-				} else {
-					end = '*'
-				}
-				for p.pos < len(p.input) {
-					if p.input[p.pos] == end {
-						// if end == '\n' (i.e. its a -- comment) dont p.pos++ to keep the newline.
-						if end == '*' {
-							p.pos++
-							if !p.skipByte('/') {
-								continue
-							}
-						}
-						break
-					}
-					p.pos++
-				}
-
-				res.WriteString(p.input[textStart:textEnd])
-				textStart = p.pos
-				continue
+// skipComment jumps over comments as defined by the SQLite spec.
+// If no comment is found the parser state is left unchanged.
+func (p *Parser) skipComment() bool {
+	cp := p.save()
+	if p.skipByte('-') || p.skipByte('/') {
+		c := p.input[p.pos-1]
+		if (c == '-' && p.skipByte('-')) || (c == '/' && p.skipByte('*')) {
+			var end byte
+			if c == '-' {
+				end = '\n'
+			} else {
+				end = '*'
 			}
-		} else {
-			// If we have skiped '-' or '/' but not found a comment don't do p.pos++.
-			p.pos++
+			for p.pos < len(p.input) {
+				if p.input[p.pos] == end {
+					// if end == '\n' (i.e. its a -- comment) dont p.pos++ to keep the newline.
+					if end == '*' {
+						p.pos++
+						if !p.skipByte('/') {
+							continue
+						}
+					}
+					return true
+				}
+				p.pos++
+			}
+			// Reached end of input (valid comment end).
+			return true
 		}
+		cp.restore()
+		return false
 	}
-	// Add any remaining input
-	res.WriteString(p.input[textStart:])
-
-	p.init(res.String())
-	return nil
+	return false
 }
 
 // Parse takes an input string and parses the input and output parts. It returns
@@ -174,10 +154,6 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 	}()
 
 	p.init(input)
-
-	if err := p.removeComments(); err != nil {
-		return nil, err
-	}
 
 	for {
 		// Advance the parser to the start of the next expression.
@@ -220,6 +196,9 @@ loop:
 		if ok, err := p.skipStringLiteral(); err != nil {
 			return err
 		} else if ok {
+			continue
+		}
+		if ok := p.skipComment(); ok {
 			continue
 		}
 
@@ -299,6 +278,9 @@ func (p *Parser) skipByteFind(b byte) bool {
 func (p *Parser) skipBlanks() bool {
 	mark := p.pos
 	for p.pos < len(p.input) {
+		if ok := p.skipComment(); ok {
+			continue
+		}
 		switch p.input[p.pos] {
 		case ' ', '\t', '\r', '\n':
 			p.pos++
