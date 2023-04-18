@@ -1,6 +1,7 @@
 package sqlair_test
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"testing"
@@ -416,10 +417,10 @@ func (s *PackageSuite) TestErrNoRows(c *C) {
 	stmt := sqlair.MustPrepare("SELECT * AS &Person.* FROM person WHERE id=12312", Person{})
 	err = db.Query(nil, stmt).One(&Person{})
 	if !errors.Is(err, sqlair.ErrNoRows) {
-		c.Errorf("test failed, error %q not the same as %q", err, sqlair.ErrNoRows)
+		c.Errorf("expected %q, got %q", sqlair.ErrNoRows, err)
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
-		c.Errorf("test failed, error %q not the same as %q", err, sql.ErrNoRows)
+		c.Errorf("expected %q, got %q", sql.ErrNoRows, err)
 	}
 
 	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
@@ -761,7 +762,86 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 
 	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	c.Assert(err, IsNil)
+}
 
+func (s *PackageSuite) TestTransactions(c *C) {
+	dropTables, sqldb, err := personAndAddressDB()
+	c.Assert(err, IsNil)
+
+	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE address_id = $Person.address_id", Person{})
+	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'fred@email.com');", Person{})
+	var derek = Person{ID: 85, Fullname: "Derek", PostalCode: 8000}
+	ctx := context.Background()
+
+	db := sqlair.NewDB(sqldb)
+	tx, err := db.Begin(ctx, nil)
+	c.Assert(err, IsNil)
+
+	// Insert derek then rollback.
+	err = tx.Query(ctx, insertStmt, &derek).Run()
+	c.Assert(err, IsNil)
+	err = tx.Rollback()
+	c.Assert(err, IsNil)
+
+	// Check derek isnt in db; insert derek; commit.
+	tx, err = db.Begin(ctx, nil)
+	c.Assert(err, IsNil)
+	var derekCheck = Person{}
+	err = tx.Query(ctx, selectStmt, &derek).One(&derekCheck)
+	if !errors.Is(err, sqlair.ErrNoRows) {
+		c.Fatalf("got err %s, expected %s", err, sqlair.ErrNoRows)
+	}
+	err = tx.Query(ctx, insertStmt, &derek).Run()
+	c.Assert(err, IsNil)
+
+	err = tx.Commit()
+	c.Assert(err, IsNil)
+
+	// Check derek is now in the db.
+	tx, err = db.Begin(ctx, nil)
+	c.Assert(err, IsNil)
+
+	err = tx.Query(ctx, selectStmt, &derek).One(&derekCheck)
+	c.Assert(err, IsNil)
+	c.Assert(derek, Equals, derekCheck)
+	err = tx.Commit()
+	c.Assert(err, IsNil)
+
+	err = db.Query(ctx, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
+}
+
+func (s *PackageSuite) TestTransactionErrors(c *C) {
+	dropTables, sqldb, err := personAndAddressDB()
+	c.Assert(err, IsNil)
+
+	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'fred@email.com');", Person{})
+	var derek = Person{ID: 85, Fullname: "Derek", PostalCode: 8000}
+	ctx := context.Background()
+
+	// Test running query after commit.
+	db := sqlair.NewDB(sqldb)
+	tx, err := db.Begin(ctx, nil)
+	c.Assert(err, IsNil)
+
+	q := tx.Query(ctx, insertStmt, &derek)
+	err = tx.Commit()
+	c.Assert(err, IsNil)
+	err = q.Run()
+	c.Assert(err, ErrorMatches, "sql: transaction has already been committed or rolled back")
+
+	// Test running query after rollback.
+	tx, err = db.Begin(ctx, nil)
+	c.Assert(err, IsNil)
+
+	q = tx.Query(ctx, insertStmt, &derek)
+	err = tx.Rollback()
+	c.Assert(err, IsNil)
+	err = q.Run()
+	c.Assert(err, ErrorMatches, "sql: transaction has already been committed or rolled back")
+
+	err = db.Query(ctx, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
 }
 
 type JujuLeaseKey struct {
