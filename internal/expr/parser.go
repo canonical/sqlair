@@ -109,6 +109,41 @@ func (p *Parser) add(part queryPart) {
 	p.partStart = p.pos
 }
 
+// skipComment jumps over comments as defined by the SQLite spec.
+// If no comment is found the parser state is left unchanged.
+func (p *Parser) skipComment() bool {
+	cp := p.save()
+	if p.skipByte('-') || p.skipByte('/') {
+		c := p.input[p.pos-1]
+		if (c == '-' && p.skipByte('-')) || (c == '/' && p.skipByte('*')) {
+			var end byte
+			if c == '-' {
+				end = '\n'
+			} else {
+				end = '*'
+			}
+			for p.pos < len(p.input) {
+				if p.input[p.pos] == end {
+					// if end == '\n' (i.e. its a -- comment) dont p.pos++ to keep the newline.
+					if end == '*' {
+						p.pos++
+						if !p.skipByte('/') {
+							continue
+						}
+					}
+					return true
+				}
+				p.pos++
+			}
+			// Reached end of input (valid comment end).
+			return true
+		}
+		cp.restore()
+		return false
+	}
+	return false
+}
+
 // Parse takes an input string and parses the input and output parts. It returns
 // a pointer to a ParsedExpr.
 func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
@@ -119,6 +154,7 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 	}()
 
 	p.init(input)
+
 	for {
 		// Advance the parser to the start of the next expression.
 		if err := p.advance(); err != nil {
@@ -160,6 +196,9 @@ loop:
 		if ok, err := p.skipStringLiteral(); err != nil {
 			return err
 		} else if ok {
+			continue
+		}
+		if ok := p.skipComment(); ok {
 			continue
 		}
 
@@ -239,6 +278,9 @@ func (p *Parser) skipByteFind(b byte) bool {
 func (p *Parser) skipBlanks() bool {
 	mark := p.pos
 	for p.pos < len(p.input) {
+		if ok := p.skipComment(); ok {
+			continue
+		}
 		switch p.input[p.pos] {
 		case ' ', '\t', '\r', '\n':
 			p.pos++
