@@ -132,3 +132,40 @@ func (s *ExprInternalSuite) TestUnfinishedQuote(c *C) {
 		}
 	}
 }
+
+func (s *ExprInternalSuite) TestRemoveComments(c *C) {
+	validComments := []string{
+		`-- Single line comment`,
+		`-- Single line comment with line break
+		`,
+		`/* multi
+		 line */`,
+		`/* unfinished multiline`,
+		`/* -- */`,
+		`-- */`,
+		`--`,
+		`/*`}
+	invalidComments := []string{
+		`- not comment`,
+		`- - not comment`,
+		`/ * not comment */`,
+		`*/ not comment`,
+		`/- not comment "`,
+		`-* not comment`,
+		`/ not comment */`,
+	}
+
+	var p = NewParser()
+	for _, s := range validComments {
+		p.init(s)
+		if ok := p.skipComment(); !ok {
+			c.Errorf("comment %s not parsed as comment", s)
+		}
+	}
+	for _, s := range invalidComments {
+		p.init(s)
+		if ok := p.skipComment(); ok {
+			c.Errorf("comment %s parsed as comment when it should not be", s)
+		}
+	}
+}

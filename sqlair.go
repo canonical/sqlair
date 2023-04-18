@@ -122,7 +122,7 @@ func (q *Query) Get(outputArgs ...any) error {
 		return err
 	} else {
 		if len(outputArgs) > 0 {
-			return fmt.Errorf("cannot decode results: query does not return any results")
+			return fmt.Errorf("cannot get results: query does not return any results")
 		}
 		res, err := q.qs.ExecContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
 		if outcome != nil {
@@ -165,31 +165,28 @@ func (iter *Iterator) Next() bool {
 // Get decodes the current result into the structs in outputValues.
 // outputArgs must contain all the structs mentioned in the query.
 // If an error occurs it will be returned with Iter.Close().
-func (iter *Iterator) Get(outputArgs ...any) (ok bool) {
-	if iter.err != nil || iter.rows == nil {
-		return false
+func (iter *Iterator) Get(outputArgs ...any) (err error) {
+	if iter.err != nil {
+		return iter.err
 	}
 	defer func() {
-		if !ok {
-			iter.err = fmt.Errorf("cannot decode result: %s", iter.err)
+		if err != nil {
+			err = fmt.Errorf("cannot get result: %s", err)
 		}
 	}()
 
 	if iter.rows == nil {
-		iter.err = fmt.Errorf("iteration ended or not started")
-		return false
+		return fmt.Errorf("iteration ended or not started")
 	}
 
 	ptrs, err := iter.qe.ScanArgs(iter.cols, outputArgs)
 	if err != nil {
-		iter.err = err
-		return false
+		return err
 	}
 	if err := iter.rows.Scan(ptrs...); err != nil {
-		iter.err = err
-		return false
+		return err
 	}
-	return true
+	return nil
 }
 
 // Close finishes the iteration and returns any errors encountered.
@@ -217,11 +214,10 @@ func (o *Outcome) Result() sql.Result {
 
 // One runs a query and decodes the first row into outputArgs.
 func (q *Query) One(outputArgs ...any) error {
-	err := ErrNoRows
 	iter := q.Iter()
+	err := ErrNoRows
 	if iter.Next() {
-		iter.Get(outputArgs...)
-		err = nil
+		err = iter.Get(outputArgs...)
 	}
 	if cerr := iter.Close(); cerr != nil {
 		return cerr
@@ -284,8 +280,9 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 			}
 			outputArgs = append(outputArgs, outputArg.Interface())
 		}
-		if !iter.Get(outputArgs...) {
-			break
+		if err := iter.Get(outputArgs...); err != nil {
+			iter.Close()
+			return err
 		}
 		for i, outputArg := range outputArgs {
 			switch k := sliceVals[i].Type().Elem().Kind(); k {
@@ -309,4 +306,58 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 	}
 
 	return nil
+}
+
+type TX struct {
+	tx *sql.Tx
+}
+
+// NewTX creates a SQLair transaction from a sql transaction.
+func (db *DB) NewTX(tx *sql.Tx) *TX {
+	return &TX{tx: tx}
+}
+
+// Begin starts a transaction.
+func (db *DB) Begin(ctx context.Context, opts *TXOptions) (*TX, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	tx, err := db.db.BeginTx(ctx, opts.plainTXOptions())
+	return db.NewTX(tx), err
+}
+
+// Commit commits the transaction.
+func (tx *TX) Commit() error {
+	return tx.tx.Commit()
+}
+
+// Rollback aborts the transaction.
+func (tx *TX) Rollback() error {
+	return tx.tx.Rollback()
+}
+
+// TXOptions holds the transaction options to be used in DB.Begin.
+type TXOptions struct {
+	// Isolation is the transaction isolation level.
+	// If zero, the driver or database's default level is used.
+	Isolation sql.IsolationLevel
+	ReadOnly  bool
+}
+
+func (txopts *TXOptions) plainTXOptions() *sql.TxOptions {
+	if txopts == nil {
+		return nil
+	}
+	return &sql.TxOptions{Isolation: txopts.Isolation, ReadOnly: txopts.ReadOnly}
+}
+
+// Query takes a context, prepared SQLair Statement and the structs mentioned in the query arguments.
+// It returns a Query object for iterating over the results.
+func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	qe, err := s.pe.Query(inputArgs...)
+	return &Query{qs: tx.tx, qe: qe, ctx: ctx, err: err}
 }
