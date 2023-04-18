@@ -43,8 +43,7 @@ type M map[string]any
 
 type IntMap map[string]int
 
-type stringType string
-type StringMap map[stringType]string
+type StringMap map[string]string
 
 var tests = []struct {
 	summary          string
