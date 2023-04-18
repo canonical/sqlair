@@ -31,6 +31,13 @@ type Manager Person
 
 type District struct{}
 
+type HardMaths struct {
+	X    int `db:"x"`
+	Y    int `db:"y"`
+	Z    int `db:"z"`
+	Coef int `db:"coef"`
+}
+
 type M map[string]any
 
 var tests = []struct {
@@ -258,6 +265,21 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	"[Bypass[UPDATE person SET person.address_id = ] Input[Address.id] Bypass[ WHERE person.id = ] Input[Person.id]]",
 	[]any{Person{}, Address{}},
 	`UPDATE person SET person.address_id = @sqlair_0 WHERE person.id = @sqlair_1`,
+}, {
+	"mathmatical operations",
+	`SELECT name FROM person WHERE id =$HardMaths.x+$HardMaths.y/$HardMaths.z-
+	($HardMaths.coef%$HardMaths.x)-$HardMaths.y|$HardMaths.z<$HardMaths.z<>$HardMaths.x`,
+	`[Bypass[SELECT name FROM person WHERE id =] Input[HardMaths.x] Bypass[+] Input[HardMaths.y] Bypass[/] Input[HardMaths.z] Bypass[-
+	(] Input[HardMaths.coef] Bypass[%] Input[HardMaths.x] Bypass[)-] Input[HardMaths.y] Bypass[|] Input[HardMaths.z] Bypass[<] Input[HardMaths.z] Bypass[<>] Input[HardMaths.x]]`,
+	[]any{HardMaths{}},
+	`SELECT name FROM person WHERE id =@sqlair_0+@sqlair_1/@sqlair_2-
+	(@sqlair_3%@sqlair_4)-@sqlair_5|@sqlair_6<@sqlair_7<>@sqlair_8`,
+}, {
+	"insert array",
+	"INSERT INTO arr VALUES (ARRAY[[1,2],[$HardMaths.x,4]], ARRAY[[5,6],[$HardMaths.y,8]]);",
+	"[Bypass[INSERT INTO arr VALUES (ARRAY[[1,2],[] Input[HardMaths.x] Bypass[,4]], ARRAY[[5,6],[] Input[HardMaths.y] Bypass[,8]]);]]",
+	[]any{HardMaths{}},
+	"INSERT INTO arr VALUES (ARRAY[[1,2],[@sqlair_0,4]], ARRAY[[5,6],[@sqlair_1,8]]);",
 }}
 
 func (s *ExprSuite) TestExpr(c *C) {

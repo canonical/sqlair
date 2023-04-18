@@ -206,7 +206,7 @@ loop:
 		switch p.input[p.pos-1] {
 		// If the preceding byte is one of these then we might be at the start
 		// of an expression.
-		case ' ', '\t', '\n', '\r', '=', ',':
+		case ' ', '\t', '\n', '\r', '=', ',', '(', '[', '>', '<', '+', '-', '*', '/', '|', '%':
 			break loop
 		}
 	}
