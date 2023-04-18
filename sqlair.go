@@ -90,22 +90,49 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 	return &Query{qs: db.db, qe: qe, ctx: ctx, err: err}
 }
 
-// Run will execute the query.
-// Any rows returned by the query are ignored.
-// An Outcome struct can be passed which will be populated with the results of the query.
-// Only the first arguement will be populated.
-func (q *Query) Run(outcomes ...*Outcome) error {
+func (q *Query) Run() error {
+	return q.Get()
+}
+
+// Get will run the query.
+// The first row (if it exists) can be decoded into the outputArgs.
+// An Outcome struct can be passed as the first argument
+// It will be populated with the outcome of the query.
+func (q *Query) Get(outputArgs ...any) error {
 	if q.err != nil {
 		return q.err
 	}
-	res, err := q.qs.ExecContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
-	if err != nil {
+	var outcome *Outcome
+	if len(outputArgs) > 0 {
+		if oc, ok := outputArgs[0].(*Outcome); len(outputArgs) == 1 && ok {
+			outcome = oc
+			outputArgs = outputArgs[1:]
+		}
+	}
+	if q.qe.HasOutputs() {
+		err := ErrNoRows
+		iter := q.Iter()
+		if iter.Next() {
+			iter.Get(outputArgs...)
+			err = nil
+		}
+		if cerr := iter.Close(); cerr != nil {
+			return cerr
+		}
 		return err
+	} else {
+		if len(outputArgs) > 0 {
+			return fmt.Errorf("cannot decode results: query does not return any results")
+		}
+		res, err := q.qs.ExecContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
+		if outcome != nil {
+			outcome.result = res
+		}
+		if err != nil {
+			return err
+		}
+		return nil
 	}
-	if len(outcomes) > 0 {
-		outcomes[0].result = res
-	}
-	return nil
 }
 
 // Iter returns an Iterator to iterate through the results row by row.
@@ -135,10 +162,10 @@ func (iter *Iterator) Next() bool {
 	return iter.rows.Next()
 }
 
-// Decode decodes the current result into the structs in outputValues.
+// Get decodes the current result into the structs in outputValues.
 // outputArgs must contain all the structs mentioned in the query.
 // If an error occurs it will be returned with Iter.Close().
-func (iter *Iterator) Decode(outputArgs ...any) (ok bool) {
+func (iter *Iterator) Get(outputArgs ...any) (ok bool) {
 	if iter.err != nil || iter.rows == nil {
 		return false
 	}
@@ -193,7 +220,7 @@ func (q *Query) One(outputArgs ...any) error {
 	err := ErrNoRows
 	iter := q.Iter()
 	if iter.Next() {
-		iter.Decode(outputArgs...)
+		iter.Get(outputArgs...)
 		err = nil
 	}
 	if cerr := iter.Close(); cerr != nil {
@@ -202,16 +229,16 @@ func (q *Query) One(outputArgs ...any) error {
 	return err
 }
 
-// All iterates over the query and decodes all rows into the provided slices.
+// GetAll iterates over the query and decodes all rows into the provided slices.
 //
 // For example:
 //
 //	var pslice []Person
 //	var aslice []*Address
-//	err := query.All(&pslice, &aslice)
+//	err := query.GetAll(&pslice, &aslice)
 //
 // sliceArgs must contain pointers to slices of each of the output types.
-func (q *Query) All(sliceArgs ...any) (err error) {
+func (q *Query) GetAll(sliceArgs ...any) (err error) {
 	if q.err != nil {
 		return q.err
 	}
@@ -257,7 +284,7 @@ func (q *Query) All(sliceArgs ...any) (err error) {
 			}
 			outputArgs = append(outputArgs, outputArg.Interface())
 		}
-		if !iter.Decode(outputArgs...) {
+		if !iter.Get(outputArgs...) {
 			break
 		}
 		for i, outputArg := range outputArgs {

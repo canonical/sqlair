@@ -16,6 +16,10 @@ func (qe *QueryExpr) QueryArgs() []any {
 	return qe.args
 }
 
+func (qe *QueryExpr) HasOutputs() bool {
+	return len(qe.outputs) > 0
+}
+
 type QueryExpr struct {
 	sql     string
 	args    []any
