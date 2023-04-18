@@ -180,6 +180,7 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 		}
 
 		iter := db.Query(nil, stmt, t.inputs...).Iter()
+		defer iter.Close()
 		i := 0
 		for iter.Next() {
 			if i >= len(t.outputs) {
@@ -285,6 +286,7 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 		}
 
 		iter := db.Query(nil, stmt, t.inputs...).Iter()
+		defer iter.Close()
 		i := 0
 		for iter.Next() {
 			if i >= len(t.outputs) {
@@ -643,13 +645,13 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	c.Assert(err, IsNil)
 
 	iter := q.Iter()
+	defer iter.Close()
 	i := 0
 	for iter.Next() {
 		if i >= len(iterOutputs) {
 			c.Fatalf("expected %d rows, got more", len(iterOutputs))
 		}
 		if err := iter.Decode(iterOutputs[i]); err != nil {
-			iter.Close()
 			c.Fatal(err)
 		}
 		i++
@@ -668,13 +670,13 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	c.Assert(allOutput, DeepEquals, allExpected)
 
 	iter = q.Iter()
+	defer iter.Close()
 	i = 0
 	for iter.Next() {
 		if i >= len(iterOutputs) {
 			c.Fatalf("expected %d rows, got more", len(iterOutputs))
 		}
 		if err := iter.Decode(iterOutputs[i]); err != nil {
-			iter.Close()
 			c.Fatal(err)
 		}
 		i++
@@ -918,6 +920,7 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 		}
 
 		iter := db.Query(nil, stmt, t.inputs...).Iter()
+		defer iter.Close()
 		i := 0
 		for iter.Next() {
 			if i >= len(t.outputs) {
