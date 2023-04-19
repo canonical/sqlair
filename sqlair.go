@@ -112,29 +112,28 @@ func (q *Query) Get(outputArgs ...any) error {
 			outputArgs = outputArgs[1:]
 		}
 	}
-	if q.qe.HasOutputs() {
-		if outcome != nil {
-			outcome.result = nil
+
+	iter := q.Iter()
+	defer iter.Close()
+	if outcome != nil {
+		err := iter.Get(outcome)
+		if err != nil {
+			return err
 		}
-		iter := q.Iter()
-		defer iter.Close()
-		if !iter.Next() {
-			if err := iter.Close(); err != nil {
-				return err
-			}
-			return ErrNoRows
-		}
-		return iter.Get(outputArgs...)
-	} else {
+	}
+	if !q.qe.HasOutputs() {
 		if len(outputArgs) > 0 {
 			return fmt.Errorf("cannot get results: query does not return any results")
 		}
-		res, err := q.qs.ExecContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
-		if outcome != nil {
-			outcome.result = res
-		}
-		return err
+		return iter.Close()
 	}
+	if !iter.Next() {
+		if err := iter.Close(); err != nil {
+			return err
+		}
+		return ErrNoRows
+	}
+	return iter.Get(outputArgs...)
 }
 
 // Iter returns an Iterator to iterate through the results row by row.
