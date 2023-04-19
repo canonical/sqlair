@@ -647,6 +647,15 @@ func (s *PackageSuite) TestOutcome(c *C) {
 	q := db.Query(nil, selectStmt)
 	c.Assert(q.Get(&outcome, &jim), IsNil)
 	c.Assert(outcome.Result(), IsNil)
+	// Test Iter.Get
+	iter := q.Iter()
+	c.Assert(iter.Next(), Equals, true)
+	c.Assert(iter.Get(&outcome, &jim), IsNil)
+	c.Assert(outcome.Result(), IsNil)
+	c.Assert(iter.Next(), Equals, true)
+	c.Assert(iter.Get(&outcome, &jim), IsNil)
+	c.Assert(outcome.Result(), IsNil)
+	c.Assert(iter.Close(), IsNil)
 	// Test GetAll
 	var jims = []Person{}
 	err = q.GetAll(&outcome, &jims)

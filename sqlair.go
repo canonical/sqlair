@@ -98,7 +98,7 @@ func (q *Query) Run() error {
 // Query.Get will run the query.
 // The first row (if there is one) will be scanned into the outputArgs.
 // It will give ErrNoRows if the query contains output expressions and there are no rows.
-// An Outcome struct can be passed as the first argument which will be populated with the outcome of the query.
+// A pointer to an Outcome struct can be passed as the first argument which will be populated with the outcome of the query.
 func (q *Query) Get(outputArgs ...any) error {
 	if q.err != nil {
 		return q.err
@@ -163,6 +163,7 @@ func (iter *Iterator) Next() bool {
 
 // Iterator.Get scans the current result into the structs in outputValues.
 // outputArgs must contain all the structs mentioned in the query.
+// A pointer to an Outcome struct can be passed as the first argument which will be populated with the outcome of the query.
 func (iter *Iterator) Get(outputArgs ...any) (err error) {
 	if iter.err != nil {
 		return iter.err
@@ -172,10 +173,21 @@ func (iter *Iterator) Get(outputArgs ...any) (err error) {
 			err = fmt.Errorf("cannot get result: %s", err)
 		}
 	}()
+
+	var outcome *Outcome
+	if len(outputArgs) > 0 {
+		if oc, ok := outputArgs[0].(*Outcome); ok {
+			outcome = oc
+			outputArgs = outputArgs[1:]
+		}
+	}
+	if outcome != nil {
+		outcome.result = nil
+	}
+
 	if iter.rows == nil {
 		return fmt.Errorf("iteration ended or not started")
 	}
-
 	ptrs, err := iter.qe.ScanArgs(iter.cols, outputArgs)
 	if err != nil {
 		return err
@@ -218,6 +230,7 @@ func (o *Outcome) Result() sql.Result {
 //	err := query.GetAll(&pslice, &aslice)
 //
 // sliceArgs must contain pointers to slices of each of the output types.
+// A pointer to an Outcome struct can be passed as the first argument which will be populated with the outcome of the query.
 func (q *Query) GetAll(sliceArgs ...any) (err error) {
 	if q.err != nil {
 		return q.err
