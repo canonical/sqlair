@@ -90,36 +90,39 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 	return &Query{qs: db.db, qe: qe, ctx: ctx, err: err}
 }
 
+// Run is an alias for Get that takes no arguments.
 func (q *Query) Run() error {
 	return q.Get()
 }
 
-// Get will run the query.
-// The first row (if it exists) will be scanned into the outputArgs.
-// An Outcome struct can be passed as the first argument
-// It will be populated with the outcome of the query.
+// Query.Get will run the query.
+// The first row (if there is one) will be scanned into the outputArgs.
+// It will give ErrNoRows if the query contains output expressions and there are no rows.
+// An Outcome struct can be passed as the first argument which will be populated with the outcome of the query.
 func (q *Query) Get(outputArgs ...any) error {
 	if q.err != nil {
 		return q.err
 	}
 	var outcome *Outcome
 	if len(outputArgs) > 0 {
-		if oc, ok := outputArgs[0].(*Outcome); len(outputArgs) == 1 && ok {
+		if oc, ok := outputArgs[0].(*Outcome); ok {
 			outcome = oc
 			outputArgs = outputArgs[1:]
 		}
 	}
 	if q.qe.HasOutputs() {
-		err := ErrNoRows
+		if outcome != nil {
+			outcome.result = nil
+		}
 		iter := q.Iter()
-		if iter.Next() {
-			iter.Get(outputArgs...)
-			err = nil
+		defer iter.Close()
+		if !iter.Next() {
+			if err := iter.Close(); err != nil {
+				return err
+			}
+			return ErrNoRows
 		}
-		if cerr := iter.Close(); cerr != nil {
-			return cerr
-		}
-		return err
+		return iter.Get(outputArgs...)
 	} else {
 		if len(outputArgs) > 0 {
 			return fmt.Errorf("cannot get results: query does not return any results")
@@ -128,10 +131,7 @@ func (q *Query) Get(outputArgs ...any) error {
 		if outcome != nil {
 			outcome.result = res
 		}
-		if err != nil {
-			return err
-		}
-		return nil
+		return err
 	}
 }
 
@@ -153,8 +153,7 @@ func (q *Query) Iter() *Iterator {
 }
 
 // Next prepares the next row for Get.
-// The first call to Next will execute the query.
-// If an error occurs it will be returned with Iter.Close().
+// If an error occurs during iteration it will be returned with Iter.Close().
 func (iter *Iterator) Next() bool {
 	if iter.err != nil || iter.rows == nil {
 		return false
@@ -162,9 +161,8 @@ func (iter *Iterator) Next() bool {
 	return iter.rows.Next()
 }
 
-// Get scans the current result into the structs in outputValues.
+// Iterator.Get scans the current result into the structs in outputValues.
 // outputArgs must contain all the structs mentioned in the query.
-// If an error occurs it will be returned with Iter.Close().
 func (iter *Iterator) Get(outputArgs ...any) (err error) {
 	if iter.err != nil {
 		return iter.err
@@ -174,7 +172,6 @@ func (iter *Iterator) Get(outputArgs ...any) (err error) {
 			err = fmt.Errorf("cannot get result: %s", err)
 		}
 	}()
-
 	if iter.rows == nil {
 		return fmt.Errorf("iteration ended or not started")
 	}
@@ -231,6 +228,16 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 		}
 	}()
 
+	var outcome *Outcome
+	if len(sliceArgs) > 0 {
+		if oc, ok := sliceArgs[0].(*Outcome); ok {
+			outcome = oc
+			sliceArgs = sliceArgs[1:]
+		}
+	}
+	if outcome != nil {
+		outcome.result = nil
+	}
 	// Check slice inputs
 	var slicePtrVals = []reflect.Value{}
 	var sliceVals = []reflect.Value{}

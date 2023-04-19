@@ -599,10 +599,12 @@ func (s *PackageSuite) TestRun(c *C) {
 
 	db := sqlair.NewDB(sqldb)
 
+	// Insert Jim.
 	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
 	err = db.Query(nil, insertStmt, &jim).Run()
 	c.Assert(err, IsNil)
 
+	// Check Jim is in the db.
 	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE id = $Person.id", Person{})
 	var jimCheck = Person{}
 	err = db.Query(nil, selectStmt, &jim).Get(&jimCheck)
@@ -640,6 +642,17 @@ func (s *PackageSuite) TestOutcome(c *C) {
 		c.Errorf("got %d for rowsAffected, expected 1", rowsAffected)
 	}
 
+	// Test Get
+	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person", Person{})
+	q := db.Query(nil, selectStmt)
+	c.Assert(q.Get(&outcome, &jim), IsNil)
+	c.Assert(outcome.Result(), IsNil)
+	// Test GetAll
+	var jims = []Person{}
+	err = q.GetAll(&outcome, &jims)
+	c.Assert(err, IsNil)
+	c.Assert(outcome.Result(), IsNil)
+
 	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	c.Assert(err, IsNil)
 }
@@ -669,9 +682,6 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	err = q.GetAll(allOutput)
 	c.Assert(err, IsNil)
 	c.Assert(allOutput, DeepEquals, allExpected)
-
-	err = q.Run()
-	c.Assert(err, IsNil)
 
 	iter := q.Iter()
 	defer iter.Close()
@@ -718,9 +728,6 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	err = q.Get(oneOutput)
 	c.Assert(err, IsNil)
 	c.Assert(oneExpected, DeepEquals, oneOutput)
-
-	err = q.Run()
-	c.Assert(err, IsNil)
 
 	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	c.Assert(err, IsNil)
