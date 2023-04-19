@@ -96,11 +96,19 @@ func (q *Query) Run() error {
 	if q.err != nil {
 		return q.err
 	}
-	_, err := q.qs.ExecContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
+	_, err := q.exec()
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+func (q *Query) exec() (sql.Result, error) {
+	return q.qs.ExecContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
+}
+
+func (q *Query) query() (*sql.Rows, error) {
+	return q.qs.QueryContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
 }
 
 // Iter returns an Iterator to iterate through the results row by row.
@@ -109,7 +117,7 @@ func (q *Query) Iter() *Iterator {
 		return &Iterator{err: q.err}
 	}
 
-	rows, err := q.qs.QueryContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
+	rows, err := q.query()
 	if err != nil {
 		return &Iterator{err: err}
 	}
