@@ -73,10 +73,12 @@ type Query struct {
 
 // Iterator is used to iterate over the results of the query.
 type Iterator struct {
-	qe   *expr.QueryExpr
-	rows *sql.Rows
-	cols []string
-	err  error
+	qe      *expr.QueryExpr
+	rows    *sql.Rows
+	cols    []string
+	err     error
+	result  sql.Result
+	started bool
 }
 
 // Query takes a context, prepared SQLair Statement and the structs mentioned in the query arguments.
@@ -140,30 +142,50 @@ func (q *Query) Iter() *Iterator {
 	if q.err != nil {
 		return &Iterator{err: q.err}
 	}
-
-	rows, err := q.qs.QueryContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
-	if err != nil {
-		return &Iterator{err: err}
+	var result sql.Result
+	var rows *sql.Rows
+	var err error
+	var cols []string
+	if q.qe.HasOutputs() {
+		rows, err = q.qs.QueryContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
+		if err != nil {
+			return &Iterator{err: err}
+		}
+		cols, err = rows.Columns()
+		if err != nil {
+			return &Iterator{err: err}
+		}
+	} else {
+		result, err = q.qs.ExecContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
+		if err != nil {
+			return &Iterator{err: err}
+		}
 	}
-	cols, err := rows.Columns()
-	if err != nil {
-		return &Iterator{err: err}
-	}
-	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err}
+	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err, result: result}
 }
 
 // Next prepares the next row for Get.
 // If an error occurs during iteration it will be returned with Iter.Close().
 func (iter *Iterator) Next() bool {
+	iter.started = true
 	if iter.err != nil || iter.rows == nil {
 		return false
 	}
 	return iter.rows.Next()
 }
 
-// Iterator.Get scans the current result into the structs in outputValues.
+// Iterator.Get scans the current result into the structs in outputValues when called after Iter.Next().
+// If it is called before the first Iter.Next() with a single Outcome argument, it will be populated with the outcome of the query.
+//
+// For example:
+//
+//	iter := q.Iter()
+//	err := iter.Get(&outcome)
+//	if iter.Next() {
+//		...
+//
 // outputArgs must contain all the structs mentioned in the query.
-// A pointer to an Outcome struct can be passed as the first argument which will be populated with the outcome of the query.
+// A pointer to an Outcome struct can be passed as the first argument which
 func (iter *Iterator) Get(outputArgs ...any) (err error) {
 	if iter.err != nil {
 		return iter.err
@@ -174,20 +196,18 @@ func (iter *Iterator) Get(outputArgs ...any) (err error) {
 		}
 	}()
 
-	var outcome *Outcome
-	if len(outputArgs) > 0 {
-		if oc, ok := outputArgs[0].(*Outcome); ok {
-			outcome = oc
-			outputArgs = outputArgs[1:]
+	if !iter.started {
+		if oc, ok := outputArgs[0].(*Outcome); ok && len(outputArgs) == 1 {
+			oc.result = iter.result
+			return nil
 		}
-	}
-	if outcome != nil {
-		outcome.result = nil
+		return fmt.Errorf("cannot call Get before Next unless getting outcome")
 	}
 
 	if iter.rows == nil {
-		return fmt.Errorf("iteration ended or not started")
+		return fmt.Errorf("iteration ended")
 	}
+
 	ptrs, err := iter.qe.ScanArgs(iter.cols, outputArgs)
 	if err != nil {
 		return err
@@ -200,6 +220,7 @@ func (iter *Iterator) Get(outputArgs ...any) (err error) {
 
 // Close finishes the iteration and returns any errors encountered.
 func (iter *Iterator) Close() error {
+	iter.started = true
 	if iter.rows == nil {
 		return iter.err
 	}

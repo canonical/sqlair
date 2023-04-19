@@ -630,9 +630,9 @@ func (s *PackageSuite) TestOutcome(c *C) {
 	var outcome = sqlair.Outcome{}
 
 	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
-	err = db.Query(nil, insertStmt, &jim).Get(&outcome)
-	c.Assert(err, IsNil)
-
+	q1 := db.Query(nil, insertStmt, &jim)
+	// Test INSERT with Get
+	c.Assert(q1.Get(&outcome), IsNil)
 	if outcome.Result() == nil {
 		c.Errorf("result in outcome is nil")
 	}
@@ -641,24 +641,33 @@ func (s *PackageSuite) TestOutcome(c *C) {
 	if rowsAffected != 1 {
 		c.Errorf("got %d for rowsAffected, expected 1", rowsAffected)
 	}
-
-	// Test Get
+	// Test SELECT with Get
 	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person", Person{})
-	q := db.Query(nil, selectStmt)
-	c.Assert(q.Get(&outcome, &jim), IsNil)
+	q2 := db.Query(nil, selectStmt)
+	c.Assert(q2.Get(&outcome, &jim), IsNil)
 	c.Assert(outcome.Result(), IsNil)
-	// Test Iter.Get
-	iter := q.Iter()
+	// Test INSERT with Iter
+	iter := q1.Iter()
+	c.Assert(iter.Get(&outcome), IsNil)
+	if outcome.Result() == nil {
+		c.Errorf("result in outcome is nil")
+	}
+	rowsAffected, err = outcome.Result().RowsAffected()
+	c.Assert(err, IsNil)
+	if rowsAffected != 1 {
+		c.Errorf("got %d for rowsAffected, expected 1", rowsAffected)
+	}
+	c.Assert(iter.Next(), Equals, false)
+	// Test SELECT with Iter.Get
+	iter = q2.Iter()
+	c.Assert(iter.Get(&outcome), IsNil)
+	c.Assert(outcome.Result(), IsNil)
 	c.Assert(iter.Next(), Equals, true)
-	c.Assert(iter.Get(&outcome, &jim), IsNil)
-	c.Assert(outcome.Result(), IsNil)
-	c.Assert(iter.Next(), Equals, true)
-	c.Assert(iter.Get(&outcome, &jim), IsNil)
-	c.Assert(outcome.Result(), IsNil)
+	c.Assert(iter.Get(&jim), IsNil)
 	c.Assert(iter.Close(), IsNil)
-	// Test GetAll
+	// Test SELECT with GetAll
 	var jims = []Person{}
-	err = q.GetAll(&outcome, &jims)
+	err = q2.GetAll(&outcome, &jims)
 	c.Assert(err, IsNil)
 	c.Assert(outcome.Result(), IsNil)
 
@@ -883,7 +892,7 @@ func (s *PackageSuite) TestIterMethodOrder(c *C) {
 	// Check immidiate Get.
 	iter := db.Query(nil, stmt).Iter()
 	err = iter.Get(&p)
-	c.Assert(err, ErrorMatches, "cannot get result: sql: Scan called without calling Next")
+	c.Assert(err, ErrorMatches, "cannot get result: cannot call Get before Next unless getting outcome")
 	err = iter.Close()
 	c.Assert(err, IsNil)
 
@@ -902,7 +911,7 @@ func (s *PackageSuite) TestIterMethodOrder(c *C) {
 	err = iter.Close()
 	c.Assert(err, IsNil)
 	err = iter.Get(&p)
-	c.Assert(err, ErrorMatches, "cannot get result: iteration ended or not started")
+	c.Assert(err, ErrorMatches, "cannot get result: iteration ended")
 	err = iter.Close()
 	c.Assert(err, IsNil)
 
