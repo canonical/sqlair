@@ -202,16 +202,35 @@ If `ctx` is `nil`, `context.Background()` will be used.
 The `stmt` is the prepared statement from before, and the `inputArgs` must contain all the Go objects mentioned in the SQLair input expressions of the `Statement`. The  query arguments will be extracted from these objects and passed the the database. 
 
 The creation of the query does not actually trigger its exection. This is only done once one of the following methods on `Query` is called. 
+### Get
+`Get` will execute the query. There are two cases for what will happen:
+- **The query contains SQLair output expressions** - The first result from the query will be scanned into the arguements of `Get`. If there are no results then it will return `ErrNoRows`. In this case the query is executed on the database or transaction with [`sql.QueryContext`](https://pkg.go.dev/database/sql#DB.QueryContext).
+- **The query does not contain SQLair output expressions** - No results will be returned. In this case the query is executed with [`sql.ExecContext`](https://pkg.go.dev/database/sql#DB.ExecContext).
+
+To get metadata about the execution of a query an `sqlair.Outcome` struct can be passed as the first argument. See the [Outcome](#outcome) section for more detail.
+
+```Go
+var person := Person{}
+var address := Address{}
+err := q.Get(&person, &address)
+```
 ### Run
-`Query.Run()` will execute the query on the database without returning any results. This is useful for data manipulation statements such as `INSERT`, `UPDATE`, `CREATE` or `DROP`.
+`Query.Run` is the same as `Query.Get` with no arguments. This is useful for data manipulation statements such as `INSERT`, `UPDATE`, `CREATE` or `DROP`.
 ### Iter
-`Query.Iter()` returns an `Iterator` that cycles through the rows returned from the query. `iter.Next()` is called to prepare the next row (and returns false if there is no next row or an error has occoured). Then the row can be scanned into the structs mentioned in the output expressions with `iter.Decode()`.
+`Query.Iter()` returns an `Iterator` that cycles through the rows returned from the query.An underlying database connection is created upon the inital call of `Iter()`.
+    
+- `iter.Next()`
+  Prepares the next row for `iter.Get()`. It returns `true` if this has been scuessful and `false` if there is no next row or an error has occoured (the error can be checked with `iter.Close()`).
+- `iter.Get(outputArgs...)`
+  Scans the results from the query into the provided `outputArgs`. If it is called before the first call to `iter.Next()` with an `Outcome` it will populate the `Outcome` with metadata about the query (see [Outcome](#outcome) for more detail). 
+It uses [`sql.Rows.Scan`](https://pkg.go.dev/database/sql#Rows) under the hood. This provides useful implicit conversions from the default database types to the types of the struct fields. 
+- `Iter.Close()`
+  Closes the underlying database connection and also return any errors that have occured during iteration.
 
-An underlying database connection is created upon the inital call of `Iter()`. This is only closed up the execution of `Iter.Close()` which will also return any errors that have occured during the execution of the query.
-
-Make sure that `iter.Close()` is called when iteration of the results is finished otherwise a connection to the database will be left hanging. You should **always** defer `iter.Close()`. Calling it twice is harmless and always a better option than leaving the connection open.
+Make sure that `iter.Close()` is called when iteration of the results is finished otherwise a connection to the database will be left hanging. You should **defer** `iter.Close()` **every time** unless there is a good reason not to. Calling it twice is harmless and always a better option than leaving the connection open.
 
 If the `Iterator` is not closed the underlying database connection is busy and cannot be used for any other queries. 
+
 ```Go
 iter := q.Iter()
 defer iter.Close()
@@ -226,23 +245,49 @@ for iter.Next() {
 err := iter.Close()
 ```
 
-Remeber, `Iter.Next` can return false either becuase the results have finished iterating **or because an error has occured**.
-### One
-`One` will decode the first result from the query. If there are no results then it will return `ErrNoRows`.
-```Go
-var person := Person{}
-var address := Address{}
-err := q.One(&person, &address)
-```
-### All
-`A#l` will decode all the rows returned by the query into slices of each of the objects mentioned in the output expressions.
+Remember, `Iter.Next` can return false either becuase the results have finished iterating **or because an error has occured**.
+### GetAll
+`GetAll` will scan all the rows returned by the query into slices of each of the objects mentioned in the output expressions. New structs will be created in the slices containing each row.
+
+It is possible to pass a slice of structs, or a slice of pointers to the structs.
+
+For example:
+
 ```Go
 var people := []Person{}
-var addresses := []Address{}
+var addresses := []*Address{}
 err := q.All(&people, &addresses)
 ```
 It is only advised that you use this if you __know__ that the results set is small and can fit comfortably in memory.
 
+## Outcome
+The `sqlair.Outcome` struct can be passed by reference to `Query.Get`, `Query.GetAll` or `Iter.Get` (but only before the first call of `Iter.Next()`). The struct that has been passed will be filled with metadata about the execution of the query.
+
+Currently this struct only has the method `Result`. This returns a [`sql.Result`](https://pkg.go.dev/database/sql#Result) but only when the query contains no output expressions (i.e. it is most likely an `INSERT` or `UPDATE`). If the query contains output expressions then `Outcome.Result()` will return `nil`.
+
+For example
+```Go
+var outcome = sqlair.Outcome{}
+
+stmt, err := sqlair.Prepare(`INSERT INTO person VALUES ($Person.name)`)
+q := db.Query(ctx, stmt, &p)
+
+// An outcome with Query.Get
+err := q.Get(&outcome)
+if err != nil {...}
+res := outcome.Result()
+
+// An outcome with Iter
+iter := q.Iter()
+defer iter.Close()
+err := iter.Get(&outcome)
+if err != nil {...}
+err := iter.Close()
+if err != nil {...}
+res := outcome.Result()
+```
+
+*There are plans to add more data to `Outcome` to make it useful with `SELECT` statements as well.*
 # FAQ
 
 

@@ -96,10 +96,11 @@ func example() error {
 	jim := people[0]
 	q := db.Query(context.Background(), tallerThan, jim)
 	iter := q.Iter()
+	defer iter.Close()
 	for iter.Next() {
 		p := Person{}
-		if !iter.Decode(&p) {
-			break
+		if err := iter.Decode(&p); err != nil {
+			return err
 		}
 		fmt.Printf("%s is taller than %s.\n", p.Name, jim.Name)
 	}
