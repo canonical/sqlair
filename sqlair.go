@@ -17,10 +17,9 @@ type Statement struct {
 	pe *expr.PreparedExpr
 }
 
-// Prepare expands the types mentioned in the SQLair expressions and checks
-// the SQLair parts of the query are well formed.
-// typeSamples must contain an instance of every type mentioned in the
-// SQLair expressions of the query. These are used only for type information.
+// Prepare expands the types mentioned in the SQLair expressions and checks the SQLair parts of the query are well formed.
+// typeSamples must contain an instance of every type mentioned in the SQLair expressions of the query.
+// These are used only for type information and cannot be pointers.
 func Prepare(query string, typeSamples ...any) (*Statement, error) {
 	parser := expr.NewParser()
 	parsedExpr, err := parser.Parse(query)
