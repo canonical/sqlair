@@ -1,50 +1,58 @@
 # SQLair
 
-SQLair is a package for Go that acts as a compatibility layer between Go and SQL databases. It allows for easy mapping between Go objects and query arguments and results.
+SQLair is a package for Go that acts as a compatibility layer between Go and SQL databases. It streamlines the process of marshalling rows from a database into Go objects, reducing repetitive and redundant code.
 
-SQLair allows you to write SQL with SQLair input/output expressions included where mapping is needed. These expressions indicate the Go objects to map the database arguments/results into. SQLair is not an ORM. It leaves all parts of the query outside of the expressions untouched.
+### Features
+ - Easy mapping from database rows to Go objects with extended SQL syntax
+ - Retain the full power of plain SQL
+ - Developer friendly API
 
-The API can be found at [pkg.go.dev](https://pkg.go.dev/github.com/canonical/sqlair).
+The API can be found at [pkg.go.dev](https://pkg.go.dev/github.com/canonical/sqlair) and a full demo can be found at [demo/demo.go](demo/demo.go).
 
-A demo can be found at [demo/demo.go](demo/demo.go).
+# Contents
+- [Motivation](#motivation)
+- [Usage](#usage)
+  - [Mini exmaple](#mini-exmaple)
+  - [Tagging structs](#tagging-structs)
+  - [Writing the SQL](#writing-the-sql)
+    - [Input Expressions](#input-expressions)
+    - [Output Expressions](#output-expressions)
+  - [A SQLair DB](#a-sqlair-db)
+      - [Transactions](#transactions)
+  - [Prepare](#prepare)
+  - [Query](#query)
+    - [Get](#get)
+    - [Run](#run)
+    - [Iter](#iter)
+    - [GetAll](#getall)
+  - [Outcome](#outcome)
+- [FAQ](#faq)
+- [Contributing](#contributing)
 
 ### Motivation
-When writing an SQL query with the standard Go database library, `database/sql`, there are multiple points of redundancy/failure:
+Marshelling rows from a database into Go objects with the Go standard libarary: [`database/sql`](https://pkg.go.dev/database/sql) requires a lot of repatative code and redundent code. SQLair provides a convinience layer on top of `database/sql` that improves this process.
 
-- The order of the columns in the query must match the order of columns in `Scan`
+When writing an SQL query with `database/sql` there are multiple points of redundancy/failure:
+
+- The order of the columns in the query must match the order of columns in `Rows.Scan`
 - The columns from the query must be manually matched to their destinations
 - If the columns needed changeing, all queries must be changed
 
-SQLair exapnds the SQL syntax with input and output expressions which indicate parts of the query that corrospond to Go objects.
+SQLair exapnds the SQL syntax with input and output expressions which indicate parts of the query that corrospond to Go objects. It allows the user to specify the Go objects they want in the SQL query itself whalst allowing the full power of SQL to be utilised. 
 
-For example, when selecting a particular `Person` from a database, instead of the query: 
-```SQL
-SELECT name_col, id_col, gender_col FROM person WHERE manager_col = ?
-```
-In SQLair you could write:
-```SQL
-SELECT &Person.* FROM person WHERE manager_col = $Manager.name
-```
-These results from this second query could then be directly decoded in the the `Person` struct.
-
-
+SQLair also provides an alternative API for reading the rows from the database. It does not aim to copy `database/sql`, it instead improves upon it and removes inconsistancies in it that have appeared as a result of its long life.
 
 # Usage
-The first step when using SQLair is to tag your structs. The `db` tag is used to map between the database column names and struct fields.
 
-For example:
+## Mini exmaple
+An example with a simple `SELECT` query with SQLair:
 ```Go
+// Use db struct tags to assosiate fields with database columns
 type Person struct {
 	Name	string	`db:"name_col"`
 	ID 	int64 	`db:"id_col"`
 	Gender	string  `db:"gender_col"`
 }
-```
-It is important to note that SQLair __needs__ the fields to be public in to order read from them and write to them.
-
-#### Mini exmaple
-An example with a simple `SELECT` query with SQLair:
-```Go
 // Wrap the *sql.DB.
 db := sqlair.NewDB(sqldb)
 
@@ -69,8 +77,31 @@ for iter.Next() {
 // Make sure to close the Iterator to avoid a hanging DB connection.
 err := iter.Close()
 ```
+## Tagging structs
+The first step when using SQLair is to tag your structs. The `db` tag is used to map between the database column names and struct fields.
+
+For example:
+```Go
+type Person struct {
+	Name	string	`db:"name_col"`
+	ID 	int64 	`db:"id_col"`
+	Gender	string  `db:"gender_col"`
+}
+```
+It is important to note that SQLair __needs__ the fields to be public in to order read from them and write to them.
 ## Writing the SQL
 In SQLair expressions, the chatacters `$` and `&` are used to specify input and outputs respectivly. These expressions specify the Go objects to fetch arguements from or read results into. 
+
+For example, when selecting a particular `Person` from a database, instead of the query: 
+```SQL
+SELECT name_col, id_col, gender_col FROM person WHERE manager_col = ?
+```
+In SQLair you would write:
+```SQL
+SELECT &Person.* FROM person WHERE manager_col = $Manager.name
+```
+This tells SQLair to substitue `&Person.*` for all columns mentioned in the `db` tags of the struct `Person` and pass the `Name` field of the struct `Manager` as an argument.
+
 ### Input Expressions
 Input expressions are limited to the form `$Type.col_name`. In the case of the `Person` struct above, we could write:
 ```Go
@@ -167,8 +198,7 @@ For more details, see the [API](https://pkg.go.dev/github.com/canonical/sqlair).
 ## Prepare
 `Prepare` parses and prepares the SQLair query for passing to the database. It checks the SQLair expressions in the query for correctness, saves information about the query, and generates the pure SQL.
 
-**Note:** This function does **not** prepare the query on the database.
-_In the future we intend to support preparing on the database as a backend optimisation once a query is created._
+**Note:** This function does **not** prepare the query on the database. _In the future we intend to support preparing on the database as a backend optimisation once a query is created._
 
 The SQLair function `Prepare` has the signiture:
 ```Go
@@ -291,6 +321,6 @@ res := outcome.Result()
 # FAQ
 
 
-## Contributing
+# Contributing
 
 See our [code and contribution guidelines](CONTRIBUTING.md)
