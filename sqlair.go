@@ -97,10 +97,9 @@ func (q *Query) Run() error {
 	return q.Get()
 }
 
-// Query.Get will run the query.
-// The first row (if there is one) will be scanned into the outputArgs.
-// It will give ErrNoRows if the query contains output expressions and there are no rows.
-// A pointer to an Outcome struct can be passed as the first argument which will be populated with the outcome of the query.
+// Get runs the query and decodes the first result into the provided output arguments.
+// It returns ErrNoRows if output arguments were provided but no results were found.
+// An &Outcome{} variable may be provided as the first output variable.
 func (q *Query) Get(outputArgs ...any) error {
 	if q.err != nil {
 		return q.err
@@ -112,28 +111,29 @@ func (q *Query) Get(outputArgs ...any) error {
 			outputArgs = outputArgs[1:]
 		}
 	}
+	if !q.qe.HasOutputs() && len(outputArgs) > 0 {
+		return fmt.Errorf("cannot get results: no output expressions in query")
+	}
 
+	var err error
 	iter := q.Iter()
-	defer iter.Close()
 	if outcome != nil {
-		err := iter.Get(outcome)
-		if err != nil {
-			return err
-		}
+		err = iter.Get(outcome)
 	}
-	if !q.qe.HasOutputs() {
-		if len(outputArgs) > 0 {
-			return fmt.Errorf("cannot get results: query does not return any results")
+	if err == nil && !iter.Next() {
+		err = iter.Close()
+		if err == nil && q.qe.HasOutputs() {
+			err = ErrNoRows
 		}
-		return iter.Close()
+		return err
 	}
-	if !iter.Next() {
-		if err := iter.Close(); err != nil {
-			return err
-		}
-		return ErrNoRows
+	if err == nil {
+		err = iter.Get(outputArgs...)
 	}
-	return iter.Get(outputArgs...)
+	if cerr := iter.Close(); err == nil {
+		err = cerr
+	}
+	return err
 }
 
 // Iter returns an Iterator to iterate through the results row by row.
@@ -147,18 +147,11 @@ func (q *Query) Iter() *Iterator {
 	var cols []string
 	if q.qe.HasOutputs() {
 		rows, err = q.qs.QueryContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
-		if err != nil {
-			return &Iterator{err: err}
-		}
-		cols, err = rows.Columns()
-		if err != nil {
-			return &Iterator{err: err}
+		if err == nil { // if err IS nil
+			cols, err = rows.Columns()
 		}
 	} else {
 		result, err = q.qs.ExecContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
-		if err != nil {
-			return &Iterator{err: err}
-		}
 	}
 	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err, result: result}
 }
@@ -173,18 +166,8 @@ func (iter *Iterator) Next() bool {
 	return iter.rows.Next()
 }
 
-// Iterator.Get scans the current result into the structs in outputValues when called after Iter.Next().
-// If it is called before the first Iter.Next() with a single Outcome argument, it will be populated with the outcome of the query.
-//
-// For example:
-//
-//	iter := q.Iter()
-//	err := iter.Get(&outcome)
-//	if iter.Next() {
-//		...
-//
-// outputArgs must contain all the structs mentioned in the query.
-// A pointer to an Outcome struct can be passed as the first argument which
+// Get decodes the result from the previous Next call into the provided output arguments.
+// An &Outcome{} variable may be provided as the single output variable before the first call to Next.
 func (iter *Iterator) Get(outputArgs ...any) (err error) {
 	if iter.err != nil {
 		return iter.err
@@ -231,8 +214,8 @@ func (iter *Iterator) Close() error {
 	return err
 }
 
-// A pointer to an outcome can be passed as the first variadic argument to Run.
-// It will be populated with the outcome of the query execution.
+// Outcome holds metadata about executed queries, and can be provided as the
+// first output argument to any of the Get methods.
 type Outcome struct {
 	result sql.Result
 }
@@ -242,15 +225,8 @@ func (o *Outcome) Result() sql.Result {
 }
 
 // GetAll iterates over the query and scans all rows into the provided slices.
-//
-// For example:
-//
-//	var pslice []Person
-//	var aslice []*Address
-//	err := query.GetAll(&pslice, &aslice)
-//
 // sliceArgs must contain pointers to slices of each of the output types.
-// A pointer to an Outcome struct can be passed as the first argument which will be populated with the outcome of the query.
+// An &Outcome{} variable may be provided as the first output variable.
 func (q *Query) GetAll(sliceArgs ...any) (err error) {
 	if q.err != nil {
 		return q.err
@@ -261,15 +237,11 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 		}
 	}()
 
-	var outcome *Outcome
 	if len(sliceArgs) > 0 {
-		if oc, ok := sliceArgs[0].(*Outcome); ok {
-			outcome = oc
+		if outcome, ok := sliceArgs[0].(*Outcome); ok {
+			outcome.result = nil
 			sliceArgs = sliceArgs[1:]
 		}
-	}
-	if outcome != nil {
-		outcome.result = nil
 	}
 	// Check slice inputs
 	var slicePtrVals = []reflect.Value{}

@@ -138,6 +138,20 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 		inputs:   []any{Manager{PostalCode: 1000}, Address{ID: 2000}},
 		outputs:  [][]any{{&Person{}}},
 		expected: [][]any{{&Person{Fullname: "Fred", PostalCode: 1000}}},
+	}, {
+		summary:  "insert",
+		query:    "INSERT INTO address VALUES ($Address.id, $Address.district, $Address.street);",
+		types:    []any{Address{}},
+		inputs:   []any{Address{8000, "Crazy Town", "Willow Wong"}},
+		outputs:  [][]any{},
+		expected: [][]any{},
+	}, {
+		summary:  "update",
+		query:    "UPDATE address SET id=$Address.id WHERE id=8000",
+		types:    []any{Address{}},
+		inputs:   []any{Address{ID: 1000}},
+		outputs:  [][]any{},
+		expected: [][]any{},
 	}}
 
 	// A Person struct that shadows the one in tests above and has different int types.
@@ -384,6 +398,13 @@ func (s *PackageSuite) TestGetErrors(c *C) {
 		inputs:  []any{},
 		outputs: []any{&Person{}},
 		err:     "sql: no rows in result set",
+	}, {
+		summary: "no outputs",
+		query:   "UPDATE person SET id=300 WHERE id=30",
+		types:   []any{Person{}},
+		inputs:  []any{},
+		outputs: []any{&Person{}},
+		err:     "cannot get results: no output expressions in query",
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()
@@ -600,7 +621,7 @@ func (s *PackageSuite) TestRun(c *C) {
 	db := sqlair.NewDB(sqldb)
 
 	// Insert Jim.
-	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
+	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ($Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
 	err = db.Query(nil, insertStmt, &jim).Run()
 	c.Assert(err, IsNil)
 
@@ -629,7 +650,7 @@ func (s *PackageSuite) TestOutcome(c *C) {
 
 	var outcome = sqlair.Outcome{}
 
-	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
+	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ($Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
 	q1 := db.Query(nil, insertStmt, &jim)
 	// Test INSERT with Get
 	c.Assert(q1.Get(&outcome), IsNil)
@@ -802,7 +823,7 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 	dropTables, sqldb, err := personAndAddressDB()
 	c.Assert(err, IsNil)
 
-	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'fred@email.com');", Person{})
+	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ($Person.name, $Person.id, $Person.address_id, 'fred@email.com');", Person{})
 	var derek = Person{ID: 85, Fullname: "Derek", PostalCode: 8000}
 	ctx := context.Background()
 
