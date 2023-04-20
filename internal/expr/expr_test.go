@@ -93,13 +93,13 @@ var tests = []struct {
 }, {
 	"input",
 	"SELECT p.*, a.district FROM person AS p JOIN address AS a ON p.address_id=$Address.id WHERE p.name = $Person.name",
-	"[Bypass[SELECT p.*, a.district FROM person AS p JOIN address AS a ON p.address_id=] Input[Address.id] Bypass[ WHERE p.name = ] Input[Person.name]]",
+	"[Bypass[SELECT p.*, a.district FROM person AS p JOIN address AS a ON p.address_id=] Input[[] [Address.id]] Bypass[ WHERE p.name = ] Input[[] [Person.name]]]",
 	[]any{Person{}, Address{}},
 	`SELECT p.*, a.district FROM person AS p JOIN address AS a ON p.address_id=@sqlair_0 WHERE p.name = @sqlair_1`,
 }, {
 	"output and input",
 	"SELECT &Person.* FROM table WHERE foo = $Address.id",
-	"[Bypass[SELECT ] Output[[] [Person.*]] Bypass[ FROM table WHERE foo = ] Input[Address.id]]",
+	"[Bypass[SELECT ] Output[[] [Person.*]] Bypass[ FROM table WHERE foo = ] Input[[] [Address.id]]]",
 	[]any{Person{}, Address{}},
 	`SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM table WHERE foo = @sqlair_0`,
 }, {
@@ -159,25 +159,25 @@ var tests = []struct {
 }, {
 	"complex query v3",
 	"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name)",
-	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district a.street] [Address.*]] Bypass[ FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name IN (SELECT name FROM table WHERE table.n = ] Input[Person.name] Bypass[)]]",
+	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district a.street] [Address.*]] Bypass[ FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name IN (SELECT name FROM table WHERE table.n = ] Input[[] [Person.name]] Bypass[)]]",
 	[]any{Person{}, Address{}},
 	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, a.district AS _sqlair_3, a.street AS _sqlair_4 FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name IN (SELECT name FROM table WHERE table.n = @sqlair_0)`,
 }, {
 	"complex query v4",
 	"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name) UNION SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name)",
-	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district a.street] [Address.*]] Bypass[ FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = ] Input[Person.name] Bypass[) UNION SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district a.street] [Address.*]] Bypass[ FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = ] Input[Person.name] Bypass[)]]",
+	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district a.street] [Address.*]] Bypass[ FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = ] Input[[] [Person.name]] Bypass[) UNION SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district a.street] [Address.*]] Bypass[ FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = ] Input[[] [Person.name]] Bypass[)]]",
 	[]any{Person{}, Address{}},
 	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, a.district AS _sqlair_3, a.street AS _sqlair_4 FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = @sqlair_0) UNION SELECT p.address_id AS _sqlair_5, p.id AS _sqlair_6, p.name AS _sqlair_7, a.district AS _sqlair_8, a.street AS _sqlair_9 FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = @sqlair_1)`,
 }, {
 	"complex query v5",
 	"SELECT p.* AS &Person.*, &District.* FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
-	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[] [District.*]] Bypass[ FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] Input[Person.name] Bypass[ AND p.address_id = ] Input[Person.address_id]]",
+	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[] [District.*]] Bypass[ FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] Input[[] [Person.name]] Bypass[ AND p.address_id = ] Input[[] [Person.address_id]]]",
 	[]any{Person{}, District{}},
 	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2,  FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = @sqlair_0 AND p.address_id = @sqlair_1`,
 }, {
 	"complex query v6",
 	"SELECT p.* AS &Person.*, FROM person AS p INNER JOIN address AS a ON p.address_id = $Address.id WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
-	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, FROM person AS p INNER JOIN address AS a ON p.address_id = ] Input[Address.id] Bypass[ WHERE p.name = ] Input[Person.name] Bypass[ AND p.address_id = ] Input[Person.address_id]]",
+	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, FROM person AS p INNER JOIN address AS a ON p.address_id = ] Input[[] [Address.id]] Bypass[ WHERE p.name = ] Input[[] [Person.name]] Bypass[ AND p.address_id = ] Input[[] [Person.address_id]]]",
 	[]any{Person{}, Address{}},
 	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, FROM person AS p INNER JOIN address AS a ON p.address_id = @sqlair_0 WHERE p.name = @sqlair_1 AND p.address_id = @sqlair_2`,
 }, {
@@ -195,9 +195,9 @@ var tests = []struct {
 }, {
 	"insert",
 	"INSERT INTO person (name) VALUES $Person.name",
-	"[Bypass[INSERT INTO person (name) VALUES ] Input[Person.name]]",
+	"[Bypass[INSERT INTO person ] Input[[name] [Person.name]]]",
 	[]any{Person{}},
-	`INSERT INTO person (name) VALUES @sqlair_0`,
+	`INSERT INTO person (name) VALUES (@sqlair_0)`,
 }, {
 	"ignore dollar",
 	"SELECT $, dollerrow$ FROM moneytable$",
@@ -225,7 +225,7 @@ var tests = []struct {
 }, {
 	"update",
 	"UPDATE person SET person.address_id = $Address.id WHERE person.id = $Person.id",
-	"[Bypass[UPDATE person SET person.address_id = ] Input[Address.id] Bypass[ WHERE person.id = ] Input[Person.id]]",
+	"[Bypass[UPDATE person SET person.address_id = ] Input[[] [Address.id]] Bypass[ WHERE person.id = ] Input[[] [Person.id]]]",
 	[]any{Person{}, Address{}},
 	`UPDATE person SET person.address_id = @sqlair_0 WHERE person.id = @sqlair_1`,
 }}
@@ -327,11 +327,11 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}{{
 		query:       "SELECT (p.name, t.id) AS &Address.id FROM t",
 		prepareArgs: []any{Address{}},
-		err:         "cannot prepare expression: mismatched number of columns and targets in output expression: (p.name, t.id) AS &Address.id",
+		err:         "cannot prepare expression: cannot match columns to types in output expression: (p.name, t.id) AS &Address.id",
 	}, {
 		query:       "SELECT p.name AS (&Address.district, &Address.street) FROM t",
 		prepareArgs: []any{Address{}},
-		err:         "cannot prepare expression: mismatched number of columns and targets in output expression: p.name AS (&Address.district, &Address.street)",
+		err:         "cannot prepare expression: cannot match columns to types in output expression: p.name AS (&Address.district, &Address.street)",
 	}, {
 		query:       "SELECT (&Address.*, &Address.id) FROM t",
 		prepareArgs: []any{Address{}, Person{}},

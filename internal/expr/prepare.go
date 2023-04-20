@@ -55,55 +55,61 @@ func starCount(fns []fullName) int {
 	return s
 }
 
-// starCheckOutput checks that the statement is well formed with regard to
-// asterisks and the number of sources and targets.
+// starCheckOutput checks that the output expression is well formed.
 func starCheckOutput(p *outputPart) error {
-	numSources := len(p.columns)
-	numTargets := len(p.types)
+	numColumns := len(p.columns)
+	numTypes := len(p.types)
 
-	targetStars := starCount(p.target)
-	sourceStars := starCount(p.source)
-	starTarget := targetStars == 1
-	starSource := sourceStars == 1
+	typeStars := starCount(p.types)
+	columnsStars := starCount(p.columns)
+	starType := typeStars == 1
+	starColumn := columnsStars == 1
 
-	if targetStars > 1 || sourceStars > 1 || (sourceStars == 1 && targetStars == 0) ||
-		(starTarget && numTargets > 1) || (starSource && numSources > 1) {
+	if typeStars > 1 || columnsStars > 1 || (columnsStars == 1 && typeStars == 0) ||
+		(starType && numTypes > 1) || (starColumn && numColumns > 1) {
 		return fmt.Errorf("invalid asterisk in output expression: %s", p.raw)
 	}
-	if !starTarget && (numSources > 0 && (numTargets != numSources)) {
-		return fmt.Errorf("mismatched number of columns and targets in output expression: %s", p.raw)
+	if !starType && (numColumns > 0 && (numTypes != numColumns)) {
+		return fmt.Errorf("cannot match columns to types in output expression: %s", p.raw)
+	}
+	return nil
+}
+
+// starCheckInput checks that the input expression is well formed.
+func starCheckInput(p *inputPart) error {
+	numTypes := len(p.types)
+	numCols := len(p.columns)
+	starTypes := starCount(p.types)
+	starCols := starCount(p.columns)
+
+	if numCols == 1 && starCols == 1 {
+		return nil
+	}
+
+	// Input types grouped togther not in VALUES expression
+	if numCols == 0 && numTypes > 1 {
+		return fmt.Errorf("internal error: cannot group standalone input expressions")
+	}
+
+	// Cannot have multiple star columns or multiple star types
+	if (numCols > 1 && starCols > 0) || numCols == 0 && starTypes > 0 {
+		return fmt.Errorf("invalid asterisk in output expression: %s", p.raw)
+	}
+
+	// Explicit columns and not star type and the number of columns does not equal number of fields specified.
+	if numCols > 0 && starCols == 0 && !((numTypes == 1 && starTypes == 1) || (starTypes == 0 && numTypes == numCols)) {
+		return fmt.Errorf("cannot match columns to types in output expression: %s", p.raw)
 	}
 	return nil
 }
 
 // prepareInput checks that the input expression corresponds to a known type.
-func prepareInput(ti typeNameToInfo, p *inputPart) (field, error) {
-	info, ok := ti[p.source.prefix]
-	if !ok {
-		ts := getKeys(ti)
-		if len(ts) == 0 {
-			return field{}, fmt.Errorf(`type %q not passed as a parameter`, p.source.prefix)
-		} else {
-			return field{}, fmt.Errorf(`type %q not passed as a parameter, have: %s`, p.source.prefix, strings.Join(ts, ", "))
-		}
-	}
-	f, ok := info.tagToField[p.source.name]
-	if !ok {
-		return field{}, fmt.Errorf(`type %q has no %q db tag`, info.typ.Name(), p.source.name)
-	}
-
-	return f, nil
-}
-
-// prepareOutput checks that the output expressions correspond to known types.
-// It then checks they are formatted correctly and finally generates the columns for the query.
-func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []field, error) {
-
-	var outCols = make([]fullName, 0)
+func prepareInput(ti typeNameToInfo, p *inputPart) ([]fullName, []field, error) {
+	var inCols = make([]fullName, 0)
 	var fields = make([]field, 0)
 
 	// Check the asterisks are well formed (if present).
-	if err := starCheckOutput(p); err != nil {
+	if err := starCheckInput(p); err != nil {
 		return nil, nil, err
 	}
 
@@ -111,7 +117,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []field, error
 	var info *info
 	var ok bool
 
-	for _, t := range p.target {
+	// Check the input structs and their tags are valid.
+	for _, t := range p.types {
 		info, ok = ti[t.prefix]
 		if !ok {
 			return nil, nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, t.prefix, strings.Join(getKeys(ti), ", "))
@@ -130,17 +137,99 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []field, error
 
 	// Generate columns to inject into SQL query.
 
-	// Case 1: Star target cases e.g. "...&P.*".
-	if p.target[0].name == "*" {
-		info, _ := ti[p.target[0].prefix]
+	// Case 0: A simple standalone input expression e.g. "$P.name".
+	if len(p.columns) == 0 {
+		return []fullName{}, fields, nil
+	}
+
+	// Case 1: Star type cases e.g. "... VALUES $P.*".
+	if p.types[0].name == "*" {
+		info, _ := ti[p.types[0].prefix]
+
+		// Case 1.1: Single star i.e. "* VALUES $P.*"
+		if p.columns[0].name == "*" {
+			for _, tag := range info.tags {
+				inCols = append(inCols, fullName{name: tag})
+				fields = append(fields, info.tagToField[tag])
+			}
+			return inCols, fields, nil
+		}
+
+		// Case 1.2: Explicit columns e.g. "(col1, col2) VALUES $P.*".
+		for _, c := range p.columns {
+			f, ok := info.tagToField[c.name]
+			if !ok {
+				return nil, nil, fmt.Errorf(`type %q has no %q db tag`, info.typ.Name(), c.name)
+			}
+			inCols = append(inCols, c)
+			fields = append(fields, f)
+		}
+		return inCols, fields, nil
+	}
+
+	// Case 2: None star type cases e.g. "... VALUES ($P.name, $P.id)".
+
+	// Case 2.1: Star column e.g. "* VALUES ($P.name, $P.id)".
+	if p.columns[0].name == "*" {
+		for _, t := range p.types {
+			inCols = append(inCols, fullName{name: t.name})
+		}
+		return inCols, fields, nil
+	}
+
+	// Case 2.2: Renamed explicit columns e.g. "(name_1) VALUES $P.name".
+	for _, c := range p.columns {
+		inCols = append(inCols, c)
+	}
+	return inCols, fields, nil
+}
+
+// prepareOutput checks that the output expressions correspond to known types.
+// It then checks they are formatted correctly and finally generates the columns for the query.
+func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []field, error) {
+
+	var outCols = make([]fullName, 0)
+	var fields = make([]field, 0)
+
+	// Check the asterisks are well formed (if present).
+	if err := starCheckOutput(p); err != nil {
+		return nil, nil, err
+	}
+
+	// Check target struct type and its tags are valid.
+	var info *info
+	var ok bool
+
+	for _, t := range p.types {
+		info, ok = ti[t.prefix]
+		if !ok {
+			return nil, nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, t.prefix, strings.Join(getKeys(ti), ", "))
+		}
+
+		if t.name != "*" {
+			f, ok := info.tagToField[t.name]
+			if !ok {
+				return nil, nil, fmt.Errorf(`type %q has no %q db tag`, info.typ.Name(), t.name)
+			}
+			// For a none star expression we record output destinations here.
+			// For a star expression we fill out the destinations as we generate the columns.
+			fields = append(fields, f)
+		}
+	}
+
+	// Generate columns to inject into SQL query.
+
+	// Case 1: Star types cases e.g. "...&P.*".
+	if p.types[0].name == "*" {
+		info, _ := ti[p.types[0].prefix]
 
 		// Case 1.1: Single star i.e. "t.* AS &P.*" or "&P.*"
-		if len(p.source) == 0 || p.source[0].name == "*" {
+		if len(p.columns) == 0 || p.columns[0].name == "*" {
 			pref := ""
 
 			// Prepend table name. E.g. "t" in "t.* AS &P.*".
-			if len(p.source) > 0 {
-				pref = p.source[0].prefix
+			if len(p.columns) > 0 {
+				pref = p.columns[0].prefix
 			}
 
 			for _, tag := range info.tags {
@@ -151,8 +240,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []field, error
 		}
 
 		// Case 1.2: Explicit columns e.g. "(col1, t.col2) AS &P.*".
-		if len(p.source) > 0 {
-			for _, c := range p.source {
+		if len(p.columns) > 0 {
+			for _, c := range p.columns {
 				f, ok := info.tagToField[c.name]
 				if !ok {
 					return nil, nil, fmt.Errorf(`type %q has no %q db tag`, info.typ.Name(), c.name)
@@ -164,18 +253,18 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []field, error
 		}
 	}
 
-	// Case 2: None star target cases e.g. "...(&P.name, &P.id)".
+	// Case 2: None star types cases e.g. "...(&P.name, &P.id)".
 
 	// Case 2.1: Explicit columns e.g. "name_1 AS P.name".
-	if len(p.source) > 0 {
-		for _, c := range p.source {
+	if len(p.columns) > 0 {
+		for _, c := range p.columns {
 			outCols = append(outCols, c)
 		}
 		return outCols, fields, nil
 	}
 
 	// Case 2.2: No columns e.g. "(&P.name, &P.id)".
-	for _, t := range p.target {
+	for _, t := range p.types {
 		outCols = append(outCols, fullName{name: t.name})
 	}
 	return outCols, fields, nil
@@ -230,13 +319,20 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	for _, part := range pe.queryParts {
 		switch p := part.(type) {
 		case *inputPart:
-			inLoc, err := prepareInput(ti, p)
+			inCols, fields, err := prepareInput(ti, p)
 			if err != nil {
 				return nil, err
 			}
-			sql.WriteString("@sqlair_" + strconv.Itoa(inCount))
-			inCount++
-			inputs = append(inputs, inLoc)
+			if len(p.columns) == 0 {
+				sql.WriteString("@sqlair_" + strconv.Itoa(inCount))
+				inCount += 1
+			} else {
+				sql.WriteString(printCols(inCols))
+				sql.WriteString(" VALUES ")
+				sql.WriteString(namedParams(inCount, len(inCols)))
+				inCount += len(inCols)
+			}
+			inputs = append(inputs, fields...)
 		case *outputPart:
 			outCols, fields, err := prepareOutput(ti, p)
 			if err != nil {
@@ -261,4 +357,33 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	}
 
 	return &PreparedExpr{inputs: inputs, outputs: outputs, sql: sql.String()}, nil
+}
+
+// printCols prints a bracketed, comma seperated list of fullNames.
+func printCols(cs []fullName) string {
+	var s bytes.Buffer
+	s.WriteString("(")
+	for i, c := range cs {
+		s.WriteString(c.String())
+		if i < len(cs)-1 {
+			s.WriteString(", ")
+		}
+	}
+	s.WriteString(")")
+	return s.String()
+}
+
+// namedParams returns n incrementing parameters with the first index being start.
+func namedParams(start int, n int) string {
+	var s bytes.Buffer
+	s.WriteString("(")
+	for i := start; i < start+n; i++ {
+		s.WriteString("@sqlair_")
+		s.WriteString(strconv.Itoa(i))
+		if i < start+n-1 {
+			s.WriteString(", ")
+		}
+	}
+	s.WriteString(")")
+	return s.String()
 }
