@@ -112,7 +112,7 @@ func (q *Query) Get(outputArgs ...any) error {
 		}
 	}
 	if !q.qe.HasOutputs() && len(outputArgs) > 0 {
-		return fmt.Errorf("cannot get results: found output objects but no output expressions in query")
+		return fmt.Errorf("cannot get results: output variables provided but not referenced in query")
 	}
 
 	var err error
