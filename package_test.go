@@ -404,7 +404,7 @@ func (s *PackageSuite) TestGetErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: []any{&Person{}},
-		err:     "cannot get results: no output expressions in query",
+		err:     "cannot get results: found output objects but no output expressions in query",
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()
