@@ -38,7 +38,7 @@ When writing an SQL query with `database/sql` some points of redundancy/failure 
 - The columns from the query must be manually matched to their destinations
 - If the columns needed changeing, all queries must be changed
 
-SQLair exapnds the SQL syntax with input and output expressions which indicate parts of the query that corrospond to Go objects. It allows the user to specify the Go objects they want in the SQL query itself whalst allowing the full power of SQL to be utilised. 
+SQLair exapnds the SQL syntax with input and output expressions which indicate parts of the query that correspond to Go objects. It allows the user to specify the Go objects they want in the SQL query itself whilst allowing the full power of SQL to be utilised. 
 
 SQLair also provides an alternative API for reading the rows from the database. It does not aim to copy `database/sql`, it instead improves upon it and removes inconsistancies in it that have appeared as a result of its long life.
 
