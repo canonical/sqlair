@@ -30,9 +30,9 @@ The API can be found at [pkg.go.dev](https://pkg.go.dev/github.com/canonical/sql
 - [Contributing](#contributing)
 
 ### Motivation
-Marshelling rows from a database into Go objects with the Go standard libarary: [`database/sql`](https://pkg.go.dev/database/sql) requires a lot of repatative code and redundent code. SQLair provides a convinience layer on top of `database/sql` that improves this process.
+Marshelling rows from a database into Go objects with the Go standard libarary: [`database/sql`](https://pkg.go.dev/database/sql) requires a lot of repatative and redundent code. SQLair provides a convinience layer on top of `database/sql` that improves this process.
 
-When writing an SQL query with `database/sql` there are multiple points of redundancy/failure:
+When writing an SQL query with `database/sql` some points of redundancy/failure are:
 
 - The order of the columns in the query must match the order of columns in `Rows.Scan`
 - The columns from the query must be manually matched to their destinations
