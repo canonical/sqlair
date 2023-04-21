@@ -416,12 +416,14 @@ func (p *Parser) parseGoFullName() (fullName, bool, error) {
 
 // parseList takes a parsing function that returns a fullName and parses a
 // bracketed, comma seperated, list.
-func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]fullName, bool, error) {
-	// Case 1: Unbracketed singleton
-	if obj, ok, err := parseFn(p); err != nil {
-		return nil, false, err
-	} else if ok {
-		return []fullName{obj}, true, nil
+func (p *Parser) parseList(singletons bool, parseFn func(p *Parser) (fullName, bool, error)) ([]fullName, bool, error) {
+	if singletons {
+		// Case 1: Unbracketed singleton
+		if obj, ok, err := parseFn(p); err != nil {
+			return nil, false, err
+		} else if ok {
+			return []fullName{obj}, true, nil
+		}
 	}
 
 	//Case 2: Bracketed list
@@ -460,8 +462,8 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 
 // parseColumns parses a list of columns. For lists of more than one column the
 // columns must be enclosed in brackets e.g. "(col1, col2) AS &Person.*".
-func (p *Parser) parseColumns() ([]fullName, bool) {
-	if cols, ok, _ := p.parseList((*Parser).parseColumn); ok {
+func (p *Parser) parseColumns(singletons bool) ([]fullName, bool) {
+	if cols, ok, _ := p.parseList(singletons, (*Parser).parseColumn); ok {
 		return cols, true
 	}
 	return nil, false
@@ -472,7 +474,7 @@ func (p *Parser) parseColumns() ([]fullName, bool) {
 func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 	start := p.pos
 	// Case 1: There are no columns e.g. "&Person.*".
-	if targets, ok, err := p.parseList((*Parser).parseOutputType); err != nil {
+	if targets, ok, err := p.parseList(true, (*Parser).parseOutputType); err != nil {
 		return nil, false, err
 	} else if ok {
 		return &outputPart{
@@ -484,11 +486,11 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 
 	cp := p.save()
 	// Case 2: There are columns e.g. "p.col1 AS &Person.*".
-	if cols, ok := p.parseColumns(); ok {
+	if cols, ok := p.parseColumns(true); ok {
 		p.skipBlanks()
 		if p.skipString("AS") {
 			p.skipBlanks()
-			if targets, ok, err := p.parseList((*Parser).parseOutputType); err != nil {
+			if targets, ok, err := p.parseList(true, (*Parser).parseOutputType); err != nil {
 				return nil, false, err
 			} else if ok {
 				return &outputPart{
@@ -529,11 +531,11 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 
 	cp := p.save()
 	// Case 2: INSERT VALUES statement e.g. "(name, id) VALUES $Person.*".
-	if columns, ok := p.parseColumns(); ok {
+	if columns, ok := p.parseColumns(false); ok {
 		p.skipBlanks()
 		if p.skipString("VALUES") {
 			p.skipBlanks()
-			if sources, ok, err := p.parseList((*Parser).parseInputType); err != nil {
+			if sources, ok, err := p.parseList(true, (*Parser).parseInputType); err != nil {
 				return nil, false, err
 			} else if ok {
 				return &inputPart{

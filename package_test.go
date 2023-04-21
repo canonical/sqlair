@@ -601,7 +601,7 @@ func (s *PackageSuite) TestRun(c *C) {
 
 	db := sqlair.NewDB(sqldb)
 
-	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
+	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ($Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
 	err = db.Query(nil, insertStmt, &jim).Run()
 	c.Assert(err, IsNil)
 
@@ -775,6 +775,84 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 
 	err = db.Query(ctx, sqlair.MustPrepare(dropTables)).Run()
 	c.Assert(err, IsNil)
+}
+
+func (s *PackageSuite) TestValidDML(c *C) {
+	var tests = []struct {
+		summary  string
+		query    string
+		types    []any
+		inputs   []any
+		outputs  [][]any
+		expected [][]any
+	}{{
+		summary:  "delete person",
+		query:    "DELETE FROM person WHERE id = $Person.id",
+		types:    []any{Person{}},
+		inputs:   []any{&Person{30, "Fred", 1000}},
+		outputs:  [][]any{},
+		expected: [][]any{},
+	}, {
+		summary:  "simple select person",
+		query:    "SELECT * AS &Person.* FROM person",
+		types:    []any{Person{}},
+		inputs:   []any{},
+		outputs:  [][]any{{&Person{}}, {&Person{}}, {&Person{}}, {&Person{}}},
+		expected: [][]any{{&Person{20, "Mark", 1500}}, {&Person{40, "Mary", 3500}}, {&Person{35, "James", 4500}}},
+	}, {
+		summary:  "insert person",
+		query:    "INSERT INTO person (*) VALUES ($Person.*)",
+		types:    []any{Person{}},
+		inputs:   []any{Person{50, "Jim", 6000}},
+		outputs:  [][]any{},
+		expected: [][]any{},
+	}}
+
+	dropTables, sqldb, err := personAndAddressDB()
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	db := sqlair.NewDB(sqldb)
+
+	for _, t := range tests {
+		stmt, err := sqlair.Prepare(t.query, t.types...)
+		if err != nil {
+			c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+			continue
+		}
+
+		iter := db.Query(nil, stmt, t.inputs...).Iter()
+		defer iter.Close()
+		i := 0
+		for iter.Next() {
+			if i >= len(t.outputs) {
+				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d >= %d)\n", t.summary, t.query, i, len(t.outputs))
+				break
+			}
+			if err := iter.Decode(t.outputs[i]...); err != nil {
+				c.Errorf("\ntest %q failed (Decode):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+			}
+			i++
+		}
+
+		err = iter.Close()
+		if err != nil {
+			c.Errorf("\ntest %q failed (Close):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+		}
+		for i, row := range t.expected {
+			for j, col := range row {
+				c.Assert(t.outputs[i][j], DeepEquals, col,
+					Commentf("\ntest %q failed:\ninput: %s\nrow: %d\n", t.summary, t.query, i))
+			}
+		}
+
+	}
+
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	if err != nil {
+		c.Fatal(err)
+	}
 }
 
 type JujuLeaseKey struct {
