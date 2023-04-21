@@ -193,8 +193,38 @@ var tests = []struct {
 	[]any{},
 	"SELECT person.*, address.district FROM person JOIN address ON person.address_id = address.id WHERE person.name = 'Fred'",
 }, {
-	"insert",
+	"insert values",
 	"INSERT INTO person (name) VALUES $Person.name",
+	"[Bypass[INSERT INTO person ] Input[[name] [Person.name]]]",
+	[]any{Person{}},
+	`INSERT INTO person (name) VALUES (@sqlair_0)`,
+}, {
+	"star insert values",
+	"INSERT INTO person (name, id) VALUES ($Person.*)",
+	"[Bypass[INSERT INTO person ] Input[[name id] [Person.*]]]",
+	[]any{Person{}},
+	`INSERT INTO person (name, id) VALUES (@sqlair_0, @sqlair_1)`,
+}, {
+	"multiple structs insert values",
+	"INSERT INTO person (name, postalcode) VALUES ($Person.name, $Address.id)",
+	"[Bypass[INSERT INTO person ] Input[[name postalcode] [Person.name Address.id]]]",
+	[]any{Person{}, Address{}},
+	`INSERT INTO person (name, postalcode) VALUES (@sqlair_0, @sqlair_1)`,
+}, {
+	"double insert values",
+	"INSERT INTO person (*) VALUES ($Person.*)",
+	"[Bypass[INSERT INTO person ] Input[[*] [Person.*]]]",
+	[]any{Person{}},
+	`INSERT INTO person (address_id, id, name) VALUES (@sqlair_0, @sqlair_1, @sqlair_2)`,
+}, {
+	"insert values no brackets double star",
+	"INSERT INTO person * VALUES $Person.* ON CONFLICT DO NOTHING",
+	"[Bypass[INSERT INTO person ] Input[[*] [Person.*]] Bypass[ ON CONFLICT DO NOTHING]]",
+	[]any{Person{}},
+	`INSERT INTO person (address_id, id, name) VALUES (@sqlair_0, @sqlair_1, @sqlair_2) ON CONFLICT DO NOTHING`,
+}, {
+	"insert values no brackets",
+	"INSERT INTO person name VALUES $Person.name",
 	"[Bypass[INSERT INTO person ] Input[[name] [Person.name]]]",
 	[]any{Person{}},
 	`INSERT INTO person (name) VALUES (@sqlair_0)`,
@@ -404,6 +434,18 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 		query:       "SELECT * AS &.* FROM t",
 		prepareArgs: []any{struct{ f int }{f: 1}},
 		err:         `cannot prepare expression: cannot use anonymous struct`,
+	}, {
+		query:       "INSERT INTO person (*, postalcode) VALUES ($Person.name, $Address.id)",
+		prepareArgs: []any{Address{}, Person{}},
+		err:         "cannot prepare expression: invalid asterisk in input expression: (*, postalcode) VALUES ($Person.name, $Address.id)",
+	}, {
+		query:       "INSERT INTO person (name, postalcode) VALUES ($Person.*, $Address.*)",
+		prepareArgs: []any{Address{}, Person{}},
+		err:         "cannot prepare expression: cannot match columns to types in input expression: (name, postalcode) VALUES ($Person.*, $Address.*)",
+	}, {
+		query:       "INSERT INTO person (postalcode) VALUES ($Person.name, $Address.id)",
+		prepareArgs: []any{Address{}, Person{}},
+		err:         "cannot prepare expression: cannot match columns to types in input expression: (postalcode) VALUES ($Person.name, $Address.id)",
 	}}
 
 	for i, test := range tests {

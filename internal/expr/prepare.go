@@ -93,12 +93,12 @@ func starCheckInput(p *inputPart) error {
 
 	// Cannot have multiple star columns or multiple star types
 	if (numCols > 1 && starCols > 0) || numCols == 0 && starTypes > 0 {
-		return fmt.Errorf("invalid asterisk in output expression: %s", p.raw)
+		return fmt.Errorf("invalid asterisk in input expression: %s", p.raw)
 	}
 
 	// Explicit columns and not star type and the number of columns does not equal number of fields specified.
 	if numCols > 0 && starCols == 0 && !((numTypes == 1 && starTypes == 1) || (starTypes == 0 && numTypes == numCols)) {
-		return fmt.Errorf("cannot match columns to types in output expression: %s", p.raw)
+		return fmt.Errorf("cannot match columns to types in input expression: %s", p.raw)
 	}
 	return nil
 }
