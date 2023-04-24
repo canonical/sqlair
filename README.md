@@ -3,29 +3,29 @@
 
 SQLair is a Go package which streamlines interaction with SQL databases.
 
-It provides:
- - Mapping from database rows directly into Go objects
- - The full power of plain SQL
- - A Developer friendly API
+Things SQLair does:
+ - Maps database rows directly into Go structs
+ - Allows you to write queries in SQL
+ - Provides a user friendly interface
 
-It does not provide:
- - An ORM
- - Query optimisation
+Things SQLair does *not* do:
+ - Acts as an ORM 
+ - Optimise queries
 
-The API can be found at [pkg.go.dev](https://pkg.go.dev/github.com/canonical/sqlair) and a full demo can be found at [demo/demo.go](demo/demo.go).
+API docs can be found at [pkg.go.dev](https://pkg.go.dev/github.com/canonical/sqlair) and a complete demo can be found at [demo/demo.go](demo/demo.go).
 
 ### Why?
-Marshalling rows from a database into Go objects with the Go standard library: [`database/sql`](https://pkg.go.dev/database/sql) requires a lot of repetitive and redundant code. SQLair provides a convenience layer on top of `database/sql` that improves this process.
+There are [many solutions](https://github.com/d-tsuji/awesome-go-orms) for using a database with Go. Most of these are ORMs that require learning a complex API which abstracts pure SQL. Others provide a light weight convenience layer on top of the default library[`database/sql`](https://pkg.go.dev/database/sql), however, these may be coupled to the `database/sql` query API and none of them are as full featured as SQLair.
 
-When writing an SQL query with `database/sql` some points of redundancy/failure are:
+With `database/sql` reading rows into Go structs requires a lot of repetitive and redundant code:
 
 - The order of the columns in the query must match the order of columns in `Rows.Scan`
 - The columns from the query must be manually matched to their destinations
 - If the columns needed changing, all queries must be changed
 
-SQLair expands the SQL syntax with input and output expressions which indicate parts of the query that correspond to Go objects. It allows the user to specify the Go objects they want in the SQL query itself whilst allowing the full power of SQL to be utilised. 
+SQLair expands the SQL syntax with input and output expressions which indicate parts of the query that correspond to Go structs. It allows the user to specify the Go structs they want in the SQL query itself whilst allowing the full power of SQL to be utilised. 
 
-SQLair also provides an alternative API for reading the rows from the database. It does not aim to copy `database/sql`, it instead improves upon it and removes inconsistencies in it that have appeared as a result of its long life.
+SQLair also provides an alternative API for reading the rows from the database. It does not copy `database/sql`, it instead improves upon it and removes inconsistencies.
 
 # Usage
 
@@ -83,7 +83,7 @@ type Person struct {
 ```
 It is important to note that SQLair __needs__ the fields to be public in to order read from them and write to them.
 ## Writing the SQL
-In SQLair expressions, the characters `$` and `&` are used to specify input and outputs respectively. These expressions specify the Go objects to fetch arguments from or read results into. 
+In SQLair expressions, the characters `$` and `&` are used to specify input and outputs respectively. These expressions specify the Go structs to fetch arguments from or read results into. 
 
 For example, when selecting a particular `Person` from a database, instead of the query: 
 ```SQL
@@ -110,7 +110,7 @@ q := db.Query(ctx, stmt, &person)
 then the value in the `ID` field will be used as the query argument.
 
  
-_There are future plans to allow more integrated use of Go objects in `INSERT` statements._ 
+_There are future plans to allow more integrated use of Go structs in `INSERT` statements._ 
 ### Output Expressions
 Output expressions have multiple different formats. An asterisk `*` can be used to indicate that we want to read into _all_ the tagged fields in the struct.
 
@@ -209,7 +209,7 @@ We mention three structs: `Person` and `Address` as outputs, and `Manager` as an
 stmt, err := sqlair.Prepare(q, Person{}, Address{}, Manager{})
 ```
 
-These structs are only used for their type information. Nothing else. It is an unfortunate limitation of generics in Go that we cannot pass a variadic list of types and, therefore, require instances of the objects themselves.
+These structs are only used for their type information. Nothing else. It is an unfortunate limitation of generics in Go that we cannot pass a variadic list of types and, therefore, require instances of the struct itself.
 
 Prepare uses the `reflect` library to gather information about the types and their struct tags. This information is used to fill in the correct columns to fetch in place of `&Person.*`, to check that there is a field in `Address` with a corresponding tag `db:"id"` and a field in `Manager` with a corresponding tag `db:"name"`. 
 
