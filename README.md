@@ -1,35 +1,20 @@
 # SQLair
+[![Go Reference](https://pkg.go.dev/badge/github.com/canonical/sqlair)](https://pkg.go.dev/github.com/canonical/sqlair) [![Go Report Card](https://goreportcard.com/badge/github.com/canonical/sqlair)](https://goreportcard.com/report/github.com/canonical/sqlair) [![CI](https://github.com/canonical/sqlair/actions/workflows/go-test.yml/badge.svg)](https://github.com/canonical/sqlair/actions/workflows/go-test.yml)
 
-SQLair is a package for Go that acts as a compatibility layer between Go and SQL databases. It streamlines the process of marshalling rows from a database into Go objects, reducing repetitive and redundant code.
+SQLair is a Go package which streamlines interaction with SQL databases.
 
-### Features
- - Easy mapping from database rows to Go objects with extended SQL syntax
- - Retain the full power of plain SQL
- - Developer friendly API
+It provides:
+ - Mapping from database rows directly into Go objects
+ - The full power of plain SQL
+ - A Developer friendly API
+
+It does not provide:
+ - An ORM
+ - Query optimisation
 
 The API can be found at [pkg.go.dev](https://pkg.go.dev/github.com/canonical/sqlair) and a full demo can be found at [demo/demo.go](demo/demo.go).
 
-# Contents
-- [Motivation](#motivation)
-- [Usage](#usage)
-  - [Mini exmaple](#mini-exmaple)
-  - [Tagging structs](#tagging-structs)
-  - [Writing the SQL](#writing-the-sql)
-    - [Input Expressions](#input-expressions)
-    - [Output Expressions](#output-expressions)
-  - [A SQLair DB](#a-sqlair-db)
-      - [Transactions](#transactions)
-  - [Prepare](#prepare)
-  - [Query](#query)
-    - [Get](#get)
-    - [Run](#run)
-    - [Iter](#iter)
-    - [GetAll](#getall)
-  - [Outcome](#outcome)
-- [FAQ](#faq)
-- [Contributing](#contributing)
-
-### Motivation
+### Why?
 Marshalling rows from a database into Go objects with the Go standard library: [`database/sql`](https://pkg.go.dev/database/sql) requires a lot of repetitive and redundant code. SQLair provides a convenience layer on top of `database/sql` that improves this process.
 
 When writing an SQL query with `database/sql` some points of redundancy/failure are:
@@ -43,6 +28,22 @@ SQLair expands the SQL syntax with input and output expressions which indicate p
 SQLair also provides an alternative API for reading the rows from the database. It does not aim to copy `database/sql`, it instead improves upon it and removes inconsistencies in it that have appeared as a result of its long life.
 
 # Usage
+
+#### Contents
+- [Mini exmaple](#mini-exmaple)
+- [Tagging structs](#tagging-structs)
+- [Writing the SQL](#writing-the-sql)
+  - [Input Expressions](#input-expressions)
+  - [Output Expressions](#output-expressions)
+- [A SQLair DB](#a-sqlair-db)
+    - [Transactions](#transactions)
+- [Prepare](#prepare)
+- [Query](#query)
+  - [Get](#get)
+  - [Run](#run)
+  - [Iter](#iter)
+  - [GetAll](#getall)
+- [Outcome](#outcome)
 
 ## Mini exmaple
 An example with a simple `SELECT` query with SQLair:
@@ -65,17 +66,9 @@ stmt := sqlair.MustPrepare(
 
 // Pass the context, prepared statement, and Address struct containing the "id" argument.
 q := db.Query(ctx, stmt, address)
-// Iterate over the returned rows, decoding each one into a Person struct.
-iter := db.Query(stmt).Iter()
-for iter.Next() {
-    var p := Person{}
-    if err := iter.Decode(&p) {
-        return err
-    }
-    doSomethingWithPerson(p)
-}
-// Make sure to close the Iterator to avoid a hanging DB connection.
-err := iter.Close()
+// Get runs the query on the DB and reads the first row of the results into p
+var p := Person{}
+err := q.Get(&p)
 ```
 ## Tagging structs
 The first step when using SQLair is to tag your structs. The `db` tag is used to map between the database column names and struct fields.
@@ -90,7 +83,7 @@ type Person struct {
 ```
 It is important to note that SQLair __needs__ the fields to be public in to order read from them and write to them.
 ## Writing the SQL
-In SQLair expressions, the chatacters `$` and `&` are used to specify input and outputs respectively. These expressions specify the Go objects to fetch arguments from or read results into. 
+In SQLair expressions, the characters `$` and `&` are used to specify input and outputs respectively. These expressions specify the Go objects to fetch arguments from or read results into. 
 
 For example, when selecting a particular `Person` from a database, instead of the query: 
 ```SQL

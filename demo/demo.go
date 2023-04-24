@@ -99,7 +99,7 @@ func example() error {
 	defer iter.Close()
 	for iter.Next() {
 		p := Person{}
-		if err := iter.Decode(&p); err != nil {
+		if err := iter.Get(&p); err != nil {
 			return err
 		}
 		fmt.Printf("%s is taller than %s.\n", p.Name, jim.Name)
@@ -112,7 +112,7 @@ func example() error {
 	// Find cities with people taller than Jim
 	tallCities := []Place{}
 	tallPeople := []Person{}
-	err = db.Query(context.Background(), tallerCity, jim).All(&tallCities, &tallPeople)
+	err = db.Query(context.Background(), tallerCity, jim).GetAll(&tallCities, &tallPeople)
 	if err != nil {
 		return err
 	}
