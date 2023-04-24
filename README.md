@@ -30,17 +30,17 @@ The API can be found at [pkg.go.dev](https://pkg.go.dev/github.com/canonical/sql
 - [Contributing](#contributing)
 
 ### Motivation
-Marshelling rows from a database into Go objects with the Go standard libarary: [`database/sql`](https://pkg.go.dev/database/sql) requires a lot of repatative and redundent code. SQLair provides a convinience layer on top of `database/sql` that improves this process.
+Marshalling rows from a database into Go objects with the Go standard library: [`database/sql`](https://pkg.go.dev/database/sql) requires a lot of repetitive and redundant code. SQLair provides a convenience layer on top of `database/sql` that improves this process.
 
 When writing an SQL query with `database/sql` some points of redundancy/failure are:
 
 - The order of the columns in the query must match the order of columns in `Rows.Scan`
 - The columns from the query must be manually matched to their destinations
-- If the columns needed changeing, all queries must be changed
+- If the columns needed changing, all queries must be changed
 
-SQLair exapnds the SQL syntax with input and output expressions which indicate parts of the query that correspond to Go objects. It allows the user to specify the Go objects they want in the SQL query itself whilst allowing the full power of SQL to be utilised. 
+SQLair expands the SQL syntax with input and output expressions which indicate parts of the query that correspond to Go objects. It allows the user to specify the Go objects they want in the SQL query itself whilst allowing the full power of SQL to be utilised. 
 
-SQLair also provides an alternative API for reading the rows from the database. It does not aim to copy `database/sql`, it instead improves upon it and removes inconsistancies in it that have appeared as a result of its long life.
+SQLair also provides an alternative API for reading the rows from the database. It does not aim to copy `database/sql`, it instead improves upon it and removes inconsistencies in it that have appeared as a result of its long life.
 
 # Usage
 
@@ -69,8 +69,8 @@ q := db.Query(ctx, stmt, address)
 iter := db.Query(stmt).Iter()
 for iter.Next() {
     var p := Person{}
-    if !iter.Decode(&p) {
-        break
+    if err := iter.Decode(&p) {
+        return err
     }
     doSomethingWithPerson(p)
 }
@@ -90,7 +90,7 @@ type Person struct {
 ```
 It is important to note that SQLair __needs__ the fields to be public in to order read from them and write to them.
 ## Writing the SQL
-In SQLair expressions, the chatacters `$` and `&` are used to specify input and outputs respectivly. These expressions specify the Go objects to fetch arguements from or read results into. 
+In SQLair expressions, the chatacters `$` and `&` are used to specify input and outputs respectively. These expressions specify the Go objects to fetch arguments from or read results into. 
 
 For example, when selecting a particular `Person` from a database, instead of the query: 
 ```SQL
@@ -100,7 +100,7 @@ In SQLair you would write:
 ```SQL
 SELECT &Person.* FROM person WHERE manager_col = $Manager.name
 ```
-This tells SQLair to substitue `&Person.*` for all columns mentioned in the `db` tags of the struct `Person` and pass the `Name` field of the struct `Manager` as an argument.
+This tells SQLair to substitute `&Person.*` for all columns mentioned in the `db` tags of the struct `Person` and pass the `Name` field of the struct `Manager` as an argument.
 
 ### Input Expressions
 Input expressions are limited to the form `$Type.col_name`. In the case of the `Person` struct above, we could write:
@@ -117,7 +117,7 @@ q := db.Query(ctx, stmt, &person)
 then the value in the `ID` field will be used as the query argument.
 
  
-_There are future plans to allow more intergrated use of Go objects in `INSERT` statements._ 
+_There are future plans to allow more integrated use of Go objects in `INSERT` statements._ 
 ### Output Expressions
 Output expressions have multiple different formats. An asterisk `*` can be used to indicate that we want to read into _all_ the tagged fields in the struct.
 
@@ -131,7 +131,7 @@ Below is a full table of the different forms of output expression:
 | `(client_name, client_id) AS (&Person.name_col, &Person.id_col)` | The `Name` and `ID` fields of `Person` will be set with the results from `client_name` and `client_id` |
 | `(gender_col, name_col) AS &Person.*` | The `Gender` and `Name` fields of `Person` will be set with the results from `gender_col` and `name_col` |
 
-The output expression should be places in the query where the columns to be returned would usually be found. Behind the scenes SQLair will replace the output expression with a list of comma seperated aliased columns.
+The output expression should be places in the query where the columns to be returned would usually be found. Behind the scenes SQLair will replace the output expression with a list of comma separated aliased columns.
 
 Multiple output expressions can be placed in the same query. 
 For example:
@@ -143,7 +143,7 @@ Person{}, Address{})
 ```
 This query will select columns from table `p` that are mentioned in the tags of the `Person` struct and columns from table `a` that are mentioned in the tags of the `Address` struct.
 
-To retrive the first row of results of this query, you would do:
+To retrieve the first row of results of this query, you would do:
 ```Go
 var p1 = Person{}
 var a1 = Address{}
@@ -167,11 +167,11 @@ db := sqlair.NewDB(sqldb)
 It is still possible to access the underlying `sqldb` with `db.PlainDB()` for any further configuration needed. 
 
 #### Transactions
-SQLair databases support transacitons. A `Query` can be created on a transaction in the same way it can on a `DB`.
+SQLair databases support transactions. A `Query` can be created on a transaction in the same way it can on a `DB`.
 
 Options can be passed to a transaction with `TXOptions`. `opts` can be `nil` if no options are needed. If `ctx` is `nil` `context.Background()` is used.
 
-An exisiting transaction can be wrapped with `NewTX` mirroring the `NewDB` method for the database.
+An existing transaction can be wrapped with `NewTX` mirroring the `NewDB` method for the database.
 
 Transactions on the database can be created in SQLair with `tx, err := db.Begin(ctx, opts)` and `Query`, `Commit` or `Rollback` can be executed on the transaction.
 
@@ -200,7 +200,7 @@ For more details, see the [API](https://pkg.go.dev/github.com/canonical/sqlair).
 
 **Note:** This function does **not** prepare the query on the database. _In the future we intend to support preparing on the database as a backend optimisation once a query is created._
 
-The SQLair function `Prepare` has the signiture:
+The SQLair function `Prepare` has the signature:
 ```Go
 sqlair.Prepare(query string, typeSamples ...any) (*Statement, error)
 ```
@@ -216,13 +216,13 @@ We mention three structs: `Person` and `Address` as outputs, and `Manager` as an
 stmt, err := sqlair.Prepare(q, Person{}, Address{}, Manager{})
 ```
 
-These structs are only used for their type information. Nothing else. It is an unfortate limiation of generics in Go that we cannot pass a variadic list of types and, therefore, require instances of the objects themsevles.
+These structs are only used for their type information. Nothing else. It is an unfortunate limitation of generics in Go that we cannot pass a variadic list of types and, therefore, require instances of the objects themselves.
 
-Prepare uses the `reflect` library to gather information about the types and their struct tags. This information is used to fill in the correct columns to fetch in place of `&Person.*`, to check that there is a field in `Address` with a corrosponding tag `db:"id"` and a field in `Manager` with a corrosponding tag `db:"name"`. 
+Prepare uses the `reflect` library to gather information about the types and their struct tags. This information is used to fill in the correct columns to fetch in place of `&Person.*`, to check that there is a field in `Address` with a corresponding tag `db:"id"` and a field in `Manager` with a corresponding tag `db:"name"`. 
 
 There is also a function `sqlair.MustPrepare` which is the same in all respects but will panic on error.
 ## Query
-A SQLair `Query` object captures all the opterations assosiated with running SQL on a database/transaction. It should be created when the query is ready to be run on the database/transaction. 
+A SQLair `Query` object captures all the operations associated with running SQL on a database/transaction. It should be created when the query is ready to be run on the database/transaction. 
 
 A new `Query` object can be created on a database or transaction with:
 ```Go
@@ -231,10 +231,10 @@ Query(ctx Context, stmt *Statement, inputArgs ...any) *Query
 If `ctx` is `nil`, `context.Background()` will be used.
 The `stmt` is the prepared statement from before, and the `inputArgs` must contain all the Go objects mentioned in the SQLair input expressions of the `Statement`. The  query arguments will be extracted from these objects and passed the the database. 
 
-The creation of the query does not actually trigger its exection. This is only done once one of the following methods on `Query` is called. 
+The creation of the query does not actually trigger its execution. This is only done once one of the following methods on `Query` is called. 
 ### Get
 `Get` will execute the query. There are two cases for what will happen:
-- **The query contains SQLair output expressions** - The first result from the query will be scanned into the arguements of `Get`. If there are no results then it will return `ErrNoRows`. In this case the query is executed on the database or transaction with [`sql.QueryContext`](https://pkg.go.dev/database/sql#DB.QueryContext).
+- **The query contains SQLair output expressions** - The first result from the query will be scanned into the arguments of `Get`. If there are no results then it will return `ErrNoRows`. In this case the query is executed on the database or transaction with [`sql.QueryContext`](https://pkg.go.dev/database/sql#DB.QueryContext).
 - **The query does not contain SQLair output expressions** - No results will be returned. In this case the query is executed with [`sql.ExecContext`](https://pkg.go.dev/database/sql#DB.ExecContext).
 
 To get metadata about the execution of a query an `sqlair.Outcome` struct can be passed as the first argument. See the [Outcome](#outcome) section for more detail.
@@ -250,12 +250,12 @@ err := q.Get(&person, &address)
 `Query.Iter()` returns an `Iterator` that cycles through the rows returned from the query.An underlying database connection is created upon the inital call of `Iter()`.
     
 - `iter.Next()`
-  Prepares the next row for `iter.Get()`. It returns `true` if this has been scuessful and `false` if there is no next row or an error has occoured (the error can be checked with `iter.Close()`).
+  Prepares the next row for `iter.Get()`. It returns `true` if this has been successful and `false` if there is no next row or an error has occurred (the error can be checked with `iter.Close()`).
 - `iter.Get(outputArgs...)`
   Scans the results from the query into the provided `outputArgs`. If it is called before the first call to `iter.Next()` with an `Outcome` it will populate the `Outcome` with metadata about the query (see [Outcome](#outcome) for more detail). 
 It uses [`sql.Rows.Scan`](https://pkg.go.dev/database/sql#Rows) under the hood. This provides useful implicit conversions from the default database types to the types of the struct fields. 
 - `Iter.Close()`
-  Closes the underlying database connection and also return any errors that have occured during iteration.
+  Closes the underlying database connection and also return any errors that have occurred during iteration.
 
 Make sure that `iter.Close()` is called when iteration of the results is finished otherwise a connection to the database will be left hanging. You should **defer** `iter.Close()` **every time** unless there is a good reason not to. Calling it twice is harmless and always a better option than leaving the connection open.
 
@@ -275,7 +275,7 @@ for iter.Next() {
 err := iter.Close()
 ```
 
-Remember, `Iter.Next` can return false either becuase the results have finished iterating **or because an error has occured**.
+Remember, `Iter.Next` can return false either because the results have finished iterating **or because an error has occured**.
 ### GetAll
 `GetAll` will scan all the rows returned by the query into slices of each of the objects mentioned in the output expressions. New structs will be created in the slices containing each row.
 
