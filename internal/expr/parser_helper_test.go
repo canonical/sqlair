@@ -52,7 +52,7 @@ func (s *ExprInternalSuite) TestRunTable(c *C) {
 	for _, v := range parseTests {
 		// Reset the input.
 		p.init(v.input)
-		for i, _ := range v.result {
+		for i := range v.result {
 			var result bool
 			if v.bytef != nil {
 				result = v.bytef(v.data[i][0])
