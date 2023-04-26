@@ -1,12 +1,12 @@
 # SQLair
 [![Go Reference](https://pkg.go.dev/badge/github.com/canonical/sqlair)](https://pkg.go.dev/github.com/canonical/sqlair) [![Go Report Card](https://goreportcard.com/badge/github.com/canonical/sqlair)](https://goreportcard.com/report/github.com/canonical/sqlair) [![CI](https://github.com/canonical/sqlair/actions/workflows/go-test.yml/badge.svg)](https://github.com/canonical/sqlair/actions/workflows/go-test.yml)
 
-SQLair is a Go package which streamlines interaction with SQL databases.
+SQLair is a Go package which streamlines interaction with SQL databases by embedding Go structs into SQL queries.
 
 Things SQLair does:
  - Maps database rows directly into Go structs
  - Allows you to write queries in SQL
- - Provides a user friendly interface
+ - Provides a user friendly query API
 
 Things SQLair does *not* do:
  - Acts as an ORM 
@@ -27,10 +27,34 @@ SQLair expands the SQL syntax with input and output expressions which indicate p
 
 SQLair also provides an alternative API for reading the rows from the database. It does not copy `database/sql`, it instead improves upon it and removes inconsistencies.
 
-# Usage
+## Mini example
+An example with a simple `SELECT` query with SQLair:
+```Go
+// Tag struct
+type Person struct {
+	Name	string	`db:"name_col"`
+	ID 	int64 	`db:"id_col"`
+	Gender	string  `db:"gender_col"`
+}
 
+// Wrap the *sql.DB.
+db := sqlair.NewDB(sqldb)
+
+// Prepare the query for use with SQLair.
+stmt := sqlair.MustPrepare(
+    "SELECT &Person.* FROM people WHERE id = $Address.id",
+    Person{}, Address{},
+)
+
+// Build the query
+q := db.Query(ctx, stmt, address)
+
+// Get the first row
+var p := Person{}
+err := q.Get(&p)
+```
+# Usage
 #### Contents
-- [Mini exmaple](#mini-exmaple)
 - [Tagging structs](#tagging-structs)
 - [Writing the SQL](#writing-the-sql)
   - [Input Expressions](#input-expressions)
@@ -45,31 +69,6 @@ SQLair also provides an alternative API for reading the rows from the database. 
   - [GetAll](#getall)
 - [Outcome](#outcome)
 
-## Mini exmaple
-An example with a simple `SELECT` query with SQLair:
-```Go
-// Use db struct tags to assosiate fields with database columns
-type Person struct {
-	Name	string	`db:"name_col"`
-	ID 	int64 	`db:"id_col"`
-	Gender	string  `db:"gender_col"`
-}
-// Wrap the *sql.DB.
-db := sqlair.NewDB(sqldb)
-
-// Prepare the query for use with SQLair.
-// A sample of each Go type mentioned in the query is provided.
-stmt := sqlair.MustPrepare(
-    "SELECT &Person.* FROM people WHERE id = $Address.id",
-    Person{}, Address{},
-)
-
-// Pass the context, prepared statement, and Address struct containing the "id" argument.
-q := db.Query(ctx, stmt, address)
-// Get runs the query on the DB and reads the first row of the results into p
-var p := Person{}
-err := q.Get(&p)
-```
 ## Tagging structs
 The first step when using SQLair is to tag your structs. The `db` tag is used to map between the database column names and struct fields.
 
