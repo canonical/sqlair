@@ -33,7 +33,7 @@ An example with a simple `SELECT` query with SQLair:
 // Tag struct
 type Person struct {
 	Name	string	`db:"name_col"`
-	ID 	int64 	`db:"id_col"`
+	ID 	int 	`db:"id_col"`
 	Gender	string  `db:"gender_col"`
 }
 
@@ -70,17 +70,19 @@ err := q.Get(&p)
 - [Outcome](#outcome)
 
 ## Tagging structs
-The first step when using SQLair is to tag your structs. The `db` tag is used to map between the database column names and struct fields.
+The first step when using SQLair is to tag your structs. The `db` tag is used to map between the database column names and struct fields. 
 
 For example:
 ```Go
 type Person struct {
 	Name	string	`db:"name_col"`
-	ID 	int64 	`db:"id_col"`
+	ID 	int 	`db:"id_col"`
 	Gender	string  `db:"gender_col"`
 }
 ```
-It is important to note that SQLair __needs__ the fields to be public in to order read from them and write to them.
+Fields that correspond to database columns should be tagged with the column name. Untagged fields will be ignored by SQLair.
+
+It is important to note that SQLair __needs__ the struct fields to be public in to order read from them and write to them. 
 ## Writing the SQL
 In SQLair expressions, the characters `$` and `&` are used to specify input and outputs respectively. These expressions specify the Go structs to fetch arguments from or read results into. 
 
@@ -93,6 +95,8 @@ In SQLair you would write:
 SELECT &Person.* FROM person WHERE manager_col = $Manager.name
 ```
 This tells SQLair to substitute `&Person.*` for all columns mentioned in the `db` tags of the struct `Person` and pass the `Name` field of the struct `Manager` as an argument.
+
+SQLair does not parse the full query, only the input/output expressions. It does this by ignoring any text that do not start with a `$` or `&` or does not match the form of a SQLair expression.
 
 ### Input Expressions
 Input expressions are limited to the form `$Type.col_name`. In the case of the `Person` struct above, we could write:
@@ -262,7 +266,7 @@ for iter.Next() {
     if err := iter.Decode(&p, &a) {
         return err
     }
-    doSomethingWithPAndA(p, a)
+    // Do something with p and a
 }
 err := iter.Close()
 ```
@@ -278,7 +282,7 @@ For example:
 ```Go
 var people := []Person{}
 var addresses := []*Address{}
-err := q.All(&people, &addresses)
+err := q.GetAll(&people, &addresses)
 ```
 It is only advised that you use this if you __know__ that the results set is small and can fit comfortably in memory.
 
@@ -310,8 +314,6 @@ res := outcome.Result()
 ```
 
 *There are plans to add more data to `Outcome` to make it useful with `SELECT` statements as well.*
-# FAQ
-
 
 # Contributing
 

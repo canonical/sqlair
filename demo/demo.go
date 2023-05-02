@@ -21,6 +21,13 @@ type Place struct {
 	Population int    `db:"population"`
 }
 
+// Tag struct
+type ThisPerson struct {
+	Name   string `db:"name_col"`
+	ID     int64  `db:"id_col"`
+	Gender string `db:"gender_col"`
+}
+
 func example() error {
 	sqldb, err := sql.Open("sqlite3", ":memory:")
 	if err != nil {
