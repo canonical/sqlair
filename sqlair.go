@@ -73,10 +73,12 @@ type Query struct {
 
 // Iterator is used to iterate over the results of the query.
 type Iterator struct {
-	qe   *expr.QueryExpr
-	rows *sql.Rows
-	cols []string
-	err  error
+	qe      *expr.QueryExpr
+	rows    *sql.Rows
+	cols    []string
+	err     error
+	result  sql.Result
+	started bool
 }
 
 // Query takes a context, prepared SQLair Statement and the structs mentioned in the query arguments.
@@ -87,29 +89,51 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 	}
 
 	qe, err := s.pe.Query(inputArgs...)
-	return &Query{qs: db.db, qe: qe, err: err, ctx: ctx}
+	return &Query{qs: db.db, qe: qe, ctx: ctx, err: err}
 }
 
-// Run will execute the query.
-// Any rows returned by the query are ignored.
+// Run is an alias for Get that takes no arguments.
 func (q *Query) Run() error {
+	return q.Get()
+}
+
+// Get runs the query and decodes the first result into the provided output arguments.
+// It returns ErrNoRows if output arguments were provided but no results were found.
+// An &Outcome{} variable may be provided as the first output variable.
+func (q *Query) Get(outputArgs ...any) error {
 	if q.err != nil {
 		return q.err
 	}
-	// Some drivers will error if we execute a SELECT with Exec
-	if q.qe.HasOutputs() {
-		rows, err := q.qs.QueryContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
-		rows.Close()
-		if err != nil {
-			return err
-		}
-	} else {
-		_, err := q.qs.ExecContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
-		if err != nil {
-			return err
+	var outcome *Outcome
+	if len(outputArgs) > 0 {
+		if oc, ok := outputArgs[0].(*Outcome); ok {
+			outcome = oc
+			outputArgs = outputArgs[1:]
 		}
 	}
-	return nil
+	if !q.qe.HasOutputs() && len(outputArgs) > 0 {
+		return fmt.Errorf("cannot get results: output variables provided but not referenced in query")
+	}
+
+	var err error
+	iter := q.Iter()
+	if outcome != nil {
+		err = iter.Get(outcome)
+	}
+	if err == nil && !iter.Next() {
+		err = iter.Close()
+		if err == nil && q.qe.HasOutputs() {
+			err = ErrNoRows
+		}
+		return err
+	}
+	if err == nil {
+		err = iter.Get(outputArgs...)
+	}
+	if cerr := iter.Close(); err == nil {
+		err = cerr
+	}
+	return err
 }
 
 // Iter returns an Iterator to iterate through the results row by row.
@@ -117,60 +141,68 @@ func (q *Query) Iter() *Iterator {
 	if q.err != nil {
 		return &Iterator{err: q.err}
 	}
-
-	rows, err := q.qs.QueryContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
-	if err != nil {
-		return &Iterator{err: err}
+	var result sql.Result
+	var rows *sql.Rows
+	var err error
+	var cols []string
+	if q.qe.HasOutputs() {
+		rows, err = q.qs.QueryContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
+		if err == nil { // if err IS nil
+			cols, err = rows.Columns()
+		}
+	} else {
+		result, err = q.qs.ExecContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
 	}
-	cols, err := rows.Columns()
-	if err != nil {
-		return &Iterator{err: err}
-	}
-	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err}
+	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err, result: result}
 }
 
-// Next prepares the next row for decoding.
-// The first call to Next will execute the query.
-// If an error occurs it will be returned with Iter.Close().
+// Next prepares the next row for Get.
+// If an error occurs during iteration it will be returned with Iter.Close().
 func (iter *Iterator) Next() bool {
+	iter.started = true
 	if iter.err != nil || iter.rows == nil {
 		return false
 	}
 	return iter.rows.Next()
 }
 
-// Decode decodes the current result into the structs in outputValues.
-// outputArgs must contain all the structs mentioned in the query.
-// If an error occurs it will be returned with Iter.Close().
-func (iter *Iterator) Decode(outputArgs ...any) (ok bool) {
-	if iter.err != nil || iter.rows == nil {
-		return false
+// Get decodes the result from the previous Next call into the provided output arguments.
+// An &Outcome{} variable may be provided as the single output variable before the first call to Next.
+func (iter *Iterator) Get(outputArgs ...any) (err error) {
+	if iter.err != nil {
+		return iter.err
 	}
 	defer func() {
-		if !ok {
-			iter.err = fmt.Errorf("cannot decode result: %s", iter.err)
+		if err != nil {
+			err = fmt.Errorf("cannot get result: %s", err)
 		}
 	}()
 
+	if !iter.started {
+		if oc, ok := outputArgs[0].(*Outcome); ok && len(outputArgs) == 1 {
+			oc.result = iter.result
+			return nil
+		}
+		return fmt.Errorf("cannot call Get before Next unless getting outcome")
+	}
+
 	if iter.rows == nil {
-		iter.err = fmt.Errorf("iteration ended or not started")
-		return false
+		return fmt.Errorf("iteration ended")
 	}
 
 	ptrs, err := iter.qe.ScanArgs(iter.cols, outputArgs)
 	if err != nil {
-		iter.err = err
-		return false
+		return err
 	}
 	if err := iter.rows.Scan(ptrs...); err != nil {
-		iter.err = err
-		return false
+		return err
 	}
-	return true
+	return nil
 }
 
 // Close finishes the iteration and returns any errors encountered.
 func (iter *Iterator) Close() error {
+	iter.started = true
 	if iter.rows == nil {
 		return iter.err
 	}
@@ -182,30 +214,20 @@ func (iter *Iterator) Close() error {
 	return err
 }
 
-// One runs a query and decodes the first row into outputArgs.
-func (q *Query) One(outputArgs ...any) error {
-	err := ErrNoRows
-	iter := q.Iter()
-	if iter.Next() {
-		iter.Decode(outputArgs...)
-		err = nil
-	}
-	if cerr := iter.Close(); cerr != nil {
-		return cerr
-	}
-	return err
+// Outcome holds metadata about executed queries, and can be provided as the
+// first output argument to any of the Get methods.
+type Outcome struct {
+	result sql.Result
 }
 
-// All iterates over the query and decodes all rows into the provided slices.
-//
-// For example:
-//
-//	var pslice []Person
-//	var aslice []*Address
-//	err := query.All(&pslice, &aslice)
-//
+func (o *Outcome) Result() sql.Result {
+	return o.result
+}
+
+// GetAll iterates over the query and scans all rows into the provided slices.
 // sliceArgs must contain pointers to slices of each of the output types.
-func (q *Query) All(sliceArgs ...any) (err error) {
+// An &Outcome{} variable may be provided as the first output variable.
+func (q *Query) GetAll(sliceArgs ...any) (err error) {
 	if q.err != nil {
 		return q.err
 	}
@@ -215,6 +237,12 @@ func (q *Query) All(sliceArgs ...any) (err error) {
 		}
 	}()
 
+	if len(sliceArgs) > 0 {
+		if outcome, ok := sliceArgs[0].(*Outcome); ok {
+			outcome.result = nil
+			sliceArgs = sliceArgs[1:]
+		}
+	}
 	// Check slice inputs
 	var slicePtrVals = []reflect.Value{}
 	var sliceVals = []reflect.Value{}
@@ -251,8 +279,9 @@ func (q *Query) All(sliceArgs ...any) (err error) {
 			}
 			outputArgs = append(outputArgs, outputArg.Interface())
 		}
-		if !iter.Decode(outputArgs...) {
-			break
+		if err := iter.Get(outputArgs...); err != nil {
+			iter.Close()
+			return err
 		}
 		for i, outputArg := range outputArgs {
 			switch k := sliceVals[i].Type().Elem().Kind(); k {
@@ -276,4 +305,58 @@ func (q *Query) All(sliceArgs ...any) (err error) {
 	}
 
 	return nil
+}
+
+type TX struct {
+	tx *sql.Tx
+}
+
+// NewTX creates a SQLair transaction from a sql transaction.
+func (db *DB) NewTX(tx *sql.Tx) *TX {
+	return &TX{tx: tx}
+}
+
+// Begin starts a transaction.
+func (db *DB) Begin(ctx context.Context, opts *TXOptions) (*TX, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	tx, err := db.db.BeginTx(ctx, opts.plainTXOptions())
+	return db.NewTX(tx), err
+}
+
+// Commit commits the transaction.
+func (tx *TX) Commit() error {
+	return tx.tx.Commit()
+}
+
+// Rollback aborts the transaction.
+func (tx *TX) Rollback() error {
+	return tx.tx.Rollback()
+}
+
+// TXOptions holds the transaction options to be used in DB.Begin.
+type TXOptions struct {
+	// Isolation is the transaction isolation level.
+	// If zero, the driver or database's default level is used.
+	Isolation sql.IsolationLevel
+	ReadOnly  bool
+}
+
+func (txopts *TXOptions) plainTXOptions() *sql.TxOptions {
+	if txopts == nil {
+		return nil
+	}
+	return &sql.TxOptions{Isolation: txopts.Isolation, ReadOnly: txopts.ReadOnly}
+}
+
+// Query takes a context, prepared SQLair Statement and the structs mentioned in the query arguments.
+// It returns a Query object for iterating over the results.
+func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	qe, err := s.pe.Query(inputArgs...)
+	return &Query{qs: tx.tx, qe: qe, ctx: ctx, err: err}
 }
