@@ -16,6 +16,10 @@ func (qe *QueryExpr) QueryArgs() []any {
 	return qe.args
 }
 
+func (qe *QueryExpr) HasOutputs() bool {
+	return len(qe.outputs) > 0
+}
+
 type QueryExpr struct {
 	sql     string
 	args    []any
@@ -150,7 +154,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, error)
 		field := qe.outputs[idx]
 		outputVal, ok := typeDest[field.structType]
 		if !ok {
-			return nil, fmt.Errorf("type %q found in query but not passed to decode", field.structType.Name())
+			return nil, fmt.Errorf("type %q found in query but not passed to get", field.structType.Name())
 		}
 
 		val := outputVal.FieldByIndex(field.index)
