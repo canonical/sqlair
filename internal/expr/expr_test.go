@@ -383,11 +383,6 @@ func FuzzParser(f *testing.F) {
 }
 
 func (s *ExprSuite) TestPrepareErrors(c *C) {
-	/*
-		type M struct {
-			Name string `db:"name"`
-		}
-	*/
 	tests := []struct {
 		query       string
 		prepareArgs []any
@@ -491,7 +486,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 }
 
 func (s *ExprSuite) TestPrepareMapError(c *C) {
-	type invalidMap map[int]any
+	type InvalidMap map[int]any
 	type CustomMap map[string]int
 	type M struct {
 		F string `db:"id"`
