@@ -137,11 +137,11 @@ func (q *Query) Get(outputArgs ...any) error {
 }
 
 func (q *Query) exec() (sql.Result, error) {
-	return q.qs.ExecContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
+	return q.qs.ExecContext(q.ctx, q.qe.SQL(), q.qe.Args()...)
 }
 
 func (q *Query) query() (*sql.Rows, error) {
-	return q.qs.QueryContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
+	return q.qs.QueryContext(q.ctx, q.qe.SQL(), q.qe.Args()...)
 }
 
 // Iter returns an Iterator to iterate through the results row by row.
