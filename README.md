@@ -12,10 +12,8 @@ Things SQLair does *not* do:
  - Acts as an ORM 
  - Optimise queries
 
-API docs can be found at [pkg.go.dev](https://pkg.go.dev/github.com/canonical/sqlair) and a complete demo can be found at [demo/demo.go](demo/demo.go).
-
-### Why?
-There are [many solutions](https://github.com/d-tsuji/awesome-go-orms) for using a database with Go. Most of these are ORMs that require learning a complex API which abstracts pure SQL. Others provide a light weight convenience layer on top of the default library[`database/sql`](https://pkg.go.dev/database/sql), however, these may be coupled to the `database/sql` query API and none of them are as full featured as SQLair.
+## Why?
+There are [many solutions](https://github.com/d-tsuji/awesome-go-orms) for using a database with Go. Most of these are ORMs that require learning a complex API which abstracts pure SQL. Others provide a light weight convenience layer on top of the default library[`database/sql`](https://pkg.go.dev/database/sql), however, these are often coupled to the `database/sql` query API and none of them are as full featured as SQLair.
 
 With `database/sql` reading rows into Go structs requires a lot of repetitive and redundant code:
 
@@ -27,32 +25,12 @@ SQLair expands the SQL syntax with input and output expressions which indicate p
 
 SQLair also provides an alternative API for reading the rows from the database. It does not copy `database/sql`, it instead improves upon it and removes inconsistencies.
 
-## Mini example
-An example with a simple `SELECT` query with SQLair:
-```Go
-// Tag struct
-type Person struct {
-	Name	string	`db:"name_col"`
-	ID 	int 	`db:"id_col"`
-	Gender	string  `db:"gender_col"`
-}
+### API
+API docs can be found at [pkg.go.dev](https://pkg.go.dev/github.com/canonical/sqlair).
 
-// Wrap the *sql.DB.
-db := sqlair.NewDB(sqldb)
+### Demo
+A demo can be found at [demo/demo.go](demo/demo.go).
 
-// Prepare the query for use with SQLair.
-stmt := sqlair.MustPrepare(
-    "SELECT &Person.* FROM people WHERE id = $Address.id",
-    Person{}, Address{},
-)
-
-// Build the query
-q := db.Query(ctx, stmt, address)
-
-// Get the first row
-var p := Person{}
-err := q.Get(&p)
-```
 # Usage
 #### Contents
 - [Tagging structs](#tagging-structs)
@@ -75,35 +53,44 @@ The first step when using SQLair is to tag your structs. The `db` tag is used to
 For example:
 ```Go
 type Person struct {
-	Name	string	`db:"name_col"`
-	ID 	int 	`db:"id_col"`
-	Gender	string  `db:"gender_col"`
+  Name    string  `db:"name_col"`
+  ID      int     `db:"id_col"`
+  Gender  string  `db:"gender_col"`
 }
 ```
 Fields that correspond to database columns should be tagged with the column name. Untagged fields will be ignored by SQLair.
 
 It is important to note that SQLair __needs__ the struct fields to be public in to order read from them and write to them. 
 ## Writing the SQL
-In SQLair expressions, the characters `$` and `&` are used to specify input and outputs respectively. These expressions specify the Go structs to fetch arguments from or read results into. 
+In SQLair expressions, the characters `$` and `&` are used to specify input and outputs respectively. The dollar `$` specifies a struct field to fetch and argument from and the ampersand `&` specifies a struct to read query results into. 
 
 For example, when selecting a particular `Person` from a database, instead of the query: 
 ```SQL
-SELECT name_col, id_col, gender_col FROM person WHERE manager_col = ?
+SELECT name_col, id_col, gender_col
+FROM person
+WHERE manager_col = ?
 ```
-In SQLair you would write:
+With SQLair you would write:
 ```SQL
-SELECT &Person.* FROM person WHERE manager_col = $Manager.name
+SELECT &Person.*
+FROM person
+WHERE manager_col = $Manager.name
 ```
-This tells SQLair to substitute `&Person.*` for all columns mentioned in the `db` tags of the struct `Person` and pass the `Name` field of the struct `Manager` as an argument.
+This tells SQLair to substitute `&Person.*` for all columns mentioned in the relevent tags of the struct `Person`. The `&Manager.name` instructs it to pass the `Name` field of the struct `Manager` as a query argument.
 
 SQLair does not parse the full query, only the input/output expressions. It does this by ignoring any text that do not start with a `$` or `&` or does not match the form of a SQLair expression.
 
-### Input Expressions
-Input expressions are limited to the form `$Type.col_name`. In the case of the `Person` struct above, we could write:
+#### Input Expressions
+Input expressions are limited to the form `$Type.col_name`. Here, `col_name` is a tag in one of the fields of `Type`. We always use the tags to specify the struct fields in SQLair expressions.
+
+In the case of the `Person` struct above, we could write:
 ```Go
 stmt, err := sqlair.Prepare(`
-SELECT name_col FROM person WHERE id_col = $Person.id_col`,
-Person{})
+  SELECT name_col
+  FROM person
+  WHERE id_col = $Person.id_col`,
+  Person{}
+)
 ```
 When we run:
 ```Go
@@ -114,12 +101,14 @@ then the value in the `ID` field will be used as the query argument.
 
  
 _There are future plans to allow more integrated use of Go structs in `INSERT` statements._ 
-### Output Expressions
+#### Output Expressions
 Output expressions have multiple different formats. An asterisk `*` can be used to indicate that we want to read into _all_ the tagged fields in the struct.
+
+To specify a field from a struct, the column name from the tag is used. For example in `Person` we would write `Person.name_col` and _not_ `Person.Name`.
 
 Below is a full table of the different forms of output expression:
 
-|Output expressions| Result |
+|Output expression| Result |
 | --- | --- |
 | `&Person.name_col` | The `Name` field of `Person` is set to the result from the name column |
 | `&Person.*` | All columns mentioned in the field tags of `Person` are set to the result of their tagged column |
@@ -133,9 +122,10 @@ Multiple output expressions can be placed in the same query.
 For example:
 ```Go
 stmt, err := sqlair.Prepare(`
-SELECT p.* AS &Person.*, a.* AS &Address.*
-FROM person AS p, address AS a`,
-Person{}, Address{})
+  SELECT p.* AS &Person.*, a.* AS &Address.*
+  FROM person AS p, address AS a`,
+  Person{}, Address{}
+)
 ```
 This query will select columns from table `p` that are mentioned in the tags of the `Person` struct and columns from table `a` that are mentioned in the tags of the `Address` struct.
 
@@ -163,7 +153,7 @@ db := sqlair.NewDB(sqldb)
 It is still possible to access the underlying `sqldb` with `db.PlainDB()` for any further configuration needed. 
 
 #### Transactions
-SQLair databases support transactions. A `Query` can be created on a transaction in the same way it can on a `DB`.
+SQLair databases support transactions. A `Query` can be created on a transaction in the same way it can on a `DB` (i.e. `tx.Query`).
 
 Options can be passed to a transaction with `TXOptions`. `opts` can be `nil` if no options are needed. If `ctx` is `nil` `context.Background()` is used.
 
@@ -174,20 +164,7 @@ Transactions on the database can be created in SQLair with `tx, err := db.Begin(
 For example: 
 
 ```Go
-opts := sqlair.TXOptions{Isolation: 0, ReadOnly: false}
-
-tx, err := db.Begin(ctx, opts)
-if err != nil {...}
-err = tx.Query(ctx, stmt).Run()
-if err != nil {...}
-err = tx.Rollback()
-if err != nil {...}
-
-tx, err = db.Begin(ctx, nil)
-if err != nil {...}
-err = tx.Query(ctx, stmt).Run()
-if err != nil {...}
-err = tx.Commit()
+tx, err := db.Begin(ctx, sqlair.TXOptions{Isolation: 0, ReadOnly: false})
 ```
 
 For more details, see the [API](https://pkg.go.dev/github.com/canonical/sqlair).
@@ -204,7 +181,11 @@ sqlair.Prepare(query string, typeSamples ...any) (*Statement, error)
 The `typeSamples` are samples of all the structs that are mentioned in the query.
 For example, in the query:
 ```Go
-q := "SELECT &Person.*, &Address.id FROM person WHERE name = $Manager.name"
+q := `
+  SELECT &Person.*, &Address.id
+  FROM person
+  WHERE name = $Manager.name
+`
 ```
 We mention three structs: `Person` and `Address` as outputs, and `Manager` as an input. Therefore we need to pass a sample of each of these structs to `Prepare`.
 
@@ -291,25 +272,20 @@ The `sqlair.Outcome` struct can be passed by reference to `Query.Get`, `Query.Ge
 
 Currently this struct only has the method `Result`. This returns a [`sql.Result`](https://pkg.go.dev/database/sql#Result) but only when the query contains no output expressions (i.e. it is most likely an `INSERT` or `UPDATE`). If the query contains output expressions then `Outcome.Result()` will return `nil`.
 
-For example
+For example:
 ```Go
 var outcome = sqlair.Outcome{}
 
-stmt, err := sqlair.Prepare(`INSERT INTO person VALUES ($Person.name)`)
+stmt, err := sqlair.Prepare(`
+  INSERT INTO person 
+  VALUES ($Person.name)
+`)
 q := db.Query(ctx, stmt, &p)
 
-// An outcome with Query.Get
 err := q.Get(&outcome)
-if err != nil {...}
-res := outcome.Result()
-
-// An outcome with Iter
-iter := q.Iter()
-defer iter.Close()
-err := iter.Get(&outcome)
-if err != nil {...}
-err := iter.Close()
-if err != nil {...}
+if err != nil {
+  // Handle error.
+}
 res := outcome.Result()
 ```
 
