@@ -16,6 +16,10 @@ func (qe *QueryExpr) QueryArgs() []any {
 	return qe.args
 }
 
+func (qe *QueryExpr) HasOutputs() bool {
+	return len(qe.outputs) > 0
+}
+
 type QueryExpr struct {
 	sql     string
 	args    []any
@@ -177,7 +181,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, []*Map
 		case structField:
 			outputVal, ok := typeDest[tm.structType]
 			if !ok {
-				return nil, nil, fmt.Errorf("type %q found in query but not passed to decode", tm.structType.Name())
+				return nil, nil, fmt.Errorf("type %q found in query but not passed to get", tm.structType.Name())
 			}
 			val := outputVal.FieldByIndex(tm.index)
 			if !val.CanSet() {
@@ -187,7 +191,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, []*Map
 		case mapKey:
 			mapDecodeInfo, ok := mapDecodeInfos[tm.mapType]
 			if !ok {
-				return nil, nil, fmt.Errorf("type %q found in query but not passed to decode", tm.mapType.Name())
+				return nil, nil, fmt.Errorf("type %q found in query but not passed to get", tm.mapType.Name())
 			}
 			// Scan in to a new value with the type of the maps value
 			mapDecodeInfo.keys = append(mapDecodeInfo.keys, tm.name)

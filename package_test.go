@@ -95,7 +95,7 @@ DROP TABLE address;
 	return dropTables, db, nil
 }
 
-func (s *PackageSuite) TestValidDecode(c *C) {
+func (s *PackageSuite) TestValidIterGet(c *C) {
 	type CustomMap map[string]any
 	type StringMap map[string]string
 	type lowerCaseMap map[string]any
@@ -179,6 +179,20 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 		inputs:   []any{lowerCaseMap{"address_id": "1000"}},
 		outputs:  [][]any{{&lowerCaseMap{}}},
 		expected: [][]any{{&lowerCaseMap{"name": "Fred", "id": int64(30)}}},
+	}, {
+		summary:  "insert",
+		query:    "INSERT INTO address VALUES ($Address.id, $Address.district, $Address.street);",
+		types:    []any{Address{}},
+		inputs:   []any{Address{8000, "Crazy Town", "Willow Wong"}},
+		outputs:  [][]any{},
+		expected: [][]any{},
+	}, {
+		summary:  "update",
+		query:    "UPDATE address SET id=$Address.id WHERE id=8000",
+		types:    []any{Address{}},
+		inputs:   []any{Address{ID: 1000}},
+		outputs:  [][]any{},
+		expected: [][]any{},
 	}}
 
 	// A Person struct that shadows the one in tests above and has different int types.
@@ -228,8 +242,8 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d > %d)\n", t.summary, t.query, i+1, len(t.outputs))
 				break
 			}
-			if err := iter.Decode(t.outputs[i]...); err != nil {
-				c.Errorf("\ntest %q failed (Decode):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+			if err := iter.Get(t.outputs[i]...); err != nil {
+				c.Errorf("\ntest %q failed (Get):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
 			}
 			i++
 		}
@@ -252,7 +266,7 @@ func (s *PackageSuite) TestValidDecode(c *C) {
 	}
 }
 
-func (s *PackageSuite) TestDecodeErrors(c *C) {
+func (s *PackageSuite) TestIterGetErrors(c *C) {
 	type SliceMap map[string][]string
 	var tests = []struct {
 		summary string
@@ -267,49 +281,49 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{nil}},
-		err:     "cannot decode result: need map or pointer to struct, got nil",
+		err:     "cannot get result: need map or pointer to struct, got nil",
 	}, {
 		summary: "nil pointer parameter",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{(*Person)(nil)}},
-		err:     "cannot decode result: got nil pointer",
+		err:     "cannot get result: got nil pointer",
 	}, {
 		summary: "non pointer parameter",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{Person{}}},
-		err:     "cannot decode result: need map or pointer to struct, got struct",
+		err:     "cannot get result: need map or pointer to struct, got struct",
 	}, {
 		summary: "wrong struct",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{&Address{}}},
-		err:     `cannot decode result: type "Address" does not appear in query, have: Person`,
+		err:     `cannot get result: type "Address" does not appear in query, have: Person`,
 	}, {
 		summary: "not a struct",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{&[]any{}}},
-		err:     "cannot decode result: need map or pointer to struct, got pointer to slice",
+		err:     "cannot get result: need map or pointer to struct, got pointer to slice",
 	}, {
-		summary: "missing decode value",
+		summary: "missing get value",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{}},
-		err:     `cannot decode result: type "Person" found in query but not passed to decode`,
+		err:     `cannot get result: type "Person" found in query but not passed to get`,
 	}, {
 		summary: "multiple of the same type",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{&Person{}, &Person{}}},
-		err:     `cannot decode result: type "Person" provided more than once, rename one of them`,
+		err:     `cannot get result: type "Person" provided more than once, rename one of them`,
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()
@@ -334,7 +348,7 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d > %d)\n", t.summary, t.query, i+1, len(t.outputs))
 				break
 			}
-			if err := iter.Decode(t.outputs[i]...); err != nil {
+			if err := iter.Get(t.outputs[i]...); err != nil {
 				c.Assert(err, ErrorMatches, t.err,
 					Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
 				iter.Close()
@@ -354,7 +368,7 @@ func (s *PackageSuite) TestDecodeErrors(c *C) {
 	}
 }
 
-func (s *PackageSuite) TestValidOne(c *C) {
+func (s *PackageSuite) TestValidGet(c *C) {
 	var tests = []struct {
 		summary  string
 		query    string
@@ -393,9 +407,9 @@ func (s *PackageSuite) TestValidOne(c *C) {
 		}
 
 		q := db.Query(nil, stmt, t.inputs...)
-		err = q.One(t.outputs...)
+		err = q.Get(t.outputs...)
 		if err != nil {
-			c.Errorf("\ntest %q failed (One):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+			c.Errorf("\ntest %q failed (Get):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
 			continue
 		}
 		for i, s := range t.expected {
@@ -410,7 +424,7 @@ func (s *PackageSuite) TestValidOne(c *C) {
 	}
 }
 
-func (s *PackageSuite) TestOneErrors(c *C) {
+func (s *PackageSuite) TestGetErrors(c *C) {
 	var tests = []struct {
 		summary string
 		query   string
@@ -425,6 +439,13 @@ func (s *PackageSuite) TestOneErrors(c *C) {
 		inputs:  []any{},
 		outputs: []any{&Person{}},
 		err:     "sql: no rows in result set",
+	}, {
+		summary: "no outputs",
+		query:   "UPDATE person SET id=300 WHERE id=30",
+		types:   []any{Person{}},
+		inputs:  []any{},
+		outputs: []any{&Person{}},
+		err:     "cannot get results: output variables provided but not referenced in query",
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()
@@ -441,7 +462,7 @@ func (s *PackageSuite) TestOneErrors(c *C) {
 			continue
 		}
 
-		err = db.Query(nil, stmt, t.inputs...).One(t.outputs...)
+		err = db.Query(nil, stmt, t.inputs...).Get(t.outputs...)
 		c.Assert(err, ErrorMatches, t.err,
 			Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
 	}
@@ -460,7 +481,7 @@ func (s *PackageSuite) TestErrNoRows(c *C) {
 
 	db := sqlair.NewDB(sqldb)
 	stmt := sqlair.MustPrepare("SELECT * AS &Person.* FROM person WHERE id=12312", Person{})
-	err = db.Query(nil, stmt).One(&Person{})
+	err = db.Query(nil, stmt).Get(&Person{})
 	if !errors.Is(err, sqlair.ErrNoRows) {
 		c.Errorf("expected %q, got %q", sqlair.ErrNoRows, err)
 	}
@@ -474,7 +495,7 @@ func (s *PackageSuite) TestErrNoRows(c *C) {
 	}
 }
 
-func (s *PackageSuite) TestValidAll(c *C) {
+func (s *PackageSuite) TestValidGetAll(c *C) {
 	var tests = []struct {
 		summary  string
 		query    string
@@ -534,9 +555,9 @@ func (s *PackageSuite) TestValidAll(c *C) {
 		}
 
 		q := db.Query(nil, stmt, t.inputs...)
-		err = q.All(t.slices...)
+		err = q.GetAll(t.slices...)
 		if err != nil {
-			c.Errorf("\ntest %q failed (All):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+			c.Errorf("\ntest %q failed (GetAll):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
 			continue
 		}
 		for i, column := range t.expected {
@@ -551,7 +572,7 @@ func (s *PackageSuite) TestValidAll(c *C) {
 	}
 }
 
-func (s *PackageSuite) TestAllErrors(c *C) {
+func (s *PackageSuite) TestGetAllErrors(c *C) {
 	var tests = []struct {
 		summary string
 		query   string
@@ -593,7 +614,7 @@ func (s *PackageSuite) TestAllErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		slices:  []any{&[]*Address{}},
-		err:     `cannot populate slice: cannot decode result: type "Address" does not appear in query, have: Person`,
+		err:     `cannot populate slice: cannot get result: type "Address" does not appear in query, have: Person`,
 	}, {
 		summary: "wrong struct argument",
 		query:   "SELECT * AS &Person.* FROM person",
@@ -617,7 +638,7 @@ func (s *PackageSuite) TestAllErrors(c *C) {
 			continue
 		}
 
-		err = db.Query(nil, stmt, t.inputs...).All(t.slices...)
+		err = db.Query(nil, stmt, t.inputs...).GetAll(t.slices...)
 		c.Assert(err, ErrorMatches, t.err,
 			Commentf("\ntest %q failed:\ninput: %s\nslices: %s", t.summary, t.query, t.slices))
 	}
@@ -630,9 +651,7 @@ func (s *PackageSuite) TestAllErrors(c *C) {
 
 func (s *PackageSuite) TestRun(c *C) {
 	dropTables, sqldb, err := personAndAddressDB()
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 
 	var jim = Person{
 		ID:         70,
@@ -642,15 +661,77 @@ func (s *PackageSuite) TestRun(c *C) {
 
 	db := sqlair.NewDB(sqldb)
 
-	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
+	// Insert Jim.
+	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ($Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
 	err = db.Query(nil, insertStmt, &jim).Run()
 	c.Assert(err, IsNil)
 
+	// Check Jim is in the db.
 	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE id = $Person.id", Person{})
 	var jimCheck = Person{}
-	err = db.Query(nil, selectStmt, &jim).One(&jimCheck)
+	err = db.Query(nil, selectStmt, &jim).Get(&jimCheck)
 	c.Assert(err, IsNil)
 	c.Assert(jimCheck, Equals, jim)
+
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
+}
+
+func (s *PackageSuite) TestOutcome(c *C) {
+	dropTables, sqldb, err := personAndAddressDB()
+	c.Assert(err, IsNil)
+
+	var jim = Person{
+		ID:         70,
+		Fullname:   "Jim",
+		PostalCode: 500,
+	}
+
+	db := sqlair.NewDB(sqldb)
+
+	var outcome = sqlair.Outcome{}
+
+	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ($Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
+	q1 := db.Query(nil, insertStmt, &jim)
+	// Test INSERT with Get
+	c.Assert(q1.Get(&outcome), IsNil)
+	if outcome.Result() == nil {
+		c.Errorf("result in outcome is nil")
+	}
+	rowsAffected, err := outcome.Result().RowsAffected()
+	c.Assert(err, IsNil)
+	if rowsAffected != 1 {
+		c.Errorf("got %d for rowsAffected, expected 1", rowsAffected)
+	}
+	// Test SELECT with Get
+	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person", Person{})
+	q2 := db.Query(nil, selectStmt)
+	c.Assert(q2.Get(&outcome, &jim), IsNil)
+	c.Assert(outcome.Result(), IsNil)
+	// Test INSERT with Iter
+	iter := q1.Iter()
+	c.Assert(iter.Get(&outcome), IsNil)
+	if outcome.Result() == nil {
+		c.Errorf("result in outcome is nil")
+	}
+	rowsAffected, err = outcome.Result().RowsAffected()
+	c.Assert(err, IsNil)
+	if rowsAffected != 1 {
+		c.Errorf("got %d for rowsAffected, expected 1", rowsAffected)
+	}
+	c.Assert(iter.Next(), Equals, false)
+	// Test SELECT with Iter.Get
+	iter = q2.Iter()
+	c.Assert(iter.Get(&outcome), IsNil)
+	c.Assert(outcome.Result(), IsNil)
+	c.Assert(iter.Next(), Equals, true)
+	c.Assert(iter.Get(&jim), IsNil)
+	c.Assert(iter.Close(), IsNil)
+	// Test SELECT with GetAll
+	var jims = []Person{}
+	err = q2.GetAll(&outcome, &jims)
+	c.Assert(err, IsNil)
+	c.Assert(outcome.Result(), IsNil)
 
 	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	c.Assert(err, IsNil)
@@ -674,16 +755,13 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 
 	// Run different Query methods.
 	q := db.Query(nil, stmt)
-	err = q.One(oneOutput)
+	err = q.Get(oneOutput)
 	c.Assert(err, IsNil)
 	c.Assert(oneExpected, DeepEquals, oneOutput)
 
-	err = q.All(allOutput)
+	err = q.GetAll(allOutput)
 	c.Assert(err, IsNil)
 	c.Assert(allOutput, DeepEquals, allExpected)
-
-	err = q.Run()
-	c.Assert(err, IsNil)
 
 	iter := q.Iter()
 	defer iter.Close()
@@ -692,7 +770,7 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 		if i >= len(iterOutputs) {
 			c.Fatalf("expected %d rows, got more", len(iterOutputs))
 		}
-		if err := iter.Decode(iterOutputs[i]); err != nil {
+		if err := iter.Get(iterOutputs[i]); err != nil {
 			c.Fatal(err)
 		}
 		i++
@@ -706,7 +784,7 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	iterOutputs = []any{&Person{}, &Person{}, &Person{}, &Person{}}
 	oneOutput = &Person{}
 
-	err = q.All(allOutput)
+	err = q.GetAll(allOutput)
 	c.Assert(err, IsNil)
 	c.Assert(allOutput, DeepEquals, allExpected)
 
@@ -717,7 +795,7 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 		if i >= len(iterOutputs) {
 			c.Fatalf("expected %d rows, got more", len(iterOutputs))
 		}
-		if err := iter.Decode(iterOutputs[i]); err != nil {
+		if err := iter.Get(iterOutputs[i]); err != nil {
 			c.Fatal(err)
 		}
 		i++
@@ -727,12 +805,9 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	c.Assert(iterOutputs, DeepEquals, iterExpected)
 
 	q = db.Query(nil, stmt)
-	err = q.One(oneOutput)
+	err = q.Get(oneOutput)
 	c.Assert(err, IsNil)
 	c.Assert(oneExpected, DeepEquals, oneOutput)
-
-	err = q.Run()
-	c.Assert(err, IsNil)
 
 	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	c.Assert(err, IsNil)
@@ -761,7 +836,7 @@ func (s *PackageSuite) TestTransactions(c *C) {
 	tx, err = db.Begin(ctx, nil)
 	c.Assert(err, IsNil)
 	var derekCheck = Person{}
-	err = tx.Query(ctx, selectStmt, &derek).One(&derekCheck)
+	err = tx.Query(ctx, selectStmt, &derek).Get(&derekCheck)
 	if !errors.Is(err, sqlair.ErrNoRows) {
 		c.Fatalf("got err %s, expected %s", err, sqlair.ErrNoRows)
 	}
@@ -775,7 +850,7 @@ func (s *PackageSuite) TestTransactions(c *C) {
 	tx, err = db.Begin(ctx, nil)
 	c.Assert(err, IsNil)
 
-	err = tx.Query(ctx, selectStmt, &derek).One(&derekCheck)
+	err = tx.Query(ctx, selectStmt, &derek).Get(&derekCheck)
 	c.Assert(err, IsNil)
 	c.Assert(derek, Equals, derekCheck)
 	err = tx.Commit()
@@ -789,7 +864,7 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 	dropTables, sqldb, err := personAndAddressDB()
 	c.Assert(err, IsNil)
 
-	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'fred@email.com');", Person{})
+	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ($Person.name, $Person.id, $Person.address_id, 'fred@email.com');", Person{})
 	var derek = Person{ID: 85, Fullname: "Derek", PostalCode: 8000}
 	ctx := context.Background()
 
@@ -876,10 +951,10 @@ func (s *PackageSuite) TestIterMethodOrder(c *C) {
 	var p = Person{}
 	stmt := sqlair.MustPrepare("SELECT &Person.* FROM person", Person{})
 
-	// Check immidiate Decode.
+	// Check immidiate Get.
 	iter := db.Query(nil, stmt).Iter()
-	err = iter.Decode(&p)
-	c.Assert(err, ErrorMatches, "cannot decode result: sql: Scan called without calling Next")
+	err = iter.Get(&p)
+	c.Assert(err, ErrorMatches, "cannot get result: cannot call Get before Next unless getting outcome")
 	err = iter.Close()
 	c.Assert(err, IsNil)
 
@@ -893,12 +968,12 @@ func (s *PackageSuite) TestIterMethodOrder(c *C) {
 	err = iter.Close()
 	c.Assert(err, IsNil)
 
-	// Check Decode after closing.
+	// Check Get after closing.
 	iter = db.Query(nil, stmt).Iter()
 	err = iter.Close()
 	c.Assert(err, IsNil)
-	err = iter.Decode(&p)
-	c.Assert(err, ErrorMatches, "cannot decode result: iteration ended or not started")
+	err = iter.Get(&p)
+	c.Assert(err, ErrorMatches, "cannot get result: iteration ended")
 	err = iter.Close()
 	c.Assert(err, IsNil)
 
@@ -915,8 +990,8 @@ func (s *PackageSuite) TestIterMethodOrder(c *C) {
 	if !iter.Next() {
 		c.Fatal("expected true, got false")
 	}
-	err = iter.Decode(&p)
-	c.Assert(err, ErrorMatches, `cannot decode result: sql: Scan error on column index 0, name "_sqlair_0": converting driver.Value type string \("Fred"\) to a int: invalid syntax`)
+	err = iter.Get(&p)
+	c.Assert(err, ErrorMatches, `cannot get result: sql: Scan error on column index 0, name "_sqlair_0": converting driver.Value type string \("Fred"\) to a int: invalid syntax`)
 	err = iter.Close()
 	c.Assert(err, IsNil)
 
@@ -968,8 +1043,8 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d > %d)\n", t.summary, t.query, i+1, len(t.outputs))
 				break
 			}
-			if err := iter.Decode(t.outputs[i]...); err != nil {
-				c.Errorf("\ntest %q failed (Decode):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+			if err := iter.Get(t.outputs[i]...); err != nil {
+				c.Errorf("\ntest %q failed (Get):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
 			}
 			i++
 		}
