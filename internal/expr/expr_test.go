@@ -446,15 +446,15 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{[]any{Person{}}},
-		err:         `cannot prepare expression: need map or struct, got slice`,
+		err:         `cannot prepare expression: need struct or map, got slice`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{&Person{}},
-		err:         `cannot prepare expression: need map or struct, got pointer to struct`,
+		err:         `cannot prepare expression: need struct or map, got pointer to struct`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{(*Person)(nil)},
-		err:         `cannot prepare expression: need map or struct, got pointer to struct`,
+		err:         `cannot prepare expression: need struct or map, got pointer to struct`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{map[string]any{}},
@@ -462,7 +462,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{nil},
-		err:         `cannot prepare expression: need map or struct, got nil`,
+		err:         `cannot prepare expression: need struct or map, got nil`,
 	}, {
 		query:       "SELECT * AS &.* FROM t",
 		prepareArgs: []any{struct{ f int }{f: 1}},
@@ -500,22 +500,22 @@ func (s *ExprSuite) TestPrepareMapError(c *C) {
 		"all output into map star",
 		"SELECT &M.* FROM person WHERE name = 'Fred'",
 		[]any{sqlair.M{}},
-		"cannot prepare expression: &M.* cannot be used with a map output when no column names are specified or column name is *",
+		"cannot prepare expression: &M.* cannot be used for maps when no column names are specified",
 	}, {
 		"all output into map star from table star",
 		"SELECT p.* AS &M.* FROM person WHERE name = 'Fred'",
 		[]any{sqlair.M{}},
-		"cannot prepare expression: &M.* cannot be used with a map output when no column names are specified or column name is *",
+		"cannot prepare expression: &M.* cannot be used for maps when no column names are specified",
 	}, {
 		"all output into map star from lone star",
 		"SELECT * AS &CustomMap.* FROM person WHERE name = 'Fred'",
 		[]any{CustomMap{}},
-		"cannot prepare expression: &CustomMap.* cannot be used with a map output when no column names are specified or column name is *",
+		"cannot prepare expression: &CustomMap.* cannot be used for maps when no column names are specified",
 	}, {
 		"invalid map",
-		"SELECT * AS &invalidMap.* FROM person WHERE name = 'Fred'",
-		[]any{invalidMap{}},
-		"cannot prepare expression: map type invalidMap must have key type string, found type int",
+		"SELECT * AS &InvalidMap.* FROM person WHERE name = 'Fred'",
+		[]any{InvalidMap{}},
+		"cannot prepare expression: map type InvalidMap must have key type string, found type int",
 	}, {
 		"clashing map and struct names",
 		"SELECT * AS &M.* FROM person WHERE name = $M.id",
@@ -612,22 +612,22 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
 		queryArgs:   []any{nil, Person{Fullname: "Monty Bingles"}},
-		err:         "invalid input parameter: need map or struct, got nil",
+		err:         "invalid input parameter: need struct or map, got nil",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
 		queryArgs:   []any{(*Person)(nil)},
-		err:         "invalid input parameter: need map or struct, got nil",
+		err:         "invalid input parameter: need struct or map, got nil",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Address{}},
 		queryArgs:   []any{8},
-		err:         "invalid input parameter: need map or struct, got int",
+		err:         "invalid input parameter: need struct or map, got int",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Address{}},
 		queryArgs:   []any{[]any{}},
-		err:         "invalid input parameter: need map or struct, got slice",
+		err:         "invalid input parameter: need struct or map, got slice",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Address{}},

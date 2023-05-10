@@ -50,12 +50,12 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	for _, arg := range args {
 		v := reflect.ValueOf(arg)
 		if v.Kind() == reflect.Invalid || (v.Kind() == reflect.Pointer && v.IsNil()) {
-			return nil, fmt.Errorf("need map or struct, got nil")
+			return nil, fmt.Errorf("need struct or map, got nil")
 		}
 		v = reflect.Indirect(v)
 		t := v.Type()
 		if v.Kind() != reflect.Struct && v.Kind() != reflect.Map {
-			return nil, fmt.Errorf("need map or struct, got %s", t.Kind())
+			return nil, fmt.Errorf("need struct or map, got %s", t.Kind())
 		}
 		if _, ok := typeValue[t]; ok {
 			return nil, fmt.Errorf("type %q provided more than once", t.Name())
@@ -76,21 +76,22 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	// Query parameteres.
 	qargs := []any{}
 	for i, typeMember := range pe.inputs {
-		v, ok := typeValue[typeMember.outerType()]
+		outerType := typeMember.outerType()
+		v, ok := typeValue[outerType]
 		if !ok {
 			if len(typeNames) == 0 {
-				return nil, fmt.Errorf(`type %q not passed as a parameter`, typeMember.outerType().Name())
+				return nil, fmt.Errorf(`type %q not passed as a parameter`, outerType.Name())
 			} else {
-				return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, typeMember.outerType().Name(), strings.Join(typeNames, ", "))
+				return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, outerType.Name(), strings.Join(typeNames, ", "))
 			}
 		}
+		var val reflect.Value
 		switch tm := typeMember.(type) {
 		case structField:
-			qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(i), v.FieldByIndex(tm.index).Interface()))
+			val = v.FieldByIndex(tm.index)
 		case mapKey:
 			// MapIndex returns a zero value if the key is not in the map so we
 			// need to check the MapKeys().
-			var val reflect.Value
 			for _, key := range v.MapKeys() {
 				if key.String() == tm.name {
 					val = v.MapIndex(reflect.ValueOf(tm.name))
@@ -100,8 +101,8 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 			if !val.IsValid() {
 				return nil, fmt.Errorf(`map does not contain key %q`, tm.name)
 			}
-			qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(i), val.Interface()))
 		}
+		qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(i), val.Interface()))
 	}
 	return &QueryExpr{outputs: pe.outputs, sql: pe.sql, args: qargs}, nil
 }
@@ -121,9 +122,10 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, []*Map
 	var typesInQuery = []string{}
 	var inQuery = make(map[reflect.Type]bool)
 	for _, typeMember := range qe.outputs {
-		if ok := inQuery[typeMember.outerType()]; !ok {
-			inQuery[typeMember.outerType()] = true
-			typesInQuery = append(typesInQuery, typeMember.outerType().Name())
+		outerType := typeMember.outerType()
+		if ok := inQuery[outerType]; !ok {
+			inQuery[outerType] = true
+			typesInQuery = append(typesInQuery, outerType.Name())
 		}
 	}
 

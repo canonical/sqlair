@@ -24,7 +24,7 @@ func (e *ExprInternalSuite) TestReflectStruct(c *C) {
 		NotInDB: "doesn't matter",
 	}
 
-	info, err := typeInfo(s)
+	info, err := getTypeInfo(s)
 	c.Assert(err, IsNil)
 
 	switch info := info.(type) {
@@ -51,7 +51,7 @@ func (s *ExprInternalSuite) TestReflectSimpleConcurrent(c *C) {
 
 	// Get the type info of a struct sequentially.
 	var seqSt myStruct
-	seqInfo, err := typeInfo(seqSt)
+	seqInfo, err := getTypeInfo(seqSt)
 	c.Assert(err, IsNil)
 
 	// Get some type info concurrently.
@@ -62,13 +62,13 @@ func (s *ExprInternalSuite) TestReflectSimpleConcurrent(c *C) {
 	for i := 0; i < 5; i++ {
 		wg.Add(1)
 		go func() {
-			_, _ = typeInfo(concSt)
+			_, _ = getTypeInfo(concSt)
 			wg.Done()
 		}()
 	}
 
 	// Get type info alongside concurrent access.
-	concInfo, err := typeInfo(concSt)
+	concInfo, err := getTypeInfo(concSt)
 	c.Assert(err, IsNil)
 
 	c.Assert(seqInfo, Equals, concInfo)
@@ -83,7 +83,7 @@ func (s *ExprInternalSuite) TestReflectNonStructType(c *C) {
 	}
 
 	for _, value := range nonStructs {
-		i, err := typeInfo(value)
+		i, err := getTypeInfo(value)
 		c.Assert(err, ErrorMatches, "internal error: cannot obtain type information for type that is not map or struct: .*")
 		c.Assert(i, IsNil)
 	}
@@ -134,15 +134,15 @@ func (s *ExprInternalSuite) TestReflectBadTagError(c *C) {
 	}
 
 	for _, value := range unsupportedFlag {
-		_, err := typeInfo(value)
+		_, err := getTypeInfo(value)
 		c.Assert(err, ErrorMatches, "cannot parse tag for field .ID: unsupported flag .*")
 	}
 	for _, value := range tagEmpty {
-		_, err := typeInfo(value)
+		_, err := getTypeInfo(value)
 		c.Assert(err, ErrorMatches, "cannot parse tag for field .ID: .*")
 	}
 	for _, value := range invalidColumn {
-		_, err := typeInfo(value)
+		_, err := getTypeInfo(value)
 		c.Assert(err, ErrorMatches, "cannot parse tag for field .ID: invalid column name in 'db' tag: .*")
 	}
 }
@@ -167,7 +167,7 @@ func (s *ExprInternalSuite) TestReflectValidTag(c *C) {
 	}
 
 	for _, value := range validTags {
-		_, err := typeInfo(value)
+		_, err := getTypeInfo(value)
 		c.Assert(err, IsNil)
 	}
 }
@@ -188,7 +188,7 @@ func (s *ExprInternalSuite) TestUnexportedField(c *C) {
 	}
 
 	for _, value := range unexportedFields {
-		_, err := typeInfo(value)
+		_, err := getTypeInfo(value)
 		c.Assert(err, ErrorMatches, `field "unexp" of struct  not exported`)
 	}
 }

@@ -97,7 +97,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
 		}
 		return f, nil
 	default:
-		return nil, fmt.Errorf(`internal error: unknow info type: %T`, info)
+		return nil, fmt.Errorf(`internal error: unknown info type: %T`, info)
 	}
 }
 
@@ -113,7 +113,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 	}
 
 	// Check target struct type and its tags are valid.
-	var info info
+	var info typeInfo
 	var ok bool
 
 	for _, t := range p.target {
@@ -133,6 +133,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 					return nil, nil, fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), t.name)
 				}
 				typeMembers = append(typeMembers, f)
+			default:
+				return nil, nil, fmt.Errorf(`internal error: unknown info type: %T`, info)
 			}
 		}
 	}
@@ -146,7 +148,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 		if len(p.source) == 0 || p.source[0].name == "*" {
 			switch info := info.(type) {
 			case *mapInfo:
-				return nil, nil, fmt.Errorf(`&%s.* cannot be used with a map output when no column names are specified or column name is *`, info.typ().Name())
+				return nil, nil, fmt.Errorf(`&%s.* cannot be used for maps when no column names are specified`, info.typ().Name())
 			case *structInfo:
 				pref := ""
 
@@ -160,6 +162,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 					typeMembers = append(typeMembers, info.tagToField[tag])
 				}
 				return outCols, typeMembers, nil
+			default:
+				return nil, nil, fmt.Errorf(`internal error: unknown info type: %T`, info)
 			}
 		}
 
@@ -182,6 +186,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 					typeMembers = append(typeMembers, f)
 				}
 				return outCols, typeMembers, nil
+			default:
+				return nil, nil, fmt.Errorf(`internal error: unknown info type: %T`, info)
 			}
 		}
 	}
@@ -203,7 +209,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 	return outCols, typeMembers, nil
 }
 
-type typeNameToInfo map[string]info
+type typeNameToInfo map[string]typeInfo
 
 // Prepare takes a parsed expression and struct instantiations of all the types
 // mentioned in it.
@@ -221,7 +227,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	// Generate and save reflection info.
 	for _, arg := range args {
 		if arg == nil {
-			return nil, fmt.Errorf("need map or struct, got nil")
+			return nil, fmt.Errorf("need struct or map, got nil")
 		}
 		t := reflect.TypeOf(arg)
 		switch t.Kind() {
@@ -229,7 +235,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			if t.Name() == "" {
 				return nil, fmt.Errorf("cannot use anonymous %s", t.Kind())
 			}
-			info, err := typeInfo(arg)
+			info, err := getTypeInfo(arg)
 			if err != nil {
 				return nil, err
 			}
@@ -241,9 +247,9 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			}
 			ti[t.Name()] = info
 		case reflect.Pointer:
-			return nil, fmt.Errorf("need map or struct, got pointer to %s", t.Elem().Kind())
+			return nil, fmt.Errorf("need struct or map, got pointer to %s", t.Elem().Kind())
 		default:
-			return nil, fmt.Errorf("need map or struct, got %s", t.Kind())
+			return nil, fmt.Errorf("need struct or map, got %s", t.Kind())
 		}
 	}
 

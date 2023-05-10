@@ -9,12 +9,69 @@ import (
 	"sync"
 )
 
-var cacheMutex sync.RWMutex
-var cache = make(map[reflect.Type]info)
+type typeMember interface {
+	outerType() reflect.Type
+}
 
-// Reflect will return the info of a given type,
+type mapKey struct {
+	name    string
+	mapType reflect.Type
+}
+
+func (mk mapKey) outerType() reflect.Type {
+	return mk.mapType
+}
+
+// structField represents reflection information about a field from some struct type.
+type structField struct {
+	name string
+
+	// The type of the containing struct.
+	structType reflect.Type
+
+	// Index sequence for Type.FieldByIndex.
+	index []int
+
+	// OmitEmpty is true when "omitempty" is
+	// a property of the field's "db" tag.
+	omitEmpty bool
+}
+
+func (f structField) outerType() reflect.Type {
+	return f.structType
+}
+
+type typeInfo interface {
+	typ() reflect.Type
+}
+
+type structInfo struct {
+	structType reflect.Type
+
+	// Ordered list of tags
+	tags []string
+
+	tagToField map[string]structField
+}
+
+func (si *structInfo) typ() reflect.Type {
+	return si.structType
+}
+
+type mapInfo struct {
+	mapType reflect.Type
+}
+
+func (mi *mapInfo) typ() reflect.Type {
+	return mi.mapType
+}
+
+var cacheMutex sync.RWMutex
+var cache = make(map[reflect.Type]typeInfo)
+
+// Reflect will return the typeInfo of a given type,
 // generating and caching as required.
-func typeInfo(value any) (info, error) {
+func getTypeInfo(value any) (typeInfo, error) {
 	if value == (any)(nil) {
 		return nil, fmt.Errorf("cannot reflect nil value")
 	}
@@ -22,27 +79,27 @@ func typeInfo(value any) (info, error) {
 	t := reflect.TypeOf(value)
 
 	cacheMutex.RLock()
-	info, found := cache[t]
+	typeInfo, found := cache[t]
 	cacheMutex.RUnlock()
 	if found {
-		return info, nil
+		return typeInfo, nil
 	}
 
-	info, err := generate(t)
+	typeInfo, err := generateTypeInfo(t)
 	if err != nil {
 		return nil, err
 	}
 
 	cacheMutex.Lock()
-	cache[t] = info
+	cache[t] = typeInfo
 	cacheMutex.Unlock()
 
-	return info, nil
+	return typeInfo, nil
 }
 
 // generate produces and returns reflection information for the input
-// reflect.Value that is specifically required for SQLAir operation.
-func generate(t reflect.Type) (info, error) {
+// reflect.Value that is specifically required for SQLair operation.
+func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 	switch t.Kind() {
 	case reflect.Map:
 		if t.Key().Kind() != reflect.String {
@@ -50,7 +107,7 @@ func generate(t reflect.Type) (info, error) {
 		}
 		return &mapInfo{mapType: t}, nil
 	case reflect.Struct:
-		structInfo := structInfo{
+		info := structInfo{
 			tagToField: make(map[string]structField),
 			structType: t,
 		}
@@ -72,7 +129,7 @@ func generate(t reflect.Type) (info, error) {
 				return nil, fmt.Errorf("cannot parse tag for field %s.%s: %s", t.Name(), f.Name, err)
 			}
 			tags = append(tags, tag)
-			structInfo.tagToField[tag] = structField{
+			info.tagToField[tag] = structField{
 				name:       f.Name,
 				index:      f.Index,
 				omitEmpty:  omitEmpty,
@@ -81,9 +138,9 @@ func generate(t reflect.Type) (info, error) {
 		}
 
 		sort.Strings(tags)
-		structInfo.tags = tags
+		info.tags = tags
 
-		return &structInfo, nil
+		return &info, nil
 	default:
 		return nil, fmt.Errorf("internal error: cannot obtain type information for type that is not map or struct: %s.", t)
 	}
