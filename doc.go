@@ -18,7 +18,7 @@ For example, given the following tagged struct "Person":
 
 	type Person struct {
 		Name	string	`db:"name"`
-		ID	int		`db:"id"`
+		ID	int	`db:"id"`
 		Team	string  `db:"team"`
 	}
 
@@ -61,6 +61,7 @@ SQLair Output expressions, however, can take many forms:
 5. Fetches the renamed columns from the database and sets them to the fields of the named columns.
 
 Multiple input and output expressions can be written in a single query.
+
 A SQLair expression will never be substituted for a wildcard asterisk in a SQL query.
 */
 package sqlair
