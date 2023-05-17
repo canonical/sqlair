@@ -107,18 +107,9 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	return &QueryExpr{outputs: pe.outputs, sql: pe.sql, args: qargs}, nil
 }
 
-// MapDecodeInfo stores a map and the results to go in it.
-// Once values have been scanned into the values slice Populate() must be called
-// to set the values in the map.
-type MapDecodeInfo struct {
-	m      reflect.Value
-	keys   []string
-	values []reflect.Value
-}
-
 // ScanArgs returns list of pointers to the struct fields that are listed in qe.outputs.
 // All the structs and maps mentioned in the query must be in outputArgs.
-func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, []*MapDecodeInfo, error) {
+func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, func(), error) {
 	var typesInQuery = []string{}
 	var inQuery = make(map[reflect.Type]bool)
 	for _, typeMember := range qe.outputs {
@@ -129,7 +120,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, []*Map
 		}
 	}
 
-	var mapDecodeInfos = make(map[reflect.Type]*MapDecodeInfo)
+	var mapFuncs = []func(){}
 	var typeDest = make(map[reflect.Type]reflect.Value)
 	outputVals := []reflect.Value{}
 	for _, outputArg := range outputArgs {
@@ -154,14 +145,10 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, []*Map
 		if !inQuery[outputVal.Type()] {
 			return nil, nil, fmt.Errorf("type %q does not appear in query, have: %s", outputVal.Type().Name(), strings.Join(typesInQuery, ", "))
 		}
-		if outputVal.Kind() == reflect.Map {
-			mapDecodeInfos[outputVal.Type()] = &MapDecodeInfo{m: outputVal}
-		} else {
-			if _, ok := typeDest[outputVal.Type()]; ok {
-				return nil, nil, fmt.Errorf("type %q provided more than once, rename one of them", outputVal.Type().Name())
-			}
-			typeDest[outputVal.Type()] = outputVal
+		if _, ok := typeDest[outputVal.Type()]; ok {
+			return nil, nil, fmt.Errorf("type %q provided more than once, rename one of them", outputVal.Type().Name())
 		}
+		typeDest[outputVal.Type()] = outputVal
 		outputVals = append(outputVals, outputVal)
 	}
 
@@ -179,38 +166,32 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, []*Map
 			return nil, nil, fmt.Errorf("internal error: sqlair column not in outputs (%d>=%d)", idx, len(qe.outputs))
 		}
 		typeMember := qe.outputs[idx]
+		outputVal, ok := typeDest[typeMember.outerType()]
+		if !ok {
+			return nil, nil, fmt.Errorf("type %q found in query but not passed to get", typeMember.outerType().Name())
+		}
 		switch tm := typeMember.(type) {
 		case structField:
-			outputVal, ok := typeDest[tm.structType]
-			if !ok {
-				return nil, nil, fmt.Errorf("type %q found in query but not passed to get", tm.structType.Name())
-			}
 			val := outputVal.FieldByIndex(tm.index)
 			if !val.CanSet() {
 				return nil, nil, fmt.Errorf("internal error: cannot set field %s of struct %s", tm.name, tm.structType.Name())
 			}
 			ptrs = append(ptrs, val.Addr().Interface())
 		case mapKey:
-			mapDecodeInfo, ok := mapDecodeInfos[tm.mapType]
-			if !ok {
-				return nil, nil, fmt.Errorf("type %q found in query but not passed to get", tm.mapType.Name())
+			scanVal := reflect.New(tm.mapType.Elem()).Elem()
+			ptrs = append(ptrs, scanVal.Addr().Interface())
+			mapSucessFunc := func() {
+				outputVal.SetMapIndex(reflect.ValueOf(tm.name), scanVal)
 			}
-			// Scan in to a new value with the type of the maps value
-			mapDecodeInfo.keys = append(mapDecodeInfo.keys, tm.name)
-			mapDecodeInfo.values = append(mapDecodeInfo.values, reflect.New(tm.mapType.Elem()).Elem())
-			ptrs = append(ptrs, mapDecodeInfo.values[len(mapDecodeInfo.values)-1].Addr().Interface())
+			mapFuncs = append(mapFuncs, mapSucessFunc)
 		}
 	}
-	var mapInfoSlice = []*MapDecodeInfo{}
-	for _, v := range mapDecodeInfos {
-		mapInfoSlice = append(mapInfoSlice, v)
-	}
-	return ptrs, mapInfoSlice, nil
-}
 
-// Populate puts scanned values into the map.
-func (mapDecodeInfo *MapDecodeInfo) Populate() {
-	for i, k := range mapDecodeInfo.keys {
-		mapDecodeInfo.m.SetMapIndex(reflect.ValueOf(k), mapDecodeInfo.values[i])
+	onSuccess := func() {
+		for _, mf := range mapFuncs {
+			mf()
+		}
 	}
+
+	return ptrs, onSuccess, nil
 }

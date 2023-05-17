@@ -202,16 +202,14 @@ func (iter *Iterator) Get(outputArgs ...any) (err error) {
 		return fmt.Errorf("iteration ended")
 	}
 
-	ptrs, mapDecodeInfos, err := iter.qe.ScanArgs(iter.cols, outputArgs)
+	ptrs, onSuccess, err := iter.qe.ScanArgs(iter.cols, outputArgs)
 	if err != nil {
 		return err
 	}
 	if err := iter.rows.Scan(ptrs...); err != nil {
 		return err
 	}
-	for _, m := range mapDecodeInfos {
-		m.Populate()
-	}
+	onSuccess()
 	return nil
 }
 

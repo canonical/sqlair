@@ -324,6 +324,13 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		inputs:  []any{},
 		outputs: [][]any{{&Person{}, &Person{}}},
 		err:     `cannot get result: type "Person" provided more than once, rename one of them`,
+	}, {
+		summary: "multiple of the same type",
+		query:   "SELECT name AS &M.* FROM person",
+		types:   []any{sqlair.M{}},
+		inputs:  []any{},
+		outputs: [][]any{{&sqlair.M{}, sqlair.M{}}},
+		err:     `cannot get result: type "M" provided more than once, rename one of them`,
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()
