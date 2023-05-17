@@ -46,9 +46,9 @@ func example() {
 
 	insertPerson := sqlair.MustPrepare("INSERT INTO person (name, id, team) VALUES ($Person.name, $Person.id, $Person.team);", Person{})
 
-	var al = Person{"Alasatir", 1, "engineering"}
+	var al = Person{"Alastair", 1, "engineering"}
 	var ed = Person{"Ed", 2, "engineering"}
-	var marco = Person{"Marco", 3, "consulting"}
+	var marco = Person{"Marco", 3, "engineering"}
 	var pedro = Person{"Pedro", 4, "management"}
 	var serdar = Person{"Serdar", 5, "presentation engineering"}
 	var joe = Person{"Joe", 6, "marketing"}
@@ -68,15 +68,14 @@ func example() {
 	insertLocation := sqlair.MustPrepare("INSERT INTO location (name, room_id, team) VALUES ($Location.name, $Location.room_id, $Location.team)", Location{})
 
 	l1 := Location{1, "Basement", "engineering"}
-	l2 := Location{100, "Shed", "consulting"}
-	l3 := Location{34, "Floor 2", "presentation engineering"}
-	l4 := Location{19, "Floor 3", "management"}
-	l5 := Location{66, "The Market", "marketing"}
-	l6 := Location{7, "Court", "legal"}
-	l7 := Location{9, "Floors 4 to 89", "hr"}
-	l8 := Location{73, "Bar", "Sales"}
-	l9 := Location{32, "Penthouse", "leadership"}
-	var locations = []Location{l1, l2, l3, l4, l5, l6, l7, l8, l9}
+	l2 := Location{34, "Floor 2", "presentation engineering"}
+	l3 := Location{19, "Floor 3", "management"}
+	l4 := Location{66, "The Market", "marketing"}
+	l5 := Location{7, "Court", "legal"}
+	l6 := Location{9, "Floors 4 to 89", "hr"}
+	l7 := Location{73, "Bar", "Sales"}
+	l8 := Location{32, "Penthouse", "leadership"}
+	var locations = []Location{l1, l2, l3, l4, l5, l6, l7, l8}
 	for _, l := range locations {
 		err := db.Query(nil, insertLocation, l).Run()
 		if err != nil {
