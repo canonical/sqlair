@@ -49,16 +49,19 @@ Where Type is a struct and col_name is a `db` tag on one of those fields.
 SQLair Output expressions, however, can take many forms:
 
  1. &Type.col_name
- 2. &Type.*
- 3. table.* AS &Type.*
- 4. (col_name1, col_name2) AS &Type.*
- 5. (renamed_col1, renamed_col2) AS (&Type.col_name1, &Type.col_name2)
+    - Fetches col_name and sets the corresponding field of Type.
 
-1. Fetches col_name and sets the corresponding field of Type.
-2. Fetches and sets all the tagged fields of Type.
-3. Does the sames 2 but prepends all columns with the table name.
-4. Fetches and sets only the specified columns.
-5. Fetches the renamed columns from the database and sets them to the fields of the named columns.
+ 2. &Type.*
+    - Fetches and sets all the tagged fields of Type.
+
+ 3. table.* AS &Type.*
+    - Does the sames 2 but prepends all columns with the table name.
+
+ 4. (col_name1, col_name2) AS &Type.*
+    - Fetches and sets only the specified columns.
+
+ 5. (renamed_col1, renamed_col2) AS (&Type.col_name1, &Type.col_name2)
+    - Fetches the renamed columns from the database and sets them to the fields of the named columns.
 
 Multiple input and output expressions can be written in a single query.
 
