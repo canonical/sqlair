@@ -32,12 +32,12 @@ func (fn fullName) String() string {
 // inputPart represents a named parameter that will be sent to the database
 // while performing the query.
 type inputPart struct {
-	source fullName
-	raw    string
+	typ fullName
+	raw string
 }
 
 func (p *inputPart) String() string {
-	return fmt.Sprintf("Input[%+v]", p.source)
+	return fmt.Sprintf("Input[%+v]", p.typ)
 }
 
 func (p *inputPart) part() {}
@@ -45,13 +45,13 @@ func (p *inputPart) part() {}
 // outputPart represents a named target output variable in the SQL expression,
 // as well as the source table and column where it will be read from.
 type outputPart struct {
-	source []fullName
-	target []fullName
-	raw    string
+	columns []fullName
+	types   []fullName
+	raw     string
 }
 
 func (p *outputPart) String() string {
-	return fmt.Sprintf("Output[%+v %+v]", p.source, p.target)
+	return fmt.Sprintf("Output[%+v %+v]", p.columns, p.types)
 }
 
 func (p *outputPart) part() {}

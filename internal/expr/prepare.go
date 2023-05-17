@@ -56,21 +56,21 @@ func starCount(fns []fullName) int {
 }
 
 // starCheckOutput checks that the statement is well formed with regard to
-// asterisks and the number of sources and targets.
+// asterisks and the number of columns and types.
 func starCheckOutput(p *outputPart) error {
-	numSources := len(p.source)
-	numTargets := len(p.target)
+	numColumns := len(p.columns)
+	numTypes := len(p.types)
 
-	targetStars := starCount(p.target)
-	sourceStars := starCount(p.source)
-	starTarget := targetStars == 1
-	starSource := sourceStars == 1
+	typeStars := starCount(p.types)
+	columnStars := starCount(p.columns)
+	starTypes := typeStars == 1
+	starColumns := columnStars == 1
 
-	if targetStars > 1 || sourceStars > 1 || (sourceStars == 1 && targetStars == 0) ||
-		(starTarget && numTargets > 1) || (starSource && numSources > 1) {
+	if typeStars > 1 || columnStars > 1 || (columnStars == 1 && typeStars == 0) ||
+		(starTypes && numTypes > 1) || (starColumns && numColumns > 1) {
 		return fmt.Errorf("invalid asterisk in output expression: %s", p.raw)
 	}
-	if !starTarget && (numSources > 0 && (numTargets != numSources)) {
+	if !starTypes && (numColumns > 0 && (numTypes != numColumns)) {
 		return fmt.Errorf("mismatched number of columns and targets in output expression: %s", p.raw)
 	}
 	return nil
@@ -78,18 +78,18 @@ func starCheckOutput(p *outputPart) error {
 
 // prepareInput checks that the input expression corresponds to a known type.
 func prepareInput(ti typeNameToInfo, p *inputPart) (field, error) {
-	info, ok := ti[p.source.prefix]
+	info, ok := ti[p.typ.prefix]
 	if !ok {
 		ts := getKeys(ti)
 		if len(ts) == 0 {
-			return field{}, fmt.Errorf(`type %q not passed as a parameter`, p.source.prefix)
+			return field{}, fmt.Errorf(`type %q not passed as a parameter`, p.typ.prefix)
 		} else {
-			return field{}, fmt.Errorf(`type %q not passed as a parameter, have: %s`, p.source.prefix, strings.Join(ts, ", "))
+			return field{}, fmt.Errorf(`type %q not passed as a parameter, have: %s`, p.typ.prefix, strings.Join(ts, ", "))
 		}
 	}
-	f, ok := info.tagToField[p.source.name]
+	f, ok := info.tagToField[p.typ.name]
 	if !ok {
-		return field{}, fmt.Errorf(`type %q has no %q db tag`, info.typ.Name(), p.source.name)
+		return field{}, fmt.Errorf(`type %q has no %q db tag`, info.typ.Name(), p.typ.name)
 	}
 
 	return f, nil
@@ -111,7 +111,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []field, error
 	var info *info
 	var ok bool
 
-	for _, t := range p.target {
+	for _, t := range p.types {
 		info, ok = ti[t.prefix]
 		if !ok {
 			return nil, nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, t.prefix, strings.Join(getKeys(ti), ", "))
@@ -130,17 +130,17 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []field, error
 
 	// Generate columns to inject into SQL query.
 
-	// Case 1: Star target cases e.g. "...&P.*".
-	if p.target[0].name == "*" {
-		info, _ := ti[p.target[0].prefix]
+	// Case 1: Star type cases e.g. "...&P.*".
+	if p.types[0].name == "*" {
+		info, _ := ti[p.types[0].prefix]
 
 		// Case 1.1: Single star i.e. "t.* AS &P.*" or "&P.*"
-		if len(p.source) == 0 || p.source[0].name == "*" {
+		if len(p.columns) == 0 || p.columns[0].name == "*" {
 			pref := ""
 
 			// Prepend table name. E.g. "t" in "t.* AS &P.*".
-			if len(p.source) > 0 {
-				pref = p.source[0].prefix
+			if len(p.columns) > 0 {
+				pref = p.columns[0].prefix
 			}
 
 			for _, tag := range info.tags {
@@ -151,8 +151,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []field, error
 		}
 
 		// Case 1.2: Explicit columns e.g. "(col1, t.col2) AS &P.*".
-		if len(p.source) > 0 {
-			for _, c := range p.source {
+		if len(p.columns) > 0 {
+			for _, c := range p.columns {
 				f, ok := info.tagToField[c.name]
 				if !ok {
 					return nil, nil, fmt.Errorf(`type %q has no %q db tag`, info.typ.Name(), c.name)
@@ -164,18 +164,18 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []field, error
 		}
 	}
 
-	// Case 2: None star target cases e.g. "...(&P.name, &P.id)".
+	// Case 2: None star type cases e.g. "...(&P.name, &P.id)".
 
 	// Case 2.1: Explicit columns e.g. "name_1 AS P.name".
-	if len(p.source) > 0 {
-		for _, c := range p.source {
+	if len(p.columns) > 0 {
+		for _, c := range p.columns {
 			outCols = append(outCols, c)
 		}
 		return outCols, fields, nil
 	}
 
 	// Case 2.2: No columns e.g. "(&P.name, &P.id)".
-	for _, t := range p.target {
+	for _, t := range p.types {
 		outCols = append(outCols, fullName{name: t.name})
 	}
 	return outCols, fields, nil
