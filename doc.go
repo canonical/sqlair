@@ -8,10 +8,10 @@ It does not copy database/sql, it instead improves upon it and removes inconsist
 
 # Basics
 
-To read the results of a query into a struct the columns listed in the SQL are replaced by a SQLair output expression.
+To read the results of a query into a struct, the columns listed in the SQL are replaced by a SQLair output expression.
 The output expressions are parsed and replaced with the column names found in the `db` tags of the struct.
 Similarly, to use a query argument directly from a Go struct the question mark is replaced by a SQLair input expression.
-This package does not parse the SQL query, only the SQLair expressions found within it.
+This package does not parse the SQL query, only the SQLair input/output expressions found within it.
 
 The characters $ and & are used to specify input and outputs expressions respectively.
 For example, given the following tagged struct "Person":
@@ -35,8 +35,9 @@ With SQLair one would write:
 	WHERE manager_name = $Manager.name
 
 SQLair substitutes &Person.* for all columns in the `db` tags of Person.
-$Manager.name instructs SQLair to pass the Name field of the struct Manager as a query argument.
-Note that in the SQLair expressions the `db` tags (i.e. the column names) are used to specify the struct fields _not_ the field names.
+The input expression, $Manager.name, instructs SQLair to pass the Name field of the struct Manager as a query argument.
+
+Note that in the SQLair `db` tags (i.e. the column names) appear in the input/output expressions, not the field names.
 
 # Syntax
 
@@ -44,7 +45,7 @@ SQLair input expressions only take one format:
 
 	$Type.col_name
 
-Where Type is a struct and col_name is a `db` tag on one of those fields.
+Where Type is a struct and col_name is a `db` tag on one of the structs fields.
 
 SQLair Output expressions, however, can take many forms:
 
