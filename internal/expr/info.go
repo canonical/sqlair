@@ -11,8 +11,11 @@ type field struct {
 	// The type of the containing struct.
 	structType reflect.Type
 
-	// Index sequence for Type.FieldByIndex.
-	index []int
+	// Index for Type.Field.
+	index int
+
+	// The tag assosiated with this field
+	tag string
 
 	// OmitEmpty is true when "omitempty" is
 	// a property of the field's "db" tag.

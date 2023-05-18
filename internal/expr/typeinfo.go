@@ -72,7 +72,8 @@ func generate(t reflect.Type) (*structInfo, error) {
 		tags = append(tags, tag)
 		info.tagToField[tag] = field{
 			name:       f.Name,
-			index:      f.Index,
+			index:      i,
+			tag:        tag,
 			omitEmpty:  omitEmpty,
 			structType: t,
 		}

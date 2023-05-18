@@ -250,7 +250,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 
 			for _, f := range fields {
 				if ok := fieldPresent[f]; ok {
-					return nil, fmt.Errorf("field %s of struct %s appears more than once", field.name, field.structType.Name)
+					return nil, fmt.Errorf("field with tag %q of struct %q appears more than once", f.tag, f.structType.Name())
 				}
 				fieldPresent[f] = true
 			}

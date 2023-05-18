@@ -86,7 +86,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 				return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, in.structType.Name(), strings.Join(typeNames, ", "))
 			}
 		}
-		named := sql.Named("sqlair_"+strconv.Itoa(i), v.FieldByIndex(in.index).Interface())
+		named := sql.Named("sqlair_"+strconv.Itoa(i), v.Field(in.index).Interface())
 		qargs = append(qargs, named)
 	}
 
@@ -155,7 +155,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, error)
 			return nil, fmt.Errorf("type %q found in query but not passed to get", field.structType.Name())
 		}
 
-		val := outputVal.FieldByIndex(field.index)
+		val := outputVal.Field(field.index)
 		if !val.CanSet() {
 			return nil, fmt.Errorf("internal error: cannot set field %s of struct %s", field.name, field.structType.Name())
 		}

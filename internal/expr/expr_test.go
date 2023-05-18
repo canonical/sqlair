@@ -111,10 +111,10 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 `,
 }, {
 	"comments v2",
-	`SELECT (&Person.name, /* ... */ &Person.id), (&Person.id /* ... */, &Person.name) FROM p -- End of the line`,
-	`[Bypass[SELECT ] Output[[] [Person.name Person.id]] Bypass[, ] Output[[] [Person.id Person.name]] Bypass[ FROM p -- End of the line]]`,
-	[]any{Person{}},
-	`SELECT name AS _sqlair_0, id AS _sqlair_1, id AS _sqlair_2, name AS _sqlair_3 FROM p -- End of the line`,
+	`SELECT (&Person.name, /* ... */ &Person.id), (&Address.id /* ... */, &Address.street) FROM p -- End of the line`,
+	`[Bypass[SELECT ] Output[[] [Person.name Person.id]] Bypass[, ] Output[[] [Address.id Address.street]] Bypass[ FROM p -- End of the line]]`,
+	[]any{Person{}, Address{}},
+	`SELECT name AS _sqlair_0, id AS _sqlair_1, id AS _sqlair_2, street AS _sqlair_3 FROM p -- End of the line`,
 }, {
 	"quoted io expressions",
 	`SELECT "&notAnOutput.Expression" '&notAnotherOutputExpresion.*' AS literal FROM t WHERE bar = '$NotAn.Input' AND baz = "$NotAnother.Input"`,
@@ -207,10 +207,10 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, a.district AS _sqlair_3, a.street AS _sqlair_4 FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name IN (SELECT name FROM table WHERE table.n = @sqlair_0)`,
 }, {
 	"complex query v4",
-	"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name) UNION SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name)",
-	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district a.street] [Address.*]] Bypass[ FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = ] Input[Person.name] Bypass[) UNION SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district a.street] [Address.*]] Bypass[ FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = ] Input[Person.name] Bypass[)]]",
+	"SELECT p.* AS &Person.* FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name) UNION SELECT (a.district, a.street) AS &Address.* FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name)",
+	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[ FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = ] Input[Person.name] Bypass[) UNION SELECT ] Output[[a.district a.street] [Address.*]] Bypass[ FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = ] Input[Person.name] Bypass[)]]",
 	[]any{Person{}, Address{}},
-	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, a.district AS _sqlair_3, a.street AS _sqlair_4 FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = @sqlair_0) UNION SELECT p.address_id AS _sqlair_5, p.id AS _sqlair_6, p.name AS _sqlair_7, a.district AS _sqlair_8, a.street AS _sqlair_9 FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = @sqlair_1)`,
+	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2 FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = @sqlair_0) UNION SELECT a.district AS _sqlair_3, a.street AS _sqlair_4 FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = @sqlair_1)`,
 }, {
 	"complex query v5",
 	"SELECT p.* AS &Person.*, &District.* FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
@@ -393,7 +393,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT (&Address.*, &Address.id) FROM t",
 		prepareArgs: []any{Address{}, Person{}},
-		err:         "cannot prepare expression: invalid asterisk in output expression: (&Address.*, &Address.id)",
+		err:         `cannot prepare expression: field with tag "id" of struct "Address" appears more than once`,
 	}, {
 		query:       "SELECT (p.*, t.name) AS &Address.* FROM t",
 		prepareArgs: []any{Address{}},
@@ -405,15 +405,11 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT (&Person.*, &Person.*) FROM t",
 		prepareArgs: []any{Address{}, Person{}},
-		err:         "cannot prepare expression: invalid asterisk in output expression: (&Person.*, &Person.*)",
+		err:         `cannot prepare expression: field with tag "address_id" of struct "Person" appears more than once`,
 	}, {
 		query:       "SELECT (p.*, t.*) AS &Address.* FROM t",
 		prepareArgs: []any{Address{}},
 		err:         "cannot prepare expression: invalid asterisk in output expression: (p.*, t.*) AS &Address.*",
-	}, {
-		query:       "SELECT p.* AS &Address.street FROM t",
-		prepareArgs: []any{Address{}},
-		err:         "cannot prepare expression: invalid asterisk in output expression: p.* AS &Address.street",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.number",
 		prepareArgs: []any{Address{}},
