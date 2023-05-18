@@ -1,4 +1,4 @@
-package example_test
+package sqlair_test
 
 import (
 	"database/sql"
@@ -15,13 +15,14 @@ type Location struct {
 	Team string `db:"team"`
 }
 
-type Person struct {
+type Employee struct {
 	Name string `db:"name"`
 	ID   int    `db:"id"`
 	Team string `db:"team"`
 }
 
 func Example() {
+	panic("this does run")
 	sqldb, err := sql.Open("sqlite3", ":memory:")
 	if err != nil {
 		panic(err)
@@ -44,22 +45,22 @@ func Example() {
 		panic(err)
 	}
 
-	insertPerson := sqlair.MustPrepare("INSERT INTO person (name, id, team) VALUES ($Person.name, $Person.id, $Person.team);", Person{})
+	insertEmployee := sqlair.MustPrepare("INSERT INTO person (name, id, team) VALUES ($Employee.name, $Employee.id, $Employee.team);", Employee{})
 
-	var al = Person{"Alastair", 1, "engineering"}
-	var ed = Person{"Ed", 2, "engineering"}
-	var marco = Person{"Marco", 3, "engineering"}
-	var pedro = Person{"Pedro", 4, "management"}
-	var serdar = Person{"Serdar", 5, "presentation engineering"}
-	var joe = Person{"Joe", 6, "marketing"}
-	var ben = Person{"Ben", 7, "legal"}
-	var sam = Person{"Sam", 8, "hr"}
-	var paul = Person{"Paul", 9, "sales"}
-	var mark = Person{"Mark", 10, "leadership"}
-	var gus = Person{"Gustavo", 11, "leadership"}
-	var people = []Person{ed, al, marco, pedro, serdar, joe, ben, sam, paul, mark, gus}
+	var al = Employee{"Alastair", 1, "engineering"}
+	var ed = Employee{"Ed", 2, "engineering"}
+	var marco = Employee{"Marco", 3, "engineering"}
+	var pedro = Employee{"Pedro", 4, "management"}
+	var serdar = Employee{"Serdar", 5, "presentation engineering"}
+	var joe = Employee{"Joe", 6, "marketing"}
+	var ben = Employee{"Ben", 7, "legal"}
+	var sam = Employee{"Sam", 8, "hr"}
+	var paul = Employee{"Paul", 9, "sales"}
+	var mark = Employee{"Mark", 10, "leadership"}
+	var gus = Employee{"Gustavo", 11, "leadership"}
+	var people = []Employee{ed, al, marco, pedro, serdar, joe, ben, sam, paul, mark, gus}
 	for _, p := range people {
-		err := db.Query(nil, insertPerson, p).Run()
+		err := db.Query(nil, insertEmployee, p).Run()
 		if err != nil {
 			panic(err)
 		}
@@ -85,15 +86,15 @@ func Example() {
 
 	// Find someone on the engineering team.
 	selectEngineer := sqlair.MustPrepare(`
-		SELECT &Person.*
+		SELECT &Employee.*
 		FROM person
 		WHERE team = "engineering"`,
-		Person{})
+		Employee{})
 
 	q := db.Query(nil, selectEngineer)
 
 	// Get returns a single result.
-	var pal = Person{}
+	var pal = Employee{}
 	err = q.Get(&pal)
 	if err != nil {
 		panic(err)
@@ -103,15 +104,15 @@ func Example() {
 
 	// Find out who is in location l1.
 	selectPeopleInRoom := sqlair.MustPrepare(`
-		SELECT &Person.*
+		SELECT &Employee.*
 		FROM person
 		WHERE team = $Location.team`,
-		Location{}, Person{})
+		Location{}, Employee{})
 
 	q = db.Query(nil, selectPeopleInRoom, l1)
 
 	// GetAll returns all the results.
-	var roomDwellers = []Person{}
+	var roomDwellers = []Employee{}
 	err = q.GetAll(&roomDwellers)
 	if err != nil {
 		panic(err)
@@ -124,11 +125,11 @@ func Example() {
 
 	// Print out who is in which room.
 	selectPeopleAndRoom := sqlair.MustPrepare(`
-		SELECT l.* AS &Location.*, (p.name, p.team) AS &Person.*
+		SELECT l.* AS &Location.*, (p.name, p.team) AS &Employee.*
 		FROM location AS l
 			JOIN person AS p
 			ON p.team = l.team`,
-		Location{}, Person{},
+		Location{}, Employee{},
 	)
 
 	q = db.Query(nil, selectPeopleAndRoom)
@@ -141,7 +142,7 @@ func Example() {
 	iter := q.Iter()
 	for iter.Next() {
 		var l = Location{}
-		var p = Person{}
+		var p = Employee{}
 
 		err := iter.Get(&l, &p)
 		if err != nil {
