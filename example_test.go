@@ -22,7 +22,6 @@ type Employee struct {
 }
 
 func Example() {
-	panic("this does run")
 	sqldb, err := sql.Open("sqlite3", ":memory:")
 	if err != nil {
 		panic(err)
@@ -160,4 +159,18 @@ func Example() {
 	if err != nil {
 		panic(err)
 	}
+
+	// Output:
+	// Ed is on the engineering team.
+	// Ed, Alastair, Marco, are in room l1.
+	// Alastair is in Basement
+	// Ed is in Basement
+	// Marco is in Basement
+	// Serdar is in Floor 2
+	// Pedro is in Floor 3
+	// Joe is in The Market
+	// Ben is in Court
+	// Sam is in Floors 4 to 89
+	// Gustavo is in Penthouse
+	// Mark is in Penthouse
 }
