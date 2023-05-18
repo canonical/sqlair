@@ -20,7 +20,7 @@ type field struct {
 }
 
 // Info represents reflected information about a struct type.
-type info struct {
+type structInfo struct {
 	typ reflect.Type
 
 	// Ordered list of tags

@@ -10,11 +10,11 @@ import (
 )
 
 var cacheMutex sync.RWMutex
-var cache = make(map[reflect.Type]*info)
+var cache = make(map[reflect.Type]*structInfo)
 
-// Reflect will return the info of a given type,
+// Reflect will return the structInfo of a given type,
 // generating and caching as required.
-func typeInfo(value any) (*info, error) {
+func typeInfo(value any) (*structInfo, error) {
 	if value == (any)(nil) {
 		return nil, fmt.Errorf("cannot reflect nil value")
 	}
@@ -42,13 +42,13 @@ func typeInfo(value any) (*info, error) {
 
 // generate produces and returns reflection information for the input
 // reflect.Value that is specifically required for SQLair operation.
-func generate(t reflect.Type) (*info, error) {
+func generate(t reflect.Type) (*structInfo, error) {
 	// Reflection information is only generated for structs.
 	if t.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("internal error: attempted to obtain struct information for something that is not a struct: %s.", t)
 	}
 
-	info := info{
+	info := structInfo{
 		tagToField: make(map[string]field),
 		typ:        t,
 	}

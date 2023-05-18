@@ -171,12 +171,18 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	"SELECT a.district AS _sqlair_0, a.id AS _sqlair_1 FROM address AS a",
 }, {
 	"multicolumn output v3",
+	"SELECT * AS (&Person.address_id, &Address.*, &Manager.id) FROM address AS a",
+	"[Bypass[SELECT ] Output[[*] [Person.address_id Address.* Manager.id]] Bypass[ FROM address AS a]]",
+	[]any{Person{}, Address{}, Manager{}},
+	"SELECT address_id AS _sqlair_0, district AS _sqlair_1, id AS _sqlair_2, street AS _sqlair_3, id AS _sqlair_4 FROM address AS a",
+}, {
+	"multicolumn output v4",
 	"SELECT (a.district, a.street) AS &Address.* FROM address AS a WHERE p.name = 'Fred'",
 	"[Bypass[SELECT ] Output[[a.district a.street] [Address.*]] Bypass[ FROM address AS a WHERE p.name = 'Fred']]",
 	[]any{Address{}},
 	"SELECT a.district AS _sqlair_0, a.street AS _sqlair_1 FROM address AS a WHERE p.name = 'Fred'",
 }, {
-	"multicolumn output v4",
+	"multicolumn output v5",
 	"SELECT (&Address.street, &Person.id) FROM address AS a WHERE p.name = 'Fred'",
 	"[Bypass[SELECT ] Output[[] [Address.street Person.id]] Bypass[ FROM address AS a WHERE p.name = 'Fred']]",
 	[]any{Address{}, Person{}},
