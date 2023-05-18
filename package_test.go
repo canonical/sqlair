@@ -786,7 +786,7 @@ func (s *PackageSuite) TestTransactions(c *C) {
 	c.Assert(err, IsNil)
 
 	// Insert derek then rollback.
-	err = tx.Query(nil, insertStmt, &derek).Run()
+	err = tx.Query(ctx, insertStmt, &derek).Run()
 	c.Assert(err, IsNil)
 	err = tx.Rollback()
 	c.Assert(err, IsNil)
@@ -795,11 +795,11 @@ func (s *PackageSuite) TestTransactions(c *C) {
 	tx, err = db.Begin(ctx, nil)
 	c.Assert(err, IsNil)
 	var derekCheck = Person{}
-	err = tx.Query(nil, selectStmt, &derek).Get(&derekCheck)
+	err = tx.Query(ctx, selectStmt, &derek).Get(&derekCheck)
 	if !errors.Is(err, sqlair.ErrNoRows) {
 		c.Fatalf("got err %s, expected %s", err, sqlair.ErrNoRows)
 	}
-	err = tx.Query(nil, insertStmt, &derek).Run()
+	err = tx.Query(ctx, insertStmt, &derek).Run()
 	c.Assert(err, IsNil)
 
 	err = tx.Commit()
@@ -809,13 +809,13 @@ func (s *PackageSuite) TestTransactions(c *C) {
 	tx, err = db.Begin(ctx, nil)
 	c.Assert(err, IsNil)
 
-	err = tx.Query(nil, selectStmt, &derek).Get(&derekCheck)
+	err = tx.Query(ctx, selectStmt, &derek).Get(&derekCheck)
 	c.Assert(err, IsNil)
 	c.Assert(derek, Equals, derekCheck)
 	err = tx.Commit()
 	c.Assert(err, IsNil)
 
-	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	err = db.Query(ctx, sqlair.MustPrepare(dropTables)).Run()
 	c.Assert(err, IsNil)
 }
 
@@ -832,7 +832,7 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 	tx, err := db.Begin(ctx, nil)
 	c.Assert(err, IsNil)
 
-	q := tx.Query(nil, insertStmt, &derek)
+	q := tx.Query(ctx, insertStmt, &derek)
 	err = tx.Commit()
 	c.Assert(err, IsNil)
 	err = q.Run()
@@ -842,13 +842,13 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 	tx, err = db.Begin(ctx, nil)
 	c.Assert(err, IsNil)
 
-	q = tx.Query(nil, insertStmt, &derek)
+	q = tx.Query(ctx, insertStmt, &derek)
 	err = tx.Rollback()
 	c.Assert(err, IsNil)
 	err = q.Run()
 	c.Assert(err, ErrorMatches, "sql: transaction has already been committed or rolled back")
 
-	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	err = db.Query(ctx, sqlair.MustPrepare(dropTables)).Run()
 	c.Assert(err, IsNil)
 }
 
