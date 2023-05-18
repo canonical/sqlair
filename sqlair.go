@@ -67,6 +67,7 @@ type querySubstrate interface {
 type Query struct {
 	qe  *expr.QueryExpr
 	qs  querySubstrate
+	ctx context.Context
 	err error
 }
 
@@ -82,20 +83,28 @@ type Iterator struct {
 
 // Query takes a context, prepared SQLair Statement and the structs mentioned in the query arguments.
 // It returns a Query object for iterating over the results.
-func (db *DB) Query(s *Statement, inputArgs ...any) *Query {
+func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	qe, err := s.pe.Query(inputArgs...)
-	return &Query{qs: db.db, qe: qe, err: err}
+	return &Query{qs: db.db, qe: qe, ctx: ctx, err: err}
+}
+
+func (q *Query) SetContext(ctx context.Context) {
+	q.ctx = ctx
 }
 
 // Run is an alias for Get that takes no arguments.
-func (q *Query) Run(ctx context.Context) error {
-	return q.Get(ctx)
+func (q *Query) Run() error {
+	return q.Get()
 }
 
 // Get runs the query and decodes the first result into the provided output arguments.
 // It returns ErrNoRows if output arguments were provided but no results were found.
 // An &Outcome{} variable may be provided as the first output variable.
-func (q *Query) Get(ctx context.Context, outputArgs ...any) error {
+func (q *Query) Get(outputArgs ...any) error {
 	if q.err != nil {
 		return q.err
 	}
@@ -111,7 +120,7 @@ func (q *Query) Get(ctx context.Context, outputArgs ...any) error {
 	}
 
 	var err error
-	iter := q.Iter(ctx)
+	iter := q.Iter()
 	if outcome != nil {
 		err = iter.Get(outcome)
 	}
@@ -132,24 +141,21 @@ func (q *Query) Get(ctx context.Context, outputArgs ...any) error {
 }
 
 // Iter returns an Iterator to iterate through the results row by row.
-func (q *Query) Iter(ctx context.Context) *Iterator {
+func (q *Query) Iter() *Iterator {
 	if q.err != nil {
 		return &Iterator{err: q.err}
-	}
-	if ctx == nil {
-		ctx = context.Background()
 	}
 	var result sql.Result
 	var rows *sql.Rows
 	var err error
 	var cols []string
 	if q.qe.HasOutputs() {
-		rows, err = q.qs.QueryContext(ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
+		rows, err = q.qs.QueryContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
 		if err == nil { // if err IS nil
 			cols, err = rows.Columns()
 		}
 	} else {
-		result, err = q.qs.ExecContext(ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
+		result, err = q.qs.ExecContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
 	}
 	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err, result: result}
 }
@@ -225,7 +231,7 @@ func (o *Outcome) Result() sql.Result {
 // GetAll iterates over the query and scans all rows into the provided slices.
 // sliceArgs must contain pointers to slices of each of the output types.
 // An &Outcome{} variable may be provided as the first output variable.
-func (q *Query) GetAll(ctx context.Context, sliceArgs ...any) (err error) {
+func (q *Query) GetAll(sliceArgs ...any) (err error) {
 	if q.err != nil {
 		return q.err
 	}
@@ -260,7 +266,7 @@ func (q *Query) GetAll(ctx context.Context, sliceArgs ...any) (err error) {
 		sliceVals = append(sliceVals, sliceVal)
 	}
 
-	iter := q.Iter(ctx)
+	iter := q.Iter()
 	for iter.Next() {
 		var outputArgs = []any{}
 		for _, sliceVal := range sliceVals {
@@ -350,7 +356,11 @@ func (txopts *TXOptions) plainTXOptions() *sql.TxOptions {
 
 // Query takes a context, prepared SQLair Statement and the structs mentioned in the query arguments.
 // It returns a Query object for iterating over the results.
-func (tx *TX) Query(s *Statement, inputArgs ...any) *Query {
+func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	qe, err := s.pe.Query(inputArgs...)
-	return &Query{qs: tx.tx, qe: qe, err: err}
+	return &Query{qs: tx.tx, qe: qe, ctx: ctx, err: err}
 }
