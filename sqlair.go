@@ -311,18 +311,13 @@ type TX struct {
 	tx *sql.Tx
 }
 
-// NewTX creates a SQLair transaction from a sql transaction.
-func NewTX(tx *sql.Tx) *TX {
-	return &TX{tx: tx}
-}
-
 // Begin starts a transaction.
 func (db *DB) Begin(ctx context.Context, opts *TXOptions) (*TX, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	tx, err := db.db.BeginTx(ctx, opts.plainTXOptions())
-	return NewTX(tx), err
+	return &TX{tx: tx}, err
 }
 
 // Commit commits the transaction.
