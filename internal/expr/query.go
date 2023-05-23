@@ -90,15 +90,8 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		case structField:
 			val = v.FieldByIndex(tm.index)
 		case mapKey:
-			// MapIndex returns a zero value if the key is not in the map so we
-			// need to check the MapKeys().
-			for _, key := range v.MapKeys() {
-				if key.String() == tm.name {
-					val = v.MapIndex(reflect.ValueOf(tm.name))
-					break
-				}
-			}
-			if !val.IsValid() {
+			val = v.MapIndex(reflect.ValueOf(tm.name))
+			if val.Kind() == reflect.Invalid {
 				return nil, fmt.Errorf(`map does not contain key %q`, tm.name)
 			}
 		}
@@ -120,7 +113,12 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, func()
 		}
 	}
 
-	var mapFuncs = []func(){}
+	type mapSetInfo struct {
+		keyVal  reflect.Value
+		scanVal reflect.Value
+		mapVal  reflect.Value
+	}
+	var mapSetInfos = []mapSetInfo{}
 	var typeDest = make(map[reflect.Type]reflect.Value)
 	outputVals := []reflect.Value{}
 	for _, outputArg := range outputArgs {
@@ -180,16 +178,13 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, func()
 		case mapKey:
 			scanVal := reflect.New(tm.mapType.Elem()).Elem()
 			ptrs = append(ptrs, scanVal.Addr().Interface())
-			mapSucessFunc := func() {
-				outputVal.SetMapIndex(reflect.ValueOf(tm.name), scanVal)
-			}
-			mapFuncs = append(mapFuncs, mapSucessFunc)
+			mapSetInfos = append(mapSetInfos, mapSetInfo{keyVal: reflect.ValueOf(tm.name), scanVal: scanVal, mapVal: outputVal})
 		}
 	}
 
 	onSuccess := func() {
-		for _, mf := range mapFuncs {
-			mf()
+		for _, mi := range mapSetInfos {
+			mi.mapVal.SetMapIndex(mi.keyVal, mi.scanVal)
 		}
 	}
 
