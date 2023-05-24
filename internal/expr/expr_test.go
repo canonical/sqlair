@@ -637,12 +637,12 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT * AS &Address.* FROM t WHERE x = $M.Fullname",
 		prepareArgs: []any{Address{}, sqlair.M{}},
 		queryArgs:   []any{sqlair.M{"fullname": "Jimany Johnson"}},
-		err:         `invalid input parameter: map does not contain key "Fullname"`,
+		err:         `invalid input parameter: map "M" does not contain key "Fullname"`,
 	}, {
 		query:       "SELECT foo FROM t WHERE x = $M.street, y = $Person.id",
 		prepareArgs: []any{Person{}, sqlair.M{}},
 		queryArgs:   []any{Person{ID: 666}, sqlair.M{"Street": "Highway to Hell"}},
-		err:         `invalid input parameter: map does not contain key "street"`,
+		err:         `invalid input parameter: map "M" does not contain key "street"`,
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
