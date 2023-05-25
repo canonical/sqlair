@@ -5,10 +5,9 @@ _Friendly type mapping in Go for SQL databases._
 
 ## Features
 
-SQLair is a Go package for interacting with SQL databases.
-
 Things SQLair does:
- - Maps database rows directly into Go structs
+ - Maps database rows directly into Go structs and maps
+ - Cite Go structs and maps in the query parameters
  - Allows you to write queries in SQL
  - Provides a user friendly query API
 
@@ -31,6 +30,7 @@ With SQLair one would write:
 	FROM person
 	WHERE manager_name = $Manager.name
 ```
+Where `Person` and `Manager` are Go structs. 
 
 The SQL syntax is expanded with SQLair input and output expressions (indicated with `$` and `&` respectively) which indicate parts of the query that correspond to Go structs.
 This package also provides an alternative API for reading the rows from the database.
