@@ -65,7 +65,7 @@ func (db *DB) PlainDB() *sql.DB {
 //
 // typeSamples must contain structs and not pointers to structs.
 func (db *DB) With(typeSamples ...any) {
-	db.typeSamples = append(db.typeSamples, typeSamples)
+	db.typeSamples = append(db.typeSamples, typeSamples...)
 }
 
 // querySubstrate abstracts the different surfaces that the query can be run on.
@@ -101,8 +101,10 @@ func (db *DB) Query(ctx context.Context, s any, inputArgs ...any) *Query {
 	var err error
 	switch s := s.(type) {
 	case string:
-		// Deference input args to use as type samples in prepare
 		var prepArgs = db.typeSamples
+		// Reset type samples from With.
+		db.typeSamples = []any{}
+		// Deference input args to use as type samples in prepare
 		for _, inputArg := range inputArgs {
 			prepArgs = append(prepArgs, reflect.Indirect(reflect.ValueOf(inputArg)).Interface())
 		}

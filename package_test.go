@@ -852,6 +852,45 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 	c.Assert(err, IsNil)
 }
 
+func (s *PackageSuite) TestWith(c *C) {
+	dropTables, sqldb, err := personAndAddressDB()
+	c.Assert(err, IsNil)
+
+	db := sqlair.NewDB(sqldb)
+
+	// Implicitly prepare with Person from the argument
+	q := "SELECT &Person.name FROM person WHERE id = $Person.id"
+	c.Assert(db.Query(nil, q, &Person{ID: 30}).Get(&Person{}), IsNil)
+
+	// Manager is not an input argument so needs to be passed with With
+	db.With(Manager{})
+	q = "SELECT p.* AS &Person.*, a.* AS &Address.*, p.* AS &Manager.* FROM person AS p, address AS a WHERE p.id = $Person.id AND a.id = $Address.id"
+	c.Assert(db.Query(nil, q, &Person{ID: 30}, &Address{ID: 1000}).Get(&Manager{}, &Person{}, &Address{}), IsNil)
+
+	err = db.Query(nil, dropTables).Run()
+	c.Assert(err, IsNil)
+}
+
+func (s *PackageSuite) TestWithErrors(c *C) {
+	dropTables, sqldb, err := personAndAddressDB()
+	c.Assert(err, IsNil)
+
+	db := sqlair.NewDB(sqldb)
+
+	// Unknown output type.
+	q := "SELECT &Person.name FROM person WHERE id = $Address.id"
+	c.Assert(db.Query(nil, q, &Address{ID: 30}).Get(&Person{}), ErrorMatches, `cannot prepare expression: type "Person" not passed as a parameter, have: Address`)
+
+	// Run query twice, missing second With.
+	db.With(Manager{})
+	q = "SELECT p.* AS &Manager.* FROM person AS p"
+	c.Assert(db.Query(nil, q).Get(&Manager{}), IsNil)
+	c.Assert(db.Query(nil, q).Get(&Manager{}), ErrorMatches, `cannot prepare expression: type "Manager" not passed as a parameter, have: `)
+
+	err = db.Query(nil, dropTables).Run()
+	c.Assert(err, IsNil)
+}
+
 type JujuLeaseKey struct {
 	Namespace string `db:"type"`
 	ModelUUID string `db:"model_uuid"`
