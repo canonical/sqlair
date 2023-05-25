@@ -89,7 +89,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
 	}
 	switch info := info.(type) {
 	case *mapInfo:
-		return mapKey{name: p.source.name, mapType: info.typ()}, nil
+		return mapKey{name: p.source.name, mapType: info.typ(), canBeSlice: false}, nil
 	case *structInfo:
 		f, ok := info.tagToField[p.source.name]
 		if !ok {
@@ -99,6 +99,35 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
 	default:
 		return nil, fmt.Errorf(`internal error: unknown info type: %T`, info)
 	}
+}
+
+// prepareIn generates the values to fetch for sqlair input expressions following an IN statement.
+func prepareIn(ti typeNameToInfo, p *inPart) ([]typeMember, error) {
+	var typeMembers = make([]typeMember, 0)
+	for _, t := range p.types {
+		info, ok := ti[t.prefix]
+		if !ok {
+			return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, t.prefix, strings.Join(getKeys(ti), ", "))
+		}
+		if t.name == "*" {
+			return nil, fmt.Errorf("invalid asterisk in input expression: %s", p.raw)
+		}
+		switch info := info.(type) {
+		case *structInfo:
+			field, ok := info.tagToField[t.name]
+			if !ok {
+				return nil, fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), t.name)
+			}
+			typeMembers = append(typeMembers, field)
+		case *mapInfo:
+			typeMembers = append(typeMembers, mapKey{
+				name:       t.name,
+				mapType:    info.typ(),
+				canBeSlice: true,
+			})
+		}
+	}
+	return typeMembers, nil
 }
 
 // prepareOutput checks that the output expressions correspond to known types.
@@ -265,13 +294,13 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	for _, part := range pe.queryParts {
 		switch p := part.(type) {
 		case *inputPart:
-			inLoc, err := prepareInput(ti, p)
+			fields, err := prepareInput(ti, p)
 			if err != nil {
 				return nil, err
 			}
 			sql.WriteString("@sqlair_" + strconv.Itoa(inCount))
 			inCount++
-			inputs = append(inputs, inLoc)
+			inputs = append(inputs, fields)
 		case *outputPart:
 			outCols, fields, err := prepareOutput(ti, p)
 			if err != nil {
@@ -288,6 +317,15 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			}
 			outputs = append(outputs, fields...)
 
+		case *inPart:
+			fields, err := prepareIn(ti, p)
+			if err != nil {
+				return nil, err
+			}
+			sql.WriteString("IN ")
+			sql.WriteString(namedParams(inCount, len(fields)))
+			inCount += len(fields)
+			inputs = append(inputs, fields...)
 		case *bypassPart:
 			sql.WriteString(p.chunk)
 		default:
@@ -296,4 +334,19 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	}
 
 	return &PreparedExpr{inputs: inputs, outputs: outputs, sql: sql.String()}, nil
+}
+
+// namedParams returns n incrementing parameters with the first index being start.
+func namedParams(start int, n int) string {
+	var s bytes.Buffer
+	s.WriteString("(")
+	for i := start; i < start+n; i++ {
+		s.WriteString("@sqlair_")
+		s.WriteString(strconv.Itoa(i))
+		if i < start+n-1 {
+			s.WriteString(", ")
+		}
+	}
+	s.WriteString(")")
+	return s.String()
 }

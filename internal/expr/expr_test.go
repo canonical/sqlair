@@ -241,6 +241,12 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	[]any{},
 	"SELECT person.*, address.district FROM person JOIN address ON person.address_id = address.id WHERE person.name = 'Fred'",
 }, {
+	"simple in",
+	"SELECT name FROM person WHERE id IN $M.slice",
+	"",
+	[]any{sqlair.M{"slice": []int{1, 2, 3, 4, 5, 6}}},
+	"SELECT name FROM person WHERE id IN (@sqlair_0, @sqlair_1, ...)",
+}, {
 	"insert",
 	"INSERT INTO person (name) VALUES $Person.name",
 	"[Bypass[INSERT INTO person (name) VALUES ] Input[Person.name]]",
@@ -637,12 +643,12 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT * AS &Address.* FROM t WHERE x = $M.Fullname",
 		prepareArgs: []any{Address{}, sqlair.M{}},
 		queryArgs:   []any{sqlair.M{"fullname": "Jimany Johnson"}},
-		err:         `invalid input parameter: map does not contain key "Fullname"`,
+		err:         `invalid input parameter: map "M" does not contain key "Fullname"`,
 	}, {
 		query:       "SELECT foo FROM t WHERE x = $M.street, y = $Person.id",
 		prepareArgs: []any{Person{}, sqlair.M{}},
 		queryArgs:   []any{Person{ID: 666}, sqlair.M{"Street": "Highway to Hell"}},
-		err:         `invalid input parameter: map does not contain key "street"`,
+		err:         `invalid input parameter: map "M" does not contain key "street"`,
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},

@@ -75,7 +75,8 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 
 	// Query parameteres.
 	qargs := []any{}
-	for i, typeMember := range pe.inputs {
+	argCount := 0
+	for _, typeMember := range pe.inputs {
 		outerType := typeMember.outerType()
 		v, ok := typeValue[outerType]
 		if !ok {
@@ -89,13 +90,27 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		switch tm := typeMember.(type) {
 		case structField:
 			val = v.FieldByIndex(tm.index)
+			qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(argCount), val.Interface()))
+			argCount++
 		case mapKey:
 			val = v.MapIndex(reflect.ValueOf(tm.name))
 			if val.Kind() == reflect.Invalid {
-				return nil, fmt.Errorf(`map does not contain key %q`, tm.name)
+				return nil, fmt.Errorf(`map %q does not contain key %q`, outerType.Name(), tm.name)
+			}
+			if val.Kind() == reflect.Slice {
+				if !tm.canBeSlice {
+					return nil, fmt.Errorf(`map value %q: cannot use slice as argument`, tm.name)
+				}
+				for i := 0; i < val.Len(); i++ {
+					sval := val.Index(i)
+					qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(argCount), sval.Interface()))
+					argCount++
+				}
+			} else {
+				qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(argCount), val.Interface()))
+				argCount++
 			}
 		}
-		qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(i), val.Interface()))
 	}
 	return &QueryExpr{outputs: pe.outputs, sql: pe.sql, args: qargs}, nil
 }

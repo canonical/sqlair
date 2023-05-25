@@ -14,8 +14,9 @@ type typeMember interface {
 }
 
 type mapKey struct {
-	name    string
-	mapType reflect.Type
+	name       string
+	mapType    reflect.Type
+	canBeSlice bool
 }
 
 func (mk mapKey) outerType() reflect.Type {
@@ -115,7 +116,7 @@ func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 
 		for i := 0; i < t.NumField(); i++ {
 			f := t.Field(i)
-			// Fields without a "db" tag are outside of SQLAir's remit.
+			// Fields without a "db" tag are outside of SQLair's remit.
 			tag := f.Tag.Get("db")
 			if tag == "" {
 				continue
@@ -128,6 +129,7 @@ func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 			if err != nil {
 				return nil, fmt.Errorf("cannot parse tag for field %s.%s: %s", t.Name(), f.Name, err)
 			}
+
 			tags = append(tags, tag)
 			info.tagToField[tag] = structField{
 				name:       f.Name,
