@@ -44,6 +44,7 @@ func Example() {
 		panic(err)
 	}
 
+	// Query to populate the person table.
 	insertEmployee := sqlair.MustPrepare("INSERT INTO person (name, id, team) VALUES ($Employee.name, $Employee.id, $Employee.team);", Employee{})
 
 	var al = Employee{"Alastair", 1, "engineering"}
@@ -56,8 +57,7 @@ func Example() {
 	var sam = Employee{"Sam", 8, "hr"}
 	var paul = Employee{"Paul", 9, "sales"}
 	var mark = Employee{"Mark", 10, "leadership"}
-	var gus = Employee{"Gustavo", 11, "leadership"}
-	var people = []Employee{ed, al, marco, pedro, serdar, joe, ben, sam, paul, mark, gus}
+	var people = []Employee{ed, al, marco, pedro, serdar, joe, ben, sam, paul, mark}
 	for _, p := range people {
 		err := db.Query(nil, insertEmployee, p).Run()
 		if err != nil {
@@ -65,6 +65,7 @@ func Example() {
 		}
 	}
 
+	// Query to populate the location table.
 	insertLocation := sqlair.MustPrepare("INSERT INTO location (name, room_id, team) VALUES ($Location.name, $Location.room_id, $Location.team)", Location{})
 
 	l1 := Location{1, "Basement", "engineering"}
@@ -136,8 +137,7 @@ func Example() {
 	// Results can be iterated through with an Iterable.
 	// iter.Next prepares the next result.
 	// iter.Get reads it into structs.
-	// iter.Close closes the query returning any errors
-	// 	it must be called after iteration is finished.
+	// iter.Close closes the query returning any errors. It must be called after iteration is finished.
 	iter := q.Iter()
 	for iter.Next() {
 		var l = Location{}
@@ -171,6 +171,5 @@ func Example() {
 	// Joe is in The Market
 	// Ben is in Court
 	// Sam is in Floors 4 to 89
-	// Gustavo is in Penthouse
 	// Mark is in Penthouse
 }
