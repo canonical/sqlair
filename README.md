@@ -5,17 +5,19 @@ _Friendly type mapping in Go for SQL databases._
 
 ## Features
 
- - Maps database rows directly into Go structs and maps
- - Cite Go structs and maps in the query parameters
- - Allows you to write queries in SQL
- - Provides a user friendly query API
-
-Things SQLair does *not* do:
- - Acts as a traditional ORM 
- - Optimises queries
-
 SQLair extends the SQL syntax to allow Go types to be referenced directly in the SQL query.
 The full power of SQL is retained but with all the benefits of convenient type mapping.
+
+SQLair allows you to:
+
+ - Map database rows directly into Go structs and maps
+ - Cite Go structs and maps in the query parameters
+ - Write rich queries in SQL
+ - Organise your code conveniently
+
+Things SQLair does *not* do:
+ - Act as a traditional ORM 
+ - Optimise queries
 
 For example, instead of the pure SQL query:
 ```
