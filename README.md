@@ -11,8 +11,8 @@ _Friendly type mapping in Go for SQL databases._
  - Provides a user friendly query API
 
 Things SQLair does *not* do:
- - Acts as an ORM 
- - Optimise queries
+ - Acts as a traditional ORM 
+ - Optimises queries
 
 SQLair extends the SQL syntax to allow Go types to be referenced directly in the SQL query.
 The full power of SQL is retained but with all the benefits of convenient type mapping.
