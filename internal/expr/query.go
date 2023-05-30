@@ -102,7 +102,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 
 // ScanArgs returns list of pointers to the struct fields that are listed in qe.outputs.
 // All the structs and maps mentioned in the query must be in outputArgs.
-func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, func(), error) {
+func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []any, onSuccess func(), err error) {
 	var typesInQuery = []string{}
 	var inQuery = make(map[reflect.Type]bool)
 	for _, typeMember := range qe.outputs {
@@ -182,7 +182,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, func()
 		}
 	}
 
-	onSuccess := func() {
+	onSuccess = func() {
 		for _, mi := range mapSetInfos {
 			mi.mapVal.SetMapIndex(mi.keyVal, mi.scanVal)
 		}
