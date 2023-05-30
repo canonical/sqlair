@@ -96,6 +96,12 @@ DROP TABLE address;
 }
 
 func (s *PackageSuite) TestValidIterGet(c *C) {
+	type CustomMap map[string]any
+	type StringMap map[string]string
+	type lowerCaseMap map[string]any
+	type M struct {
+		F string `db:"id"`
+	}
 	var tests = []struct {
 		summary  string
 		query    string
@@ -138,6 +144,41 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 		inputs:   []any{Manager{PostalCode: 1000}, Address{ID: 2000}},
 		outputs:  [][]any{{&Person{}}},
 		expected: [][]any{{&Person{Fullname: "Fred", PostalCode: 1000}}},
+	}, {
+		summary:  "select into map",
+		query:    "SELECT &M.name FROM person WHERE address_id = $M.p1 OR address_id = $M.p2",
+		types:    []any{sqlair.M{}},
+		inputs:   []any{sqlair.M{"p1": 1000, "p2": 1500}},
+		outputs:  [][]any{{sqlair.M{}}, {sqlair.M{}}},
+		expected: [][]any{{sqlair.M{"name": "Fred"}}, {sqlair.M{"name": "Mark"}}},
+	}, {
+		summary:  "select into star map",
+		query:    "SELECT (name, address_id) AS &M.* FROM person WHERE address_id = $M.p1",
+		types:    []any{sqlair.M{}},
+		inputs:   []any{sqlair.M{"p1": 1000}},
+		outputs:  [][]any{{&sqlair.M{"address_id": 0}}},
+		expected: [][]any{{&sqlair.M{"name": "Fred", "address_id": int64(1000)}}},
+	}, {
+		summary:  "select into custom map",
+		query:    "SELECT (name, address_id) AS &CustomMap.* FROM person WHERE address_id IN ( $CustomMap.address_id, $CustomMap.district)",
+		types:    []any{CustomMap{}},
+		inputs:   []any{CustomMap{"address_id": 1000, "district": 2000}},
+		outputs:  [][]any{{&CustomMap{"address_id": 0}}},
+		expected: [][]any{{&CustomMap{"name": "Fred", "address_id": int64(1000)}}},
+	}, {
+		summary:  "multiple maps",
+		query:    "SELECT name AS &StringMap.*, id AS &CustomMap.* FROM person WHERE address_id = $M.address_id AND id = $StringMap.id",
+		types:    []any{StringMap{}, sqlair.M{}, CustomMap{}},
+		inputs:   []any{sqlair.M{"address_id": "1000"}, &StringMap{"id": "30"}},
+		outputs:  [][]any{{&StringMap{}, CustomMap{}}},
+		expected: [][]any{{&StringMap{"name": "Fred"}, CustomMap{"id": int64(30)}}},
+	}, {
+		summary:  "lower case map",
+		query:    "SELECT name AS &lowerCaseMap.*, id AS &lowerCaseMap.* FROM person WHERE address_id = $lowerCaseMap.address_id",
+		types:    []any{lowerCaseMap{}},
+		inputs:   []any{lowerCaseMap{"address_id": "1000"}},
+		outputs:  [][]any{{&lowerCaseMap{}}},
+		expected: [][]any{{&lowerCaseMap{"name": "Fred", "id": int64(30)}}},
 	}, {
 		summary:  "insert",
 		query:    "INSERT INTO address VALUES ($Address.id, $Address.district, $Address.street);",
@@ -198,7 +239,7 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 		i := 0
 		for iter.Next() {
 			if i >= len(t.outputs) {
-				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d >= %d)\n", t.summary, t.query, i, len(t.outputs))
+				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d > %d)\n", t.summary, t.query, i+1, len(t.outputs))
 				break
 			}
 			if err := iter.Get(t.outputs[i]...); err != nil {
@@ -217,7 +258,6 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 					Commentf("\ntest %q failed:\ninput: %s\nrow: %d\n", t.summary, t.query, i))
 			}
 		}
-
 	}
 
 	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
@@ -227,6 +267,7 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 }
 
 func (s *PackageSuite) TestIterGetErrors(c *C) {
+	type SliceMap map[string][]string
 	var tests = []struct {
 		summary string
 		query   string
@@ -240,7 +281,7 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{nil}},
-		err:     "cannot get result: need pointer to struct, got nil",
+		err:     "cannot get result: need map or pointer to struct, got nil",
 	}, {
 		summary: "nil pointer parameter",
 		query:   "SELECT * AS &Person.* FROM person",
@@ -254,7 +295,7 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{Person{}}},
-		err:     "cannot get result: need pointer to struct, got struct",
+		err:     "cannot get result: need map or pointer to struct, got struct",
 	}, {
 		summary: "wrong struct",
 		query:   "SELECT * AS &Person.* FROM person",
@@ -267,8 +308,8 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
-		outputs: [][]any{{&map[string]any{}}},
-		err:     "cannot get result: need pointer to struct, got pointer to map",
+		outputs: [][]any{{&[]any{}}},
+		err:     "cannot get result: need map or pointer to struct, got pointer to slice",
 	}, {
 		summary: "missing get value",
 		query:   "SELECT * AS &Person.* FROM person",
@@ -283,6 +324,13 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		inputs:  []any{},
 		outputs: [][]any{{&Person{}, &Person{}}},
 		err:     `cannot get result: type "Person" provided more than once, rename one of them`,
+	}, {
+		summary: "multiple of the same type",
+		query:   "SELECT name AS &M.* FROM person",
+		types:   []any{sqlair.M{}},
+		inputs:  []any{},
+		outputs: [][]any{{&sqlair.M{}, sqlair.M{}}},
+		err:     `cannot get result: type "M" provided more than once, rename one of them`,
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()
@@ -304,7 +352,7 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		i := 0
 		for iter.Next() {
 			if i >= len(t.outputs) {
-				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected\n", t.summary, t.query)
+				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d > %d)\n", t.summary, t.query, i+1, len(t.outputs))
 				break
 			}
 			if err := iter.Get(t.outputs[i]...); err != nil {
