@@ -129,7 +129,6 @@ func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 			if err != nil {
 				return nil, fmt.Errorf("cannot parse tag for field %s.%s: %s", t.Name(), f.Name, err)
 			}
-
 			tags = append(tags, tag)
 			info.tagToField[tag] = structField{
 				name:       f.Name,

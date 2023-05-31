@@ -9,16 +9,15 @@ import (
 	"github.com/canonical/sqlair/internal/expr"
 )
 
-// sqlair-provided M-type map.
-// The M type can be used in querys to pass arbitrary values referenced by their key.
+// M is a type that, as with other map types, can be used with SQLair for more dynamic behavior.
+// It can be used in querys to pass arbitrary values referenced by their key.
 //
 // For example:
 //
 //	stmt := sqlair.MustPrepare("SELECT (name, postcode) AS &M.* FROM p WHERE id = $M.id", sqlair.M{})
-//	q := db.Query(stmt, sqlair.M{"id": 10})
+//	q := db.Query(ctx, stmt, sqlair.M{"id": 10})
 //	var resultMap = sqlair.M{}
-//	err := q.One{resultMap}
-//	// resultMap == sqlair.M{"name": "Fred", "postcode": 10031}
+//	err := q.Get(resultMap) // => sqlair.M{"name": "Fred", "postcode": 10031}
 type M map[string]any
 
 var ErrNoRows = sql.ErrNoRows
