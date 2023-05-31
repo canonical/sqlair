@@ -45,7 +45,11 @@ func Example() {
 	}
 
 	// Query to populate the person table.
-	insertEmployee := sqlair.MustPrepare("INSERT INTO person (name, id, team) VALUES ($Employee.name, $Employee.id, $Employee.team);", Employee{})
+	insertEmployee := sqlair.MustPrepare(`
+		INSERT INTO person (name, id, team)
+		VALUES ($Employee.name, $Employee.id, $Employee.team);`,
+		Employee{},
+	)
 
 	var al = Employee{"Alastair", 1, "engineering"}
 	var ed = Employee{"Ed", 2, "engineering"}
@@ -66,16 +70,20 @@ func Example() {
 	}
 
 	// Query to populate the location table.
-	insertLocation := sqlair.MustPrepare("INSERT INTO location (name, room_id, team) VALUES ($Location.name, $Location.room_id, $Location.team)", Location{})
+	insertLocation := sqlair.MustPrepare(`
+		INSERT INTO location (name, room_id, team) 
+		VALUES ($Location.name, $Location.room_id, $Location.team)`,
+		Location{},
+	)
 
-	l1 := Location{1, "Basement", "engineering"}
-	l2 := Location{34, "Floor 2", "presentation engineering"}
-	l3 := Location{19, "Floor 3", "management"}
-	l4 := Location{66, "The Market", "marketing"}
-	l5 := Location{7, "Court", "legal"}
-	l6 := Location{9, "Floors 4 to 89", "hr"}
-	l7 := Location{73, "Bar", "Sales"}
-	l8 := Location{32, "Penthouse", "leadership"}
+	l1 := Location{1, "The Basement", "engineering"}
+	l2 := Location{8, "Floor 2", "presentation engineering"}
+	l3 := Location{10, "Floor 3", "management"}
+	l4 := Location{19, "Floors 4 to 89", "hr"}
+	l5 := Location{23, "Court", "legal"}
+	l6 := Location{26, "The Market", "marketing"}
+	l7 := Location{46, "The Bar", "Sales"}
+	l8 := Location{73, "The Penthouse", "leadership"}
 	var locations = []Location{l1, l2, l3, l4, l5, l6, l7, l8}
 	for _, l := range locations {
 		err := db.Query(nil, insertLocation, l).Run()
@@ -85,13 +93,14 @@ func Example() {
 	}
 
 	// Find someone on the engineering team.
-	selectEngineer := sqlair.MustPrepare(`
+	selectSomeoneInTeam := sqlair.MustPrepare(`
 		SELECT &Employee.*
 		FROM person
-		WHERE team = "engineering"`,
-		Employee{})
+		WHERE team = $M.team`,
+		Employee{}, sqlair.M{},
+	)
 
-	q := db.Query(nil, selectEngineer)
+	q := db.Query(nil, selectSomeoneInTeam, sqlair.M{"team": "engineering"})
 
 	// Get returns a single result.
 	var pal = Employee{}
@@ -107,7 +116,8 @@ func Example() {
 		SELECT &Employee.*
 		FROM person
 		WHERE team = $Location.team`,
-		Location{}, Employee{})
+		Location{}, Employee{},
+	)
 
 	q = db.Query(nil, selectPeopleInRoom, l1)
 
@@ -127,8 +137,8 @@ func Example() {
 	selectPeopleAndRoom := sqlair.MustPrepare(`
 		SELECT l.* AS &Location.*, (p.name, p.team) AS &Employee.*
 		FROM location AS l
-			JOIN person AS p
-			ON p.team = l.team`,
+		JOIN person AS p
+		ON p.team = l.team`,
 		Location{}, Employee{},
 	)
 
@@ -154,7 +164,10 @@ func Example() {
 		panic(err)
 	}
 
-	drop := sqlair.MustPrepare("DROP TABLE person; DROP TABLE location;")
+	drop := sqlair.MustPrepare(`
+		DROP TABLE person;
+		DROP TABLE location;`,
+	)
 	err = db.Query(nil, drop).Run()
 	if err != nil {
 		panic(err)
@@ -163,13 +176,13 @@ func Example() {
 	// Output:
 	// Ed is on the engineering team.
 	// Ed, Alastair, Marco, are in room l1.
-	// Alastair is in Basement
-	// Ed is in Basement
-	// Marco is in Basement
+	// Alastair is in The Basement
+	// Ed is in The Basement
+	// Marco is in The Basement
 	// Serdar is in Floor 2
 	// Pedro is in Floor 3
 	// Joe is in The Market
 	// Ben is in Court
 	// Sam is in Floors 4 to 89
-	// Mark is in Penthouse
+	// Mark is in The Penthouse
 }
