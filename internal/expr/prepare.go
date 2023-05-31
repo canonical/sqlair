@@ -11,8 +11,8 @@ import (
 
 // PreparedExpr contains an SQL expression that is ready for execution.
 type PreparedExpr struct {
-	outputs []field
-	inputs  []field
+	outputs []typeMember
+	inputs  []typeMember
 	sql     string
 }
 
@@ -77,30 +77,35 @@ func starCheckOutput(p *outputPart) error {
 }
 
 // prepareInput checks that the input expression corresponds to a known type.
-func prepareInput(ti typeNameToInfo, p *inputPart) (field, error) {
+func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
 	info, ok := ti[p.source.prefix]
 	if !ok {
 		ts := getKeys(ti)
 		if len(ts) == 0 {
-			return field{}, fmt.Errorf(`type %q not passed as a parameter`, p.source.prefix)
+			return nil, fmt.Errorf(`type %q not passed as a parameter`, p.source.prefix)
 		} else {
-			return field{}, fmt.Errorf(`type %q not passed as a parameter, have: %s`, p.source.prefix, strings.Join(ts, ", "))
+			return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, p.source.prefix, strings.Join(ts, ", "))
 		}
 	}
-	f, ok := info.tagToField[p.source.name]
-	if !ok {
-		return field{}, fmt.Errorf(`type %q has no %q db tag`, info.typ.Name(), p.source.name)
+	switch info := info.(type) {
+	case *mapInfo:
+		return mapKey{name: p.source.name, mapType: info.typ()}, nil
+	case *structInfo:
+		f, ok := info.tagToField[p.source.name]
+		if !ok {
+			return nil, fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), p.source.name)
+		}
+		return f, nil
+	default:
+		return nil, fmt.Errorf(`internal error: unknown info type: %T`, info)
 	}
-
-	return f, nil
 }
 
 // prepareOutput checks that the output expressions correspond to known types.
 // It then checks they are formatted correctly and finally generates the columns for the query.
-func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []field, error) {
-
+func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, error) {
 	var outCols = make([]fullName, 0)
-	var fields = make([]field, 0)
+	var typeMembers = make([]typeMember, 0)
 
 	// Check the asterisks are well formed (if present).
 	if err := starCheckOutput(p); err != nil {
@@ -108,7 +113,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []field, error
 	}
 
 	// Check target struct type and its tags are valid.
-	var info *info
+	var info typeInfo
 	var ok bool
 
 	for _, t := range p.target {
@@ -116,15 +121,21 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []field, error
 		if !ok {
 			return nil, nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, t.prefix, strings.Join(getKeys(ti), ", "))
 		}
-
 		if t.name != "*" {
-			f, ok := info.tagToField[t.name]
-			if !ok {
-				return nil, nil, fmt.Errorf(`type %q has no %q db tag`, info.typ.Name(), t.name)
-			}
 			// For a none star expression we record output destinations here.
 			// For a star expression we fill out the destinations as we generate the columns.
-			fields = append(fields, f)
+			switch info := info.(type) {
+			case *mapInfo:
+				typeMembers = append(typeMembers, mapKey{name: t.name, mapType: info.typ()})
+			case *structInfo:
+				f, ok := info.tagToField[t.name]
+				if !ok {
+					return nil, nil, fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), t.name)
+				}
+				typeMembers = append(typeMembers, f)
+			default:
+				return nil, nil, fmt.Errorf(`internal error: unknown info type: %T`, info)
+			}
 		}
 	}
 
@@ -133,34 +144,51 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []field, error
 	// Case 1: Star target cases e.g. "...&P.*".
 	if p.target[0].name == "*" {
 		info, _ := ti[p.target[0].prefix]
-
 		// Case 1.1: Single star i.e. "t.* AS &P.*" or "&P.*"
 		if len(p.source) == 0 || p.source[0].name == "*" {
-			pref := ""
+			switch info := info.(type) {
+			case *mapInfo:
+				return nil, nil, fmt.Errorf(`&%s.* cannot be used for maps when no column names are specified`, info.typ().Name())
+			case *structInfo:
+				pref := ""
 
-			// Prepend table name. E.g. "t" in "t.* AS &P.*".
-			if len(p.source) > 0 {
-				pref = p.source[0].prefix
-			}
+				// Prepend table name. E.g. "t" in "t.* AS &P.*".
+				if len(p.source) > 0 {
+					pref = p.source[0].prefix
+				}
 
-			for _, tag := range info.tags {
-				outCols = append(outCols, fullName{pref, tag})
-				fields = append(fields, info.tagToField[tag])
+				for _, tag := range info.tags {
+					outCols = append(outCols, fullName{pref, tag})
+					typeMembers = append(typeMembers, info.tagToField[tag])
+				}
+				return outCols, typeMembers, nil
+			default:
+				return nil, nil, fmt.Errorf(`internal error: unknown info type: %T`, info)
 			}
-			return outCols, fields, nil
 		}
 
 		// Case 1.2: Explicit columns e.g. "(col1, t.col2) AS &P.*".
 		if len(p.source) > 0 {
-			for _, c := range p.source {
-				f, ok := info.tagToField[c.name]
-				if !ok {
-					return nil, nil, fmt.Errorf(`type %q has no %q db tag`, info.typ.Name(), c.name)
+			switch info := info.(type) {
+			case *mapInfo:
+				for _, c := range p.source {
+					outCols = append(outCols, c)
+					typeMembers = append(typeMembers, mapKey{name: c.name, mapType: info.typ()})
 				}
-				outCols = append(outCols, c)
-				fields = append(fields, f)
+				return outCols, typeMembers, nil
+			case *structInfo:
+				for _, c := range p.source {
+					f, ok := info.tagToField[c.name]
+					if !ok {
+						return nil, nil, fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), c.name)
+					}
+					outCols = append(outCols, c)
+					typeMembers = append(typeMembers, f)
+				}
+				return outCols, typeMembers, nil
+			default:
+				return nil, nil, fmt.Errorf(`internal error: unknown info type: %T`, info)
 			}
-			return outCols, fields, nil
 		}
 	}
 
@@ -171,17 +199,17 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []field, error
 		for _, c := range p.source {
 			outCols = append(outCols, c)
 		}
-		return outCols, fields, nil
+		return outCols, typeMembers, nil
 	}
 
 	// Case 2.2: No columns e.g. "(&P.name, &P.id)".
 	for _, t := range p.target {
 		outCols = append(outCols, fullName{name: t.name})
 	}
-	return outCols, fields, nil
+	return outCols, typeMembers, nil
 }
 
-type typeNameToInfo map[string]*info
+type typeNameToInfo map[string]typeInfo
 
 // Prepare takes a parsed expression and struct instantiations of all the types
 // mentioned in it.
@@ -199,23 +227,30 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	// Generate and save reflection info.
 	for _, arg := range args {
 		if arg == nil {
-			return nil, fmt.Errorf("need struct, got nil")
+			return nil, fmt.Errorf("need struct or map, got nil")
 		}
 		t := reflect.TypeOf(arg)
-		if t.Kind() != reflect.Struct {
-			if t.Kind() == reflect.Pointer {
-				return nil, fmt.Errorf("need struct, got pointer to %s", t.Elem().Kind())
+		switch t.Kind() {
+		case reflect.Struct, reflect.Map:
+			if t.Name() == "" {
+				return nil, fmt.Errorf("cannot use anonymous %s", t.Kind())
 			}
-			return nil, fmt.Errorf("need struct, got %s", t.Kind())
+			info, err := getTypeInfo(arg)
+			if err != nil {
+				return nil, err
+			}
+			if dupeInfo, ok := ti[t.Name()]; ok {
+				if dupeInfo.typ() == t {
+					return nil, fmt.Errorf("found multiple instances of type %q", t.Name())
+				}
+				return nil, fmt.Errorf("two types found with name %q: %q and %q", t.Name(), dupeInfo.typ().String(), t.String())
+			}
+			ti[t.Name()] = info
+		case reflect.Pointer:
+			return nil, fmt.Errorf("need struct or map, got pointer to %s", t.Elem().Kind())
+		default:
+			return nil, fmt.Errorf("need struct or map, got %s", t.Kind())
 		}
-		if t.Name() == "" {
-			return nil, fmt.Errorf("cannot use anonymous %s", t.Kind())
-		}
-		info, err := typeInfo(arg)
-		if err != nil {
-			return nil, err
-		}
-		ti[info.typ.Name()] = info
 	}
 
 	var sql bytes.Buffer
@@ -223,8 +258,8 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	var inCount int
 	var outCount int
 
-	var outputs = make([]field, 0)
-	var inputs = make([]field, 0)
+	var outputs = make([]typeMember, 0)
+	var inputs = make([]typeMember, 0)
 
 	// Check and expand each query part.
 	for _, part := range pe.queryParts {
