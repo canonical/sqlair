@@ -9,9 +9,20 @@ import (
 	"github.com/canonical/sqlair/internal/expr"
 )
 
+// M is a type that, as with other map types, can be used with SQLair for more dynamic behavior.
+// It can be used in querys to pass arbitrary values referenced by their key.
+//
+// For example:
+//
+//	stmt := sqlair.MustPrepare("SELECT (name, postcode) AS &M.* FROM p WHERE id = $M.id", sqlair.M{})
+//	q := db.Query(ctx, stmt, sqlair.M{"id": 10})
+//	var resultMap = sqlair.M{}
+//	err := q.Get(resultMap) // => sqlair.M{"name": "Fred", "postcode": 10031}
+type M map[string]any
+
 var ErrNoRows = sql.ErrNoRows
 
-// Statement represents a SQL statemnt with valid SQLair expressions.
+// Statement represents a SQL statement with valid SQLair expressions.
 // It is ready to be run on a SQLair DB.
 type Statement struct {
 	pe *expr.PreparedExpr
@@ -189,13 +200,14 @@ func (iter *Iterator) Get(outputArgs ...any) (err error) {
 		return fmt.Errorf("iteration ended")
 	}
 
-	ptrs, err := iter.qe.ScanArgs(iter.cols, outputArgs)
+	ptrs, onSuccess, err := iter.qe.ScanArgs(iter.cols, outputArgs)
 	if err != nil {
 		return err
 	}
 	if err := iter.rows.Scan(ptrs...); err != nil {
 		return err
 	}
+	onSuccess()
 	return nil
 }
 
@@ -310,18 +322,13 @@ type TX struct {
 	tx *sql.Tx
 }
 
-// NewTX creates a SQLair transaction from a sql transaction.
-func (db *DB) NewTX(tx *sql.Tx) *TX {
-	return &TX{tx: tx}
-}
-
 // Begin starts a transaction.
 func (db *DB) Begin(ctx context.Context, opts *TXOptions) (*TX, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	tx, err := db.db.BeginTx(ctx, opts.plainTXOptions())
-	return db.NewTX(tx), err
+	return &TX{tx: tx}, err
 }
 
 // Commit commits the transaction.
