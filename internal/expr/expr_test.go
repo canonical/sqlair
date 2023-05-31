@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"testing"
 
+	"github.com/canonical/sqlair"
 	"github.com/canonical/sqlair/internal/expr"
 	. "gopkg.in/check.v1"
 )
@@ -39,6 +40,10 @@ type HardMaths struct {
 }
 
 type M map[string]any
+
+type IntMap map[string]int
+
+type StringMap map[string]string
 
 var tests = []struct {
 	summary          string
@@ -157,6 +162,12 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	"[Bypass[SELECT ] Output[[] [Person.*]] Bypass[, ] Output[[a.*] [Address.*]] Bypass[ FROM person, address a WHERE name = 'Fred']]",
 	[]any{Person{}, Address{}},
 	"SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2, a.district AS _sqlair_3, a.id AS _sqlair_4, a.street AS _sqlair_5 FROM person, address a WHERE name = 'Fred'",
+}, {
+	"map input and output",
+	"SELECT (p.name, a.id) AS &M.*, street AS &StringMap.*, &IntMap.id FROM person, address a WHERE name = $M.name",
+	"[Bypass[SELECT ] Output[[p.name a.id] [M.*]] Bypass[, ] Output[[street] [StringMap.*]] Bypass[, ] Output[[] [IntMap.id]] Bypass[ FROM person, address a WHERE name = ] Input[[] [M.name]]]",
+	[]any{sqlair.M{}, IntMap{}, StringMap{}},
+	"SELECT p.name AS _sqlair_0, a.id AS _sqlair_1, street AS _sqlair_2, id AS _sqlair_3 FROM person, address a WHERE name = @sqlair_0",
 }, {
 	"multicolumn output v1",
 	"SELECT (a.district, a.street) AS (&Address.district, &Address.street), a.id AS &Person.id FROM address AS a",
@@ -471,23 +482,23 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{[]any{Person{}}},
-		err:         `cannot prepare expression: need struct, got slice`,
+		err:         `cannot prepare expression: need struct or map, got slice`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{&Person{}},
-		err:         `cannot prepare expression: need struct, got pointer to struct`,
+		err:         `cannot prepare expression: need struct or map, got pointer to struct`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{(*Person)(nil)},
-		err:         `cannot prepare expression: need struct, got pointer to struct`,
+		err:         `cannot prepare expression: need struct or map, got pointer to struct`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{map[string]any{}},
-		err:         `cannot prepare expression: need struct, got map`,
+		err:         `cannot prepare expression: cannot use anonymous map`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{nil},
-		err:         `cannot prepare expression: need struct, got nil`,
+		err:         `cannot prepare expression: need struct or map, got nil`,
 	}, {
 		query:       "SELECT * AS &.* FROM t",
 		prepareArgs: []any{struct{ f int }{f: 1}},
@@ -522,6 +533,55 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}
 }
 
+func (s *ExprSuite) TestPrepareMapError(c *C) {
+	type InvalidMap map[int]any
+	type CustomMap map[string]int
+	type M struct {
+		F string `db:"id"`
+	}
+	tests := []struct {
+		summary string
+		input   string
+		args    []any
+		expect  string
+	}{{
+		"all output into map star",
+		"SELECT &M.* FROM person WHERE name = 'Fred'",
+		[]any{sqlair.M{}},
+		"cannot prepare expression: &M.* cannot be used for maps when no column names are specified",
+	}, {
+		"all output into map star from table star",
+		"SELECT p.* AS &M.* FROM person WHERE name = 'Fred'",
+		[]any{sqlair.M{}},
+		"cannot prepare expression: &M.* cannot be used for maps when no column names are specified",
+	}, {
+		"all output into map star from lone star",
+		"SELECT * AS &CustomMap.* FROM person WHERE name = 'Fred'",
+		[]any{CustomMap{}},
+		"cannot prepare expression: &CustomMap.* cannot be used for maps when no column names are specified",
+	}, {
+		"invalid map",
+		"SELECT * AS &InvalidMap.* FROM person WHERE name = 'Fred'",
+		[]any{InvalidMap{}},
+		"cannot prepare expression: map type InvalidMap must have key type string, found type int",
+	}, {
+		"clashing map and struct names",
+		"SELECT * AS &M.* FROM person WHERE name = $M.id",
+		[]any{M{}, sqlair.M{}},
+		`cannot prepare expression: two types found with name "M": "expr_test.M" and "sqlair.M"`,
+	},
+	}
+	for _, test := range tests {
+		parser := expr.NewParser()
+		parsedExpr, err := parser.Parse(test.input)
+		if err != nil {
+			c.Fatal(err)
+		}
+		_, err = parsedExpr.Prepare(test.args...)
+		c.Assert(err.Error(), Equals, test.expect)
+	}
+}
+
 func (s *ExprSuite) TestValidQuery(c *C) {
 	tests := []struct {
 		query       string
@@ -542,6 +602,26 @@ func (s *ExprSuite) TestValidQuery(c *C) {
 		"SELECT foo FROM t WHERE x = $Address.street, y = $Person.id",
 		[]any{Person{}, Address{}},
 		[]any{&Person{ID: 666}, &Address{Street: "Highway to Hell"}},
+		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
+	}, {
+		"SELECT * AS &Address.* FROM t WHERE x = $M.fullname",
+		[]any{Address{}, sqlair.M{}},
+		[]any{sqlair.M{"fullname": "Jimany Johnson"}},
+		[]any{sql.Named("sqlair_0", "Jimany Johnson")},
+	}, {
+		"SELECT foo FROM t WHERE x = $M.street, y = $Person.id",
+		[]any{Person{}, sqlair.M{}},
+		[]any{Person{ID: 666}, sqlair.M{"street": "Highway to Hell"}},
+		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
+	}, {
+		"SELECT * AS &Address.* FROM t WHERE x = $StringMap.fullname",
+		[]any{Address{}, StringMap{}},
+		[]any{StringMap{"fullname": "Jimany Johnson"}},
+		[]any{sql.Named("sqlair_0", "Jimany Johnson")},
+	}, {
+		"SELECT foo FROM t WHERE x = $StringMap.street, y = $Person.id",
+		[]any{Person{}, StringMap{}},
+		[]any{Person{ID: 666}, StringMap{"street": "Highway to Hell"}},
 		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
 	}}
 	for _, t := range tests {
@@ -580,22 +660,37 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
 		queryArgs:   []any{nil, Person{Fullname: "Monty Bingles"}},
-		err:         "invalid input parameter: need struct, got nil",
+		err:         "invalid input parameter: need struct or map, got nil",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
 		queryArgs:   []any{(*Person)(nil)},
-		err:         "invalid input parameter: need struct, got nil",
+		err:         "invalid input parameter: need struct or map, got nil",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Address{}},
 		queryArgs:   []any{8},
-		err:         "invalid input parameter: need struct, got int",
+		err:         "invalid input parameter: need struct or map, got int",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Address{}},
-		queryArgs:   []any{map[string]any{}},
-		err:         "invalid input parameter: need struct, got map",
+		queryArgs:   []any{[]any{}},
+		err:         "invalid input parameter: need struct or map, got slice",
+	}, {
+		query:       "SELECT street FROM t WHERE x = $Address.street",
+		prepareArgs: []any{Address{}},
+		queryArgs:   []any{Address{}, Person{}},
+		err:         "invalid input parameter: Person not referenced in query",
+	}, {
+		query:       "SELECT * AS &Address.* FROM t WHERE x = $M.Fullname",
+		prepareArgs: []any{Address{}, sqlair.M{}},
+		queryArgs:   []any{sqlair.M{"fullname": "Jimany Johnson"}},
+		err:         `invalid input parameter: map "M" does not contain key "Fullname"`,
+	}, {
+		query:       "SELECT foo FROM t WHERE x = $M.street, y = $Person.id",
+		prepareArgs: []any{Person{}, sqlair.M{}},
+		queryArgs:   []any{Person{ID: 666}, sqlair.M{"Street": "Highway to Hell"}},
+		err:         `invalid input parameter: map "M" does not contain key "street"`,
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
@@ -605,7 +700,7 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $Person.id, y = $Person.name",
 		prepareArgs: []any{Person{}},
 		queryArgs:   []any{Person{}, Person{}},
-		err:         `invalid input parameter: type "Person" provided more than once, rename one of them`,
+		err:         `invalid input parameter: type "Person" provided more than once`,
 	}}
 
 	outerP := Person{}

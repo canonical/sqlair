@@ -23,7 +23,7 @@ func (qe *QueryExpr) HasOutputs() bool {
 type QueryExpr struct {
 	sql     string
 	args    []any
-	outputs []field
+	outputs []typeMember
 }
 
 // Query returns a query expression ready for execution, using the provided values to
@@ -40,9 +40,9 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		}
 	}()
 
-	var typeInQuery = make(map[reflect.Type]bool)
-	for _, in := range pe.inputs {
-		typeInQuery[in.structType] = true
+	var inQuery = make(map[reflect.Type]bool)
+	for _, typeMember := range pe.inputs {
+		inQuery[typeMember.outerType()] = true
 	}
 
 	var typeValue = make(map[reflect.Type]reflect.Value)
@@ -50,24 +50,23 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	for _, arg := range args {
 		v := reflect.ValueOf(arg)
 		if v.Kind() == reflect.Invalid || (v.Kind() == reflect.Pointer && v.IsNil()) {
-			return nil, fmt.Errorf("need struct, got nil")
+			return nil, fmt.Errorf("need struct or map, got nil")
 		}
 		v = reflect.Indirect(v)
 		t := v.Type()
-		if t.Kind() != reflect.Struct {
-			return nil, fmt.Errorf("need struct, got %s", t.Kind())
+		if v.Kind() != reflect.Struct && v.Kind() != reflect.Map {
+			return nil, fmt.Errorf("need struct or map, got %s", t.Kind())
 		}
 		if _, ok := typeValue[t]; ok {
-			return nil, fmt.Errorf("type %q provided more than once, rename one of them", t.Name())
+			return nil, fmt.Errorf("type %q provided more than once", t.Name())
 		}
 		typeValue[t] = v
 		typeNames = append(typeNames, t.Name())
-
-		if !typeInQuery[t] {
+		if !inQuery[t] {
 			// Check if we have a type with the same name from a different package.
-			for _, in := range pe.inputs {
-				if t.Name() == in.structType.Name() {
-					return nil, fmt.Errorf("type %s not passed as a parameter, have %s", in.structType.String(), t.String())
+			for _, typeMember := range pe.inputs {
+				if t.Name() == typeMember.outerType().Name() {
+					return nil, fmt.Errorf("type %s not passed as a parameter, have %s", typeMember.outerType().String(), t.String())
 				}
 			}
 			return nil, fmt.Errorf("%s not referenced in query", t.Name())
@@ -76,67 +75,82 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 
 	// Query parameteres.
 	qargs := []any{}
-
-	for i, in := range pe.inputs {
-		v, ok := typeValue[in.structType]
+	for i, typeMember := range pe.inputs {
+		outerType := typeMember.outerType()
+		v, ok := typeValue[outerType]
 		if !ok {
 			if len(typeNames) == 0 {
-				return nil, fmt.Errorf(`type %q not passed as a parameter`, in.structType.Name())
+				return nil, fmt.Errorf(`type %q not passed as a parameter`, outerType.Name())
 			} else {
-				return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, in.structType.Name(), strings.Join(typeNames, ", "))
+				return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, outerType.Name(), strings.Join(typeNames, ", "))
 			}
 		}
-		named := sql.Named("sqlair_"+strconv.Itoa(i), v.FieldByIndex(in.index).Interface())
-		qargs = append(qargs, named)
+		var val reflect.Value
+		switch tm := typeMember.(type) {
+		case structField:
+			val = v.FieldByIndex(tm.index)
+		case mapKey:
+			val = v.MapIndex(reflect.ValueOf(tm.name))
+			if val.Kind() == reflect.Invalid {
+				return nil, fmt.Errorf(`map %q does not contain key %q`, outerType.Name(), tm.name)
+			}
+		}
+		qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(i), val.Interface()))
 	}
-
 	return &QueryExpr{outputs: pe.outputs, sql: pe.sql, args: qargs}, nil
 }
 
 // ScanArgs returns list of pointers to the struct fields that are listed in qe.outputs.
-// All the structs mentioned in the query must be in outputArgs.
-// All outputArgs must be structs.
-func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, error) {
+// All the structs and maps mentioned in the query must be in outputArgs.
+func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []any, onSuccess func(), err error) {
+	var typesInQuery = []string{}
+	var inQuery = make(map[reflect.Type]bool)
+	for _, typeMember := range qe.outputs {
+		outerType := typeMember.outerType()
+		if ok := inQuery[outerType]; !ok {
+			inQuery[outerType] = true
+			typesInQuery = append(typesInQuery, outerType.Name())
+		}
+	}
+
+	type mapSetInfo struct {
+		keyVal  reflect.Value
+		scanVal reflect.Value
+		mapVal  reflect.Value
+	}
+	var mapSetInfos = []mapSetInfo{}
+	var typeDest = make(map[reflect.Type]reflect.Value)
 	outputVals := []reflect.Value{}
 	for _, outputArg := range outputArgs {
 		if outputArg == nil {
-			return nil, fmt.Errorf("need pointer to struct, got nil")
+			return nil, nil, fmt.Errorf("need map or pointer to struct, got nil")
 		}
 		outputVal := reflect.ValueOf(outputArg)
-		if outputVal.Kind() != reflect.Pointer {
-			return nil, fmt.Errorf("need pointer to struct, got %s", outputVal.Kind())
+		k := outputVal.Kind()
+		if k != reflect.Map {
+			if k != reflect.Pointer {
+				return nil, nil, fmt.Errorf("need map or pointer to struct, got %s", k)
+			}
+			if outputVal.IsNil() {
+				return nil, nil, fmt.Errorf("got nil pointer")
+			}
+			outputVal = outputVal.Elem()
+			k = outputVal.Kind()
+			if k != reflect.Struct && k != reflect.Map {
+				return nil, nil, fmt.Errorf("need map or pointer to struct, got pointer to %s", k)
+			}
 		}
-		if outputVal.IsNil() {
-			return nil, fmt.Errorf("got nil pointer")
+		if !inQuery[outputVal.Type()] {
+			return nil, nil, fmt.Errorf("type %q does not appear in query, have: %s", outputVal.Type().Name(), strings.Join(typesInQuery, ", "))
 		}
-		outputVal = reflect.Indirect(outputVal)
-		if outputVal.Kind() != reflect.Struct {
-			return nil, fmt.Errorf("need pointer to struct, got pointer to %s", outputVal.Kind())
+		if _, ok := typeDest[outputVal.Type()]; ok {
+			return nil, nil, fmt.Errorf("type %q provided more than once, rename one of them", outputVal.Type().Name())
 		}
+		typeDest[outputVal.Type()] = outputVal
 		outputVals = append(outputVals, outputVal)
 	}
 
-	// Check that each outputVal is in the query.
-	var typesInQuery = []string{}
-	var inQuery = make(map[reflect.Type]bool)
-	for _, field := range qe.outputs {
-		if ok := inQuery[field.structType]; !ok {
-			inQuery[field.structType] = true
-			typesInQuery = append(typesInQuery, field.structType.Name())
-		}
-	}
-	var typeDest = make(map[reflect.Type]reflect.Value)
-	for _, outputVal := range outputVals {
-		t := outputVal.Type()
-		if !inQuery[t] {
-			return nil, fmt.Errorf("type %q does not appear in query, have: %s", t.Name(), strings.Join(typesInQuery, ", "))
-		}
-		if _, ok := typeDest[t]; ok {
-			return nil, fmt.Errorf("type %q provided more than once, rename one of them", t.Name())
-		}
-		typeDest[t] = outputVal
-	}
-
+	// Generate the pointers.
 	var ptrs = []any{}
 	for _, column := range columns {
 		idx, ok := markerIndex(column)
@@ -147,19 +161,32 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) ([]any, error)
 			continue
 		}
 		if idx >= len(qe.outputs) {
-			return nil, fmt.Errorf("internal error: sqlair column not in outputs (%d>=%d)", idx, len(qe.outputs))
+			return nil, nil, fmt.Errorf("internal error: sqlair column not in outputs (%d>=%d)", idx, len(qe.outputs))
 		}
-		field := qe.outputs[idx]
-		outputVal, ok := typeDest[field.structType]
+		typeMember := qe.outputs[idx]
+		outputVal, ok := typeDest[typeMember.outerType()]
 		if !ok {
-			return nil, fmt.Errorf("type %q found in query but not passed to get", field.structType.Name())
+			return nil, nil, fmt.Errorf("type %q found in query but not passed to get", typeMember.outerType().Name())
 		}
-
-		val := outputVal.FieldByIndex(field.index)
-		if !val.CanSet() {
-			return nil, fmt.Errorf("internal error: cannot set field %s of struct %s", field.name, field.structType.Name())
+		switch tm := typeMember.(type) {
+		case structField:
+			val := outputVal.FieldByIndex(tm.index)
+			if !val.CanSet() {
+				return nil, nil, fmt.Errorf("internal error: cannot set field %s of struct %s", tm.name, tm.structType.Name())
+			}
+			ptrs = append(ptrs, val.Addr().Interface())
+		case mapKey:
+			scanVal := reflect.New(tm.mapType.Elem()).Elem()
+			ptrs = append(ptrs, scanVal.Addr().Interface())
+			mapSetInfos = append(mapSetInfos, mapSetInfo{keyVal: reflect.ValueOf(tm.name), scanVal: scanVal, mapVal: outputVal})
 		}
-		ptrs = append(ptrs, val.Addr().Interface())
 	}
-	return ptrs, nil
+
+	onSuccess = func() {
+		for _, mi := range mapSetInfos {
+			mi.mapVal.SetMapIndex(mi.keyVal, mi.scanVal)
+		}
+	}
+
+	return ptrs, onSuccess, nil
 }
