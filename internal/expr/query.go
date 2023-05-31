@@ -98,9 +98,13 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 				return nil, fmt.Errorf(`map %q does not contain key %q`, outerType.Name(), tm.name)
 			}
 			if val.Kind() == reflect.Slice {
-				if !tm.canBeSlice {
+				if tm.slice == nil {
 					return nil, fmt.Errorf(`map value %q: cannot use slice as argument`, tm.name)
 				}
+				if val.Len() != tm.slice.length {
+					tm.slice.length = val.Len()
+					pe = Prepare
+
 				for i := 0; i < val.Len(); i++ {
 					sval := val.Index(i)
 					qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(argCount), sval.Interface()))

@@ -11,9 +11,9 @@ import (
 
 // PreparedExpr contains an SQL expression that is ready for execution.
 type PreparedExpr struct {
-	outputs []typeMember
-	inputs  []typeMember
-	sql     string
+	outputs   []typeMember
+	inputs    []typeMember
+	sqlChunks []any
 }
 
 const markerPrefix = "_sqlair_"
@@ -89,7 +89,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
 	}
 	switch info := info.(type) {
 	case *mapInfo:
-		return mapKey{name: p.source.name, mapType: info.typ(), canBeSlice: false}, nil
+		return mapKey{name: p.source.name, mapType: info.typ()}, nil
 	case *structInfo:
 		f, ok := info.tagToField[p.source.name]
 		if !ok {
@@ -121,9 +121,9 @@ func prepareIn(ti typeNameToInfo, p *inPart) ([]typeMember, error) {
 			typeMembers = append(typeMembers, field)
 		case *mapInfo:
 			typeMembers = append(typeMembers, mapKey{
-				name:       t.name,
-				mapType:    info.typ(),
-				canBeSlice: true,
+				name:    t.name,
+				mapType: info.typ(),
+				slice:   &sliceInfo{length: 1},
 			})
 		}
 	}
@@ -240,6 +240,71 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 
 type typeNameToInfo map[string]typeInfo
 
+type outputChunk struct {
+	outCols []fullName
+}
+
+type inputChunk struct{}
+
+type inChunk struct {
+	typeMembers []typeMembers
+}
+
+type bypassChunk struct {
+	chunk string
+}
+
+func generateInputSQL(inCount int) (int, string) {
+	return inCount + 1, "@sqlair_" + strconv.Itoa(inCount)
+}
+
+func generateOutputSQL(outCount int, outCols []fullName) (int, string) {
+	var sql bytes.Buffer
+	for i, c := range outCols {
+		sql.WriteString(c.String())
+		sql.WriteString(" AS ")
+		sql.WriteString(markerName(outCount))
+		if i != len(outCols)-1 {
+			sql.WriteString(", ")
+		}
+		outCount++
+	}
+	return outCount, sql.String()
+}
+
+func generateInSQL(inCount int, typeMembers []typeMember) (int, string) {
+	var sql bytes.Buffer
+	sql.WriteString("IN (")
+	for i, tm := range typeMembers {
+		switch tm := tm.(type) {
+		case structField:
+			sql.WriteString("@sqlair_")
+			sql.WriteString(strconv.Itoa(inCount))
+			if i < len(typeMembers)-1 {
+				sql.WriteString(", ")
+			}
+			inCount++
+		case mapKey:
+			length := 1
+			if tm.slice != nil {
+				length = tm.slice.length
+			}
+			for j := 0; j < length; j++ {
+				sql.WriteString("@sqlair_")
+				sql.WriteString(strconv.Itoa(inCount))
+				if i < len(typeMembers)-1 || j < length-1 {
+					sql.WriteString(", ")
+				}
+				inCount++
+			}
+		default:
+			panic(fmt.Sprintf("%T", tm))
+		}
+	}
+	sql.WriteString(")")
+	return sql.String(), inCount
+}
+
 // Prepare takes a parsed expression and struct instantiations of all the types
 // mentioned in it.
 // The IO parts of the statement are checked for validity against the types
@@ -282,71 +347,50 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 		}
 	}
 
-	var sql bytes.Buffer
-
 	var inCount int
 	var outCount int
 
 	var outputs = make([]typeMember, 0)
 	var inputs = make([]typeMember, 0)
 
+	var sqlChuncks []sqlChunk
+	var s string
+
 	// Check and expand each query part.
 	for _, part := range pe.queryParts {
 		switch p := part.(type) {
 		case *inputPart:
-			fields, err := prepareInput(ti, p)
+			typeMembers, err := prepareInput(ti, p)
 			if err != nil {
 				return nil, err
 			}
-			sql.WriteString("@sqlair_" + strconv.Itoa(inCount))
-			inCount++
-			inputs = append(inputs, fields)
+			inCount, s = generateInputSQL(inCount)
+			inputs = append(inputs, typeMembers)
 		case *outputPart:
-			outCols, fields, err := prepareOutput(ti, p)
+			outCols, typeMembers, err := prepareOutput(ti, p)
 			if err != nil {
 				return nil, err
 			}
-			for i, c := range outCols {
-				sql.WriteString(c.String())
-				sql.WriteString(" AS ")
-				sql.WriteString(markerName(outCount))
-				if i != len(outCols)-1 {
-					sql.WriteString(", ")
-				}
-				outCount++
-			}
-			outputs = append(outputs, fields...)
-
+			outCount, s = generateOutputSQL(outCount, outCols)
+			outputs = append(outputs, typeMembers...)
 		case *inPart:
-			fields, err := prepareIn(ti, p)
+			typeMembers, err := prepareIn(ti, p)
 			if err != nil {
 				return nil, err
 			}
-			sql.WriteString("IN ")
-			sql.WriteString(namedParams(inCount, len(fields)))
-			inCount += len(fields)
-			inputs = append(inputs, fields...)
+			inCount, s = generateInSQL(inCount, typeMembers)
+			inputs = append(inputs, typeMembers...)
 		case *bypassPart:
-			sql.WriteString(p.chunk)
+			s = p.chunk
 		default:
 			return nil, fmt.Errorf("internal error: unknown query part type %T", part)
 		}
+		sqlChunks = append(sqlChunks, &sqlChunk{s})
 	}
 
 	return &PreparedExpr{inputs: inputs, outputs: outputs, sql: sql.String()}, nil
 }
 
-// namedParams returns n incrementing parameters with the first index being start.
-func namedParams(start int, n int) string {
-	var s bytes.Buffer
-	s.WriteString("(")
-	for i := start; i < start+n; i++ {
-		s.WriteString("@sqlair_")
-		s.WriteString(strconv.Itoa(i))
-		if i < start+n-1 {
-			s.WriteString(", ")
-		}
-	}
-	s.WriteString(")")
-	return s.String()
+func (pe *PreparedExpr) Reprepare() {
+
 }
