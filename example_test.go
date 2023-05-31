@@ -92,6 +92,7 @@ func Example() {
 		}
 	}
 
+	// Example 1
 	// Find someone on the engineering team.
 	selectSomeoneInTeam := sqlair.MustPrepare(`
 		SELECT &Employee.*
@@ -100,7 +101,12 @@ func Example() {
 		Employee{}, sqlair.M{},
 	)
 
-	q := db.Query(nil, selectSomeoneInTeam, sqlair.M{"team": "engineering"})
+	// A map with a key type of string is used to
+	// pass arguments that are not fields of structs.
+	// sqlair.M is of type map[string]any but if
+	// the map has a key type of string it can be used.
+	team := "engineering"
+	q := db.Query(nil, selectSomeoneInTeam, sqlair.M{"team": team})
 
 	// Get returns a single result.
 	var pal = Employee{}
@@ -109,8 +115,9 @@ func Example() {
 		panic(err)
 	}
 
-	fmt.Printf("%s is on the engineering team.\n", pal.Name)
+	fmt.Printf("%s is on the %s team\n", pal.Name, team)
 
+	// Example 2
 	// Find out who is in location l1.
 	selectPeopleInRoom := sqlair.MustPrepare(`
 		SELECT &Employee.*
@@ -131,8 +138,9 @@ func Example() {
 	for _, p := range roomDwellers {
 		fmt.Printf("%s, ", p.Name)
 	}
-	fmt.Println("are in room l1.")
+	fmt.Printf("are in %s\n", l1.Name)
 
+	// Example 3
 	// Print out who is in which room.
 	selectPeopleAndRoom := sqlair.MustPrepare(`
 		SELECT l.* AS &Location.*, (p.name, p.team) AS &Employee.*
@@ -174,15 +182,15 @@ func Example() {
 	}
 
 	// Output:
-	// Ed is on the engineering team.
-	// Ed, Alastair, Marco, are in room l1.
+	// Ed is on the engineering team
+	// Ed, Alastair, Marco, are in The Basement
 	// Alastair is in The Basement
 	// Ed is in The Basement
 	// Marco is in The Basement
 	// Serdar is in Floor 2
 	// Pedro is in Floor 3
-	// Joe is in The Market
-	// Ben is in Court
 	// Sam is in Floors 4 to 89
+	// Ben is in Court
+	// Joe is in The Market
 	// Mark is in The Penthouse
 }
