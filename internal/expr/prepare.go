@@ -14,7 +14,7 @@ import (
 type PreparedExpr struct {
 	outputs   []typeMember
 	inputs    []typeMember
-	sqlChunks []any
+	sqlChunks []sqlChunk
 }
 
 const markerPrefix = "_sqlair_"
@@ -241,19 +241,31 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (*outputChunk, []typeMember
 
 type typeNameToInfo map[string]typeInfo
 
+type sqlChunk interface {
+	chunk()
+}
+
 type outputChunk struct {
 	outCols []fullName
 }
 
+func (outputChunk) chunk() {}
+
 type inputChunk struct{}
+
+func (inputChunk) chunk() {}
 
 type inChunk struct {
 	typeMembers []typeMember
 }
 
+func (inChunk) chunk() {}
+
 type bypassChunk struct {
-	chunk string
+	str string
 }
+
+func (bypassChunk) chunk() {}
 
 func generateInputSQL(inCount int) (int, string) {
 	return inCount + 1, "@sqlair_" + strconv.Itoa(inCount)
@@ -352,9 +364,9 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	var outputs = make([]typeMember, 0)
 	var inputs = make([]typeMember, 0)
 
-	var SQLChunks []any
+	var sqlChunks []sqlChunk
 	var typeMembers []typeMember
-	var chunk any
+	var chunk sqlChunk
 
 	// Check and expand each query part.
 	for _, part := range pe.queryParts {
@@ -382,10 +394,10 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 		default:
 			return nil, fmt.Errorf("internal error: unknown query part type %T", part)
 		}
-		SQLChunks = append(SQLChunks, chunk)
+		sqlChunks = append(sqlChunks, chunk)
 	}
 
-	return &PreparedExpr{inputs: inputs, outputs: outputs, sqlChunks: SQLChunks}, nil
+	return &PreparedExpr{inputs: inputs, outputs: outputs, sqlChunks: sqlChunks}, nil
 }
 
 func (pe *PreparedExpr) sql() string {
@@ -403,15 +415,11 @@ func (pe *PreparedExpr) sql() string {
 		case *inChunk:
 			inCount, s = generateInSQL(inCount, chunk.typeMembers)
 		case *bypassChunk:
-			s = chunk.chunk
+			s = chunk.str
 		default:
 			panic("not valid type")
 		}
 		sql.WriteString(s)
 	}
 	return sql.String()
-}
-
-func (pe *PreparedExpr) Reprepare() {
-
 }
