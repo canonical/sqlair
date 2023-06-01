@@ -108,7 +108,12 @@ func prepareIn(ti typeNameToInfo, p *inPart) (*inChunk, []typeMember, error) {
 	for _, t := range p.types {
 		info, ok := ti[t.prefix]
 		if !ok {
-			return nil, nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, t.prefix, strings.Join(getKeys(ti), ", "))
+			ts := getKeys(ti)
+			if len(ts) == 0 {
+				return nil, nil, fmt.Errorf(`type %q not passed as a parameter`, t.prefix)
+			} else {
+				return nil, nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, t.prefix, strings.Join(ts, ", "))
+			}
 		}
 		if t.name == "*" {
 			return nil, nil, fmt.Errorf("invalid asterisk in input expression: %s", p.raw)

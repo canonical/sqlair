@@ -664,6 +664,11 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		prepareArgs: []any{Person{}},
 		queryArgs:   []any{Person{}, Person{}},
 		err:         `invalid input parameter: type "Person" provided more than once`,
+	}, {
+		query:       "SELECT street FROM t WHERE x = $M.slice",
+		prepareArgs: []any{sqlair.M{}},
+		queryArgs:   []any{sqlair.M{"slice": []int{1, 2}}},
+		err:         `invalid input parameter: map value "slice": invalid slice outside of IN clause`,
 	}}
 
 	outerP := Person{}
