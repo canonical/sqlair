@@ -301,18 +301,20 @@ func (s *ExprSuite) TestExpr(c *C) {
 			preparedExpr *expr.PreparedExpr
 			err          error
 		)
-		if parsedExpr, err = parser.Parse(t.query); err != nil {
-			c.Errorf("test %d failed (Parse):\nsummary: %s\nquery: %s\nexpected: %s\nerr: %s\n", i, t.summary, t.query, t.expectedParsed, err)
-		} else if parsedExpr.String() != t.expectedParsed {
-			c.Errorf("test %d failed (Parse):\nsummary: %s\nquery: %s\nexpected: %s\nactual:   %s\n", i, t.summary, t.query, t.expectedParsed, parsedExpr.String())
-		}
-
-		if preparedExpr, err = parsedExpr.Prepare(t.prepareArgs...); err != nil {
-			c.Errorf("test %d failed (Prepare):\nsummary: %s\nquery: %s\nexpected: %s\nerr: %s\n", i, t.summary, t.query, t.expectedPrepared, err)
-		} else {
-			c.Check(expr.PreparedSQL(preparedExpr), Equals, t.expectedPrepared,
-				Commentf("test %d failed (Prepare):\nsummary: %s\nquery: %s\nexpected: %s\nactual:   %s\n", i, t.summary, t.query, t.expectedPrepared, expr.PreparedSQL(preparedExpr)))
-		}
+		parsedExpr, err = parser.Parse(t.query)
+		c.Assert(err, IsNil,
+			Commentf("test %d failed (Parse):\nsummary:  %s\nquery:    %s\nexpected: %s\nerr:      %s\n",
+				i, t.summary, t.query, t.expectedParsed, err))
+		c.Assert(parsedExpr.String(), Equals, t.expectedParsed,
+			Commentf("test %d failed (Parse):\nsummary: %s\nquery:   %s\n",
+				i, t.summary, t.query))
+		preparedExpr, err = parsedExpr.Prepare(t.prepareArgs...)
+		c.Assert(err, IsNil,
+			Commentf("test %d failed (Prepare):\nsummary:  %s\nquery:    %s\nexpected: %s\nerr:      %s\n",
+				i, t.summary, t.query, t.expectedPrepared, err))
+		c.Assert(expr.PreparedSQL(preparedExpr), Equals, t.expectedPrepared,
+			Commentf("test %d failed (Prepare):\nsummary: %s\nquery:   %s\n",
+				i, t.summary, t.query))
 	}
 }
 
