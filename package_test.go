@@ -70,8 +70,7 @@ CREATE TABLE person (
 CREATE TABLE address (
 	id integer,
 	district text,
-	street textgot
-
+	street text
 );
 `
 	dropTables := `
