@@ -243,9 +243,9 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 }, {
 	"simple in",
 	"SELECT name FROM person WHERE id IN $M.slice",
-	"",
-	[]any{sqlair.M{"slice": []int{1, 2, 3, 4, 5, 6}}},
-	"SELECT name FROM person WHERE id IN (@sqlair_0, @sqlair_1, ...)",
+	"[Bypass[SELECT name FROM person WHERE id ] In[[M.slice]]]",
+	[]any{sqlair.M{}},
+	"SELECT name FROM person WHERE id IN (@sqlair_0)",
 }, {
 	"insert",
 	"INSERT INTO person (name) VALUES $Person.name",
@@ -581,6 +581,11 @@ func (s *ExprSuite) TestValidQuery(c *C) {
 		[]any{Person{}, StringMap{}},
 		[]any{Person{ID: 666}, StringMap{"street": "Highway to Hell"}},
 		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
+	}, {
+		"SELECT name FROM person WHERE id IN $M.slice",
+		[]any{sqlair.M{}},
+		[]any{sqlair.M{"slice": []int{1, 2, 3, 4, 5, 6}}},
+		[]any{sql.Named("sqlair_0", 1), sql.Named("sqlair_1", 2), sql.Named("sqlair_2", 3), sql.Named("sqlair_3", 4), sql.Named("sqlair_4", 5), sql.Named("sqlair_5", 6)},
 	}}
 	for _, t := range tests {
 		parser := expr.NewParser()

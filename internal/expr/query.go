@@ -3,12 +3,14 @@ package expr
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"reflect"
 	"strconv"
 	"strings"
 )
 
 func (qe *QueryExpr) QuerySQL() string {
+	log.Println(qe.sql)
 	return qe.sql
 }
 
@@ -88,23 +90,26 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		}
 		var val reflect.Value
 		switch tm := typeMember.(type) {
-		case structField:
+		case *structField:
 			val = v.FieldByIndex(tm.index)
 			qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(argCount), val.Interface()))
 			argCount++
-		case mapKey:
+		case *mapKey:
 			val = v.MapIndex(reflect.ValueOf(tm.name))
 			if val.Kind() == reflect.Invalid {
 				return nil, fmt.Errorf(`map %q does not contain key %q`, outerType.Name(), tm.name)
+			}
+			if val.Kind() == reflect.Interface {
+				val = val.Elem()
 			}
 			if val.Kind() == reflect.Slice {
 				if tm.slice == nil {
 					return nil, fmt.Errorf(`map value %q: cannot use slice as argument`, tm.name)
 				}
 				if val.Len() != tm.slice.length {
+					// This should change it in the same object that is used to generate the SQL.
 					tm.slice.length = val.Len()
-					pe = Prepare
-
+				}
 				for i := 0; i < val.Len(); i++ {
 					sval := val.Index(i)
 					qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(argCount), sval.Interface()))
@@ -116,7 +121,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 			}
 		}
 	}
-	return &QueryExpr{outputs: pe.outputs, sql: pe.sql, args: qargs}, nil
+	return &QueryExpr{outputs: pe.outputs, sql: pe.sql(), args: qargs}, nil
 }
 
 // ScanArgs returns list of pointers to the struct fields that are listed in qe.outputs.
@@ -188,13 +193,13 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 			return nil, nil, fmt.Errorf("type %q found in query but not passed to get", typeMember.outerType().Name())
 		}
 		switch tm := typeMember.(type) {
-		case structField:
+		case *structField:
 			val := outputVal.FieldByIndex(tm.index)
 			if !val.CanSet() {
 				return nil, nil, fmt.Errorf("internal error: cannot set field %s of struct %s", tm.name, tm.structType.Name())
 			}
 			ptrs = append(ptrs, val.Addr().Interface())
-		case mapKey:
+		case *mapKey:
 			scanVal := reflect.New(tm.mapType.Elem()).Elem()
 			ptrs = append(ptrs, scanVal.Addr().Interface())
 			mapSetInfos = append(mapSetInfos, mapSetInfo{keyVal: reflect.ValueOf(tm.name), scanVal: scanVal, mapVal: outputVal})

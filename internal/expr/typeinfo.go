@@ -24,7 +24,7 @@ type mapKey struct {
 	slice *sliceInfo
 }
 
-func (mk mapKey) outerType() reflect.Type {
+func (mk *mapKey) outerType() reflect.Type {
 	return mk.mapType
 }
 
@@ -43,7 +43,7 @@ type structField struct {
 	omitEmpty bool
 }
 
-func (f structField) outerType() reflect.Type {
+func (f *structField) outerType() reflect.Type {
 	return f.structType
 }
 
@@ -57,7 +57,7 @@ type structInfo struct {
 	// Ordered list of tags
 	tags []string
 
-	tagToField map[string]structField
+	tagToField map[string]*structField
 }
 
 func (si *structInfo) typ() reflect.Type {
@@ -114,7 +114,7 @@ func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 		return &mapInfo{mapType: t}, nil
 	case reflect.Struct:
 		info := structInfo{
-			tagToField: make(map[string]structField),
+			tagToField: make(map[string]*structField),
 			structType: t,
 		}
 		tags := []string{}
@@ -135,7 +135,7 @@ func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 				return nil, fmt.Errorf("cannot parse tag for field %s.%s: %s", t.Name(), f.Name, err)
 			}
 			tags = append(tags, tag)
-			info.tagToField[tag] = structField{
+			info.tagToField[tag] = &structField{
 				name:       f.Name,
 				index:      f.Index,
 				omitEmpty:  omitEmpty,
