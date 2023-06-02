@@ -319,38 +319,38 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 	return nil
 }
 
-type TX struct {
+type Tx struct {
 	tx *sql.Tx
 }
 
 // Begin starts a transaction.
-func (db *DB) Begin(ctx context.Context, opts *TXOptions) (*TX, error) {
+func (db *DB) Begin(ctx context.Context, opts *TxOptions) (*Tx, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	tx, err := db.db.BeginTx(ctx, opts.plainTXOptions())
-	return &TX{tx: tx}, err
+	tx, err := db.db.BeginTx(ctx, opts.plainTxOptions())
+	return &Tx{tx: tx}, err
 }
 
 // Commit commits the transaction.
-func (tx *TX) Commit() error {
+func (tx *Tx) Commit() error {
 	return tx.tx.Commit()
 }
 
 // Rollback aborts the transaction.
-func (tx *TX) Rollback() error {
+func (tx *Tx) Rollback() error {
 	return tx.tx.Rollback()
 }
 
-// TXOptions holds the transaction options to be used in DB.Begin.
-type TXOptions struct {
+// TxOptions holds the transaction options to be used in DB.Begin.
+type TxOptions struct {
 	// Isolation is the transaction isolation level.
 	// If zero, the driver or database's default level is used.
 	Isolation sql.IsolationLevel
 	ReadOnly  bool
 }
 
-func (txopts *TXOptions) plainTXOptions() *sql.TxOptions {
+func (txopts *TxOptions) plainTxOptions() *sql.TxOptions {
 	if txopts == nil {
 		return nil
 	}
@@ -359,7 +359,7 @@ func (txopts *TXOptions) plainTXOptions() *sql.TxOptions {
 
 // Query takes a context, prepared SQLair Statement and the structs mentioned in the query arguments.
 // It returns a Query object for iterating over the results.
-func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query {
+func (tx *Tx) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query {
 	if ctx == nil {
 		ctx = context.Background()
 	}
