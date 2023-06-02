@@ -78,7 +78,7 @@ func starCheckOutput(p *outputPart) error {
 }
 
 // prepareInput checks that the input expression corresponds to a known type.
-func prepareInput(ti typeNameToInfo, p *inputPart) (*inputChunk, []typeMember, error) {
+func prepareInput(ti typeNameToInfo, p *inputPart) (*prepedInputPart, []typeMember, error) {
 	info, ok := ti[p.source.prefix]
 	if !ok {
 		ts := getKeys(ti)
@@ -90,20 +90,20 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (*inputChunk, []typeMember, e
 	}
 	switch info := info.(type) {
 	case *mapInfo:
-		return &inputChunk{}, []typeMember{&mapKey{name: p.source.name, mapType: info.typ()}}, nil
+		return &prepedInputPart{}, []typeMember{&mapKey{name: p.source.name, mapType: info.typ()}}, nil
 	case *structInfo:
 		f, ok := info.tagToField[p.source.name]
 		if !ok {
 			return nil, nil, fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), p.source.name)
 		}
-		return &inputChunk{}, []typeMember{f}, nil
+		return &prepedInputPart{}, []typeMember{f}, nil
 	default:
 		return nil, nil, fmt.Errorf(`internal error: unknown info type: %T`, info)
 	}
 }
 
 // prepareIn generates the values to fetch for sqlair input expressions following an IN statement.
-func prepareIn(ti typeNameToInfo, p *inPart) (*inChunk, []typeMember, error) {
+func prepareIn(ti typeNameToInfo, p *inPart) (*prepedInPart, []typeMember, error) {
 	var typeMembers = make([]typeMember, 0)
 	for _, t := range p.types {
 		info, ok := ti[t.prefix]
@@ -133,12 +133,12 @@ func prepareIn(ti typeNameToInfo, p *inPart) (*inChunk, []typeMember, error) {
 			})
 		}
 	}
-	return &inChunk{typeMembers}, typeMembers, nil
+	return &prepedInPart{typeMembers}, typeMembers, nil
 }
 
 // prepareOutput checks that the output expressions correspond to known types.
 // It then checks they are formatted correctly and finally generates the columns for the query.
-func prepareOutput(ti typeNameToInfo, p *outputPart) (*outputChunk, []typeMember, error) {
+func prepareOutput(ti typeNameToInfo, p *outputPart) (*prepedOutputPart, []typeMember, error) {
 	var outCols = make([]fullName, 0)
 	var typeMembers = make([]typeMember, 0)
 
@@ -196,7 +196,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (*outputChunk, []typeMember
 					outCols = append(outCols, fullName{pref, tag})
 					typeMembers = append(typeMembers, info.tagToField[tag])
 				}
-				return &outputChunk{outCols}, typeMembers, nil
+				return &prepedOutputPart{outCols}, typeMembers, nil
 			default:
 				return nil, nil, fmt.Errorf(`internal error: unknown info type: %T`, info)
 			}
@@ -210,7 +210,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (*outputChunk, []typeMember
 					outCols = append(outCols, c)
 					typeMembers = append(typeMembers, &mapKey{name: c.name, mapType: info.typ()})
 				}
-				return &outputChunk{outCols}, typeMembers, nil
+				return &prepedOutputPart{outCols}, typeMembers, nil
 			case *structInfo:
 				for _, c := range p.source {
 					f, ok := info.tagToField[c.name]
@@ -220,7 +220,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (*outputChunk, []typeMember
 					outCols = append(outCols, c)
 					typeMembers = append(typeMembers, f)
 				}
-				return &outputChunk{outCols}, typeMembers, nil
+				return &prepedOutputPart{outCols}, typeMembers, nil
 			default:
 				return nil, nil, fmt.Errorf(`internal error: unknown info type: %T`, info)
 			}
@@ -234,14 +234,14 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (*outputChunk, []typeMember
 		for _, c := range p.source {
 			outCols = append(outCols, c)
 		}
-		return &outputChunk{outCols}, typeMembers, nil
+		return &prepedOutputPart{outCols}, typeMembers, nil
 	}
 
 	// Case 2.2: No columns e.g. "(&P.name, &P.id)".
 	for _, t := range p.target {
 		outCols = append(outCols, fullName{name: t.name})
 	}
-	return &outputChunk{outCols}, typeMembers, nil
+	return &prepedOutputPart{outCols}, typeMembers, nil
 }
 
 type typeNameToInfo map[string]typeInfo
@@ -255,11 +255,11 @@ type prepedQueryPart interface {
 	sql(*ioCounter) string
 }
 
-type outputChunk struct {
+type prepedOutputPart struct {
 	outCols []fullName
 }
 
-func (oc *outputChunk) sql(c *ioCounter) string {
+func (oc *prepedOutputPart) sql(c *ioCounter) string {
 	var sql bytes.Buffer
 	for i, col := range oc.outCols {
 		sql.WriteString(col.String())
@@ -273,18 +273,18 @@ func (oc *outputChunk) sql(c *ioCounter) string {
 	return sql.String()
 }
 
-type inputChunk struct{}
+type prepedInputPart struct{}
 
-func (ic *inputChunk) sql(c *ioCounter) string {
+func (ic *prepedInputPart) sql(c *ioCounter) string {
 	c.inputCount++
 	return "@sqlair_" + strconv.Itoa(c.inputCount-1)
 }
 
-type inChunk struct {
+type prepedInPart struct {
 	typeMembers []typeMember
 }
 
-func (ic *inChunk) sql(c *ioCounter) string {
+func (ic *prepedInPart) sql(c *ioCounter) string {
 	var sql bytes.Buffer
 	sql.WriteString("IN (")
 	for i, tm := range ic.typeMembers {
@@ -318,11 +318,11 @@ func (ic *inChunk) sql(c *ioCounter) string {
 	return sql.String()
 }
 
-type bypassChunk struct {
+type prepedBypassPart struct {
 	str string
 }
 
-func (bc *bypassChunk) sql(*ioCounter) string {
+func (bc *prepedBypassPart) sql(*ioCounter) string {
 	return bc.str
 }
 
@@ -397,7 +397,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			}
 			inputs = append(inputs, typeMembers...)
 		case *bypassPart:
-			prepedQueryPart = &bypassChunk{p.chunk}
+			prepedQueryPart = &prepedBypassPart{p.chunk}
 		default:
 			return nil, fmt.Errorf("internal error: unknown query part type %T", part)
 		}
