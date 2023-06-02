@@ -425,8 +425,8 @@ func (p *Parser) parseGoFullName() (fullName, bool, error) {
 // parseList takes a parsing function that returns a fullName and parses a
 // bracketed, comma seperated, list.
 func (p *Parser) parseList(singletons bool, parseFn func(p *Parser) (fullName, bool, error)) ([]fullName, bool, error) {
+	// Case 1: Unbracketed singleton.
 	if singletons {
-		// Case 1: Unbracketed singleton
 		if obj, ok, err := parseFn(p); err != nil {
 			return nil, false, err
 		} else if ok {
@@ -434,7 +434,7 @@ func (p *Parser) parseList(singletons bool, parseFn func(p *Parser) (fullName, b
 		}
 	}
 
-	//Case 2: Bracketed list
+	// Case 2: Bracketed, comma seperated, list.
 	cp := p.save()
 	if !p.skipByte('(') {
 		return nil, false, nil

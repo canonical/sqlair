@@ -12,9 +12,9 @@ import (
 
 // PreparedExpr contains an SQL expression that is ready for execution.
 type PreparedExpr struct {
-	outputs   []typeMember
-	inputs    []typeMember
-	sqlChunks []sqlChunk
+	outputs          []typeMember
+	inputs           []typeMember
+	prepedQueryParts []prepedQueryPart
 }
 
 const markerPrefix = "_sqlair_"
@@ -127,9 +127,9 @@ func prepareIn(ti typeNameToInfo, p *inPart) (*inChunk, []typeMember, error) {
 			typeMembers = append(typeMembers, field)
 		case *mapInfo:
 			typeMembers = append(typeMembers, &mapKey{
-				name:    t.name,
-				mapType: info.typ(),
-				slice:   &sliceInfo{length: 1},
+				name:         t.name,
+				mapType:      info.typ(),
+				sliceAllowed: &sliceInfo{length: 1},
 			})
 		}
 	}
@@ -246,82 +246,84 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (*outputChunk, []typeMember
 
 type typeNameToInfo map[string]typeInfo
 
-type sqlChunk interface {
-	chunk()
+type ioCounter struct {
+	outputCount int
+	inputCount  int
+}
+
+type prepedQueryPart interface {
+	sql(*ioCounter) string
 }
 
 type outputChunk struct {
 	outCols []fullName
 }
 
-func (outputChunk) chunk() {}
+func (oc *outputChunk) sql(c *ioCounter) string {
+	var sql bytes.Buffer
+	for i, col := range oc.outCols {
+		sql.WriteString(col.String())
+		sql.WriteString(" AS ")
+		sql.WriteString(markerName(c.outputCount))
+		if i != len(oc.outCols)-1 {
+			sql.WriteString(", ")
+		}
+		c.outputCount++
+	}
+	return sql.String()
+}
 
 type inputChunk struct{}
 
-func (inputChunk) chunk() {}
+func (ic *inputChunk) sql(c *ioCounter) string {
+	c.inputCount++
+	return "@sqlair_" + strconv.Itoa(c.inputCount-1)
+}
 
 type inChunk struct {
 	typeMembers []typeMember
 }
 
-func (inChunk) chunk() {}
+func (ic *inChunk) sql(c *ioCounter) string {
+	var sql bytes.Buffer
+	sql.WriteString("IN (")
+	for i, tm := range ic.typeMembers {
+		switch tm := tm.(type) {
+		case *structField:
+			sql.WriteString("@sqlair_")
+			sql.WriteString(strconv.Itoa(c.inputCount))
+			c.inputCount++
+		case *mapKey:
+			length := 1
+			if tm.sliceAllowed != nil {
+				log.Printf("length is %d", tm.sliceAllowed.length)
+				length = tm.sliceAllowed.length
+			}
+			for j := 0; j < length; j++ {
+				sql.WriteString("@sqlair_")
+				sql.WriteString(strconv.Itoa(c.inputCount))
+				if j < length-1 {
+					sql.WriteString(", ")
+				}
+				c.inputCount++
+			}
+		default:
+			panic(fmt.Sprintf("invalid type: %T", tm))
+		}
+		if i < len(ic.typeMembers)-1 {
+			sql.WriteString(", ")
+		}
+	}
+	sql.WriteString(")")
+	return sql.String()
+}
 
 type bypassChunk struct {
 	str string
 }
 
-func (bypassChunk) chunk() {}
-
-func generateInputSQL(inCount int) (int, string) {
-	return inCount + 1, "@sqlair_" + strconv.Itoa(inCount)
-}
-
-func generateOutputSQL(outCount int, outCols []fullName) (int, string) {
-	var sql bytes.Buffer
-	for i, c := range outCols {
-		sql.WriteString(c.String())
-		sql.WriteString(" AS ")
-		sql.WriteString(markerName(outCount))
-		if i != len(outCols)-1 {
-			sql.WriteString(", ")
-		}
-		outCount++
-	}
-	return outCount, sql.String()
-}
-
-func generateInSQL(inCount int, typeMembers []typeMember) (int, string) {
-	var sql bytes.Buffer
-	sql.WriteString("IN (")
-	for i, tm := range typeMembers {
-		switch tm := tm.(type) {
-		case *structField:
-			sql.WriteString("@sqlair_")
-			sql.WriteString(strconv.Itoa(inCount))
-			if i < len(typeMembers)-1 {
-				sql.WriteString(", ")
-			}
-			inCount++
-		case *mapKey:
-			length := 1
-			if tm.slice != nil {
-				log.Printf("length is %d", tm.slice.length)
-				length = tm.slice.length
-			}
-			for j := 0; j < length; j++ {
-				sql.WriteString("@sqlair_")
-				sql.WriteString(strconv.Itoa(inCount))
-				if i < len(typeMembers)-1 || j < length-1 {
-					sql.WriteString(", ")
-				}
-				inCount++
-			}
-		default:
-			panic(fmt.Sprintf("%T", tm))
-		}
-	}
-	sql.WriteString(")")
-	return inCount, sql.String()
+func (bc *bypassChunk) sql(*ioCounter) string {
+	return bc.str
 }
 
 // Prepare takes a parsed expression and struct instantiations of all the types
@@ -369,62 +371,47 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	var outputs = make([]typeMember, 0)
 	var inputs = make([]typeMember, 0)
 
-	var sqlChunks []sqlChunk
+	var prepedQueryParts []prepedQueryPart
 	var typeMembers []typeMember
-	var chunk sqlChunk
+	var prepedQueryPart prepedQueryPart
 
 	// Check and expand each query part.
 	for _, part := range pe.queryParts {
 		switch p := part.(type) {
 		case *inputPart:
-			chunk, typeMembers, err = prepareInput(ti, p)
+			prepedQueryPart, typeMembers, err = prepareInput(ti, p)
 			if err != nil {
 				return nil, err
 			}
 			inputs = append(inputs, typeMembers...)
 		case *outputPart:
-			chunk, typeMembers, err = prepareOutput(ti, p)
+			prepedQueryPart, typeMembers, err = prepareOutput(ti, p)
 			if err != nil {
 				return nil, err
 			}
 			outputs = append(outputs, typeMembers...)
 		case *inPart:
-			chunk, typeMembers, err = prepareIn(ti, p)
+			prepedQueryPart, typeMembers, err = prepareIn(ti, p)
 			if err != nil {
 				return nil, err
 			}
 			inputs = append(inputs, typeMembers...)
 		case *bypassPart:
-			chunk = &bypassChunk{p.chunk}
+			prepedQueryPart = &bypassChunk{p.chunk}
 		default:
 			return nil, fmt.Errorf("internal error: unknown query part type %T", part)
 		}
-		sqlChunks = append(sqlChunks, chunk)
+		prepedQueryParts = append(prepedQueryParts, prepedQueryPart)
 	}
 
-	return &PreparedExpr{inputs: inputs, outputs: outputs, sqlChunks: sqlChunks}, nil
+	return &PreparedExpr{inputs: inputs, outputs: outputs, prepedQueryParts: prepedQueryParts}, nil
 }
 
 func (pe *PreparedExpr) sql() string {
-	var inCount int
-	var outCount int
-	var s string
+	var c = &ioCounter{}
 	var sql bytes.Buffer
-
-	for _, chunk := range pe.sqlChunks {
-		switch chunk := chunk.(type) {
-		case *outputChunk:
-			outCount, s = generateOutputSQL(outCount, chunk.outCols)
-		case *inputChunk:
-			inCount, s = generateInputSQL(inCount)
-		case *inChunk:
-			inCount, s = generateInSQL(inCount, chunk.typeMembers)
-		case *bypassChunk:
-			s = chunk.str
-		default:
-			panic("not valid type")
-		}
-		sql.WriteString(s)
+	for _, prepedQueryPart := range pe.prepedQueryParts {
+		sql.WriteString(prepedQueryPart.sql(c))
 	}
 	return sql.String()
 }

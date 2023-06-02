@@ -21,7 +21,7 @@ type mapKey struct {
 	name    string
 	mapType reflect.Type
 	// sliceInfo is nil if the map value is not allowed to be a slice.
-	slice *sliceInfo
+	sliceAllowed *sliceInfo
 }
 
 func (mk *mapKey) outerType() reflect.Type {

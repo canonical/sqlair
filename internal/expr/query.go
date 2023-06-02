@@ -3,14 +3,12 @@ package expr
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"reflect"
 	"strconv"
 	"strings"
 )
 
 func (qe *QueryExpr) QuerySQL() string {
-	log.Println(qe.sql)
 	return qe.sql
 }
 
@@ -103,12 +101,12 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 				val = val.Elem()
 			}
 			if val.Kind() == reflect.Slice {
-				if tm.slice == nil {
+				if tm.sliceAllowed == nil {
 					return nil, fmt.Errorf(`map value %q: invalid slice outside of IN clause`, tm.name)
 				}
-				if val.Len() != tm.slice.length {
+				if val.Len() != tm.sliceAllowed.length {
 					// This should change it in the same object that is used to generate the SQL.
-					tm.slice.length = val.Len()
+					tm.sliceAllowed.length = val.Len()
 				}
 				for i := 0; i < val.Len(); i++ {
 					sval := val.Index(i)
