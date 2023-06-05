@@ -593,7 +593,7 @@ func (s *ExprSuite) TestValidQuery(c *C) {
 			c.Fatal(err)
 		}
 
-		c.Assert(query.QueryArgs(), DeepEquals, t.queryValues)
+		c.Assert(query.Args(), DeepEquals, t.queryValues)
 	}
 }
 

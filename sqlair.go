@@ -151,6 +151,14 @@ func (q *Query) Get(outputArgs ...any) error {
 	return err
 }
 
+func (q *Query) exec() (sql.Result, error) {
+	return q.qs.ExecContext(q.ctx, q.qe.SQL(), q.qe.Args()...)
+}
+
+func (q *Query) query() (*sql.Rows, error) {
+	return q.qs.QueryContext(q.ctx, q.qe.SQL(), q.qe.Args()...)
+}
+
 // Iter returns an Iterator to iterate through the results row by row.
 func (q *Query) Iter() *Iterator {
 	if q.err != nil {
@@ -161,12 +169,12 @@ func (q *Query) Iter() *Iterator {
 	var err error
 	var cols []string
 	if q.qe.HasOutputs() {
-		rows, err = q.qs.QueryContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
+		rows, err = q.query()
 		if err == nil { // if err IS nil
 			cols, err = rows.Columns()
 		}
 	} else {
-		result, err = q.qs.ExecContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
+		result, err = q.exec()
 	}
 	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err, result: result}
 }
