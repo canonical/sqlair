@@ -67,19 +67,12 @@ func (db *DB) PlainDB() *sql.DB {
 	return db.db
 }
 
-// querySubstrate abstracts the different surfaces that the query can be run on.
-// For example, the database or a transaction.
-type querySubstrate interface {
-	QueryContext(ctx context.Context, sql string, args ...any) (*sql.Rows, error)
-	ExecContext(ctx context.Context, sql string, args ...any) (sql.Result, error)
-}
-
 // Query holds the results of a database query.
 type Query struct {
-	qe  *expr.QueryExpr
-	qs  querySubstrate
-	ctx context.Context
-	err error
+	qe   *expr.QueryExpr
+	stmt *sql.Stmt
+	ctx  context.Context
+	err  error
 }
 
 // Iterator is used to iterate over the results of the query.
@@ -102,9 +95,9 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 	var stmt *sql.Stmt
 	qe, err := s.pe.Query(inputArgs...)
 	if err == nil {
-		stmt, err = sql.Prepare(qe.SQL())
+		stmt, err = db.db.Prepare(qe.SQL())
 	}
-	return &Query{qs: db.db, qe: qe, stmt: stmt, ctx: ctx, err: err}
+	return &Query{qe: qe, stmt: stmt, ctx: ctx, err: err}
 }
 
 // Run is an alias for Get that takes no arguments.
@@ -152,11 +145,11 @@ func (q *Query) Get(outputArgs ...any) error {
 }
 
 func (q *Query) exec() (sql.Result, error) {
-	return q.qs.ExecContext(q.ctx, q.qe.SQL(), q.qe.Args()...)
+	return q.stmt.ExecContext(q.ctx, q.qe.Args()...)
 }
 
 func (q *Query) query() (*sql.Rows, error) {
-	return q.qs.QueryContext(q.ctx, q.qe.SQL(), q.qe.Args()...)
+	return q.stmt.QueryContext(q.ctx, q.qe.Args()...)
 }
 
 // Iter returns an Iterator to iterate through the results row by row.
@@ -376,6 +369,10 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		ctx = context.Background()
 	}
 
+	var stmt *sql.Stmt
 	qe, err := s.pe.Query(inputArgs...)
-	return &Query{qs: tx.tx, qe: qe, ctx: ctx, err: err}
+	if err == nil {
+		stmt, err = tx.tx.Prepare(qe.SQL())
+	}
+	return &Query{qe: qe, stmt: stmt, ctx: ctx, err: err}
 }
