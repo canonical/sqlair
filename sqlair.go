@@ -99,8 +99,12 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		ctx = context.Background()
 	}
 
+	var stmt *sql.Stmt
 	qe, err := s.pe.Query(inputArgs...)
-	return &Query{qs: db.db, qe: qe, ctx: ctx, err: err}
+	if err == nil {
+		stmt, err = sql.Prepare(qe.SQL())
+	}
+	return &Query{qs: db.db, qe: qe, stmt: stmt, ctx: ctx, err: err}
 }
 
 // Run is an alias for Get that takes no arguments.

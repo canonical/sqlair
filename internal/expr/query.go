@@ -8,11 +8,11 @@ import (
 	"strings"
 )
 
-func (qe *QueryExpr) QuerySQL() string {
+func (qe *QueryExpr) SQL() string {
 	return qe.sql
 }
 
-func (qe *QueryExpr) QueryArgs() []any {
+func (qe *QueryExpr) Args() []any {
 	return qe.args
 }
 
