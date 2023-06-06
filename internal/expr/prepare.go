@@ -55,9 +55,9 @@ func starCount(fns []fullName) int {
 	return s
 }
 
-// checkValidOutput checks that the statement is well formed with regard to
+// checkValidOutputExpr checks that the statement is well formed with regard to
 // asterisks and the number of columns and types.
-func checkValidOutput(p *outputPart) error {
+func checkValidOutputExpr(p *outputPart) error {
 	numTypes := len(p.targetTypes)
 	numColumns := len(p.sourceColumns)
 	starTypes := starCount(p.targetTypes)
@@ -109,7 +109,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 	var typeMembers = make([]typeMember, 0)
 
 	// Check the asterisks are well formed (if present).
-	if err := checkValidOutput(p); err != nil {
+	if err := checkValidOutputExpr(p); err != nil {
 		return nil, nil, err
 	}
 
