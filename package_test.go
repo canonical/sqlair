@@ -432,7 +432,7 @@ func (s *PackageSuite) TestGetErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: []any{&Person{}},
-		err:     `invalid input parameter: type "Person" not passed as a parameter`,
+		err:     `invalid input parameter: type "Person" not found`,
 	}, {
 		summary: "no outputs",
 		query:   "UPDATE person SET id=300 WHERE id=30",

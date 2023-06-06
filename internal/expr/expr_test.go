@@ -436,15 +436,15 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Person{}},
-		err:         `cannot prepare expression: type "Address" not passed as a parameter, have: Person`,
+		err:         `cannot prepare expression: type "Address" not found, have: Person`,
 	}, {
 		query:       "SELECT street AS &Address.street FROM t",
 		prepareArgs: []any{},
-		err:         `cannot prepare expression: type "Address" not passed as a parameter, have: `,
+		err:         `cannot prepare expression: type "Address" not found, have: `,
 	}, {
 		query:       "SELECT street AS &Address.id FROM t",
 		prepareArgs: []any{Person{}},
-		err:         `cannot prepare expression: type "Address" not passed as a parameter, have: Person`,
+		err:         `cannot prepare expression: type "Address" not found, have: Person`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{[]any{Person{}}},
@@ -601,7 +601,7 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
 		queryArgs:   []any{Address{Street: "Dead end road"}},
-		err:         `invalid input parameter: type "Person" not passed as a parameter, have: Address`,
+		err:         `invalid input parameter: type "Person" not found, have: Address`,
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
@@ -641,7 +641,7 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
 		queryArgs:   []any{},
-		err:         `invalid input parameter: type "Address" not passed as a parameter`,
+		err:         `invalid input parameter: type "Address" not found`,
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Person.id, y = $Person.name",
 		prepareArgs: []any{Person{}},
@@ -667,7 +667,7 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT street FROM t WHERE y = $Person.name",
 		prepareArgs: []any{outerP},
 		queryArgs:   []any{shadowedP},
-		err:         "invalid input parameter: type expr_test.Person not passed as a parameter, have expr_test.Person",
+		err:         "invalid input parameter: type expr_test.Person not found, have expr_test.Person",
 	}}
 
 	tests = append(tests, testsShadowed...)

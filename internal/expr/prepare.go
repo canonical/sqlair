@@ -82,9 +82,9 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
 	if !ok {
 		ts := getKeys(ti)
 		if len(ts) == 0 {
-			return nil, fmt.Errorf(`type %q not passed as a parameter`, p.source.prefix)
+			return nil, fmt.Errorf(`type %q not found`, p.source.prefix)
 		} else {
-			return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, p.source.prefix, strings.Join(ts, ", "))
+			return nil, fmt.Errorf(`type %q not found, have: %s`, p.source.prefix, strings.Join(ts, ", "))
 		}
 	}
 	switch info := info.(type) {
@@ -119,7 +119,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 	for _, t := range p.target {
 		info, ok = ti[t.prefix]
 		if !ok {
-			return nil, nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, t.prefix, strings.Join(getKeys(ti), ", "))
+			return nil, nil, fmt.Errorf(`type %q not found, have: %s`, t.prefix, strings.Join(getKeys(ti), ", "))
 		}
 		if t.name != "*" {
 			// For a none star expression we record output destinations here.
