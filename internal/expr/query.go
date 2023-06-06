@@ -87,9 +87,9 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		}
 		var val reflect.Value
 		switch tm := typeMember.(type) {
-		case structField:
+		case *structField:
 			val = v.FieldByIndex(tm.index)
-		case mapKey:
+		case *mapKey:
 			val = v.MapIndex(reflect.ValueOf(tm.name))
 			if val.Kind() == reflect.Invalid {
 				return nil, fmt.Errorf(`map %q does not contain key %q`, outerType.Name(), tm.name)
@@ -171,13 +171,13 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 			return nil, nil, fmt.Errorf("type %q found in query but not passed to get", typeMember.outerType().Name())
 		}
 		switch tm := typeMember.(type) {
-		case structField:
+		case *structField:
 			val := outputVal.FieldByIndex(tm.index)
 			if !val.CanSet() {
 				return nil, nil, fmt.Errorf("internal error: cannot set field %s of struct %s", tm.name, tm.structType.Name())
 			}
 			ptrs = append(ptrs, val.Addr().Interface())
-		case mapKey:
+		case *mapKey:
 			scanVal := reflect.New(tm.mapType.Elem()).Elem()
 			ptrs = append(ptrs, scanVal.Addr().Interface())
 			mapSetInfos = append(mapSetInfos, mapSetInfo{keyVal: reflect.ValueOf(tm.name), scanVal: scanVal, mapVal: outputVal})
