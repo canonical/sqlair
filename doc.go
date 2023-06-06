@@ -56,10 +56,10 @@ SQLair output expressions can take the following formats:
 
  4. (t1.col_name1, t2.col_name2) AS &Type.*
     - Fetches and sets only the specified columns (the table is optional).
-    - This form can be used with maps, the map key will not include the table name.
+    - If Type is a map they will be stored at "col_name1" and "col_name2".
 
- 5. (renamed_col1, renamed_col2) AS (&Type.col_name1, &Type.col_name2)
-    - Fetches the renamed columns from the database and sets them to the fields/keys of the named columns.
+ 5. (col_name1, col_name2) AS (&Type.other_col1, &Type.other_col2)
+    - Fetches the columns from the database and stores them at other_col1 and other_col2 in Type.
 
 Multiple input and output expressions can be written in a single query.
 */
