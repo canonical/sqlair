@@ -192,7 +192,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 		}
 	}
 
-	// Case 2: None star type cases e.g. "...(&P.name, &P.id)".
+	// Case 2: None star target cases e.g. "...(&P.name, &P.id)".
 
 	// Case 2.1: Explicit columns e.g. "name_1 AS P.name".
 	if len(p.sourceColumns) > 0 {
