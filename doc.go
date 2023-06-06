@@ -1,8 +1,8 @@
 /*
-SQLair is a convenience layer for SQL databases that embeds Go structs directly into SQL queries.
+SQLair is a convenience layer for SQL databases that embeds Go structs and maps directly into SQL queries.
 
-The SQL syntax is expanded with SQLair input and output expressions which indicate parts of the query that correspond to Go structs.
-This allows the user to specify the Go structs they want in the SQL query itself whilst allowing the full power of SQL to be utilised.
+The SQL syntax is expanded with SQLair input and output expressions which indicate the parts of the query that correspond to Go structs or maps.
+This allows the user to specify the Go structs/maps they want in the SQL query itself whilst allowing the full power of SQL to be utilised.
 This package also provides an alternative API for reading the rows from the database.
 SQLair relies on database/sql for all the underlying operations.
 
@@ -37,24 +37,29 @@ SQLair input expressions take the format:
 
 	$Type.col_name
 
-Where Type is a struct and col_name is a `db` tag on one of the structs fields.
+If Type is a struct then col_name is a `db` tag on one of the structs fields.
+If Type is a map then col_name is a key in the map.
 
 SQLair output expressions can take the following formats:
 
  1. &Type.col_name
-    - Fetches col_name and sets the corresponding field of Type.
+    - Fetches col_name and sets it in Type.
+    - If Type is a struct this will be the field tagged with col_name.
+    - If Type is a map this will be the value with key "col_name".
 
  2. &Type.*
     - Fetches and sets all the tagged fields of Type.
+    - This form cannot be used with maps.
 
  3. table.* AS &Type.*
     - Does the same as 2 but prepends all columns with the table name.
 
  4. (t1.col_name1, t2.col_name2) AS &Type.*
     - Fetches and sets only the specified columns (the table is optional).
+    - If Type is a map they will be stored at "col_name1" and "col_name2".
 
- 5. (renamed_col1, renamed_col2) AS (&Type.col_name1, &Type.col_name2)
-    - Fetches the renamed columns from the database and sets them to the fields of the named columns.
+ 5. (col_name1, col_name2) AS (&Type.other_col1, &Type.other_col2)
+    - Fetches the columns from the database and stores them at other_col1 and other_col2 in Type.
 
 Multiple input and output expressions can be written in a single query.
 */

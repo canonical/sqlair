@@ -89,7 +89,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
 	}
 	switch info := info.(type) {
 	case *mapInfo:
-		return mapKey{name: p.sourceType.name, mapType: info.typ()}, nil
+		return &mapKey{name: p.sourceType.name, mapType: info.typ()}, nil
 	case *structInfo:
 		f, ok := info.tagToField[p.sourceType.name]
 		if !ok {
@@ -126,7 +126,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 			// For a star expression we fill out the destinations as we generate the columns.
 			switch info := info.(type) {
 			case *mapInfo:
-				typeMembers = append(typeMembers, mapKey{name: t.name, mapType: info.typ()})
+				typeMembers = append(typeMembers, &mapKey{name: t.name, mapType: info.typ()})
 			case *structInfo:
 				f, ok := info.tagToField[t.name]
 				if !ok {
@@ -173,7 +173,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 			case *mapInfo:
 				for _, c := range p.sourceColumns {
 					outCols = append(outCols, c)
-					typeMembers = append(typeMembers, mapKey{name: c.name, mapType: info.typ()})
+					typeMembers = append(typeMembers, &mapKey{name: c.name, mapType: info.typ()})
 				}
 				return outCols, typeMembers, nil
 			case *structInfo:
