@@ -375,6 +375,70 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 	}
 }
 
+func (s *PackageSuite) TestNulls(c *C) {
+	type PersonWithOmit struct {
+		ID         int    `db:"id,omitempty"`
+		Fullname   string `db:"name"`
+		PostalCode int    `db:"address_id, omitempty"`
+	}
+	type NullGuy struct {
+		ID         sql.NullInt64  `db:"id"`
+		Fullname   sql.NullString `db:"name"`
+		PostalCode sql.NullInt64  `db:"address_id"`
+	}
+
+	var tests = []struct {
+		summary  string
+		query    string
+		types    []any
+		inputs   []any
+		outputs  []any
+		expected []any
+	}{{
+		summary:  "omityempty",
+		query:    `SELECT &PersonWithOmit.* FROM person WHERE name = "Nully"`,
+		types:    []any{PersonWithOmit{}},
+		inputs:   []any{},
+		outputs:  []any{&PersonWithOmit{ID: 5}},
+		expected: []any{&PersonWithOmit{Fullname: "Nully", ID: 5}},
+	}}
+
+	dropTables, sqldb, err := personAndAddressDB()
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	db := sqlair.NewDB(sqldb)
+
+	insertNullPerson, err := sqlair.Prepare("INSERT INTO person VALUES ('Nully', NULL, NULL, NULL);")
+	c.Assert(err, IsNil)
+	c.Assert(db.Query(nil, insertNullPerson).Run(), IsNil)
+
+	for _, t := range tests {
+		stmt, err := sqlair.Prepare(t.query, t.types...)
+		if err != nil {
+			c.Errorf("\ntest %q failed (prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+			continue
+		}
+
+		q := db.Query(nil, stmt, t.inputs...)
+		err = q.Get(t.outputs...)
+		if err != nil {
+			c.Errorf("\ntest %q failed (Get):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
+			continue
+		}
+		for i, s := range t.expected {
+			c.Assert(t.outputs[i], DeepEquals, s,
+				Commentf("\ntest %q failed:\ninput: %s", t.summary, t.query))
+		}
+	}
+
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	if err != nil {
+		c.Fatal(err)
+	}
+}
+
 func (s *PackageSuite) TestValidGet(c *C) {
 	var tests = []struct {
 		summary  string

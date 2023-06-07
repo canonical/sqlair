@@ -119,6 +119,11 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 		mapVal  reflect.Value
 	}
 	var mapSetInfos = []mapSetInfo{}
+	type nullableInfo struct {
+		fieldVal reflect.Value
+		nullT    NullT
+	}
+	var nullableInfos = []nullableInfo{}
 	var typeDest = make(map[reflect.Type]reflect.Value)
 	outputVals := []reflect.Value{}
 	for _, outputArg := range outputArgs {
@@ -174,7 +179,13 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 			if !val.CanSet() {
 				return nil, nil, fmt.Errorf("internal error: cannot set field %s of struct %s", tm.name, tm.structType.Name())
 			}
-			ptrs = append(ptrs, val.Addr().Interface())
+			if tm.omitEmpty {
+				nullT := NullT{Value: reflect.New(val.Type()).Elem()}
+				ptrs = append(ptrs, &nullT)
+				nullableInfos = append(nullableInfos, nullableInfo{fieldVal: val, nullT: nullT})
+			} else {
+				ptrs = append(ptrs, val.Addr().Interface())
+			}
 		case *mapKey:
 			scanVal := reflect.New(tm.mapType.Elem()).Elem()
 			ptrs = append(ptrs, scanVal.Addr().Interface())
@@ -185,6 +196,11 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 	onSuccess = func() {
 		for _, mi := range mapSetInfos {
 			mi.mapVal.SetMapIndex(mi.keyVal, mi.scanVal)
+		}
+		for _, ni := range nullableInfos {
+			if ni.nullT.Valid {
+				ni.fieldVal.Set(ni.nullT.Value)
+			}
 		}
 	}
 
