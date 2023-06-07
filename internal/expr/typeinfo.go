@@ -166,7 +166,7 @@ func parseTag(tag string) (string, bool, error) {
 		}
 	}
 
-	name := options[0]
+	name := strings.TrimSpace(options[0])
 	if len(name) == 0 {
 		return "", false, fmt.Errorf("empty db tag")
 	}
