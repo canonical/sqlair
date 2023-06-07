@@ -403,28 +403,28 @@ func (s *PackageSuite) TestNulls(c *C) {
 		outputs  []any
 		expected []any
 	}{{
-		summary:  "nulls with omityempty",
+		summary:  "nulls with omitempty",
 		query:    `SELECT &PersonWithOmit.* FROM person WHERE name = "Nully"`,
 		types:    []any{PersonWithOmit{}},
 		inputs:   []any{},
 		outputs:  []any{&PersonWithOmit{ID: 5}},
 		expected: []any{&PersonWithOmit{Fullname: "Nully", ID: 5}},
 	}, {
-		summary:  "regular values with omityempty",
+		summary:  "regular values with omitempty",
 		query:    `SELECT &PersonWithOmit.* FROM person WHERE name = "Mark"`,
 		types:    []any{PersonWithOmit{}},
 		inputs:   []any{},
 		outputs:  []any{&PersonWithOmit{ID: 5}},
 		expected: []any{&PersonWithOmit{Fullname: "Mark", ID: 20, PostalCode: 1500}},
 	}, {
-		summary:  "null with omityempty and custom types",
+		summary:  "null with omitempty and custom types",
 		query:    `SELECT &PersonWithStrangeTypesAndOmit.* FROM person WHERE name = "Nully"`,
 		types:    []any{PersonWithStrangeTypesAndOmit{}},
 		inputs:   []any{},
 		outputs:  []any{&PersonWithStrangeTypesAndOmit{ID: 5}},
 		expected: []any{&PersonWithStrangeTypesAndOmit{Fullname: "Nully", ID: 5}},
 	}, {
-		summary:  "regular values with omityempty and custom types",
+		summary:  "regular values with omitempty and custom types",
 		query:    `SELECT &PersonWithStrangeTypesAndOmit.* FROM person WHERE name = "Mark"`,
 		types:    []any{PersonWithStrangeTypesAndOmit{}},
 		inputs:   []any{},
