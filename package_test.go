@@ -395,12 +395,26 @@ func (s *PackageSuite) TestNulls(c *C) {
 		outputs  []any
 		expected []any
 	}{{
-		summary:  "omityempty",
+		summary:  "nulls with omityempty",
 		query:    `SELECT &PersonWithOmit.* FROM person WHERE name = "Nully"`,
 		types:    []any{PersonWithOmit{}},
 		inputs:   []any{},
 		outputs:  []any{&PersonWithOmit{ID: 5}},
 		expected: []any{&PersonWithOmit{Fullname: "Nully", ID: 5}},
+	}, {
+		summary:  "regular values with omityempty",
+		query:    `SELECT &PersonWithOmit.* FROM person WHERE name = "Mark"`,
+		types:    []any{PersonWithOmit{}},
+		inputs:   []any{},
+		outputs:  []any{&PersonWithOmit{ID: 5}},
+		expected: []any{&PersonWithOmit{Fullname: "Mark", ID: 20, PostalCode: 1500}},
+	}, {
+		summary:  "regular nulls",
+		query:    `SELECT &NullGuy.* FROM person WHERE name = "Nully"`,
+		types:    []any{NullGuy{}},
+		inputs:   []any{},
+		outputs:  []any{&NullGuy{}},
+		expected: []any{&NullGuy{Fullname: sql.NullString{Valid: true, String: "Nully"}, ID: sql.NullInt64{Valid: false}, PostalCode: sql.NullInt64{Valid: false}}},
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()

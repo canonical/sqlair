@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+
+	"github.com/canonical/sqlair/internal/convert"
 )
 
 func (qe *QueryExpr) QuerySQL() string {
@@ -100,6 +102,20 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	return &QueryExpr{outputs: pe.outputs, sql: pe.sql, args: qargs}, nil
 }
 
+type NullT struct {
+	Value reflect.Value
+	Valid bool
+}
+
+func (nt *NullT) Scan(src any) error {
+	if src == nil {
+		nt.Valid = false
+		return nil
+	}
+	nt.Valid = true
+	return convert.ConvertAssign(nt.Value.Addr().Interface(), src)
+}
+
 // ScanArgs returns list of pointers to the struct fields that are listed in qe.outputs.
 // All the structs and maps mentioned in the query must be in outputArgs.
 func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []any, onSuccess func(), err error) {
@@ -121,7 +137,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 	var mapSetInfos = []mapSetInfo{}
 	type nullableInfo struct {
 		fieldVal reflect.Value
-		nullT    NullT
+		nullT    *NullT
 	}
 	var nullableInfos = []nullableInfo{}
 	var typeDest = make(map[reflect.Type]reflect.Value)
@@ -182,7 +198,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 			if tm.omitEmpty {
 				nullT := NullT{Value: reflect.New(val.Type()).Elem()}
 				ptrs = append(ptrs, &nullT)
-				nullableInfos = append(nullableInfos, nullableInfo{fieldVal: val, nullT: nullT})
+				nullableInfos = append(nullableInfos, nullableInfo{fieldVal: val, nullT: &nullT})
 			} else {
 				ptrs = append(ptrs, val.Addr().Interface())
 			}

@@ -18,6 +18,9 @@ import (
 // This file was imported from database.sql.convert for
 // go 1.20.5 with minor modifications to get the convertAssign function.
 
+// This is used in NullT.Scan to provide automatic type conversions for
+// types that could be Null.
+
 var errNilPtr = errors.New("destination pointer is nil") // embedded in descriptive error
 
 // convertAssignRows copies to dest the value in src, converting it if possible.
