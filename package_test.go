@@ -381,6 +381,14 @@ func (s *PackageSuite) TestNulls(c *C) {
 		Fullname   string `db:"name"`
 		PostalCode int    `db:"address_id, omitempty"`
 	}
+	type I int
+	type J = int
+	type S = string
+	type PersonWithStrangeTypesAndOmit struct {
+		ID         I `db:"id,omitempty"`
+		Fullname   S `db:"name,omitempty"`
+		PostalCode J `db:"address_id,omitempty"`
+	}
 	type NullGuy struct {
 		ID         sql.NullInt64  `db:"id"`
 		Fullname   sql.NullString `db:"name"`
@@ -408,6 +416,20 @@ func (s *PackageSuite) TestNulls(c *C) {
 		inputs:   []any{},
 		outputs:  []any{&PersonWithOmit{ID: 5}},
 		expected: []any{&PersonWithOmit{Fullname: "Mark", ID: 20, PostalCode: 1500}},
+	}, {
+		summary:  "null with omityempty and custom types",
+		query:    `SELECT &PersonWithStrangeTypesAndOmit.* FROM person WHERE name = "Nully"`,
+		types:    []any{PersonWithStrangeTypesAndOmit{}},
+		inputs:   []any{},
+		outputs:  []any{&PersonWithStrangeTypesAndOmit{ID: 5}},
+		expected: []any{&PersonWithStrangeTypesAndOmit{Fullname: "Nully", ID: 5}},
+	}, {
+		summary:  "regular values with omityempty and custom types",
+		query:    `SELECT &PersonWithStrangeTypesAndOmit.* FROM person WHERE name = "Mark"`,
+		types:    []any{PersonWithStrangeTypesAndOmit{}},
+		inputs:   []any{},
+		outputs:  []any{&PersonWithStrangeTypesAndOmit{ID: 5}},
+		expected: []any{&PersonWithStrangeTypesAndOmit{Fullname: "Mark", ID: 20, PostalCode: 1500}},
 	}, {
 		summary:  "regular nulls",
 		query:    `SELECT &NullGuy.* FROM person WHERE name = "Nully"`,
