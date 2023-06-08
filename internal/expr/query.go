@@ -112,8 +112,11 @@ func (nt *NullT) Scan(src any) error {
 		nt.Valid = false
 		return nil
 	}
-	nt.Valid = true
-	return convert.ConvertAssign(nt.Value.Addr().Interface(), src)
+	err := convert.ConvertAssign(nt.Value.Addr().Interface(), src)
+	if err == nil {
+		nt.Valid = true
+	}
+	return err
 }
 
 // ScanArgs returns list of pointers to the struct fields that are listed in qe.outputs.
