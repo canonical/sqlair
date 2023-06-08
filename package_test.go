@@ -884,7 +884,7 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 	err = tx.Commit()
 	c.Assert(err, IsNil)
 	err = q.Run()
-	c.Assert(err, ErrorMatches, "sql: transaction has already been committed or rolled back")
+	c.Assert(err, ErrorMatches, "sql: statement is closed")
 
 	// Test running query after rollback.
 	tx, err = db.Begin(ctx, nil)
@@ -894,7 +894,7 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 	err = tx.Rollback()
 	c.Assert(err, IsNil)
 	err = q.Run()
-	c.Assert(err, ErrorMatches, "sql: transaction has already been committed or rolled back")
+	c.Assert(err, ErrorMatches, "sql: statement is closed")
 
 	err = db.Query(ctx, sqlair.MustPrepare(dropTables)).Run()
 	c.Assert(err, IsNil)

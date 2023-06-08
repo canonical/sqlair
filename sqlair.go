@@ -1,10 +1,12 @@
 package sqlair
 
 import (
+	"container/list"
 	"context"
 	"database/sql"
 	"fmt"
 	"reflect"
+	"sync"
 
 	"github.com/canonical/sqlair/internal/expr"
 )
@@ -55,11 +57,13 @@ func MustPrepare(query string, typeSamples ...any) *Statement {
 }
 
 type DB struct {
-	db *sql.DB
+	prepedCache      *lruCache
+	prepedCacheMutex sync.RWMutex
+	db               *sql.DB
 }
 
 func NewDB(db *sql.DB) *DB {
-	return &DB{db: db}
+	return &DB{db: db, prepedCache: newLRUCache(500)}
 }
 
 // PlainDB returns the underlying database object.
@@ -67,19 +71,12 @@ func (db *DB) PlainDB() *sql.DB {
 	return db.db
 }
 
-// querySubstrate abstracts the different surfaces that the query can be run on.
-// For example, the database or a transaction.
-type querySubstrate interface {
-	QueryContext(ctx context.Context, sql string, args ...any) (*sql.Rows, error)
-	ExecContext(ctx context.Context, sql string, args ...any) (sql.Result, error)
-}
-
 // Query holds the results of a database query.
 type Query struct {
-	qe  *expr.QueryExpr
-	qs  querySubstrate
-	ctx context.Context
-	err error
+	qe   *expr.QueryExpr
+	stmt *sql.Stmt
+	ctx  context.Context
+	err  error
 }
 
 // Iterator is used to iterate over the results of the query.
@@ -92,6 +89,58 @@ type Iterator struct {
 	started bool
 }
 
+type lruCache struct {
+	ll   *list.List
+	c    map[index]*list.Element
+	size int
+}
+
+type index struct {
+	tx *TX
+	s  *Statement
+}
+
+type entry struct {
+	key   index
+	value *sql.Stmt
+}
+
+func newLRUCache(size int) *lruCache {
+	c := &lruCache{}
+	c.ll = list.New()
+	c.c = make(map[index]*list.Element)
+	c.size = size
+	return c
+}
+
+func (c *lruCache) lookup(s *Statement, tx *TX) (*sql.Stmt, bool) {
+	e, ok := c.c[index{tx: tx, s: s}]
+	if !ok {
+		return nil, ok
+	}
+	c.ll.MoveToFront(e)
+	return e.Value.(*entry).value, ok
+}
+
+func (c *lruCache) add(s *Statement, tx *TX, ps *sql.Stmt) error {
+	k := index{tx: tx, s: s}
+	if e, ok := c.c[k]; ok {
+		c.ll.MoveToFront(e)
+		return nil
+	}
+	var err error
+	e := c.ll.PushFront(&entry{key: k, value: ps})
+	c.c[k] = e
+	if c.ll.Len() > c.size {
+		b := c.ll.Back()
+		delete(c.c, b.Value.(*entry).key)
+		c.ll.Remove(b)
+		// Close the *sql.Stmt
+		err = b.Value.(*entry).value.Close()
+	}
+	return err
+}
+
 // Query takes a context, prepared SQLair Statement and the structs mentioned in the query arguments.
 // It returns a Query object for iterating over the results.
 func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query {
@@ -99,8 +148,26 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		ctx = context.Background()
 	}
 
-	qe, err := s.pe.Query(inputArgs...)
-	return &Query{qs: db.db, qe: qe, ctx: ctx, err: err}
+	// Query only actually prepares the query arguemnt, the sql already
+	// exists in pe. This and the prepared stmt lookup could be swapped.
+	var err error
+	var qe *expr.QueryExpr
+	qe, err = s.pe.Query(inputArgs...)
+	if err != nil {
+		return &Query{ctx: ctx, err: err}
+	}
+
+	db.prepedCacheMutex.Lock()
+	defer db.prepedCacheMutex.Unlock()
+	ps, ok := db.prepedCache.lookup(s, nil)
+	if !ok {
+		ps, err = db.db.PrepareContext(ctx, qe.QuerySQL())
+		if err == nil {
+			err = db.prepedCache.add(s, nil, ps)
+		}
+	}
+
+	return &Query{stmt: ps, qe: qe, ctx: ctx, err: err}
 }
 
 // Run is an alias for Get that takes no arguments.
@@ -157,12 +224,12 @@ func (q *Query) Iter() *Iterator {
 	var err error
 	var cols []string
 	if q.qe.HasOutputs() {
-		rows, err = q.qs.QueryContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
+		rows, err = q.stmt.QueryContext(q.ctx, q.qe.QueryArgs()...)
 		if err == nil { // if err IS nil
 			cols, err = rows.Columns()
 		}
 	} else {
-		result, err = q.qs.ExecContext(q.ctx, q.qe.QuerySQL(), q.qe.QueryArgs()...)
+		result, err = q.stmt.ExecContext(q.ctx, q.qe.QueryArgs()...)
 	}
 	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err, result: result}
 }
@@ -321,6 +388,7 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 
 type TX struct {
 	tx *sql.Tx
+	db *DB
 }
 
 // Begin starts a transaction.
@@ -329,7 +397,7 @@ func (db *DB) Begin(ctx context.Context, opts *TXOptions) (*TX, error) {
 		ctx = context.Background()
 	}
 	tx, err := db.db.BeginTx(ctx, opts.plainTXOptions())
-	return &TX{tx: tx}, err
+	return &TX{tx: tx, db: db}, err
 }
 
 // Commit commits the transaction.
@@ -365,5 +433,27 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 	}
 
 	qe, err := s.pe.Query(inputArgs...)
-	return &Query{qs: tx.tx, qe: qe, ctx: ctx, err: err}
+	if err != nil {
+		return &Query{ctx: ctx, err: err}
+	}
+
+	tx.db.prepedCacheMutex.Lock()
+	defer tx.db.prepedCacheMutex.Unlock()
+
+	var ok bool
+	var ps *sql.Stmt
+	ps, ok = tx.db.prepedCache.lookup(s, tx)
+	if !ok {
+		ps, ok = tx.db.prepedCache.lookup(s, nil)
+		if !ok {
+			ps, err = tx.tx.PrepareContext(ctx, qe.QuerySQL())
+		} else {
+			ps = tx.tx.Stmt(ps)
+		}
+		if err != nil {
+			err = tx.db.prepedCache.add(s, tx, ps)
+		}
+	}
+
+	return &Query{stmt: ps, qe: qe, ctx: ctx, err: err}
 }
