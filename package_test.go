@@ -912,7 +912,7 @@ func (s *PackageSuite) TestPreparedCaching(c *C) {
 	c.Assert(err, IsNil)
 	selectChurchRoad, err := sqlair.Prepare(`
 		SELECT &Address.*
-		FROM address 
+		FROM address
 		WHERE street = "Church Road"
 	`, Address{})
 	c.Assert(err, IsNil)
@@ -969,6 +969,8 @@ func (s *PackageSuite) TestPreparedCaching(c *C) {
 	err = tx.Query(nil, selectMark).Get(&p)
 	c.Assert(err, IsNil)
 	c.Assert(p, Equals, mark)
+
+	tx.Commit()
 
 	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	c.Assert(err, IsNil)
