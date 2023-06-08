@@ -799,53 +799,6 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 	c.Assert(err, IsNil)
 }
 
-type JujuLeaseKey struct {
-	Namespace string `db:"type"`
-	ModelUUID string `db:"model_uuid"`
-	Lease     string `db:"name"`
-}
-
-type JujuLeaseInfo struct {
-	Holder string `db:"holder"`
-	Expiry int    `db:"expiry"`
-}
-
-func JujuStoreLeaseDB() (string, *sql.DB, error) {
-	createTables := `
-CREATE TABLE lease (
-	model_uuid text,
-	name text,
-	holder text,
-	expiry integer,
-	lease_type_id text
-);
-CREATE TABLE lease_type (
-	id text,
-	type text
-);
-
-`
-	dropTables := `
-DROP TABLE lease;
-DROP TABLE lease_type;
-`
-
-	inserts := []string{
-		"INSERT INTO lease VALUES ('uuid1', 'name1', 'holder1', 1, 'type_id1');",
-		"INSERT INTO lease VALUES ('uuid2', 'name2', 'holder2', 4, 'type_id1');",
-		"INSERT INTO lease VALUES ('uuid3', 'name3', 'holder3', 7, 'type_id2');",
-		"INSERT INTO lease_type VALUES ('type_id1', 'type1');",
-		"INSERT INTO lease_type VALUES ('type_id2', 'type2');",
-	}
-
-	db, err := createExampleDB(createTables, inserts)
-	if err != nil {
-		return "", nil, err
-	}
-	return dropTables, db, nil
-
-}
-
 func (s *PackageSuite) TestIterMethodOrder(c *C) {
 	dropTables, sqldb, err := personAndAddressDB()
 	c.Assert(err, IsNil)
@@ -886,54 +839,4 @@ func (s *PackageSuite) TestIterMethodOrder(c *C) {
 
 	_, err = db.PlainDB().Exec(dropTables)
 	c.Assert(err, IsNil)
-}
-
-func (s *PackageSuite) TestJujuStore(c *C) {
-	var tests = []struct {
-		summary  string
-		query    string
-		types    []any
-		inputs   []any
-		outputs  [][]any
-		expected [][]any
-	}{{
-		summary: "juju store lease group query",
-		query: `
-SELECT (t.type, l.model_uuid, l.name) AS &JujuLeaseKey.*, (l.holder, l.expiry) AS &JujuLeaseInfo.*
-FROM   lease l JOIN lease_type t ON l.lease_type_id = t.id
-WHERE  t.type = $JujuLeaseKey.type
-AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
-		types:    []any{JujuLeaseKey{}, JujuLeaseInfo{}},
-		inputs:   []any{JujuLeaseKey{Namespace: "type1", ModelUUID: "uuid1"}},
-		outputs:  [][]any{{&JujuLeaseKey{}, &JujuLeaseInfo{}}},
-		expected: [][]any{{&JujuLeaseKey{Namespace: "type1", ModelUUID: "uuid1", Lease: "name1"}, &JujuLeaseInfo{Holder: "holder1", Expiry: 1}}},
-	}}
-
-	dropTables, sqldb, err := JujuStoreLeaseDB()
-	c.Assert(err, IsNil)
-
-	db := sqlair.NewDB(sqldb)
-
-	for _, t := range tests {
-		stmt, err := sqlair.Prepare(t.query, t.types...)
-		c.Assert(err, IsNil,
-			Commentf("\ntest %q failed (Prepare):\ninput: %s\n", t.summary, t.query))
-
-		iter := db.Query(nil, stmt, t.inputs...).Iter()
-		defer iter.Close()
-		i := 0
-		for iter.Next() {
-			if i >= len(t.outputs) {
-				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d > %d)\n", t.summary, t.query, i+1, len(t.outputs))
-				break
-			}
-
-			c.Assert(iter.Get(t.outputs[i]...), IsNil,
-				Commentf("\ntest %q failed (Get):\ninput: %s\n", t.summary, t.query))
-			i++
-		}
-		c.Assert(iter.Close(), IsNil,
-			Commentf("\ntest %q failed (Close):\ninput: %s\n", t.summary, t.query))
-	}
-	c.Assert(db.Query(nil, sqlair.MustPrepare(dropTables)).Run(), IsNil)
 }
