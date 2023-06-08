@@ -97,17 +97,20 @@ type Iterator struct {
 	started bool
 }
 
+// A Least Recently Used Cache using a doubly linked list.
 type lruCache struct {
 	ll   *list.List
 	c    map[index]*list.Element
 	size int
 }
 
+// The cache key.
 type index struct {
 	tx *TX
 	s  *Statement
 }
 
+// The cache value.
 type entry struct {
 	key   index
 	value *sql.Stmt
@@ -143,7 +146,7 @@ func (c *lruCache) add(s *Statement, tx *TX, ps *sql.Stmt) error {
 		b := c.ll.Back()
 		delete(c.c, b.Value.(*entry).key)
 		c.ll.Remove(b)
-		// Close the *sql.Stmt
+		// Close the prepared statement on removal from the cache.
 		err = b.Value.(*entry).value.Close()
 	}
 	return err
@@ -468,6 +471,7 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		if !ok {
 			ps, err = tx.tx.PrepareContext(ctx, qe.QuerySQL())
 		} else {
+			// If the statement is alredy prepared on the db, prepare it on the tx.
 			ps = tx.tx.Stmt(ps)
 		}
 		if err != nil {
