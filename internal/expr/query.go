@@ -108,8 +108,8 @@ type NullT struct {
 }
 
 func (nt *NullT) Scan(src any) error {
+	nt.Valid = false
 	if src == nil {
-		nt.Valid = false
 		return nil
 	}
 	err := convert.ConvertAssign(nt.Value.Addr().Interface(), src)
