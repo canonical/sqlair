@@ -62,8 +62,16 @@ type DB struct {
 	db               *sql.DB
 }
 
-func NewDB(db *sql.DB) *DB {
-	return &DB{db: db, prepedCache: newLRUCache(500)}
+type DBOptions struct {
+	PreparedStmtCacheSize int
+}
+
+func NewDB(db *sql.DB, dbopts *DBOptions) *DB {
+	size := 500
+	if dbopts != nil && dbopts.PreparedStmtCacheSize != 0 {
+		size = dbopts.PreparedStmtCacheSize
+	}
+	return &DB{db: db, prepedCache: newLRUCache(size)}
 }
 
 // PlainDB returns the underlying database object.
@@ -139,6 +147,16 @@ func (c *lruCache) add(s *Statement, tx *TX, ps *sql.Stmt) error {
 		err = b.Value.(*entry).value.Close()
 	}
 	return err
+}
+
+// Remove all statements prepared on tx from the cache.
+// Note that this does not close the sql.Stmt.
+func (c *lruCache) removeTX(tx *TX) {
+	for k, _ := range c.c {
+		if k.tx == tx {
+			delete(c.c, k)
+		}
+	}
 }
 
 // Query takes a context, prepared SQLair Statement and the structs mentioned in the query arguments.
@@ -402,11 +420,13 @@ func (db *DB) Begin(ctx context.Context, opts *TXOptions) (*TX, error) {
 
 // Commit commits the transaction.
 func (tx *TX) Commit() error {
+	tx.db.prepedCache.removeTX(tx)
 	return tx.tx.Commit()
 }
 
 // Rollback aborts the transaction.
 func (tx *TX) Rollback() error {
+	tx.db.prepedCache.removeTX(tx)
 	return tx.tx.Rollback()
 }
 
