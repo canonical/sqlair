@@ -900,7 +900,7 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 	c.Assert(err, IsNil)
 }
 
-func (s *PackageSuite) TestPreparedCaching(c *C) {
+func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 	dropTables, sqldb, err := personAndAddressDB()
 	c.Assert(err, IsNil)
 
@@ -935,42 +935,57 @@ func (s *PackageSuite) TestPreparedCaching(c *C) {
 	err = db.Query(nil, selectMark).Get(&p)
 	c.Assert(err, IsNil)
 	c.Assert(p, Equals, mark)
+	c.Assert(db.CheckCacheEQ([]sqlair.TestIndex{
+		{TX: nil, S: selectMark}}), Equals, true)
 
 	err = db.Query(nil, selectChurchRoad).Get(&a)
 	c.Assert(err, IsNil)
 	c.Assert(a, Equals, churchRoad)
+	c.Assert(db.CheckCacheEQ([]sqlair.TestIndex{
+		{TX: nil, S: selectChurchRoad}, {TX: nil, S: selectMark}}), Equals, true)
 
 	// Cache hit.
 	err = db.Query(nil, selectMark).Get(&p)
 	c.Assert(err, IsNil)
 	c.Assert(p, Equals, mark)
+	c.Assert(db.CheckCacheEQ([]sqlair.TestIndex{
+		{TX: nil, S: selectMark}, {TX: nil, S: selectChurchRoad}}), Equals, true)
 
 	// Church Road is removed from cache.
 	err = db.Query(nil, selectFredAndMainStreet).Get(&a, &p)
 	c.Assert(err, IsNil)
 	c.Assert(a, Equals, mainStreet)
 	c.Assert(p, Equals, fred)
+	c.Assert(db.CheckCacheEQ([]sqlair.TestIndex{
+		{TX: nil, S: selectFredAndMainStreet}, {TX: nil, S: selectMark}}), Equals, true)
 
-	// Start a transaction and prepare Mark on it.
+	// Start a transaction and prepare Mark on it using Mark prepared
+	// on the DB. This will also eject the db prepared Mark as it is the LRU.
 	tx, err := db.Begin(nil, nil)
 	c.Assert(err, IsNil)
 	err = tx.Query(nil, selectMark).Get(&p)
 	c.Assert(err, IsNil)
 	c.Assert(p, Equals, mark)
+	c.Assert(db.CheckCacheEQ([]sqlair.TestIndex{
+		{TX: tx, S: selectMark}, {TX: nil, S: selectFredAndMainStreet}}), Equals, true)
 
-	// Find Fred in cache and prepare it on specific transaction.
-	// This will also eject the db Fred as it is the LRU.
-	err = tx.Query(nil, selectFredAndMainStreet).Get(&a, &p)
+	// ChurchRoad not in cache.
+	err = tx.Query(nil, selectChurchRoad).Get(&a)
 	c.Assert(err, IsNil)
-	c.Assert(a, Equals, mainStreet)
-	c.Assert(p, Equals, fred)
+	c.Assert(a, Equals, churchRoad)
+	c.Assert(db.CheckCacheEQ([]sqlair.TestIndex{
+		{TX: tx, S: selectChurchRoad}, {TX: tx, S: selectMark}}), Equals, true)
 
 	// Cache hit on Mark.
 	err = tx.Query(nil, selectMark).Get(&p)
 	c.Assert(err, IsNil)
 	c.Assert(p, Equals, mark)
+	c.Assert(db.CheckCacheEQ([]sqlair.TestIndex{
+		{TX: tx, S: selectMark}, {TX: tx, S: selectChurchRoad}}), Equals, true)
 
+	// Commit should remove any cached prepared statements on the tx.
 	tx.Commit()
+	c.Assert(db.CheckCacheEQ([]sqlair.TestIndex{}), Equals, true)
 
 	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	c.Assert(err, IsNil)

@@ -57,9 +57,9 @@ func MustPrepare(query string, typeSamples ...any) *Statement {
 }
 
 type DB struct {
-	prepedCache      *lruCache
-	prepedCacheMutex sync.RWMutex
-	db               *sql.DB
+	preparedCache      *cache
+	preparedCacheMutex sync.RWMutex
+	db                 *sql.DB
 }
 
 type DBOptions struct {
@@ -71,7 +71,7 @@ func NewDB(db *sql.DB, dbopts *DBOptions) *DB {
 	if dbopts != nil && dbopts.PreparedStmtCacheSize != 0 {
 		size = dbopts.PreparedStmtCacheSize
 	}
-	return &DB{db: db, prepedCache: newLRUCache(size)}
+	return &DB{db: db, preparedCache: newCache(size)}
 }
 
 // PlainDB returns the underlying database object.
@@ -98,10 +98,12 @@ type Iterator struct {
 }
 
 // A Least Recently Used Cache using a doubly linked list.
-type lruCache struct {
-	ll   *list.List
-	c    map[index]*list.Element
-	size int
+type cache struct {
+	// ll is a doubly linked list.
+	// The element at the back is the least recently used.
+	ll    *list.List
+	cache map[index]*list.Element
+	size  int
 }
 
 // The cache key.
@@ -116,48 +118,56 @@ type entry struct {
 	value *sql.Stmt
 }
 
-func newLRUCache(size int) *lruCache {
-	c := &lruCache{}
-	c.ll = list.New()
-	c.c = make(map[index]*list.Element)
-	c.size = size
-	return c
-}
-
-func (c *lruCache) lookup(s *Statement, tx *TX) (*sql.Stmt, bool) {
-	e, ok := c.c[index{tx: tx, s: s}]
-	if !ok {
-		return nil, ok
+func newCache(size int) *cache {
+	return &cache{
+		ll:    list.New(),
+		cache: make(map[index]*list.Element),
+		size:  size,
 	}
-	c.ll.MoveToFront(e)
-	return e.Value.(*entry).value, ok
 }
 
-func (c *lruCache) add(s *Statement, tx *TX, ps *sql.Stmt) error {
+func (c *cache) lookup(s *Statement, tx *TX) (*sql.Stmt, bool) {
+	if e, ok := c.cache[index{tx: tx, s: s}]; ok {
+		c.ll.MoveToFront(e)
+		return e.Value.(*entry).value, true
+	}
+	return nil, false
+}
+
+func (c *cache) lookupNoMove(s *Statement, tx *TX) (*sql.Stmt, bool) {
+	if e, ok := c.cache[index{tx: tx, s: s}]; ok {
+		return e.Value.(*entry).value, true
+	}
+	return nil, false
+}
+
+func (c *cache) add(s *Statement, tx *TX, ps *sql.Stmt) error {
 	k := index{tx: tx, s: s}
-	if e, ok := c.c[k]; ok {
+	if e, ok := c.cache[k]; ok {
 		c.ll.MoveToFront(e)
 		return nil
 	}
-	var err error
 	e := c.ll.PushFront(&entry{key: k, value: ps})
-	c.c[k] = e
+	c.cache[k] = e
 	if c.ll.Len() > c.size {
 		b := c.ll.Back()
-		delete(c.c, b.Value.(*entry).key)
+		delete(c.cache, b.Value.(*entry).key)
 		c.ll.Remove(b)
 		// Close the prepared statement on removal from the cache.
-		err = b.Value.(*entry).value.Close()
+		return b.Value.(*entry).value.Close()
 	}
-	return err
+	return nil
 }
 
 // Remove all statements prepared on tx from the cache.
 // Note that this does not close the sql.Stmt.
-func (c *lruCache) removeTX(tx *TX) {
-	for k, _ := range c.c {
+func (c *cache) removeTX(tx *TX) {
+	for k, v := range c.cache {
 		if k.tx == tx {
-			delete(c.c, k)
+			delete(c.cache, k)
+			// These prepared statements are closed automatically
+			// when the transaction is committed/rolled back.
+			c.ll.Remove(v)
 		}
 	}
 }
@@ -178,17 +188,19 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: err}
 	}
 
-	db.prepedCacheMutex.Lock()
-	defer db.prepedCacheMutex.Unlock()
-	ps, ok := db.prepedCache.lookup(s, nil)
+	db.preparedCacheMutex.Lock()
+	defer db.preparedCacheMutex.Unlock()
+	ps, ok := db.preparedCache.lookup(s, nil)
 	if !ok {
 		ps, err = db.db.PrepareContext(ctx, qe.QuerySQL())
 		if err == nil {
-			err = db.prepedCache.add(s, nil, ps)
+			err = db.preparedCache.add(s, nil, ps)
+		}
+		if err != nil {
+			return &Query{ctx: ctx, err: err}
 		}
 	}
-
-	return &Query{stmt: ps, qe: qe, ctx: ctx, err: err}
+	return &Query{stmt: ps, qe: qe, ctx: ctx, err: nil}
 }
 
 // Run is an alias for Get that takes no arguments.
@@ -423,13 +435,13 @@ func (db *DB) Begin(ctx context.Context, opts *TXOptions) (*TX, error) {
 
 // Commit commits the transaction.
 func (tx *TX) Commit() error {
-	tx.db.prepedCache.removeTX(tx)
+	tx.db.preparedCache.removeTX(tx)
 	return tx.tx.Commit()
 }
 
 // Rollback aborts the transaction.
 func (tx *TX) Rollback() error {
-	tx.db.prepedCache.removeTX(tx)
+	tx.db.preparedCache.removeTX(tx)
 	return tx.tx.Rollback()
 }
 
@@ -460,24 +472,27 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: err}
 	}
 
-	tx.db.prepedCacheMutex.Lock()
-	defer tx.db.prepedCacheMutex.Unlock()
+	tx.db.preparedCacheMutex.Lock()
+	defer tx.db.preparedCacheMutex.Unlock()
 
 	var ok bool
 	var ps *sql.Stmt
-	ps, ok = tx.db.prepedCache.lookup(s, tx)
+	ps, ok = tx.db.preparedCache.lookup(s, tx)
 	if !ok {
-		ps, ok = tx.db.prepedCache.lookup(s, nil)
-		if !ok {
-			ps, err = tx.tx.PrepareContext(ctx, qe.QuerySQL())
-		} else {
-			// If the statement is alredy prepared on the db, prepare it on the tx.
+		// Check if is already prepared but not attached to a tx.
+		if ps, ok = tx.db.preparedCache.lookupNoMove(s, nil); ok {
+			// Turn the Stmt prepared on the db into one tied to a specfic transaction.
 			ps = tx.tx.Stmt(ps)
+		} else {
+			ps, err = tx.tx.PrepareContext(ctx, qe.QuerySQL())
+		}
+		if err == nil {
+			err = tx.db.preparedCache.add(s, tx, ps)
 		}
 		if err != nil {
-			err = tx.db.prepedCache.add(s, tx, ps)
+			return &Query{ctx: ctx, err: err}
 		}
 	}
 
-	return &Query{stmt: ps, qe: qe, ctx: ctx, err: err}
+	return &Query{stmt: ps, qe: qe, ctx: ctx, err: nil}
 }
