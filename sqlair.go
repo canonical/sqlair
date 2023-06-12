@@ -481,7 +481,7 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 	if !ok {
 		// Check if is already prepared but not attached to a tx.
 		if ps, ok = tx.db.preparedCache.lookupNoMove(s, nil); ok {
-			// Turn the Stmt prepared on the db into one tied to a specfic transaction.
+			// Convert the Stmt prepared on the db into one tied to a specfic transaction.
 			ps = tx.tx.Stmt(ps)
 		} else {
 			ps, err = tx.tx.PrepareContext(ctx, qe.QuerySQL())
