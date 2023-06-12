@@ -394,37 +394,35 @@ func (p *Parser) parseColumn() (fullName, bool, error) {
 
 func (p *Parser) parseFuncName() (string, bool, error) {
 	cp := p.save()
-	if p.skipName() {
-		if p.skipByte('(') {
-			bracketLevel := 1
-			for {
-				if p.pos == len(p.input) {
+	if p.skipName() && p.skipByte('(') {
+		bracketLevel := 1
+		for {
+			if p.pos == len(p.input) {
+				return "", false, nil
+			}
+			if ok, err := p.skipStringLiteral(); err != nil {
+				return "", false, err
+			} else if ok {
+				continue
+			}
+			if ok := p.skipComment(); ok {
+				continue
+			}
+			if p.skipByte('(') {
+				bracketLevel++
+				continue
+			}
+			if p.skipByte(')') {
+				bracketLevel--
+				if bracketLevel == 0 {
 					break
 				}
-				if ok, err := p.skipStringLiteral(); err != nil {
-					return "", false, err
-				} else if ok {
-					continue
-				}
-				if ok := p.skipComment(); ok {
-					continue
-				}
-				if p.skipByte('(') {
-					bracketLevel++
-					continue
-				}
-				if p.skipByte(')') {
-					bracketLevel--
-					if bracketLevel == 0 {
-						break
-					}
-					continue
-				}
-				p.pos++
-
+				continue
 			}
-			return p.input[cp.pos:p.pos], true, nil
+			p.pos++
+
 		}
+		return p.input[cp.pos:p.pos], true, nil
 	}
 	cp.restore()
 	return "", false, nil
