@@ -18,6 +18,7 @@ type queryPart interface {
 // FullName represents a table column or a Go type identifier.
 type fullName struct {
 	prefix, name string
+	isFunc       bool
 }
 
 func (fn fullName) String() string {

@@ -371,6 +371,12 @@ func (p *Parser) parseIdentifier() (string, bool) {
 func (p *Parser) parseColumn() (fullName, bool, error) {
 	cp := p.save()
 
+	if f, ok, err := p.parseFuncName(); err != nil {
+		return fullName{}, false, err
+	} else if ok {
+		return fullName{name: f, isFunc: true}, true, nil
+	}
+
 	if id, ok := p.parseIdentifierAsterisk(); ok {
 		if id != "*" && p.skipByte('.') {
 			if idCol, ok := p.parseIdentifierAsterisk(); ok {
@@ -384,6 +390,44 @@ func (p *Parser) parseColumn() (fullName, bool, error) {
 
 	cp.restore()
 	return fullName{}, false, nil
+}
+
+func (p *Parser) parseFuncName() (string, bool, error) {
+	cp := p.save()
+	if p.skipName() {
+		if p.skipByte('(') {
+			bracketLevel := 1
+			for {
+				if p.pos == len(p.input) {
+					break
+				}
+				if ok, err := p.skipStringLiteral(); err != nil {
+					return "", false, err
+				} else if ok {
+					continue
+				}
+				if ok := p.skipComment(); ok {
+					continue
+				}
+				if p.skipByte('(') {
+					bracketLevel++
+					continue
+				}
+				if p.skipByte(')') {
+					bracketLevel--
+					if bracketLevel == 0 {
+						break
+					}
+					continue
+				}
+				p.pos++
+
+			}
+			return p.input[cp.pos:p.pos], true, nil
+		}
+	}
+	cp.restore()
+	return "", false, nil
 }
 
 func (p *Parser) parseTarget() (fullName, bool, error) {
@@ -408,7 +452,7 @@ func (p *Parser) parseGoFullName() (fullName, bool, error) {
 		if !ok {
 			return fullName{}, false, fmt.Errorf("column %d: invalid identifier suffix following %q", p.pos, id)
 		}
-		return fullName{id, idField}, true, nil
+		return fullName{prefix: id, name: idField}, true, nil
 	}
 
 	cp.restore()

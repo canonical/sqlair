@@ -397,6 +397,13 @@ func (s *PackageSuite) TestValidGet(c *C) {
 		inputs:   []any{Address{ID: 1000}, Person{ID: 30}},
 		outputs:  []any{&Person{}, &Address{}, &Manager{}},
 		expected: []any{&Person{30, "Fred", 1000}, &Address{1000, "Happy Land", "Main Street"}, &Manager{30, "Fred", 1000}},
+	}, {
+		summary:  "sql functions",
+		query:    `SELECT (max(AVG(id), AVG(address_id), length("((((''""((")), IFNULL(name, "Mr &Person.id of $M.name")) AS (&M.avg, &M.name), round(24.5234) AS &M.* FROM person`,
+		types:    []any{sqlair.M{}},
+		inputs:   []any{},
+		outputs:  []any{sqlair.M{}},
+		expected: []any{sqlair.M{"avg": float64(2625), "name": "Fred", "round(24.5234)": float64(25)}},
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()

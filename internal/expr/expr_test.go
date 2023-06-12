@@ -291,6 +291,12 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	"[Bypass[INSERT INTO arr VALUES (ARRAY[[1,2],[] Input[HardMaths.x] Bypass[,4]], ARRAY[[5,6],[] Input[HardMaths.y] Bypass[,8]]);]]",
 	[]any{HardMaths{}},
 	"INSERT INTO arr VALUES (ARRAY[[1,2],[@sqlair_0,4]], ARRAY[[5,6],[@sqlair_1,8]]);",
+}, {
+	"functions",
+	`SELECT (max(AVG(id), AVG(address_id), length("((((''""((")), IFNULL(name, "Mr &Person.id of $M.name")) AS (&M.avg, &M.name), random() AS &M.* FROM person`,
+	`[Bypass[SELECT ] Output[[max(AVG(id), AVG(address_id), length("((((''""((")) IFNULL(name, "Mr &Person.id of $M.name")] [M.avg M.name]] Bypass[, ] Output[[random()] [M.*]] Bypass[ FROM person]]`,
+	[]any{sqlair.M{}},
+	`SELECT max(AVG(id), AVG(address_id), length("((((''""((")) AS _sqlair_0, IFNULL(name, "Mr &Person.id of $M.name") AS _sqlair_1, random() AS _sqlair_2 FROM person`,
 }}
 
 func (s *ExprSuite) TestExpr(c *C) {
@@ -467,6 +473,10 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 		query:       "SELECT * AS &.* FROM t",
 		prepareArgs: []any{struct{ f int }{f: 1}},
 		err:         `cannot prepare expression: cannot use anonymous struct`,
+	}, {
+		query:       "SELECT avg(*) AS &Person.* FROM t",
+		prepareArgs: []any{Person{}},
+		err:         `cannot prepare expression: invalid tag/column name "avg(*)" in "avg(*) AS &Person.*"`,
 	}}
 
 	for i, test := range tests {

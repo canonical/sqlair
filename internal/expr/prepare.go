@@ -158,7 +158,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 				}
 
 				for _, tag := range info.tags {
-					outCols = append(outCols, fullName{pref, tag})
+					outCols = append(outCols, fullName{prefix: pref, name: tag})
 					typeMembers = append(typeMembers, info.tagToField[tag])
 				}
 				return outCols, typeMembers, nil
@@ -178,6 +178,9 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 				return outCols, typeMembers, nil
 			case *structInfo:
 				for _, c := range p.source {
+					if c.isFunc {
+						return nil, nil, fmt.Errorf(`invalid tag/column name %q in %q`, c.name, p.raw)
+					}
 					f, ok := info.tagToField[c.name]
 					if !ok {
 						return nil, nil, fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), c.name)
