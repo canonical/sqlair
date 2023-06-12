@@ -102,32 +102,32 @@ type cache struct {
 	// ll is a doubly linked list.
 	// The element at the back is the least recently used.
 	ll    *list.List
-	cache map[index]*list.Element
+	cache map[cacheKey]*list.Element
 	size  int
 }
 
 // The cache key.
-type index struct {
+type cacheKey struct {
 	tx *TX
 	s  *Statement
 }
 
 // The cache value.
 type entry struct {
-	key   index
+	key   cacheKey
 	value *sql.Stmt
 }
 
 func newCache(size int) *cache {
 	return &cache{
 		ll:    list.New(),
-		cache: make(map[index]*list.Element),
+		cache: make(map[cacheKey]*list.Element),
 		size:  size,
 	}
 }
 
 func (c *cache) lookup(s *Statement, tx *TX) (*sql.Stmt, bool) {
-	if e, ok := c.cache[index{tx: tx, s: s}]; ok {
+	if e, ok := c.cache[cacheKey{tx: tx, s: s}]; ok {
 		c.ll.MoveToFront(e)
 		return e.Value.(*entry).value, true
 	}
@@ -135,14 +135,14 @@ func (c *cache) lookup(s *Statement, tx *TX) (*sql.Stmt, bool) {
 }
 
 func (c *cache) lookupNoMove(s *Statement, tx *TX) (*sql.Stmt, bool) {
-	if e, ok := c.cache[index{tx: tx, s: s}]; ok {
+	if e, ok := c.cache[cacheKey{tx: tx, s: s}]; ok {
 		return e.Value.(*entry).value, true
 	}
 	return nil, false
 }
 
 func (c *cache) add(s *Statement, tx *TX, ps *sql.Stmt) error {
-	k := index{tx: tx, s: s}
+	k := cacheKey{tx: tx, s: s}
 	if e, ok := c.cache[k]; ok {
 		c.ll.MoveToFront(e)
 		return nil
