@@ -55,30 +55,6 @@ func starCount(fns []fullName) int {
 	return s
 }
 
-// checkValidOutputExpr checks that the statement is well formed with regard to
-// asterisks and the number of columns and types.
-func checkValidOutputExpr(p *outputPart) error {
-	numTypes := len(p.targetTypes)
-	numColumns := len(p.sourceColumns)
-	starTypes := starCount(p.targetTypes)
-	starColumns := starCount(p.sourceColumns)
-
-	if numColumns == 0 || (numColumns == 1 && starColumns == 1) {
-		return nil
-	}
-
-	if numColumns > 1 && starColumns > 0 {
-		return fmt.Errorf("invalid asterisk in output expression: %s", p.raw)
-	}
-
-	// This checks if that of expression has explicit column and explicit
-	// types then the number of columns equals the number of types.
-	if numColumns > 0 && starColumns == 0 && !(numTypes == 1 && starTypes == 1) && !(numTypes == numColumns && starTypes == 0) {
-		return fmt.Errorf("mismatched number of columns and targets in output expression: %s", p.raw)
-	}
-	return nil
-}
-
 // prepareInput checks that the input expression corresponds to a known type.
 func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
 	info, ok := ti[p.sourceType.prefix]
@@ -110,10 +86,10 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 	var outCols = make([]fullName, 0)
 	var typeMembers = make([]typeMember, 0)
 
-	// Check the asterisks are well formed (if present).
-	if err := checkValidOutputExpr(p); err != nil {
-		return nil, nil, err
-	}
+	numTypes := len(p.targetTypes)
+	numColumns := len(p.sourceColumns)
+	starTypes := starCount(p.targetTypes)
+	starColumns := starCount(p.sourceColumns)
 
 	// Check target struct type and its tags are valid.
 	var info typeInfo
@@ -145,10 +121,10 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 	}
 
 	// Case 1: Generated columns e.g. "* AS (&P.*, &A.id)" or "&P.*".
-	if len(p.sourceColumns) == 0 || (len(p.sourceColumns) == 1 && p.sourceColumns[0].name == "*") {
+	if numColumns == 0 || (numColumns == 1 && starColumns == 1) {
 		pref := ""
 		// Prepend table name. E.g. "t" in "t.* AS &P.*".
-		if len(p.sourceColumns) > 0 {
+		if numColumns > 0 {
 			pref = p.sourceColumns[0].prefix
 		}
 
@@ -175,11 +151,13 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 			}
 		}
 		return outCols, typeMembers, nil
+	} else if numColumns > 1 && starColumns > 0 {
+		return nil, nil, fmt.Errorf("invalid asterisk in output expression columns: %s", p.raw)
 	}
 
 	// Case 2: Explicit columns, single asterisk type e.g. "(col1, t.col2) AS &P.*".
-	if t := p.targetTypes[0]; t.name == "*" {
-		if info, err = fetchInfo(t.prefix); err != nil {
+	if starTypes == 1 && numTypes == 1 {
+		if info, err = fetchInfo(p.targetTypes[0].prefix); err != nil {
 			return nil, nil, err
 		}
 		for _, c := range p.sourceColumns {
@@ -188,19 +166,26 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 			}
 		}
 		return outCols, typeMembers, nil
+	} else if starTypes > 0 && numTypes > 1 {
+		return nil, nil, fmt.Errorf("invalid asterisk in output expression types: %s", p.raw)
 	}
 
 	// Case 3: Explicit columns and types e.g. "(col1, col2) AS (&P.name, &P.id)".
-	for i, c := range p.sourceColumns {
-		t := p.targetTypes[i]
-		if info, err = fetchInfo(t.prefix); err != nil {
-			return nil, nil, err
-		}
+	if numColumns == numTypes {
+		for i, c := range p.sourceColumns {
+			t := p.targetTypes[i]
+			if info, err = fetchInfo(t.prefix); err != nil {
+				return nil, nil, err
+			}
 
-		if err = addColumns(info, t.name, c); err != nil {
-			return nil, nil, err
+			if err = addColumns(info, t.name, c); err != nil {
+				return nil, nil, err
+			}
 		}
+	} else {
+		return nil, nil, fmt.Errorf("mismatched number of columns and targets in output expression: %s", p.raw)
 	}
+
 	return outCols, typeMembers, nil
 }
 

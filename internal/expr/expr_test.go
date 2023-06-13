@@ -420,11 +420,11 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT (p.*, t.name) AS &Address.* FROM t",
 		prepareArgs: []any{Address{}},
-		err:         "cannot prepare expression: invalid asterisk in output expression: (p.*, t.name) AS &Address.*",
+		err:         "cannot prepare expression: invalid asterisk in output expression columns: (p.*, t.name) AS &Address.*",
 	}, {
 		query:       "SELECT (name, p.*) AS (&Person.id, &Person.*) FROM t",
 		prepareArgs: []any{Address{}, Person{}},
-		err:         "cannot prepare expression: invalid asterisk in output expression: (name, p.*) AS (&Person.id, &Person.*)",
+		err:         "cannot prepare expression: invalid asterisk in output expression columns: (name, p.*) AS (&Person.id, &Person.*)",
 	}, {
 		query:       "SELECT (&Person.*, &Person.*) FROM t",
 		prepareArgs: []any{Address{}, Person{}},
@@ -432,7 +432,19 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT (p.*, t.*) AS &Address.* FROM t",
 		prepareArgs: []any{Address{}},
-		err:         "cannot prepare expression: invalid asterisk in output expression: (p.*, t.*) AS &Address.*",
+		err:         "cannot prepare expression: invalid asterisk in output expression columns: (p.*, t.*) AS &Address.*",
+	}, {
+		query:       "SELECT (id, name) AS (&Person.id, &Address.*) FROM t",
+		prepareArgs: []any{Address{}, Person{}},
+		err:         "cannot prepare expression: invalid asterisk in output expression types: (id, name) AS (&Person.id, &Address.*)",
+	}, {
+		query:       "SELECT (name, id) AS (&Person.*, &Address.id) FROM t",
+		prepareArgs: []any{Address{}, Person{}},
+		err:         "cannot prepare expression: invalid asterisk in output expression types: (name, id) AS (&Person.*, &Address.id)",
+	}, {
+		query:       "SELECT (name, id) AS (&Person.*, &Address.*) FROM t",
+		prepareArgs: []any{Address{}, Person{}},
+		err:         "cannot prepare expression: invalid asterisk in output expression types: (name, id) AS (&Person.*, &Address.*)",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.number",
 		prepareArgs: []any{Address{}},
