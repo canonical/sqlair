@@ -474,13 +474,13 @@ func (p *Parser) parseColumns(singletons bool) ([]fullName, bool) {
 func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 	start := p.pos
 	// Case 1: There are no columns e.g. "&Person.*".
-	if targets, ok, err := p.parseList(true, (*Parser).parseOutputType); err != nil {
+	if targetTypes, ok, err := p.parseList(true, (*Parser).parseOutputType); err != nil {
 		return nil, false, err
 	} else if ok {
 		return &outputPart{
-			columns: []fullName{},
-			types:   targets,
-			raw:     p.input[start:p.pos],
+			sourceColumns: []fullName{},
+			targetTypes:   targetTypes,
+			raw:           p.input[start:p.pos],
 		}, true, nil
 	}
 
@@ -490,13 +490,13 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 		p.skipBlanks()
 		if p.skipString("AS") {
 			p.skipBlanks()
-			if targets, ok, err := p.parseList(true, (*Parser).parseOutputType); err != nil {
+			if targetTypes, ok, err := p.parseList(true, (*Parser).parseOutputType); err != nil {
 				return nil, false, err
 			} else if ok {
 				return &outputPart{
-					columns: cols,
-					types:   targets,
-					raw:     p.input[start:p.pos],
+					sourceColumns: cols,
+					targetTypes:   targetTypes,
+					raw:           p.input[start:p.pos],
 				}, true, nil
 			}
 		}
@@ -523,9 +523,9 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 			return nil, false, fmt.Errorf(`asterisk not allowed in standalone input expression "$%s"`, fn)
 		}
 		return &inputPart{
-			columns: []fullName{},
-			types:   []fullName{fn},
-			raw:     p.input[start:p.pos],
+			targetColumns: []fullName{},
+			sourceTypes:   []fullName{fn},
+			raw:           p.input[start:p.pos],
 		}, true, nil
 	}
 
@@ -539,9 +539,9 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 				return nil, false, err
 			} else if ok {
 				return &inputPart{
-					columns: columns,
-					types:   sources,
-					raw:     p.input[start:p.pos],
+					targetColumns: columns,
+					sourceTypes:   sources,
+					raw:           p.input[start:p.pos],
 				}, true, nil
 			}
 		}
