@@ -244,7 +244,7 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 	}
 	defer func() {
 		if err != nil {
-			err = fmt.Errorf("cannot populate slice: %s", err)
+			err = fmt.Errorf("cannot get all results: %s", err)
 		}
 	}()
 
@@ -254,6 +254,10 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 			sliceArgs = sliceArgs[1:]
 		}
 	}
+	if !q.qe.HasOutputs() && len(sliceArgs) > 0 {
+		return fmt.Errorf("output slices provided but not referenced in query")
+	}
+
 	// Check slice inputs
 	var slicePtrVals = []reflect.Value{}
 	var sliceVals = []reflect.Value{}
