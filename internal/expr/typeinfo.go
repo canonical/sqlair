@@ -11,7 +11,7 @@ import (
 
 type typeMember interface {
 	outerType() reflect.Type
-	memberName() string
+	elemName() string
 }
 
 type mapKey struct {
@@ -23,7 +23,7 @@ func (mk *mapKey) outerType() reflect.Type {
 	return mk.mapType
 }
 
-func (mk mapKey) memberName() string {
+func (mk mapKey) elemName() string {
 	return mk.name
 }
 
@@ -48,7 +48,7 @@ func (f *structField) outerType() reflect.Type {
 	return f.structType
 }
 
-func (f structField) memberName() string {
+func (f structField) elemName() string {
 	return f.tag
 }
 

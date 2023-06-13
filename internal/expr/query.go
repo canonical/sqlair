@@ -185,7 +185,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 	}
 	for i := 0; i < len(qe.outputs); i++ {
 		if !columnInResult[i] {
-			return nil, nil, fmt.Errorf("column for %s.%s not found in results", qe.outputs[i].outerType().Name(), qe.outputs[i].memberName())
+			return nil, nil, fmt.Errorf("column for %s.%s not found in results", qe.outputs[i].outerType().Name(), qe.outputs[i].elemName())
 		}
 	}
 
