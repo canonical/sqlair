@@ -133,6 +133,18 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	[]any{Person{}},
 	"SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM t",
 }, {
+	"star as output multitype",
+	"SELECT * AS (&Person.*, &Address.*) FROM t",
+	"[Bypass[SELECT ] Output[[*] [Person.* Address.*]] Bypass[ FROM t]]",
+	[]any{Person{}, Address{}},
+	"SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2, district AS _sqlair_3, id AS _sqlair_4, street AS _sqlair_5 FROM t",
+}, {
+	"multiple multitype",
+	"SELECT t.* AS (&Person.*, &M.uid), (district, street, postcode) AS (&Address.district, &Address.street, &M.postcode) FROM t",
+	"[Bypass[SELECT ] Output[[t.*] [Person.* M.uid]] Bypass[, ] Output[[district street postcode] [Address.district Address.street M.postcode]] Bypass[ FROM t]]",
+	[]any{Person{}, Address{}, sqlair.M{}},
+	"SELECT t.address_id AS _sqlair_0, t.id AS _sqlair_1, t.name AS _sqlair_2, t.uid AS _sqlair_3, district AS _sqlair_4, street AS _sqlair_5, postcode AS _sqlair_6 FROM t",
+}, {
 	"input",
 	"SELECT p.*, a.district FROM person AS p JOIN address AS a ON p.address_id=$Address.id WHERE p.name = $Person.name",
 	"[Bypass[SELECT p.*, a.district FROM person AS p JOIN address AS a ON p.address_id=] Input[Address.id] Bypass[ WHERE p.name = ] Input[Person.name]]",
