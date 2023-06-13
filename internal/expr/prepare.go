@@ -63,7 +63,7 @@ func checkValidOutputExpr(p *outputPart) error {
 	starTypes := starCount(p.targetTypes)
 	starColumns := starCount(p.sourceColumns)
 
-	if (numColumns == 1 && starColumns == 1) || numColumns == 0 {
+	if numColumns == 0 || (numColumns == 1 && starColumns == 1) {
 		return nil
 	}
 
@@ -71,6 +71,8 @@ func checkValidOutputExpr(p *outputPart) error {
 		return fmt.Errorf("invalid asterisk in output expression: %s", p.raw)
 	}
 
+	// This checks if that of expression has explicit column and explicit
+	// types then the number of columns equals the number of types.
 	if numColumns > 0 && starColumns == 0 && !(numTypes == 1 && starTypes == 1) && !(numTypes == numColumns && starTypes == 0) {
 		return fmt.Errorf("mismatched number of columns and targets in output expression: %s", p.raw)
 	}
@@ -142,7 +144,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 		return nil
 	}
 
-	// Case 1: Generated columns e.g. "* AS (&P.*, &A.id)" or "&P.*" or
+	// Case 1: Generated columns e.g. "* AS (&P.*, &A.id)" or "&P.*".
 	if len(p.sourceColumns) == 0 || (len(p.sourceColumns) == 1 && p.sourceColumns[0].name == "*") {
 		pref := ""
 		// Prepend table name. E.g. "t" in "t.* AS &P.*".
