@@ -71,7 +71,7 @@ func checkValidOutputExpr(p *outputPart) error {
 		return fmt.Errorf("invalid asterisk in output expression: %s", p.raw)
 	}
 
-	if numColumns > 0 && starColumns == 0 && !((numTypes == 1 && starTypes == 1) || (starTypes == 0 && numTypes == numColumns)) {
+	if numColumns > 0 && starColumns == 0 && !(numTypes == 1 && starTypes == 1) && !(numTypes == numColumns && starTypes == 0) {
 		return fmt.Errorf("mismatched number of columns and targets in output expression: %s", p.raw)
 	}
 	return nil
