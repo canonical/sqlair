@@ -55,7 +55,8 @@ func starCount(fns []fullName) int {
 	return s
 }
 
-// starCheckOutput checks that the output expression is well formed.
+// starCheckOutput checks that the statement is well formed with regard to
+// asterisks and the number of columns and types.
 func starCheckOutput(p *outputPart) error {
 	numColumns := len(p.sourceColumns)
 	numTypes := len(p.targetTypes)
