@@ -75,8 +75,9 @@ func (db *DB) PlainDB() *sql.DB {
 //	q := db.With(Person{}).Query(ctx, "SELECT &Person.* FROM table")
 //
 // typeSamples must contain structs and not pointers to structs.
-func (db *DB) With(typeSamples ...any) {
+func (db *DB) With(typeSamples ...any) *DB {
 	db.typeSamples = append(db.typeSamples, typeSamples...)
+	return db
 }
 
 // querySubstrate abstracts the different surfaces that the query can be run on.

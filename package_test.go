@@ -906,6 +906,10 @@ func (s *PackageSuite) TestWith(c *C) {
 
 	db := sqlair.NewDB(sqldb)
 
+	var p = Person{}
+	c.Assert(db.With(Person{}).Query(nil, `SELECT &Person.* FROM person WHERE name = "Mark"`).Get(&p), IsNil)
+	c.Assert(p, Equals, Person{20, "Mark", 1500})
+
 	// Implicitly prepare with Person from the argument
 	q := "SELECT &Person.name FROM person WHERE id = $Person.id"
 	c.Assert(db.Query(nil, q, &Person{ID: 30}).Get(&Person{}), IsNil)
