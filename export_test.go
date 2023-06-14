@@ -5,6 +5,8 @@ type TestIndex struct {
 	S  *Statement
 }
 
+// CheckCacheEQ checks the order of the contents of the
+// private LRU cache that stores prepared statements.
 func (db *DB) CheckCacheEQ(tis []TestIndex) bool {
 	e := db.preparedCache.ll.Front()
 	for i := 0; i < db.preparedCache.ll.Len(); i++ {
