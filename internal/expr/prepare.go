@@ -57,21 +57,21 @@ func starCount(fns []fullName) int {
 }
 
 // starCheckOutput checks that the statement is well formed with regard to
-// asterisks and the number of sources and targets.
+// asterisks and the number of columns and types.
 func starCheckOutput(p *outputPart) error {
-	numSources := len(p.source)
-	numTargets := len(p.target)
+	numColumns := len(p.sourceColumns)
+	numTypes := len(p.targetTypes)
 
-	targetStars := starCount(p.target)
-	sourceStars := starCount(p.source)
-	starTarget := targetStars == 1
-	starSource := sourceStars == 1
+	typeStars := starCount(p.targetTypes)
+	columnStars := starCount(p.sourceColumns)
+	starTypes := typeStars == 1
+	starColumns := columnStars == 1
 
-	if targetStars > 1 || sourceStars > 1 || (sourceStars == 1 && targetStars == 0) ||
-		(starTarget && numTargets > 1) || (starSource && numSources > 1) {
+	if typeStars > 1 || columnStars > 1 || (columnStars == 1 && typeStars == 0) ||
+		(starTypes && numTypes > 1) || (starColumns && numColumns > 1) {
 		return fmt.Errorf("invalid asterisk in output expression: %s", p.raw)
 	}
-	if !starTarget && (numSources > 0 && (numTargets != numSources)) {
+	if !starTypes && (numColumns > 0 && (numTypes != numColumns)) {
 		return fmt.Errorf("mismatched number of columns and targets in output expression: %s", p.raw)
 	}
 	return nil
@@ -79,22 +79,22 @@ func starCheckOutput(p *outputPart) error {
 
 // prepareInput checks that the input expression corresponds to a known type.
 func prepareInput(ti typeNameToInfo, p *inputPart) (*prepedInputPart, []typeMember, error) {
-	info, ok := ti[p.source.prefix]
+	info, ok := ti[p.sourceType.prefix]
 	if !ok {
 		ts := getKeys(ti)
 		if len(ts) == 0 {
-			return nil, nil, fmt.Errorf(`type %q not passed as a parameter`, p.source.prefix)
+			return nil, nil, fmt.Errorf(`type %q not passed as a parameter`, p.sourceType.prefix)
 		} else {
-			return nil, nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, p.source.prefix, strings.Join(ts, ", "))
+			return nil, nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, p.sourceType.prefix, strings.Join(ts, ", "))
 		}
 	}
 	switch info := info.(type) {
 	case *mapInfo:
-		return &prepedInputPart{}, []typeMember{&mapKey{name: p.source.name, mapType: info.typ()}}, nil
+		return &prepedInputPart{}, []typeMember{&mapKey{name: p.sourceType.name, mapType: info.typ()}}, nil
 	case *structInfo:
-		f, ok := info.tagToField[p.source.name]
+		f, ok := info.tagToField[p.sourceType.name]
 		if !ok {
-			return nil, nil, fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), p.source.name)
+			return nil, nil, fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), p.sourceType.name)
 		}
 		return &prepedInputPart{}, []typeMember{f}, nil
 	default:
@@ -151,7 +151,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (*prepedOutputPart, []typeM
 	var info typeInfo
 	var ok bool
 
-	for _, t := range p.target {
+	for _, t := range p.targetTypes {
 		info, ok = ti[t.prefix]
 		if !ok {
 			return nil, nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, t.prefix, strings.Join(getKeys(ti), ", "))
@@ -176,11 +176,11 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (*prepedOutputPart, []typeM
 
 	// Generate columns to inject into SQL query.
 
-	// Case 1: Star target cases e.g. "...&P.*".
-	if p.target[0].name == "*" {
-		info, _ := ti[p.target[0].prefix]
+	// Case 1: Star types cases e.g. "...&P.*".
+	if p.targetTypes[0].name == "*" {
+		info, _ := ti[p.targetTypes[0].prefix]
 		// Case 1.1: Single star i.e. "t.* AS &P.*" or "&P.*"
-		if len(p.source) == 0 || p.source[0].name == "*" {
+		if len(p.sourceColumns) == 0 || p.sourceColumns[0].name == "*" {
 			switch info := info.(type) {
 			case *mapInfo:
 				return nil, nil, fmt.Errorf(`&%s.* cannot be used for maps when no column names are specified`, info.typ().Name())
@@ -188,8 +188,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (*prepedOutputPart, []typeM
 				pref := ""
 
 				// Prepend table name. E.g. "t" in "t.* AS &P.*".
-				if len(p.source) > 0 {
-					pref = p.source[0].prefix
+				if len(p.sourceColumns) > 0 {
+					pref = p.sourceColumns[0].prefix
 				}
 
 				for _, tag := range info.tags {
@@ -203,16 +203,16 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (*prepedOutputPart, []typeM
 		}
 
 		// Case 1.2: Explicit columns e.g. "(col1, t.col2) AS &P.*".
-		if len(p.source) > 0 {
+		if len(p.sourceColumns) > 0 {
 			switch info := info.(type) {
 			case *mapInfo:
-				for _, c := range p.source {
+				for _, c := range p.sourceColumns {
 					outCols = append(outCols, c)
 					typeMembers = append(typeMembers, &mapKey{name: c.name, mapType: info.typ()})
 				}
 				return &prepedOutputPart{outCols}, typeMembers, nil
 			case *structInfo:
-				for _, c := range p.source {
+				for _, c := range p.sourceColumns {
 					f, ok := info.tagToField[c.name]
 					if !ok {
 						return nil, nil, fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), c.name)
@@ -230,15 +230,15 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (*prepedOutputPart, []typeM
 	// Case 2: None star target cases e.g. "...(&P.name, &P.id)".
 
 	// Case 2.1: Explicit columns e.g. "name_1 AS P.name".
-	if len(p.source) > 0 {
-		for _, c := range p.source {
+	if len(p.sourceColumns) > 0 {
+		for _, c := range p.sourceColumns {
 			outCols = append(outCols, c)
 		}
 		return &prepedOutputPart{outCols}, typeMembers, nil
 	}
 
 	// Case 2.2: No columns e.g. "(&P.name, &P.id)".
-	for _, t := range p.target {
+	for _, t := range p.targetTypes {
 		outCols = append(outCols, fullName{name: t.name})
 	}
 	return &prepedOutputPart{outCols}, typeMembers, nil
