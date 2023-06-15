@@ -12,9 +12,9 @@ import (
 
 // PreparedExpr contains an SQL expression that is ready for execution.
 type PreparedExpr struct {
-	outputs          []typeMember
-	inputs           []typeMember
-	prepedQueryParts []prepedQueryPart
+	outputs            []typeMember
+	inputs             []typeMember
+	preparedQueryParts []preparedQueryPart
 }
 
 const markerPrefix = "_sqlair_"
@@ -57,7 +57,7 @@ func starCount(fns []fullName) int {
 }
 
 // prepareInput checks that the input expression corresponds to a known type.
-func prepareInput(ti typeNameToInfo, p *inputPart) (*prepedInputPart, []typeMember, error) {
+func prepareInput(ti typeNameToInfo, p *inputPart) (*preparedInputPart, []typeMember, error) {
 	info, ok := ti[p.sourceType.prefix]
 	if !ok {
 		ts := getKeys(ti)
@@ -69,20 +69,20 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (*prepedInputPart, []typeMemb
 	}
 	switch info := info.(type) {
 	case *mapInfo:
-		return &prepedInputPart{}, []typeMember{&mapKey{name: p.sourceType.name, mapType: info.typ()}}, nil
+		return &preparedInputPart{}, []typeMember{&mapKey{name: p.sourceType.name, mapType: info.typ()}}, nil
 	case *structInfo:
 		f, ok := info.tagToField[p.sourceType.name]
 		if !ok {
 			return nil, nil, fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), p.sourceType.name)
 		}
-		return &prepedInputPart{}, []typeMember{f}, nil
+		return &preparedInputPart{}, []typeMember{f}, nil
 	default:
 		return nil, nil, fmt.Errorf(`internal error: unknown info type: %T`, info)
 	}
 }
 
 // prepareIn generates the values to fetch for sqlair input expressions following an IN statement.
-func prepareIn(ti typeNameToInfo, p *inPart) (*prepedInPart, []typeMember, error) {
+func prepareIn(ti typeNameToInfo, p *inPart) (*preparedInPart, []typeMember, error) {
 	var typeMembers = make([]typeMember, 0)
 	for _, t := range p.types {
 		info, ok := ti[t.prefix]
@@ -112,12 +112,12 @@ func prepareIn(ti typeNameToInfo, p *inPart) (*prepedInPart, []typeMember, error
 			})
 		}
 	}
-	return &prepedInPart{typeMembers}, typeMembers, nil
+	return &preparedInPart{typeMembers}, typeMembers, nil
 }
 
 // prepareOutput checks that the output expressions correspond to known types.
 // It then checks they are formatted correctly and finally generates the columns for the query.
-func prepareOutput(ti typeNameToInfo, p *outputPart) (*prepedOutputPart, []typeMember, error) {
+func prepareOutput(ti typeNameToInfo, p *outputPart) (*preparedOutputPart, []typeMember, error) {
 	var outCols = make([]fullName, 0)
 	var typeMembers = make([]typeMember, 0)
 
@@ -185,7 +185,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (*prepedOutputPart, []typeM
 				}
 			}
 		}
-		return &prepedOutputPart{outCols}, typeMembers, nil
+		return &preparedOutputPart{outCols}, typeMembers, nil
 	} else if numColumns > 1 && starColumns > 0 {
 		return nil, nil, fmt.Errorf("invalid asterisk in output expression columns: %s", p.raw)
 	}
@@ -200,7 +200,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (*prepedOutputPart, []typeM
 				return nil, nil, err
 			}
 		}
-		return &prepedOutputPart{outCols}, typeMembers, nil
+		return &preparedOutputPart{outCols}, typeMembers, nil
 	} else if starTypes > 0 && numTypes > 1 {
 		return nil, nil, fmt.Errorf("invalid asterisk in output expression types: %s", p.raw)
 	}
@@ -221,7 +221,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (*prepedOutputPart, []typeM
 		return nil, nil, fmt.Errorf("mismatched number of columns and targets in output expression: %s", p.raw)
 	}
 
-	return &prepedOutputPart{outCols}, typeMembers, nil
+	return &preparedOutputPart{outCols}, typeMembers, nil
 }
 
 type typeNameToInfo map[string]typeInfo
@@ -231,15 +231,15 @@ type ioCounter struct {
 	inputCount  int
 }
 
-type prepedQueryPart interface {
+type preparedQueryPart interface {
 	sql(*ioCounter) string
 }
 
-type prepedOutputPart struct {
+type preparedOutputPart struct {
 	outCols []fullName
 }
 
-func (oc *prepedOutputPart) sql(c *ioCounter) string {
+func (oc *preparedOutputPart) sql(c *ioCounter) string {
 	var sql bytes.Buffer
 	for i, col := range oc.outCols {
 		sql.WriteString(col.String())
@@ -253,18 +253,18 @@ func (oc *prepedOutputPart) sql(c *ioCounter) string {
 	return sql.String()
 }
 
-type prepedInputPart struct{}
+type preparedInputPart struct{}
 
-func (ic *prepedInputPart) sql(c *ioCounter) string {
+func (ic *preparedInputPart) sql(c *ioCounter) string {
 	c.inputCount++
 	return "@sqlair_" + strconv.Itoa(c.inputCount-1)
 }
 
-type prepedInPart struct {
+type preparedInPart struct {
 	typeMembers []typeMember
 }
 
-func (ic *prepedInPart) sql(c *ioCounter) string {
+func (ic *preparedInPart) sql(c *ioCounter) string {
 	var sql bytes.Buffer
 	sql.WriteString("IN (")
 	for i, tm := range ic.typeMembers {
@@ -298,11 +298,11 @@ func (ic *prepedInPart) sql(c *ioCounter) string {
 	return sql.String()
 }
 
-type prepedBypassPart struct {
+type preparedBypassPart struct {
 	str string
 }
 
-func (bc *prepedBypassPart) sql(*ioCounter) string {
+func (bc *preparedBypassPart) sql(*ioCounter) string {
 	return bc.str
 }
 
@@ -352,21 +352,21 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	var inputs = make([]typeMember, 0)
 	var typeMemberPresent = make(map[typeMember]bool)
 
-	var prepedQueryParts []prepedQueryPart
+	var preparedQueryParts []preparedQueryPart
 	var typeMembers []typeMember
-	var prepedQueryPart prepedQueryPart
+	var preparedQueryPart preparedQueryPart
 
 	// Check and expand each query part.
 	for _, part := range pe.queryParts {
 		switch p := part.(type) {
 		case *inputPart:
-			prepedQueryPart, typeMembers, err = prepareInput(ti, p)
+			preparedQueryPart, typeMembers, err = prepareInput(ti, p)
 			if err != nil {
 				return nil, err
 			}
 			inputs = append(inputs, typeMembers...)
 		case *outputPart:
-			prepedQueryPart, typeMembers, err = prepareOutput(ti, p)
+			preparedQueryPart, typeMembers, err = prepareOutput(ti, p)
 			if err != nil {
 				return nil, err
 			}
@@ -380,27 +380,27 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 
 			outputs = append(outputs, typeMembers...)
 		case *inPart:
-			prepedQueryPart, typeMembers, err = prepareIn(ti, p)
+			preparedQueryPart, typeMembers, err = prepareIn(ti, p)
 			if err != nil {
 				return nil, err
 			}
 			inputs = append(inputs, typeMembers...)
 		case *bypassPart:
-			prepedQueryPart = &prepedBypassPart{p.chunk}
+			preparedQueryPart = &preparedBypassPart{p.chunk}
 		default:
 			return nil, fmt.Errorf("internal error: unknown query part type %T", part)
 		}
-		prepedQueryParts = append(prepedQueryParts, prepedQueryPart)
+		preparedQueryParts = append(preparedQueryParts, preparedQueryPart)
 	}
 
-	return &PreparedExpr{inputs: inputs, outputs: outputs, prepedQueryParts: prepedQueryParts}, nil
+	return &PreparedExpr{inputs: inputs, outputs: outputs, preparedQueryParts: preparedQueryParts}, nil
 }
 
 func (pe *PreparedExpr) sql() string {
 	var c = &ioCounter{}
 	var sql bytes.Buffer
-	for _, prepedQueryPart := range pe.prepedQueryParts {
-		sql.WriteString(prepedQueryPart.sql(c))
+	for _, preparedQueryPart := range pe.preparedQueryParts {
+		sql.WriteString(preparedQueryPart.sql(c))
 	}
 	return sql.String()
 }
