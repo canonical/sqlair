@@ -464,7 +464,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT street AS &Address.street FROM t",
 		prepareArgs: []any{},
-		err:         `cannot prepare expression: type "Address" not passed as a parameter, have: `,
+		err:         `cannot prepare expression: type "Address" not passed as a parameter`,
 	}, {
 		query:       "SELECT street AS &Address.id FROM t",
 		prepareArgs: []any{Person{}},
