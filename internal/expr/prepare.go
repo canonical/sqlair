@@ -210,7 +210,12 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 	fetchInfo := func(typeName string) (typeInfo, error) {
 		info, ok := ti[typeName]
 		if !ok {
-			return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, typeName, strings.Join(getKeys(ti), ", "))
+			ts := getKeys(ti)
+			if len(ts) == 0 {
+				return nil, fmt.Errorf(`type %q not passed as a parameter`, typeName)
+			} else {
+				return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, typeName, strings.Join(ts, ", "))
+			}
 		}
 		return info, nil
 	}
