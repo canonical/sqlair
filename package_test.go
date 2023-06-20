@@ -399,11 +399,11 @@ func (s *PackageSuite) TestValidGet(c *C) {
 		expected: []any{&Person{30, "Fred", 1000}, &Address{1000, "Happy Land", "Main Street"}, &Manager{30, "Fred", 1000}},
 	}, {
 		summary:  "sql functions",
-		query:    `SELECT MAX(id) AS &Person.id, round(24.5234) AS &M.* FROM person`,
+		query:    `SELECT MAX(id) AS &Person.id, round(24.5234) AS &M.round FROM person`,
 		types:    []any{sqlair.M{}, Person{}},
 		inputs:   []any{},
 		outputs:  []any{sqlair.M{}, &Person{}},
-		expected: []any{sqlair.M{"round(24.5234)": float64(25)}, &Person{ID: 40}},
+		expected: []any{sqlair.M{"round": float64(25)}, &Person{ID: 40}},
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()
