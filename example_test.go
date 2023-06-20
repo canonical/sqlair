@@ -94,6 +94,11 @@ func Example() {
 
 	// Example 1
 	// Find someone on the engineering team.
+
+	// A map with a key type of string is used to
+	// pass arguments that are not fields of structs.
+	// sqlair.M is of type map[string]any but if
+	// the map has a key type of string it can be used.
 	selectSomeoneInTeam := sqlair.MustPrepare(`
 		SELECT &Employee.*
 		FROM person
@@ -101,16 +106,10 @@ func Example() {
 		Employee{}, sqlair.M{},
 	)
 
-	// A map with a key type of string is used to
-	// pass arguments that are not fields of structs.
-	// sqlair.M is of type map[string]any but if
-	// the map has a key type of string it can be used.
-	team := "engineering"
-	q := db.Query(nil, selectSomeoneInTeam, sqlair.M{"team": team})
-
 	// Get returns a single result.
 	var pal = Employee{}
-	err = q.Get(&pal)
+	team := "engineering"
+	err = db.Query(nil, selectSomeoneInTeam, sqlair.M{"team": team}).Get(&pal)
 	if err != nil {
 		panic(err)
 	}
@@ -126,11 +125,9 @@ func Example() {
 		Location{}, Employee{},
 	)
 
-	q = db.Query(nil, selectPeopleInRoom, l1)
-
 	// GetAll returns all the results.
 	var roomDwellers = []Employee{}
-	err = q.GetAll(&roomDwellers)
+	err = db.Query(nil, selectPeopleInRoom, l1).GetAll(&roomDwellers)
 	if err != nil {
 		panic(err)
 	}
@@ -150,13 +147,11 @@ func Example() {
 		Location{}, Employee{},
 	)
 
-	q = db.Query(nil, selectPeopleAndRoom)
-
 	// Results can be iterated through with an Iterable.
 	// iter.Next prepares the next result.
 	// iter.Get reads it into structs.
 	// iter.Close closes the query returning any errors. It must be called after iteration is finished.
-	iter := q.Iter()
+	iter := db.Query(nil, selectPeopleAndRoom).Iter()
 	for iter.Next() {
 		var l = Location{}
 		var p = Employee{}
