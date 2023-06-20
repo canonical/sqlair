@@ -131,7 +131,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) ([]fullName, []typeMember, er
 			if t.name == "*" {
 				switch info := info.(type) {
 				case *mapInfo:
-					return nil, nil, fmt.Errorf(`$%s.* cannot be used in input expression`, info.typ().Name())
+					return nil, nil, fmt.Errorf(`map type %q cannot be used with asterisk in input expression: %s`, info.typ().Name(), p.raw)
 				case *structInfo:
 					for _, tag := range info.tags {
 						inCols = append(inCols, fullName{name: tag})
@@ -357,16 +357,25 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	var outputs = make([]typeMember, 0)
 	var inputs = make([]typeMember, 0)
 
-	var typeMemberPresent = make(map[typeMember]bool)
+	var typeMemberInOutputs = make(map[typeMember]bool)
 
 	// Check and expand each query part.
 	for _, part := range pe.queryParts {
 		switch p := part.(type) {
 		case *inputPart:
-			inCols, fields, err := prepareInput(ti, p)
+			columnInInput := make(map[fullName]bool)
+			inCols, typeMembers, err := prepareInput(ti, p)
 			if err != nil {
 				return nil, err
 			}
+
+			for _, col := range inCols {
+				if ok := columnInInput[col]; ok {
+					return nil, fmt.Errorf("column %q is set more than once in: %s", col.name, p.raw)
+				}
+				columnInInput[col] = true
+			}
+
 			if len(p.targetColumns) == 0 {
 				sql.WriteString("@sqlair_" + strconv.Itoa(inCount))
 				inCount += 1
@@ -376,7 +385,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 				sql.WriteString(namedParams(inCount, len(inCols)))
 				inCount += len(inCols)
 			}
-			inputs = append(inputs, fields...)
+			inputs = append(inputs, typeMembers...)
 		case *outputPart:
 			outCols, typeMembers, err := prepareOutput(ti, p)
 			if err != nil {
@@ -384,10 +393,10 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			}
 
 			for _, tm := range typeMembers {
-				if ok := typeMemberPresent[tm]; ok {
-					return nil, fmt.Errorf("member %q of type %q appears more than once", tm.memberName(), tm.outerType().Name())
+				if ok := typeMemberInOutputs[tm]; ok {
+					return nil, fmt.Errorf("member %q of type %q appears more than once in outputs", tm.memberName(), tm.outerType().Name())
 				}
-				typeMemberPresent[tm] = true
+				typeMemberInOutputs[tm] = true
 			}
 
 			for i, c := range outCols {

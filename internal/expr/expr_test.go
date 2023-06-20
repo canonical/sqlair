@@ -211,6 +211,30 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	[]any{Address{}, Person{}},
 	"SELECT street AS _sqlair_0, id AS _sqlair_1 FROM address AS a WHERE p.name = 'Fred'",
 }, {
+	"multicolumn input v1",
+	"INSERT INTO person (*) VALUES ($Address.street, $Person.*, $M.team)",
+	"[Bypass[INSERT INTO person ] Input[[*] [Address.street Person.* M.team]]]",
+	[]any{Address{}, Person{}, sqlair.M{}},
+	"INSERT INTO person (street, address_id, id, name, team) VALUES (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4)",
+}, {
+	"multicolumn input v2",
+	"INSERT INTO person (id, street) VALUES ($Address.*)",
+	"[Bypass[INSERT INTO person ] Input[[id street] [Address.*]]]",
+	[]any{Address{}},
+	"INSERT INTO person (id, street) VALUES (@sqlair_0, @sqlair_1)",
+}, {
+	"multicolumn input v3",
+	"INSERT INTO person (id, street) VALUES ($Person.address_id, $Address.street)",
+	"[Bypass[INSERT INTO person ] Input[[id street] [Person.address_id Address.street]]]",
+	[]any{Address{}, Person{}},
+	"INSERT INTO person (id, street) VALUES (@sqlair_0, @sqlair_1)",
+}, {
+	"multicolumn input v4",
+	"INSERT INTO person (*) VALUES ($Person.address_id, /* rouge comment */$Address.street)",
+	"[Bypass[INSERT INTO person ] Input[[*] [Person.address_id Address.street]]]",
+	[]any{Address{}, Person{}},
+	"INSERT INTO person (address_id, street) VALUES (@sqlair_0, @sqlair_1)",
+}, {
 	"complex query v1",
 	"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.*, (5+7), (col1 * col2) AS calculated_value FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = 'Fred'",
 	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district a.street] [Address.*]] Bypass[, (5+7), (col1 * col2) AS calculated_value FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = 'Fred']]",
@@ -452,7 +476,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT (&Address.*, &Address.id) FROM t",
 		prepareArgs: []any{Address{}, Person{}},
-		err:         `cannot prepare expression: member "id" of type "Address" appears more than once`,
+		err:         `cannot prepare expression: member "id" of type "Address" appears more than once in outputs`,
 	}, {
 		query:       "SELECT (p.*, t.name) AS &Address.* FROM t",
 		prepareArgs: []any{Address{}},
@@ -464,7 +488,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT (&Person.*, &Person.*) FROM t",
 		prepareArgs: []any{Address{}, Person{}},
-		err:         `cannot prepare expression: member "address_id" of type "Person" appears more than once`,
+		err:         `cannot prepare expression: member "address_id" of type "Person" appears more than once in outputs`,
 	}, {
 		query:       "SELECT (p.*, t.*) AS &Address.* FROM t",
 		prepareArgs: []any{Address{}},
@@ -541,6 +565,22 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 		query:       "INSERT INTO person (postalcode) VALUES ($Person.name, $Address.id)",
 		prepareArgs: []any{Address{}, Person{}},
 		err:         "cannot prepare expression: mismatched number of columns and targets in input expression: (postalcode) VALUES ($Person.name, $Address.id)",
+	}, {
+		query:       "INSERT INTO person (*) VALUES ($Person.*, $Address.*)",
+		prepareArgs: []any{Address{}, Person{}},
+		err:         `cannot prepare expression: column "id" is set more than once in: (*) VALUES ($Person.*, $Address.*)`,
+	}, {
+		query:       "INSERT INTO person (*) VALUES ($M.name, $Person.name)",
+		prepareArgs: []any{sqlair.M{}, Person{}},
+		err:         `cannot prepare expression: column "name" is set more than once in: (*) VALUES ($M.name, $Person.name)`,
+	}, {
+		query:       "INSERT INTO person (id, id) VALUES ($Person.*)",
+		prepareArgs: []any{Person{}},
+		err:         `cannot prepare expression: column "id" is set more than once in: (id, id) VALUES ($Person.*)`,
+	}, {
+		query:       "INSERT INTO person (*) VALUES ($M.*)",
+		prepareArgs: []any{sqlair.M{}},
+		err:         `cannot prepare expression: map type "M" cannot be used with asterisk in input expression: (*) VALUES ($M.*)`,
 	}}
 
 	for i, test := range tests {
