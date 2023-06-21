@@ -375,6 +375,32 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 	}
 }
 
+type ScannerInt struct {
+	SI int
+}
+
+func (si *ScannerInt) Scan(v any) error {
+	if _, ok := v.(int); ok {
+		si.SI = 42
+	} else {
+		si.SI = 666
+	}
+	return nil
+}
+
+type ScannerString struct {
+	SS string
+}
+
+func (ss *ScannerString) Scan(v any) error {
+	if _, ok := v.(string); ok {
+		ss.SS = "ScannerString scanned well!"
+	} else {
+		ss.SS = "ScannerString found a NULL"
+	}
+	return nil
+}
+
 func (s *PackageSuite) TestNulls(c *C) {
 	type I int
 	type J = int
@@ -388,6 +414,11 @@ func (s *PackageSuite) TestNulls(c *C) {
 		ID         sql.NullInt64  `db:"id"`
 		Fullname   sql.NullString `db:"name"`
 		PostalCode sql.NullInt64  `db:"address_id"`
+	}
+	type ScannerDude struct {
+		ID         ScannerInt    `db:"id"`
+		Fullname   ScannerString `db:"name"`
+		PostalCode ScannerInt    `db:"address_id"`
 	}
 
 	var tests = []struct {
@@ -418,6 +449,13 @@ func (s *PackageSuite) TestNulls(c *C) {
 		inputs:   []any{},
 		outputs:  []any{&NullGuy{}},
 		expected: []any{&NullGuy{Fullname: sql.NullString{Valid: true, String: "Nully"}, ID: sql.NullInt64{Valid: false}, PostalCode: sql.NullInt64{Valid: false}}},
+	}, {
+		summary:  "nulls with custom scan type",
+		query:    `SELECT &ScannerDude.* FROM person WHERE name = "Nully"`,
+		types:    []any{ScannerDude{}},
+		inputs:   []any{},
+		outputs:  []any{&ScannerDude{}},
+		expected: []any{&ScannerDude{Fullname: ScannerString{SS: "ScannerString scanned well!"}, ID: ScannerInt{SI: 666}, PostalCode: ScannerInt{SI: 666}}},
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()

@@ -183,8 +183,9 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 				return nil, nil, fmt.Errorf("internal error: cannot set field %s of struct %s", tm.name, tm.structType.Name())
 			}
 			t := val.Type()
-			if t.Kind() != reflect.Pointer && !t.Implements(scannerInterface) {
-				scanVal := reflect.New(reflect.PointerTo(t)).Elem()
+			pt := reflect.PointerTo(t)
+			if t.Kind() != reflect.Pointer && !pt.Implements(scannerInterface) {
+				scanVal := reflect.New(pt).Elem()
 				ptrs = append(ptrs, scanVal.Addr().Interface())
 				scanInfos = append(scanInfos, scanInfo{fieldVal: val, scanVal: scanVal, valType: t})
 			} else {
