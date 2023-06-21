@@ -14,7 +14,7 @@ var _ = Suite(&ExprInternalSuite{})
 func (e *ExprInternalSuite) TestReflectStruct(c *C) {
 	type something struct {
 		ID      int64  `db:"id"`
-		Name    string `db:"name,omitempty"`
+		Name    string `db:"name"`
 		NotInDB string
 	}
 
@@ -37,12 +37,10 @@ func (e *ExprInternalSuite) TestReflectStruct(c *C) {
 		id, ok := info.tagToField["id"]
 		c.Assert(ok, Equals, true)
 		c.Assert("ID", Equals, id.name)
-		c.Assert(id.omitEmpty, Equals, false)
 
 		name, ok := info.tagToField["name"]
 		c.Assert(ok, Equals, true)
 		c.Assert("Name", Equals, name.name)
-		c.Assert(name.omitEmpty, Equals, true)
 	}
 }
 

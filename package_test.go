@@ -376,18 +376,13 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 }
 
 func (s *PackageSuite) TestNulls(c *C) {
-	type PersonWithOmit struct {
-		ID         int    `db:"id,omitempty"`
-		Fullname   string `db:"name"`
-		PostalCode int    `db:"address_id, omitempty"`
-	}
 	type I int
 	type J = int
 	type S = string
-	type PersonWithStrangeTypesAndOmit struct {
-		ID         I `db:"id,omitempty"`
-		Fullname   S `db:"name,omitempty"`
-		PostalCode J `db:"address_id,omitempty"`
+	type PersonWithStrangeTypes struct {
+		ID         I `db:"id"`
+		Fullname   S `db:"name"`
+		PostalCode J `db:"address_id"`
 	}
 	type NullGuy struct {
 		ID         sql.NullInt64  `db:"id"`
@@ -403,33 +398,19 @@ func (s *PackageSuite) TestNulls(c *C) {
 		outputs  []any
 		expected []any
 	}{{
-		summary:  "nulls with omitempty",
-		query:    `SELECT &PersonWithOmit.* FROM person WHERE name = "Nully"`,
-		types:    []any{PersonWithOmit{}},
+		summary:  "reading nulls",
+		query:    `SELECT &Person.* FROM person WHERE name = "Nully"`,
+		types:    []any{Person{}},
 		inputs:   []any{},
-		outputs:  []any{&PersonWithOmit{ID: 5}},
-		expected: []any{&PersonWithOmit{Fullname: "Nully", ID: 5}},
+		outputs:  []any{&Person{ID: 5, PostalCode: 10}},
+		expected: []any{&Person{Fullname: "Nully", ID: 0, PostalCode: 0}},
 	}, {
-		summary:  "regular values with omitempty",
-		query:    `SELECT &PersonWithOmit.* FROM person WHERE name = "Mark"`,
-		types:    []any{PersonWithOmit{}},
+		summary:  "reading nulls with custom types",
+		query:    `SELECT &PersonWithStrangeTypes.* FROM person WHERE name = "Nully"`,
+		types:    []any{PersonWithStrangeTypes{}},
 		inputs:   []any{},
-		outputs:  []any{&PersonWithOmit{ID: 5}},
-		expected: []any{&PersonWithOmit{Fullname: "Mark", ID: 20, PostalCode: 1500}},
-	}, {
-		summary:  "null with omitempty and custom types",
-		query:    `SELECT &PersonWithStrangeTypesAndOmit.* FROM person WHERE name = "Nully"`,
-		types:    []any{PersonWithStrangeTypesAndOmit{}},
-		inputs:   []any{},
-		outputs:  []any{&PersonWithStrangeTypesAndOmit{ID: 5}},
-		expected: []any{&PersonWithStrangeTypesAndOmit{Fullname: "Nully", ID: 5}},
-	}, {
-		summary:  "regular values with omitempty and custom types",
-		query:    `SELECT &PersonWithStrangeTypesAndOmit.* FROM person WHERE name = "Mark"`,
-		types:    []any{PersonWithStrangeTypesAndOmit{}},
-		inputs:   []any{},
-		outputs:  []any{&PersonWithStrangeTypesAndOmit{ID: 5}},
-		expected: []any{&PersonWithStrangeTypesAndOmit{Fullname: "Mark", ID: 20, PostalCode: 1500}},
+		outputs:  []any{&PersonWithStrangeTypes{ID: 5, PostalCode: 10}},
+		expected: []any{&PersonWithStrangeTypes{Fullname: "Nully", ID: 0, PostalCode: 0}},
 	}, {
 		summary:  "regular nulls",
 		query:    `SELECT &NullGuy.* FROM person WHERE name = "Nully"`,

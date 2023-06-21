@@ -31,10 +31,6 @@ type structField struct {
 
 	// Index sequence for Type.FieldByIndex.
 	index []int
-
-	// OmitEmpty is true when "omitempty" is
-	// a property of the field's "db" tag.
-	omitEmpty bool
 }
 
 func (f *structField) outerType() reflect.Type {
@@ -124,7 +120,7 @@ func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 				return nil, fmt.Errorf("field %q of struct %s not exported", f.Name, t.Name())
 			}
 
-			tag, omitEmpty, err := parseTag(tag)
+			tag, err := parseTag(tag)
 			if err != nil {
 				return nil, fmt.Errorf("cannot parse tag for field %s.%s: %s", t.Name(), f.Name, err)
 			}
@@ -132,7 +128,6 @@ func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 			info.tagToField[tag] = &structField{
 				name:       f.Name,
 				index:      f.Index,
-				omitEmpty:  omitEmpty,
 				structType: t,
 			}
 		}
@@ -150,30 +145,22 @@ func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 // the parser.
 var validColNameRx = regexp.MustCompile(`^([a-zA-Z_])+([a-zA-Z_0-9])*$`)
 
-// parseTag parses the input tag string and returns its
-// name and whether it contains the "omitempty" option.
-func parseTag(tag string) (string, bool, error) {
+// parseTag parses the input tag string and returns its name.
+func parseTag(tag string) (string, error) {
 	options := strings.Split(tag, ",")
 
-	var omitEmpty bool
 	if len(options) > 1 {
-		for _, flag := range options[1:] {
-			if strings.TrimSpace(flag) == "omitempty" {
-				omitEmpty = true
-			} else {
-				return "", omitEmpty, fmt.Errorf("unsupported flag %q in tag %q", flag, tag)
-			}
-		}
+		return "", fmt.Errorf("unsupported flag %q in tag %q", options[1], tag)
 	}
 
 	name := strings.TrimSpace(options[0])
 	if len(name) == 0 {
-		return "", false, fmt.Errorf("empty db tag")
+		return "", fmt.Errorf("empty db tag")
 	}
 
 	if !validColNameRx.MatchString(name) {
-		return "", false, fmt.Errorf("invalid column name in 'db' tag: %q", name)
+		return "", fmt.Errorf("invalid column name in 'db' tag: %q", name)
 	}
 
-	return name, omitEmpty, nil
+	return name, nil
 }

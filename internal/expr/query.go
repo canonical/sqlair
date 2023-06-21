@@ -6,8 +6,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-
-	"github.com/canonical/sqlair/internal/convert"
 )
 
 func (qe *QueryExpr) QuerySQL() string {
@@ -102,22 +100,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	return &QueryExpr{outputs: pe.outputs, sql: pe.sql, args: qargs}, nil
 }
 
-type NullT struct {
-	Value reflect.Value
-	Valid bool
-}
-
-func (nt *NullT) Scan(src any) error {
-	nt.Valid = false
-	if src == nil {
-		return nil
-	}
-	err := convert.ConvertAssign(nt.Value.Addr().Interface(), src)
-	if err == nil {
-		nt.Valid = true
-	}
-	return err
-}
+var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
 
 // ScanArgs returns list of pointers to the struct fields that are listed in qe.outputs.
 // All the structs and maps mentioned in the query must be in outputArgs.
@@ -138,11 +121,12 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 		mapVal  reflect.Value
 	}
 	var mapSetInfos = []mapSetInfo{}
-	type nullableInfo struct {
+	type scanInfo struct {
 		fieldVal reflect.Value
-		nullT    *NullT
+		scanVal  reflect.Value
+		valType  reflect.Type
 	}
-	var nullableInfos = []nullableInfo{}
+	var scanInfos = []scanInfo{}
 	var typeDest = make(map[reflect.Type]reflect.Value)
 	outputVals := []reflect.Value{}
 	for _, outputArg := range outputArgs {
@@ -198,10 +182,11 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 			if !val.CanSet() {
 				return nil, nil, fmt.Errorf("internal error: cannot set field %s of struct %s", tm.name, tm.structType.Name())
 			}
-			if tm.omitEmpty {
-				nullT := NullT{Value: reflect.New(val.Type()).Elem()}
-				ptrs = append(ptrs, &nullT)
-				nullableInfos = append(nullableInfos, nullableInfo{fieldVal: val, nullT: &nullT})
+			t := val.Type()
+			if t.Kind() != reflect.Pointer && !t.Implements(scannerInterface) {
+				scanVal := reflect.New(reflect.PointerTo(t)).Elem()
+				ptrs = append(ptrs, scanVal.Addr().Interface())
+				scanInfos = append(scanInfos, scanInfo{fieldVal: val, scanVal: scanVal, valType: t})
 			} else {
 				ptrs = append(ptrs, val.Addr().Interface())
 			}
@@ -216,9 +201,11 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 		for _, mi := range mapSetInfos {
 			mi.mapVal.SetMapIndex(mi.keyVal, mi.scanVal)
 		}
-		for _, ni := range nullableInfos {
-			if ni.nullT.Valid {
-				ni.fieldVal.Set(ni.nullT.Value)
+		for _, si := range scanInfos {
+			if !si.scanVal.IsNil() {
+				si.fieldVal.Set(si.scanVal.Elem())
+			} else {
+				si.fieldVal.Set(reflect.Zero(si.valType))
 			}
 		}
 	}
