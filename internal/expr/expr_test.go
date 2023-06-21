@@ -503,6 +503,10 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 		query:       "SELECT avg(*) AS &Person.* FROM t",
 		prepareArgs: []any{Person{}},
 		err:         `cannot prepare expression: invalid tag/column name "avg(*)" in "avg(*) AS &Person.*"`,
+	}, {
+		query:       "SELECT avg(*) AS &M.* FROM t",
+		prepareArgs: []any{sqlair.M{}},
+		err:         `cannot prepare expression: invalid tag/column name "avg(*)" in "avg(*) AS &M.*"`,
 	}}
 
 	for i, test := range tests {

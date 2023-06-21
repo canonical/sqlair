@@ -368,13 +368,13 @@ func (p *Parser) parseIdentifier() (string, bool) {
 // parseColumn parses a column made up of name bytes, optionally dot-prefixed by
 // its table name.
 // parseColumn returns an error so that it can be used with parseList.
-func (p *Parser) parseColumn() (fullName, bool, error) {
+func (p *Parser) parseColumn() (columnExpr, bool, error) {
 	cp := p.save()
 
-	if f, ok, err := p.parseFuncName(); err != nil {
-		return fullName{}, false, err
+	if ce, ok, err := p.parseFuncName(); err != nil {
+		return funcExpr{}, false, err
 	} else if ok {
-		return fullName{name: f, isFunc: true}, true, nil
+		return ce, true, nil
 	}
 
 	if id, ok := p.parseIdentifierAsterisk(); ok {
@@ -392,16 +392,16 @@ func (p *Parser) parseColumn() (fullName, bool, error) {
 	return fullName{}, false, nil
 }
 
-func (p *Parser) parseFuncName() (string, bool, error) {
+func (p *Parser) parseFuncName() (columnExpr, bool, error) {
 	cp := p.save()
 	if p.skipName() && p.skipByte('(') {
 		bracketLevel := 1
 		for {
 			if p.pos == len(p.input) {
-				return "", false, nil
+				return funcExpr{}, false, nil
 			}
 			if ok, err := p.skipStringLiteral(); err != nil {
-				return "", false, err
+				return funcExpr{}, false, err
 			} else if ok {
 				continue
 			}
@@ -420,12 +420,17 @@ func (p *Parser) parseFuncName() (string, bool, error) {
 				continue
 			}
 			p.pos++
-
 		}
-		return p.input[cp.pos:p.pos], true, nil
+		rawFunc := p.input[cp.pos:p.pos]
+		funcParser := NewParser()
+		pe, err := funcParser.Parse(rawFunc)
+		if err != nil {
+			return funcExpr{}, false, err
+		}
+		return funcExpr{f: rawFunc, pe: pe}, true, nil
 	}
 	cp.restore()
-	return "", false, nil
+	return funcExpr{}, false, nil
 }
 
 func (p *Parser) parseTarget() (fullName, bool, error) {
@@ -459,7 +464,7 @@ func (p *Parser) parseGoFullName() (fullName, bool, error) {
 
 // parseList takes a parsing function that returns a fullName and parses a
 // bracketed, comma seperated, list.
-func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]fullName, bool, error) {
+func parseList[T any](p *Parser, parseFn func(p *Parser) (T, bool, error)) ([]T, bool, error) {
 	cp := p.save()
 	if !p.skipByte('(') {
 		return nil, false, nil
@@ -468,7 +473,7 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 	parenPos := p.pos
 
 	nextItem := true
-	var objs []fullName
+	var objs []T
 	for i := 0; nextItem; i++ {
 		p.skipBlanks()
 		if obj, ok, err := parseFn(p); ok {
@@ -496,15 +501,15 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 
 // parseColumns parses a list of columns. For lists of more than one column the
 // columns must be enclosed in brackets e.g. "(col1, col2) AS &Person.*".
-func (p *Parser) parseColumns() ([]fullName, bool) {
+func (p *Parser) parseColumns() ([]columnExpr, bool) {
 
 	// Case 1: A single column e.g. "p.name".
 	if col, ok, _ := p.parseColumn(); ok {
-		return []fullName{col}, true
+		return []columnExpr{col}, true
 	}
 
 	// Case 2: Multiple columns e.g. "(p.name, p.id)".
-	if cols, ok, _ := p.parseList((*Parser).parseColumn); ok {
+	if cols, ok, _ := parseList(p, (*Parser).parseColumn); ok {
 		return cols, true
 	}
 
@@ -515,14 +520,14 @@ func (p *Parser) parseColumns() ([]fullName, bool) {
 // ampersand. This can be one or more references to Go types.
 func (p *Parser) parseTargets() ([]fullName, bool, error) {
 	// Case 1: A single target e.g. "&Person.name".
-	if targetTypes, ok, err := p.parseTarget(); err != nil {
+	if targetType, ok, err := p.parseTarget(); err != nil {
 		return nil, false, err
 	} else if ok {
-		return []fullName{targetTypes}, true, nil
+		return []fullName{targetType}, true, nil
 	}
 
 	// Case 2: Multiple types e.g. "(&Person.name, &Person.id)".
-	if targetTypes, ok, err := p.parseList((*Parser).parseTarget); err != nil {
+	if targetTypes, ok, err := parseList(p, (*Parser).parseTarget); err != nil {
 		return nil, false, err
 	} else if ok {
 		return targetTypes, true, nil
@@ -541,7 +546,7 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 		return nil, false, err
 	} else if ok {
 		return &outputPart{
-			sourceColumns: []fullName{},
+			sourceColumns: []columnExpr{},
 			targetTypes:   targetTypes,
 			raw:           p.input[start:p.pos],
 		}, true, nil

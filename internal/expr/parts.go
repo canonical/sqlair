@@ -15,11 +15,23 @@ type queryPart interface {
 	part()
 }
 
+type columnExpr interface {
+	ce()
+}
+
+type funcExpr struct {
+	f  string
+	pe *ParsedExpr
+}
+
+func (fe funcExpr) ce() {}
+
 // FullName represents a table column or a Go type identifier.
 type fullName struct {
 	prefix, name string
-	isFunc       bool
 }
+
+func (fn fullName) ce() {}
 
 func (fn fullName) String() string {
 	if fn.prefix == "" {
@@ -46,7 +58,7 @@ func (p *inputPart) part() {}
 // outputPart represents a named target output variable in the SQL expression,
 // as well as the source table and column where it will be read from.
 type outputPart struct {
-	sourceColumns []fullName
+	sourceColumns []columnExpr
 	targetTypes   []fullName
 	raw           string
 }

@@ -45,11 +45,13 @@ func getKeys[T any](m map[string]T) []string {
 	return keys
 }
 
-func starCount(fns []fullName) int {
+func starCount[T any](ts []T) int {
 	s := 0
-	for _, fn := range fns {
-		if fn.name == "*" {
-			s++
+	for _, t := range ts {
+		if fn, ok := any(t).(fullName); ok {
+			if fn.name == "*" {
+				s++
+			}
 		}
 	}
 	return s
@@ -82,8 +84,8 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
 
 // prepareOutput checks that the output expressions correspond to known types.
 // It then checks they are formatted correctly and finally generates the columns for the query.
-func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, error) {
-	var outCols = make([]fullName, 0)
+func prepareOutput(ti typeNameToInfo, p *outputPart) ([]string, []typeMember, error) {
+	var outCols = make([]string, 0)
 	var typeMembers = make([]typeMember, 0)
 
 	numTypes := len(p.targetTypes)
@@ -121,16 +123,20 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 			tm = &mapKey{name: tag, mapType: info.typ()}
 		}
 		typeMembers = append(typeMembers, tm)
-		outCols = append(outCols, column)
+		outCols = append(outCols, column.String())
 		return nil
 	}
 
 	// Case 1: Generated columns e.g. "* AS (&P.*, &A.id)" or "&P.*".
 	if numColumns == 0 || (numColumns == 1 && starColumns == 1) {
+		starCol, ok := p.sourceColumns[0].(fullName)
+		if !ok {
+			return nil, nil, fmt.Errorf("internal error: expected starCol to be of type fullName, got %T", starCol)
+		}
 		pref := ""
 		// Prepend table name. E.g. "t" in "t.* AS &P.*".
 		if numColumns > 0 {
-			pref = p.sourceColumns[0].prefix
+			pref = starCol.prefix
 		}
 
 		for _, t := range p.targetTypes {
@@ -144,7 +150,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 					return nil, nil, fmt.Errorf(`&%s.* cannot be used for maps when no column names are specified`, info.typ().Name())
 				case *structInfo:
 					for _, tag := range info.tags {
-						outCols = append(outCols, fullName{prefix: pref, name: tag})
+						outCols = append(outCols, fullName{prefix: pref, name: tag}.String())
 						typeMembers = append(typeMembers, info.tagToField[tag])
 					}
 				}
@@ -166,11 +172,13 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 			return nil, nil, err
 		}
 		for _, c := range p.sourceColumns {
-			if c.isFunc {
-				return nil, nil, fmt.Errorf(`invalid tag/column name %q in %q`, c.name, p.raw)
-			}
-			if err = addColumns(info, c.name, c); err != nil {
-				return nil, nil, err
+			switch c := c.(type) {
+			case funcExpr:
+				return nil, nil, fmt.Errorf(`invalid tag/column name %q in %q`, c.f, p.raw)
+			case fullName:
+				if err = addColumns(info, c.name, c); err != nil {
+					return nil, nil, err
+				}
 			}
 		}
 		return outCols, typeMembers, nil
@@ -186,7 +194,16 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 				return nil, nil, err
 			}
 
-			if err = addColumns(info, t.name, c); err != nil {
+			switch c := c.(type) {
+			case funcExpr:
+				if pe, err := c.pe.prepareParts(ti); err != nil {
+					return nil, nil, err
+				}
+				// Generate prepared function here.
+			case fullName:
+				err = addColumns(info, t.name, c)
+			}
+			if err != nil {
 				return nil, nil, err
 			}
 		}
@@ -240,7 +257,10 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			return nil, fmt.Errorf("need struct or map, got %s", t.Kind())
 		}
 	}
+	return pe.prepareParts(ti)
+}
 
+func (pe *ParsedExpr) prepareParts(ti typeNameToInfo) (expr *PreparedExpr, err error) {
 	var sql bytes.Buffer
 
 	var inCount int
@@ -276,7 +296,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			}
 
 			for i, c := range outCols {
-				sql.WriteString(c.String())
+				sql.WriteString(c)
 				sql.WriteString(" AS ")
 				sql.WriteString(markerName(outCount))
 				if i != len(outCols)-1 {
@@ -291,6 +311,5 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			return nil, fmt.Errorf("internal error: unknown query part type %T", part)
 		}
 	}
-
 	return &PreparedExpr{inputs: inputs, outputs: outputs, sql: sql.String()}, nil
 }
