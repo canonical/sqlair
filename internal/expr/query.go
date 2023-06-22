@@ -88,7 +88,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		var val reflect.Value
 		switch tm := typeMember.(type) {
 		case *structField:
-			val = v.FieldByIndex(tm.index)
+			val = v.Field(tm.index)
 		case *mapKey:
 			val = v.MapIndex(reflect.ValueOf(tm.name))
 			if val.Kind() == reflect.Invalid {
@@ -172,7 +172,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 		}
 		switch tm := typeMember.(type) {
 		case *structField:
-			val := outputVal.FieldByIndex(tm.index)
+			val := outputVal.Field(tm.index)
 			if !val.CanSet() {
 				return nil, nil, fmt.Errorf("internal error: cannot set field %s of struct %s", tm.name, tm.structType.Name())
 			}

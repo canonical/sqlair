@@ -31,13 +31,14 @@ func (mk mapKey) elemName() string {
 type structField struct {
 	name string
 
-	tag string
-
 	// The type of the containing struct.
 	structType reflect.Type
 
-	// Index sequence for Type.FieldByIndex.
-	index []int
+	// Index for Type.Field.
+	index int
+
+	// The tag assosiated with this field
+	tag string
 
 	// OmitEmpty is true when "omitempty" is
 	// a property of the field's "db" tag.
@@ -142,9 +143,9 @@ func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 			tags = append(tags, tag)
 			info.tagToField[tag] = &structField{
 				name:       f.Name,
-				tag:        tag,
-				index:      f.Index,
+				index:      i,
 				omitEmpty:  omitEmpty,
+				tag:        tag,
 				structType: t,
 			}
 		}
