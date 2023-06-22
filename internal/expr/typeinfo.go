@@ -11,6 +11,7 @@ import (
 
 type typeMember interface {
 	outerType() reflect.Type
+	memberName() string
 }
 
 type mapKey struct {
@@ -22,6 +23,10 @@ func (mk *mapKey) outerType() reflect.Type {
 	return mk.mapType
 }
 
+func (mk mapKey) memberName() string {
+	return mk.name
+}
+
 // structField represents reflection information about a field from some struct type.
 type structField struct {
 	name string
@@ -29,12 +34,19 @@ type structField struct {
 	// The type of the containing struct.
 	structType reflect.Type
 
-	// Index sequence for Type.FieldByIndex.
-	index []int
+	// Index for Type.Field.
+	index int
+
+	// The tag assosiated with this field
+	tag string
 }
 
 func (f *structField) outerType() reflect.Type {
 	return f.structType
+}
+
+func (f structField) memberName() string {
+	return f.tag
 }
 
 type typeInfo interface {
@@ -127,7 +139,8 @@ func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 			tags = append(tags, tag)
 			info.tagToField[tag] = &structField{
 				name:       f.Name,
-				index:      f.Index,
+				index:      i,
+				tag:        tag,
 				structType: t,
 			}
 		}
