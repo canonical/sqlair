@@ -31,7 +31,9 @@ type Statement struct {
 	id uuid.UUID
 	pe *expr.PreparedExpr
 
-	// A list of *sql.Stmt caches that this Statement is in.
+	// A list of *sql.Stmt caches that this Statement appears in. This is
+	// needed to remove and close these the db-prepared statements when the
+	// finalizer for this Statement is run.
 	caches      []*cache
 	cachesMutex sync.Mutex
 }
@@ -129,8 +131,6 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		ctx = context.Background()
 	}
 
-	// Query only actually prepares the query arguemnt, the sql already
-	// exists in pe. This and the prepared stmt lookup could be swapped.
 	var err error
 	var qe *expr.QueryExpr
 	qe, err = s.pe.Query(inputArgs...)
@@ -151,7 +151,7 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		db.stmtCache.m.Unlock()
 
 		// If Query is called at the same time from two go routines then we
-		// may have db.stmtCache in the list twice. This is ok.
+		// may have db.stmtCache in the list twice. This is not a big problem.
 		s.cachesMutex.Lock()
 		if len(s.caches) == 0 {
 			runtime.SetFinalizer(s, stmtFinalizer)
@@ -434,6 +434,8 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 	ps, ok := tx.stmtCache.c[s.id]
 	tx.stmtCache.m.RUnlock()
 	if !ok {
+		// If we cannot find the prepared statement in the transaction cache,
+		// try the db cache and use tx.Stmt to prepare it on the tx.
 		tx.db.stmtCache.m.RLock()
 		ps, ok = tx.db.stmtCache.c[s.id]
 		tx.db.stmtCache.m.RUnlock()
@@ -450,7 +452,7 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		tx.stmtCache.m.Unlock()
 
 		// If Query is called at the same time from two go routines then we
-		// may have db.stmtCache in the list twice. This is ok.
+		// may have tx.stmtCache in the list twice. This is ok.
 		s.cachesMutex.Lock()
 		if len(s.caches) == 0 {
 			runtime.SetFinalizer(s, stmtFinalizer)

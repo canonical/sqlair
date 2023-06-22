@@ -940,14 +940,14 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 		c.Assert(p, Equals, mark)
 
 		c.Assert(lookup(db.Cache())(markStmtID), Equals, true)
-		// Check its in the cache
+		// Check the prepared selectMark in the cache.
 
 		err = db.Query(nil, selectMark).Get(&p)
 		c.Assert(err, IsNil)
 		c.Assert(p, Equals, mark)
 
 		c.Assert(lookup(db.Cache())(markStmtID), Equals, true)
-		// Check its still in the cache
+		// Check its still in the cache.
 
 		err = db.Query(nil, selectMark).Get(&p)
 		c.Assert(err, IsNil)
@@ -956,13 +956,13 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 	runtime.GC()
 	time.Sleep(1 * time.Millisecond)
 	// The finalizer for selectMark will run after the GC.
-	// 1 millisecond should be long enough for the finalizer to run.
+	// 1 millisecond should be long enough for the finalizer to finish.
 
-	// Check selectMark has been removed from the cache
+	// Check selectMark has been removed from the cache.
 	c.Assert(lookup(db.Cache())(markStmtID), Equals, false)
 
+	// Test with transactions.
 	var tx *sqlair.TX
-	// Test with transactions
 	{
 		selectMark, err := sqlair.Prepare(`
 			SELECT &Person.*
@@ -982,7 +982,8 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 
 		tx, err = db.Begin(nil, nil)
 		c.Assert(err, IsNil)
-		// Run selectMark on a tx.
+		// Run selectMark on a tx. This should repreare the same
+		// *sql.Stmt on the Tx since it is already prepared on the DB.
 		err = tx.Query(nil, selectMark).Get(&p)
 		c.Assert(err, IsNil)
 		c.Assert(p, Equals, mark)
