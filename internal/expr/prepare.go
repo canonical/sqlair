@@ -134,7 +134,12 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (*preparedOutputPart, []typ
 	fetchInfo := func(typeName string) (typeInfo, error) {
 		info, ok := ti[typeName]
 		if !ok {
-			return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, typeName, strings.Join(getKeys(ti), ", "))
+			ts := getKeys(ti)
+			if len(ts) == 0 {
+				return nil, fmt.Errorf(`type %q not passed as a parameter`, typeName)
+			} else {
+				return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, typeName, strings.Join(ts, ", "))
+			}
 		}
 		return info, nil
 	}
@@ -350,11 +355,12 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 
 	var outputs = make([]typeMember, 0)
 	var inputs = make([]typeMember, 0)
-	var typeMemberPresent = make(map[typeMember]bool)
 
 	var preparedQueryParts []preparedQueryPart
 	var typeMembers []typeMember
 	var preparedQueryPart preparedQueryPart
+
+	var typeMemberPresent = make(map[typeMember]bool)
 
 	// Check and expand each query part.
 	for _, part := range pe.queryParts {
