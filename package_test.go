@@ -404,6 +404,13 @@ func (s *PackageSuite) TestValidGet(c *C) {
 		inputs:   []any{},
 		outputs:  []any{sqlair.M{}, &Person{}},
 		expected: []any{sqlair.M{"round": float64(25)}, &Person{ID: 40}},
+	}, {
+		summary:  "nested input in function",
+		query:    `SELECT MAX($Person.id, 10) AS &Person.id FROM person`,
+		types:    []any{Person{}},
+		inputs:   []any{Person{ID: 40}},
+		outputs:  []any{&Person{}},
+		expected: []any{&Person{ID: 40}},
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()

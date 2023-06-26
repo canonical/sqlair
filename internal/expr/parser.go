@@ -455,7 +455,7 @@ func (p *Parser) parseGoFullName() (fullName, bool, error) {
 		if !ok {
 			return fullName{}, false, fmt.Errorf("column %d: invalid identifier suffix following %q", p.pos, id)
 		}
-		return fullName{prefix: id, name: idField}, true, nil
+		return fullName{id, idField}, true, nil
 	}
 
 	cp.restore()
@@ -520,10 +520,10 @@ func (p *Parser) parseColumns() ([]columnExpr, bool) {
 // ampersand. This can be one or more references to Go types.
 func (p *Parser) parseTargets() ([]fullName, bool, error) {
 	// Case 1: A single target e.g. "&Person.name".
-	if targetType, ok, err := p.parseTarget(); err != nil {
+	if targetTypes, ok, err := p.parseTarget(); err != nil {
 		return nil, false, err
 	} else if ok {
-		return []fullName{targetType}, true, nil
+		return []fullName{targetTypes}, true, nil
 	}
 
 	// Case 2: Multiple types e.g. "(&Person.name, &Person.id)".
