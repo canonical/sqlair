@@ -473,10 +473,10 @@ func (p *Parser) parseColumns() ([]fullName, bool) {
 // ampersand. This can be one or more references to Go types.
 func (p *Parser) parseTargets() ([]fullName, bool, error) {
 	// Case 1: A single target e.g. "&Person.name".
-	if targetTypes, ok, err := p.parseTarget(); err != nil {
+	if targetType, ok, err := p.parseTarget(); err != nil {
 		return nil, false, err
 	} else if ok {
-		return []fullName{targetTypes}, true, nil
+		return []fullName{targetType}, true, nil
 	}
 
 	// Case 2: Multiple types e.g. "(&Person.name, &Person.id)".
