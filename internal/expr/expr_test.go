@@ -239,7 +239,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	"SELECT p.* AS &Person.*, &District.* FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
 	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[] [District.*]] Bypass[ FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] Input[Person.name] Bypass[ AND p.address_id = ] Input[Person.address_id]]",
 	[]any{Person{}, District{}},
-	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2,  FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = @sqlair_0 AND p.address_id = @sqlair_1`,
+	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2 FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = @sqlair_0 AND p.address_id = @sqlair_1`,
 }, {
 	"complex query v6",
 	"SELECT p.* AS &Person.*, FROM person AS p INNER JOIN address AS a ON p.address_id = $Address.id WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
@@ -312,9 +312,15 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 }, {
 	"functions",
 	`SELECT (max(AVG(id), AVG(address_id), length("((((''""((")), IFNULL(name, "Mr &Person.id of $M.name")) AS (&M.avg, &M.name), random() AS &M.random FROM person`,
-	`[Bypass[SELECT ] Output[[max(AVG(id), AVG(address_id), length("((((''""((")) IFNULL(name, "Mr &Person.id of $M.name")] [M.avg M.name]] Bypass[, ] Output[[random()] [M.random]] Bypass[ FROM person]]`,
+	`[Bypass[SELECT ] Output[[[Bypass[max(AVG(id), AVG(address_id), length("((((''""(("))]] [Bypass[IFNULL(name, "Mr &Person.id of $M.name")]]] [M.avg M.name]] Bypass[, ] Output[[[Bypass[random()]]] [M.random]] Bypass[ FROM person]]`,
 	[]any{sqlair.M{}},
 	`SELECT max(AVG(id), AVG(address_id), length("((((''""((")) AS _sqlair_0, IFNULL(name, "Mr &Person.id of $M.name") AS _sqlair_1, random() AS _sqlair_2 FROM person`,
+}, {
+	"function with nested input",
+	`SELECT max($Person.id, 20) AS &Manager.id FROM person`,
+	`[Bypass[SELECT ] Output[[[Bypass[max(] Input[Person.id] Bypass[, 20)]]] [Manager.id]] Bypass[ FROM person]]`,
+	[]any{Person{}, Manager{}},
+	`SELECT max(@sqlair_0, 20) AS _sqlair_0 FROM person`,
 }}
 
 func (s *ExprSuite) TestExpr(c *C) {

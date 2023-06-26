@@ -26,6 +26,11 @@ type funcExpr struct {
 
 func (fe funcExpr) ce() {}
 
+func (fe funcExpr) String() string {
+	return fe.pe.String()
+
+}
+
 // FullName represents a table column or a Go type identifier.
 type fullName struct {
 	prefix, name string
