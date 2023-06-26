@@ -209,29 +209,17 @@ func getArgInfo(t reflect.Type) (arg, error) {
 		}
 		tags := []string{}
 
-		for i := 0; i < t.NumField(); i++ {
-			f := t.Field(i)
-			// Fields without a "db" tag are outside of SQLAir's remit.
-			tag := f.Tag.Get("db")
-			if tag == "" {
-				continue
+		fields, err := getStructFields(t)
+		if err != nil {
+			return nil, err
+		}
+		for _, field := range fields {
+			tags = append(tags, field.tag)
+			if dup, ok := info.tagToField[field.tag]; ok {
+				return nil, fmt.Errorf("db tag %q appears in both field %q and field %q of struct %q",
+					field.tag, field.name, dup.name, t.Name())
 			}
-			if !f.IsExported() {
-				return nil, fmt.Errorf("field %q of struct %s not exported", f.Name, t.Name())
-			}
-
-			tag, omitEmpty, err := parseTag(tag)
-			if err != nil {
-				return nil, fmt.Errorf("cannot parse tag for field %s.%s: %s", t.Name(), f.Name, err)
-			}
-			tags = append(tags, tag)
-			info.tagToField[tag] = &structField{
-				name:       f.Name,
-				index:      i,
-				omitEmpty:  omitEmpty,
-				tag:        tag,
-				structType: t,
-			}
+			info.tagToField[field.tag] = field
 		}
 
 		sort.Strings(tags)
@@ -250,6 +238,68 @@ func getArgInfo(t reflect.Type) (arg, error) {
 	argInfoCacheMutex.Unlock()
 
 	return typeInfo, nil
+}
+
+// fieldIsStruct checks if the field type is a struct or pointer to a struct.
+// If a pointer to the field type implementes Scanner it returns false.
+func fieldIsStruct(field reflect.StructField) bool {
+	ft := field.Type
+	k := ft.Kind()
+	// Check if it is a
+	return (k == reflect.Struct && !reflect.PointerTo(ft).Implements(scannerInterface)) ||
+		(k == reflect.Pointer && ft.Elem().Kind() == reflect.Struct && !ft.Implements(scannerInterface))
+}
+
+// getStructFields returns relevant reflection information about all struct
+// fields included nested/embedded fields. The caller is required to check that
+// structType is a struct.
+func getStructFields(structType reflect.Type) ([]*structField, error) {
+	var fields []*structField
+	for i := 0; i < structType.NumField(); i++ {
+		field := structType.Field(i)
+		if fieldIsStruct(field) {
+			if !field.IsExported() {
+				continue
+			}
+			fieldType := field.Type
+			if fieldType.Kind() == reflect.Pointer {
+				fieldType = fieldType.Elem()
+			}
+			// Promote the nested struct fields into the current parent struct
+			// scope, making sure to update the Index list for navigation back
+			// to the original nested location.
+			nestedFields, err := getStructFields(fieldType)
+			if err != nil {
+				return nil, err
+			}
+			for _, nestedField := range nestedFields {
+				nestedField.index = append([]int{i}, nestedField.index...)
+				nestedField.structType = structType
+			}
+			fields = append(fields, nestedFields...)
+		} else {
+			// Fields without a "db" tag are outside of SQLair's remit.
+			tag := field.Tag.Get("db")
+			if tag == "" {
+				continue
+			}
+			if !field.IsExported() {
+				return nil, fmt.Errorf("field %q of struct %s not exported", field.Name, structType.Name())
+			}
+			tag, omitEmpty, err := parseTag(tag)
+			if err != nil {
+				return nil, fmt.Errorf("cannot parse tag for field %s.%s: %s", structType.Name(), field.Name, err)
+			}
+			fields = append(fields, &structField{
+				name:       field.Name,
+				index:      field.Index,
+				omitEmpty:  omitEmpty,
+				tag:        tag,
+				structType: structType,
+			})
+		}
+	}
+	return fields, nil
 }
 
 // This expression should be aligned with the bytes we allow in isNameByte in

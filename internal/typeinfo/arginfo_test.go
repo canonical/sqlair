@@ -36,27 +36,27 @@ func (s *typeInfoSuite) TestArgInfoStruct(c *C) {
 	// AllStructOutputs.
 	structFields := []struct {
 		fieldName string
-		index     int
+		index     []int
 		omitEmpty bool
 		tag       string
 	}{{
 		fieldName: "ValidTag2",
-		index:     3,
+		index:     []int{3},
 		omitEmpty: false,
 		tag:       "IdENT99",
 	}, {
 		fieldName: "ValidTag1",
-		index:     2,
+		index:     []int{2},
 		omitEmpty: false,
 		tag:       "_i_d_55_",
 	}, {
 		fieldName: "ID",
-		index:     0,
+		index:     []int{0},
 		omitEmpty: false,
 		tag:       "id",
 	}, {
 		fieldName: "Name",
-		index:     1,
+		index:     []int{1},
 		omitEmpty: true,
 		tag:       "name",
 	}}

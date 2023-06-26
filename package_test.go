@@ -500,6 +500,32 @@ func (s *PackageSuite) TestNulls(c *C) {
 }
 
 func (s *PackageSuite) TestValidGet(c *C) {
+	// Embedded/nested structs.
+	type E1 struct {
+		Street string `db:"street"`
+	}
+	type E2 struct {
+		ID int `db:"id"`
+	}
+	type E3 struct {
+		District string `db:"district"`
+		E2       E2
+	}
+	type StructWithEmbedded struct {
+		E1 *E1
+		E3
+	}
+	// Struct with pointers.
+	type StructWithPointers struct {
+		Street   *string         `db:"street"`
+		District *sql.NullString `db:"district"`
+		ID       *int            `db:"id"`
+	}
+
+	// Pointer variables for pointer struct test.
+	mainStreet := "Main Street"
+	oneThousand := 1000
+
 	var tests = []struct {
 		summary  string
 		query    string
@@ -535,6 +561,20 @@ func (s *PackageSuite) TestValidGet(c *C) {
 		inputs:   []any{},
 		outputs:  []any{sqlair.M{}},
 		expected: []any{sqlair.M{"avg": float64(2625), "name": "Fred"}},
+	}, {
+		summary:  "embedded struct",
+		query:    "SELECT &StructWithEmbedded.* FROM address WHERE id = $StructWithEmbedded.id AND district = $StructWithEmbedded.district AND street = $StructWithEmbedded.street",
+		types:    []any{StructWithEmbedded{}},
+		inputs:   []any{&StructWithEmbedded{E1: &E1{Street: "Main Street"}, E3: E3{District: "Happy Land", E2: E2{ID: 1000}}}},
+		outputs:  []any{&StructWithEmbedded{E1: &E1{}}},
+		expected: []any{&StructWithEmbedded{E1: &E1{Street: "Main Street"}, E3: E3{District: "Happy Land", E2: E2{ID: 1000}}}},
+	}, {
+		summary:  "pointers struct",
+		query:    "SELECT &StructWithPointers.* FROM address WHERE street = $StructWithPointers.street",
+		types:    []any{StructWithPointers{}},
+		inputs:   []any{&StructWithPointers{Street: &mainStreet}},
+		outputs:  []any{&StructWithPointers{}},
+		expected: []any{&StructWithPointers{Street: &mainStreet, District: &sql.NullString{Valid: true, String: "Happy Land"}, ID: &oneThousand}},
 	}}
 
 	tables, sqldb, err := personAndAddressDB(c)
