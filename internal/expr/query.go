@@ -115,17 +115,13 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 		}
 	}
 
-	type mapSetInfo struct {
-		keyVal  reflect.Value
-		scanVal reflect.Value
-		mapVal  reflect.Value
+	type scanProxy struct {
+		original reflect.Value
+		scan     reflect.Value
+		key      reflect.Value
 	}
-	var mapSetInfos = []mapSetInfo{}
-	type scanInfo struct {
-		pointerScanVal reflect.Value
-		fieldVal       reflect.Value
-	}
-	var scanInfos = []scanInfo{}
+	var scanProxies []scanProxy
+
 	var typeDest = make(map[reflect.Type]reflect.Value)
 	outputVals := []reflect.Value{}
 	for _, outputArg := range outputArgs {
@@ -183,32 +179,34 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 			}
 			pt := reflect.PointerTo(val.Type())
 			if val.Type().Kind() != reflect.Pointer && !pt.Implements(scannerInterface) {
-				// Rows.Scan will return an error if it tries to scan NULL into a type that does not have nil.
-				// Pointers are the only nil type that work with Rows.Scan so for none pointer types we generate
-				// a pointer to them and pass this to Rows.Scan. After scanning the variable is set, if the
-				// pointer is nil, it is set to its zero value.
+				// Rows.Scan will return an error if it tries to scan NULL into a type that cannot be set to nil.
+				// For types that are not a pointer and do not implement sql.Scanner a pointer to them is generated
+				// and passed to Rows.Scan. If Scan has set this pointer to nil the value is zeroed.
 				scanVal := reflect.New(pt).Elem()
 				ptrs = append(ptrs, scanVal.Addr().Interface())
-				scanInfos = append(scanInfos, scanInfo{fieldVal: val, pointerScanVal: scanVal})
+				scanProxies = append(scanProxies, scanProxy{original: val, scan: scanVal})
 			} else {
 				ptrs = append(ptrs, val.Addr().Interface())
 			}
 		case *mapKey:
 			scanVal := reflect.New(tm.mapType.Elem()).Elem()
 			ptrs = append(ptrs, scanVal.Addr().Interface())
-			mapSetInfos = append(mapSetInfos, mapSetInfo{keyVal: reflect.ValueOf(tm.name), scanVal: scanVal, mapVal: outputVal})
+			scanProxies = append(scanProxies, scanProxy{original: outputVal, scan: scanVal, key: reflect.ValueOf(tm.name)})
 		}
 	}
 
 	onSuccess = func() {
-		for _, mi := range mapSetInfos {
-			mi.mapVal.SetMapIndex(mi.keyVal, mi.scanVal)
-		}
-		for _, si := range scanInfos {
-			if !si.pointerScanVal.IsNil() {
-				si.fieldVal.Set(si.pointerScanVal.Elem())
+		for _, sp := range scanProxies {
+			if sp.key.IsValid() {
+				sp.original.SetMapIndex(sp.key, sp.scan)
 			} else {
-				si.fieldVal.Set(reflect.Zero(si.fieldVal.Type()))
+				var val reflect.Value
+				if !sp.scan.IsNil() {
+					val = sp.scan.Elem()
+				} else {
+					val = reflect.Zero(sp.original.Type())
+				}
+				sp.original.Set(val)
 			}
 		}
 	}
