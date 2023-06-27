@@ -122,8 +122,8 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 	}
 	var mapSetInfos = []mapSetInfo{}
 	type scanInfo struct {
-		scanVal  reflect.Value
-		fieldVal reflect.Value
+		pointerScanVal reflect.Value
+		fieldVal       reflect.Value
 	}
 	var scanInfos = []scanInfo{}
 	var typeDest = make(map[reflect.Type]reflect.Value)
@@ -185,7 +185,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 			if val.Type().Kind() != reflect.Pointer && !pt.Implements(scannerInterface) {
 				scanVal := reflect.New(pt).Elem()
 				ptrs = append(ptrs, scanVal.Addr().Interface())
-				scanInfos = append(scanInfos, scanInfo{fieldVal: val, scanVal: scanVal})
+				scanInfos = append(scanInfos, scanInfo{fieldVal: val, pointerScanVal: scanVal})
 			} else {
 				ptrs = append(ptrs, val.Addr().Interface())
 			}
@@ -201,8 +201,8 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 			mi.mapVal.SetMapIndex(mi.keyVal, mi.scanVal)
 		}
 		for _, si := range scanInfos {
-			if !si.scanVal.IsNil() {
-				si.fieldVal.Set(si.scanVal.Elem())
+			if !si.pointerScanVal.IsNil() {
+				si.fieldVal.Set(si.pointerScanVal.Elem())
 			} else {
 				si.fieldVal.Set(reflect.Zero(si.fieldVal.Type()))
 			}
