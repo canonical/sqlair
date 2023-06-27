@@ -183,6 +183,10 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 			}
 			pt := reflect.PointerTo(val.Type())
 			if val.Type().Kind() != reflect.Pointer && !pt.Implements(scannerInterface) {
+				// Rows.Scan will return an error if it tries to scan NULL into a type that does not have nil.
+				// Pointers are the only nil type that work with Rows.Scan so for none pointer types we generate
+				// a pointer to them and pass this to Rows.Scan. After scanning the variable is set, if the
+				// pointer is nil, it is set to its zero value.
 				scanVal := reflect.New(pt).Elem()
 				ptrs = append(ptrs, scanVal.Addr().Interface())
 				scanInfos = append(scanInfos, scanInfo{fieldVal: val, pointerScanVal: scanVal})
