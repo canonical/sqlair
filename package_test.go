@@ -910,7 +910,7 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 	db := sqlair.NewDB(sqldb)
 
 	mark := Person{20, "Mark", 1500}
-	churchRoad := Address{1500, "Sad World", "Church Road"}
+	mainStreet := Address{1000, "Happy Land", "Main Street"}
 	var p = Person{}
 	var a = Address{}
 
@@ -924,7 +924,6 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 	}
 
 	var markStmtID uuid.UUID
-	var churchRoadStmtID uuid.UUID
 	{
 		selectMark, err := sqlair.Prepare(`
 			SELECT &Person.*
@@ -939,30 +938,30 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 		c.Assert(err, IsNil)
 		c.Assert(p, Equals, mark)
 
+		// Check the prepared selectMark is in the cache.
 		c.Assert(lookup(db.Cache())(markStmtID), Equals, true)
-		// Check the prepared selectMark in the cache.
 
 		err = db.Query(nil, selectMark).Get(&p)
 		c.Assert(err, IsNil)
 		c.Assert(p, Equals, mark)
 
+		// Check selectMark is still in the cache.
 		c.Assert(lookup(db.Cache())(markStmtID), Equals, true)
-		// Check its still in the cache.
 
 		err = db.Query(nil, selectMark).Get(&p)
 		c.Assert(err, IsNil)
 		c.Assert(p, Equals, mark)
 	}
-	runtime.GC()
-	time.Sleep(1 * time.Millisecond)
 	// The finalizer for selectMark will run after the GC.
-	// 1 millisecond should be long enough for the finalizer to finish.
-
+	runtime.GC()
+	// Wait 1 millisecond for the finalizer to finish.
+	time.Sleep(1 * time.Millisecond)
 	// Check selectMark has been removed from the cache.
 	c.Assert(lookup(db.Cache())(markStmtID), Equals, false)
 
 	// Test with transactions.
 	var tx *sqlair.TX
+	var mainStreetStmtID uuid.UUID
 	{
 		selectMark, err := sqlair.Prepare(`
 			SELECT &Person.*
@@ -982,7 +981,7 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 
 		tx, err = db.Begin(nil, nil)
 		c.Assert(err, IsNil)
-		// Run selectMark on a tx. This should repreare the same
+		// Run selectMark on a Tx. This should reprepare the same
 		// *sql.Stmt on the Tx since it is already prepared on the DB.
 		err = tx.Query(nil, selectMark).Get(&p)
 		c.Assert(err, IsNil)
@@ -990,28 +989,28 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 
 		c.Assert(lookup(tx.Cache())(markStmtID), Equals, true)
 
-		// Check it is still in the cache.
+		// Check selectMark is still in the cache.
 		err = tx.Query(nil, selectMark).Get(&p)
 		c.Assert(err, IsNil)
 		c.Assert(p, Equals, mark)
 
 		c.Assert(lookup(tx.Cache())(markStmtID), Equals, true)
 
-		// Run a different query on the tx that has not
-		// already been prepared on the database.
-		selectChurchRoad, err := sqlair.Prepare(`
+		// Run a different query on the Tx that has not already been
+		// prepared on the DB.
+		selectMainStreet, err := sqlair.Prepare(`
 			SELECT &Address.*
 			FROM address
-			WHERE street = "Church Road"
+			WHERE street = "Main Street"
 		`, Address{})
 		c.Assert(err, IsNil)
 
-		churchRoadStmtID = selectChurchRoad.ID()
+		mainStreetStmtID = selectMainStreet.ID()
 
-		err = tx.Query(nil, selectChurchRoad).Get(&a)
+		err = tx.Query(nil, selectMainStreet).Get(&a)
 		c.Assert(err, IsNil)
-		c.Assert(a, Equals, churchRoad)
-		c.Assert(lookup(tx.Cache())(churchRoadStmtID), Equals, true)
+		c.Assert(a, Equals, mainStreet)
+		c.Assert(lookup(tx.Cache())(mainStreetStmtID), Equals, true)
 
 		tx.Commit()
 	}
@@ -1019,10 +1018,10 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 	runtime.GC()
 	time.Sleep(1 * time.Millisecond)
 
-	c.Assert(lookup(tx.Cache())(churchRoadStmtID), Equals, false)
+	c.Assert(lookup(tx.Cache())(mainStreetStmtID), Equals, false)
 	c.Assert(lookup(db.Cache())(markStmtID), Equals, false)
 
-	// Check cache is actually empty at the end
+	// Check the cache is empty at the end.
 	cache, _ := db.Cache()
 	c.Assert(cache, HasLen, 0)
 	cache, _ = tx.Cache()
