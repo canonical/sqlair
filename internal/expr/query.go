@@ -122,9 +122,8 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 	}
 	var mapSetInfos = []mapSetInfo{}
 	type scanInfo struct {
-		fieldVal reflect.Value
 		scanVal  reflect.Value
-		valType  reflect.Type
+		fieldVal reflect.Value
 	}
 	var scanInfos = []scanInfo{}
 	var typeDest = make(map[reflect.Type]reflect.Value)
@@ -182,12 +181,11 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 			if !val.CanSet() {
 				return nil, nil, fmt.Errorf("internal error: cannot set field %s of struct %s", tm.name, tm.structType.Name())
 			}
-			t := val.Type()
-			pt := reflect.PointerTo(t)
-			if t.Kind() != reflect.Pointer && !pt.Implements(scannerInterface) {
+			pt := reflect.PointerTo(val.Type())
+			if val.Type().Kind() != reflect.Pointer && !pt.Implements(scannerInterface) {
 				scanVal := reflect.New(pt).Elem()
 				ptrs = append(ptrs, scanVal.Addr().Interface())
-				scanInfos = append(scanInfos, scanInfo{fieldVal: val, scanVal: scanVal, valType: t})
+				scanInfos = append(scanInfos, scanInfo{fieldVal: val, scanVal: scanVal})
 			} else {
 				ptrs = append(ptrs, val.Addr().Interface())
 			}
@@ -206,7 +204,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 			if !si.scanVal.IsNil() {
 				si.fieldVal.Set(si.scanVal.Elem())
 			} else {
-				si.fieldVal.Set(reflect.Zero(si.valType))
+				si.fieldVal.Set(reflect.Zero(si.fieldVal.Type()))
 			}
 		}
 	}
