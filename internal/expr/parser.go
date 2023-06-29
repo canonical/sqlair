@@ -4,11 +4,17 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 type Parser struct {
 	input string
 	pos   int
+	// nextPos is start of the next char.
+	nextPos int
+	// char is the rune starting at pos. char is set to 0 at the end of input.
+	char rune
 	// prevPart is the value of pos when we last finished parsing a part.
 	prevPart int
 	// partStart is the value of pos just before we started parsing the part
@@ -25,9 +31,27 @@ func NewParser() *Parser {
 func (p *Parser) init(input string) {
 	p.input = input
 	p.pos = 0
+	p.nextPos = 0
+	p.char = 0
 	p.prevPart = 0
 	p.partStart = 0
 	p.parts = []queryPart{}
+	p.nextChar()
+}
+
+// nextChar reads the next character from the
+// input and increments the position.
+func (p *Parser) nextChar() {
+	if p.nextPos >= len(p.input) {
+		p.char = 0
+		p.pos = p.nextPos
+		return
+	}
+
+	var size int
+	p.char, size = utf8.DecodeRuneInString(p.input[p.nextPos:])
+	p.pos = p.nextPos
+	p.nextPos += size
 }
 
 // A checkpoint struct for saving parser state to restore later. We only use
@@ -36,6 +60,8 @@ func (p *Parser) init(input string) {
 type checkpoint struct {
 	parser    *Parser
 	pos       int
+	nextPos   int
+	char      rune
 	prevPart  int
 	partStart int
 	parts     []queryPart
@@ -47,6 +73,8 @@ func (p *Parser) save() *checkpoint {
 	return &checkpoint{
 		parser:    p,
 		pos:       p.pos,
+		nextPos:   p.nextPos,
+		char:      p.char,
 		prevPart:  p.prevPart,
 		partStart: p.partStart,
 		parts:     p.parts,
@@ -57,6 +85,8 @@ func (p *Parser) save() *checkpoint {
 // checkpoint.
 func (cp *checkpoint) restore() {
 	cp.parser.pos = cp.pos
+	cp.parser.nextPos = cp.nextPos
+	cp.parser.char = cp.char
 	cp.parser.prevPart = cp.prevPart
 	cp.parser.partStart = cp.partStart
 	cp.parser.parts = cp.parts
@@ -113,27 +143,27 @@ func (p *Parser) add(part queryPart) {
 // If no comment is found the parser state is left unchanged.
 func (p *Parser) skipComment() bool {
 	cp := p.save()
-	if p.skipByte('-') || p.skipByte('/') {
-		c := p.input[p.pos-1]
-		if (c == '-' && p.skipByte('-')) || (c == '/' && p.skipByte('*')) {
-			var end byte
+	c := p.char
+	if p.skipChar('-') || p.skipChar('/') {
+		if (c == '-' && p.skipChar('-')) || (c == '/' && p.skipChar('*')) {
+			var end rune
 			if c == '-' {
 				end = '\n'
 			} else {
 				end = '*'
 			}
 			for p.pos < len(p.input) {
-				if p.input[p.pos] == end {
+				if p.char == end {
 					// if end == '\n' (i.e. its a -- comment) dont p.pos++ to keep the newline.
 					if end == '*' {
-						p.pos++
-						if !p.skipByte('/') {
+						p.nextChar()
+						if !p.skipChar('/') {
 							continue
 						}
 					}
 					return true
 				}
-				p.pos++
+				p.nextChar()
 			}
 			// Reached end of input (valid comment end).
 			return true
@@ -163,7 +193,7 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 
 		p.partStart = p.pos
 
-		if p.pos == len(p.input) {
+		if p.pos >= len(p.input) {
 			break
 		}
 
@@ -202,8 +232,9 @@ loop:
 			continue
 		}
 
-		p.pos++
-		switch p.input[p.pos-1] {
+		c := p.char
+		p.nextChar()
+		switch c {
 		// If the preceding byte is one of these then we might be at the start
 		// of an expression.
 		case ' ', '\t', '\n', '\r', '=', ',', '(', '[', '>', '<', '+', '-', '*', '/', '|', '%':
@@ -222,16 +253,16 @@ loop:
 func (p *Parser) skipStringLiteral() (bool, error) {
 	cp := p.save()
 
-	if p.skipByte('"') || p.skipByte('\'') {
-		c := p.input[p.pos-1]
+	c := p.char
+	if p.skipChar('"') || p.skipChar('\'') {
 
 		// We keep track of whether the next quote has been previously
 		// escaped. If not, it might be a closing quote.
 		maybeCloser := true
-		for p.skipByteFind(c) {
+		for p.skipCharFind(c) {
 			// If this looks like a closing quote, check if it might be an
 			// escape for a following quote. If not, we're done.
-			if maybeCloser && !p.peekByte(c) {
+			if maybeCloser && !p.peekChar(c) {
 				return true, nil
 			}
 			maybeCloser = !maybeCloser
@@ -244,32 +275,35 @@ func (p *Parser) skipStringLiteral() (bool, error) {
 	return false, nil
 }
 
-// peekByte returns true if the current byte equals the one passed as parameter.
-func (p *Parser) peekByte(b byte) bool {
-	return p.pos < len(p.input) && p.input[p.pos] == b
+// peekChar returns true if the current char equals the one passed as parameter.
+func (p *Parser) peekChar(c rune) bool {
+	return p.pos < len(p.input) && p.char == c
 }
 
-// skipByte jumps over the current byte if it matches the byte passed as a
+// skipChar jumps over the current char if it matches the char passed as a
 // parameter. Returns true in that case, false otherwise.
-func (p *Parser) skipByte(b byte) bool {
-	if p.pos < len(p.input) && p.input[p.pos] == b {
-		p.pos++
+func (p *Parser) skipChar(c rune) bool {
+	if p.pos < len(p.input) && p.char == c {
+		p.nextChar()
 		return true
 	}
 	return false
 }
 
-// skipByteFind advances the parser until it finds a byte that matches the one
+// skipCharFind advances the parser until it finds a char that matches the one
 // passed as parameter and then jumps over it. In that case returns true. If the
-// end of the string is reached and no matching byte was found, it returns
+// end of the string is reached and no matching char was found, it returns
 // false.
-func (p *Parser) skipByteFind(b byte) bool {
-	for i := p.pos; i < len(p.input); i++ {
-		if p.input[i] == b {
-			p.pos = i + 1
+func (p *Parser) skipCharFind(c rune) bool {
+	cp := p.save()
+	for p.pos < len(p.input) {
+		if p.char == c {
+			p.nextChar()
 			return true
 		}
+		p.nextChar()
 	}
+	cp.restore()
 	return false
 }
 
@@ -281,9 +315,9 @@ func (p *Parser) skipBlanks() bool {
 		if ok := p.skipComment(); ok {
 			continue
 		}
-		switch p.input[p.pos] {
+		switch p.char {
 		case ' ', '\t', '\r', '\n':
-			p.pos++
+			p.nextChar()
 		default:
 			return p.pos != mark
 		}
@@ -297,39 +331,14 @@ func (p *Parser) skipBlanks() bool {
 func (p *Parser) skipString(s string) bool {
 	if p.pos+len(s) <= len(p.input) &&
 		strings.EqualFold(p.input[p.pos:p.pos+len(s)], s) {
+		// Manually advance the parser to the end of the string.
 		p.pos += len(s)
+		var size int
+		p.char, size = utf8.DecodeRuneInString(p.input[p.pos:])
+		p.nextPos = p.pos + size
 		return true
 	}
 	return false
-}
-
-// isNameByte returns true if the given byte can be part of a name. It returns
-// false otherwise.
-func isNameByte(c byte) bool {
-	return 'A' <= c && c <= 'Z' || 'a' <= c && c <= 'z' ||
-		'0' <= c && c <= '9' || c == '_'
-}
-
-// isNameInitialByte returns true if the given byte can appear at the start of a
-// name. It returns false otherwise.
-func isInitialNameByte(c byte) bool {
-	return 'A' <= c && c <= 'Z' || 'a' <= c && c <= 'z' || c == '_'
-}
-
-// skipName advances the parser until it is on the first non name byte and
-// returns true. If the p.pos does not start on a name byte it returns false.
-func (p *Parser) skipName() bool {
-	if p.pos >= len(p.input) {
-		return false
-	}
-	mark := p.pos
-	if isInitialNameByte(p.input[p.pos]) {
-		p.pos++
-		for p.pos < len(p.input) && isNameByte(p.input[p.pos]) {
-			p.pos++
-		}
-	}
-	return p.pos > mark
 }
 
 // Functions with the prefix parse attempt to parse some construct. They return
@@ -344,36 +353,72 @@ func (p *Parser) skipName() bool {
 //  - bool == false, err == nil
 //		The construct was not the one we are looking for
 
-// parseIdentifierAsterisk parses a name made up of only nameBytes or of a
-// single asterisk. On success it returns the parsed string and true. Otherwise,
-// it returns the empty string and false.
+// parseIdentifierAsterisk parses an identifier or an asterisk.
 func (p *Parser) parseIdentifierAsterisk() (string, bool) {
-	if p.skipByte('*') {
+	if p.skipChar('*') {
 		return "*", true
 	}
 	return p.parseIdentifier()
 }
 
-// parseIdentifier parses a name made up of only nameBytes. On success it
-// returns the parsed string and true. Otherwise, it returns the empty string
-// and false.
+// parseIdentifier parses a name starting with a letter or underscore and
+// followed by letters, digits and underscores. This matches the allowed
+// characters in Go type names.
 func (p *Parser) parseIdentifier() (string, bool) {
 	mark := p.pos
-	if p.skipName() {
+
+	if unicode.IsLetter(p.char) || p.char == '_' {
+		p.nextChar()
+		for p.pos < len(p.input) && (unicode.IsLetter(p.char) ||
+			unicode.IsDigit(p.char) || p.char == '_') {
+			p.nextChar()
+		}
+	}
+
+	if p.pos > mark {
 		return p.input[mark:p.pos], true
 	}
 	return "", false
 }
 
+// skipColumnName parses column names inside quotes as well as regular columns.
+func (p *Parser) parseColumnName() (string, bool, error) {
+	if p.skipChar('*') {
+		return "*", true, nil
+	}
+
+	mark := p.pos
+
+	if ok, err := p.skipStringLiteral(); err != nil {
+		return "", false, err
+	} else if ok {
+		return p.input[mark:p.pos], true, nil
+	}
+
+	for p.pos < len(p.input) && (unicode.IsLetter(p.char) ||
+		unicode.IsDigit(p.char) || p.char == '_') {
+		p.nextChar()
+	}
+	if p.pos > mark {
+		return p.input[mark:p.pos], true, nil
+	}
+	return "", false, nil
+}
+
 // parseColumn parses a column made up of name bytes, optionally dot-prefixed by
 // its table name.
-// parseColumn returns an error so that it can be used with parseList.
 func (p *Parser) parseColumn() (fullName, bool, error) {
 	cp := p.save()
 
-	if id, ok := p.parseIdentifierAsterisk(); ok {
-		if id != "*" && p.skipByte('.') {
-			if idCol, ok := p.parseIdentifierAsterisk(); ok {
+	if id, ok, err := p.parseColumnName(); err != nil {
+		cp.restore()
+		return fullName{}, false, err
+	} else if ok {
+		if id != "*" && p.skipChar('.') {
+			if idCol, ok, err := p.parseColumnName(); err != nil {
+				cp.restore()
+				return fullName{}, false, err
+			} else if ok {
 				return fullName{prefix: id, name: idCol}, true, nil
 			}
 		} else {
@@ -387,7 +432,7 @@ func (p *Parser) parseColumn() (fullName, bool, error) {
 }
 
 func (p *Parser) parseTarget() (fullName, bool, error) {
-	if p.skipByte('&') {
+	if p.skipChar('&') {
 		return p.parseGoFullName()
 	}
 
@@ -400,7 +445,7 @@ func (p *Parser) parseGoFullName() (fullName, bool, error) {
 	cp := p.save()
 
 	if id, ok := p.parseIdentifier(); ok {
-		if !p.skipByte('.') {
+		if !p.skipChar('.') {
 			return fullName{}, false, fmt.Errorf("column %d: unqualified type, expected %s.* or %s.<db tag>", p.pos, id, id)
 		}
 
@@ -419,7 +464,7 @@ func (p *Parser) parseGoFullName() (fullName, bool, error) {
 // bracketed, comma seperated, list.
 func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]fullName, bool, error) {
 	cp := p.save()
-	if !p.skipByte('(') {
+	if !p.skipChar('(') {
 		return nil, false, nil
 	}
 
@@ -443,11 +488,11 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 		}
 
 		p.skipBlanks()
-		if p.skipByte(')') {
+		if p.skipChar(')') {
 			return objs, true, nil
 		}
 
-		nextItem = p.skipByte(',')
+		nextItem = p.skipChar(',')
 	}
 	return nil, false, fmt.Errorf("column %d: missing closing parentheses", parenPos)
 }
@@ -532,7 +577,7 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 	cp := p.save()
 
-	if p.skipByte('$') {
+	if p.skipChar('$') {
 		if fn, ok, err := p.parseGoFullName(); ok {
 			if fn.name == "*" {
 				return nil, false, fmt.Errorf(`asterisk not allowed in input expression "$%s"`, fn)

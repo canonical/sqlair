@@ -39,11 +39,24 @@ type HardMaths struct {
 	Coef int `db:"coef"`
 }
 
+type QuotedColumnNames struct {
+	Ex int `db:"\"!!!\""`
+	Qu int `db:"'???'"`
+}
+
 type M map[string]any
+
+type lowerCaseMap map[string]any
 
 type IntMap map[string]int
 
 type StringMap map[string]string
+
+type Unicode我Struct struct {
+	X人 int    `db:"საფოსტო"`
+	X我 int    `db:"住所"`
+	X这 string `db:"鑑別"`
+}
 
 var tests = []struct {
 	summary          string
@@ -309,6 +322,42 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	"[Bypass[INSERT INTO arr VALUES (ARRAY[[1,2],[] Input[HardMaths.x] Bypass[,4]], ARRAY[[5,6],[] Input[HardMaths.y] Bypass[,8]]);]]",
 	[]any{HardMaths{}},
 	"INSERT INTO arr VALUES (ARRAY[[1,2],[@sqlair_0,4]], ARRAY[[5,6],[@sqlair_1,8]]);",
+}, {
+	"lower case struct",
+	"SELECT &lowerCaseMap.x FROM person",
+	"[Bypass[SELECT ] Output[[] [lowerCaseMap.x]] Bypass[ FROM person]]",
+	[]any{lowerCaseMap{}},
+	"SELECT x AS _sqlair_0 FROM person",
+}, {
+	"unicode asterisk",
+	"SELECT &Unicode我Struct.* FROM person WHERE id = 30",
+	"[Bypass[SELECT ] Output[[] [Unicode我Struct.*]] Bypass[ FROM person WHERE id = 30]]",
+	[]any{Unicode我Struct{}},
+	"SELECT საფოსტო AS _sqlair_0, 住所 AS _sqlair_1, 鑑別 AS _sqlair_2 FROM person WHERE id = 30",
+}, {
+	"unicode explicit",
+	"SELECT &Unicode我Struct.საფოსტო, &Unicode我Struct.住所, &Unicode我Struct.鑑別 FROM person WHERE id = $Unicode我Struct.საფოსტო",
+	"[Bypass[SELECT ] Output[[] [Unicode我Struct.საფოსტო]] Bypass[, ] Output[[] [Unicode我Struct.住所]] Bypass[, ] Output[[] [Unicode我Struct.鑑別]] Bypass[ FROM person WHERE id = ] Input[Unicode我Struct.საფოსტო]]",
+	[]any{Unicode我Struct{}},
+	"SELECT საფოსტო AS _sqlair_0, 住所 AS _sqlair_1, 鑑別 AS _sqlair_2 FROM person WHERE id = @sqlair_0",
+}, {
+	"unicode rename",
+	"SELECT (鑑別, мяч) AS (&Unicode我Struct.საფოსტო, &Unicode我Struct.鑑別) FROM person WHERE id = 30",
+	"[Bypass[SELECT ] Output[[鑑別 мяч] [Unicode我Struct.საფოსტო Unicode我Struct.鑑別]] Bypass[ FROM person WHERE id = 30]]",
+	[]any{Unicode我Struct{}},
+	"SELECT 鑑別 AS _sqlair_0, мяч AS _sqlair_1 FROM person WHERE id = 30",
+}, {
+	"empty input",
+	"",
+	"[]",
+	[]any{},
+	"",
+}, {
+	"quoted column names",
+	`SELECT ("!!!", '???') AS &QuotedColumnNames.* FROM person`,
+	`[Bypass[SELECT ] Output[["!!!" '???'] [QuotedColumnNames.*]] Bypass[ FROM person]]`,
+	[]any{QuotedColumnNames{}},
+	`SELECT "!!!" AS _sqlair_0, '???' AS _sqlair_1 FROM person`,
 }}
 
 func (s *ExprSuite) TestExpr(c *C) {
@@ -601,6 +650,16 @@ func (s *ExprSuite) TestValidQuery(c *C) {
 		[]any{Person{}, StringMap{}},
 		[]any{Person{ID: 666}, StringMap{"street": "Highway to Hell"}},
 		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
+	}, {
+		"SELECT foo FROM t WHERE x = $StringMap.street, y = $Person.id",
+		[]any{Person{}, StringMap{}},
+		[]any{Person{ID: 666}, StringMap{"street": "Highway to Hell"}},
+		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
+	}, {
+		"SELECT FROM person WHERE id = $Unicode我Struct.საფოსტო",
+		[]any{Unicode我Struct{}},
+		[]any{Unicode我Struct{X人: 30}},
+		[]any{sql.Named("sqlair_0", 30)},
 	}}
 	for _, t := range tests {
 		parser := expr.NewParser()

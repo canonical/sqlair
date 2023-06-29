@@ -111,9 +111,6 @@ func (s *ExprInternalSuite) TestReflectBadTagError(c *C) {
 
 	var invalidColumn = []any{
 		struct {
-			ID int64 `db:"5id"`
-		}{99},
-		struct {
 			ID int64 `db:"+id"`
 		}{99},
 		struct {

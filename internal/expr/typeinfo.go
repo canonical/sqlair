@@ -3,7 +3,6 @@ package expr
 import (
 	"fmt"
 	"reflect"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -159,34 +158,33 @@ func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 	}
 }
 
-// This expression should be aligned with the bytes we allow in isNameByte in
-// the parser.
-var validColNameRx = regexp.MustCompile(`^([a-zA-Z_])+([a-zA-Z_0-9])*$`)
-
 // parseTag parses the input tag string and returns its
 // name and whether it contains the "omitempty" option.
 func parseTag(tag string) (string, bool, error) {
 	options := strings.Split(tag, ",")
 
-	var omitEmpty bool
+	var omitempty bool
 	if len(options) > 1 {
 		for _, flag := range options[1:] {
-			if flag == "omitempty" {
-				omitEmpty = true
+			if strings.TrimSpace(flag) == "omitempty" {
+				omitempty = true
 			} else {
-				return "", omitEmpty, fmt.Errorf("unsupported flag %q in tag %q", flag, tag)
+				return "", false, fmt.Errorf("unsupported flag %q in tag %q", flag, tag)
 			}
 		}
 	}
 
-	name := options[0]
+	name := strings.TrimSpace(options[0])
 	if len(name) == 0 {
 		return "", false, fmt.Errorf("empty db tag")
 	}
 
-	if !validColNameRx.MatchString(name) {
+	var p = NewParser()
+	p.init(name)
+	if col, ok, err := p.parseColumnName(); err != nil {
+		return "", omitempty, err
+	} else if !ok || name != col || col == "*" {
 		return "", false, fmt.Errorf("invalid column name in 'db' tag: %q", name)
 	}
-
-	return name, omitEmpty, nil
+	return name, omitempty, nil
 }

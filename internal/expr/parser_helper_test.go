@@ -5,7 +5,7 @@ import (
 )
 
 type parseHelperTest struct {
-	bytef    func(byte) bool
+	charf    func(rune) bool
 	stringf  func(string) bool
 	stringf0 func() bool
 	result   []bool
@@ -17,17 +17,17 @@ func (s *ExprInternalSuite) TestRunTable(c *C) {
 	var p = NewParser()
 	var parseTests = []parseHelperTest{
 
-		{bytef: p.peekByte, result: []bool{false}, input: "", data: []string{"a"}},
-		{bytef: p.peekByte, result: []bool{false}, input: "b", data: []string{"a"}},
-		{bytef: p.peekByte, result: []bool{true}, input: "a", data: []string{"a"}},
+		{charf: p.peekChar, result: []bool{false}, input: "", data: []string{"a"}},
+		{charf: p.peekChar, result: []bool{false}, input: "b", data: []string{"a"}},
+		{charf: p.peekChar, result: []bool{true}, input: "a", data: []string{"a"}},
 
-		{bytef: p.skipByte, result: []bool{false}, input: "", data: []string{"a"}},
-		{bytef: p.skipByte, result: []bool{false}, input: "abc", data: []string{"b"}},
-		{bytef: p.skipByte, result: []bool{true, true}, input: "abc", data: []string{"a", "b"}},
+		{charf: p.skipChar, result: []bool{false}, input: "", data: []string{"a"}},
+		{charf: p.skipChar, result: []bool{false}, input: "abc", data: []string{"b"}},
+		{charf: p.skipChar, result: []bool{true, true}, input: "abc", data: []string{"a", "b"}},
 
-		{bytef: p.skipByteFind, result: []bool{false}, input: "", data: []string{"a"}},
-		{bytef: p.skipByteFind, result: []bool{false, true, true}, input: "abcde", data: []string{"x", "b", "c"}},
-		{bytef: p.skipByteFind, result: []bool{true, false}, input: "abcde ", data: []string{" ", " "}},
+		{charf: p.skipCharFind, result: []bool{false}, input: "", data: []string{"a"}},
+		{charf: p.skipCharFind, result: []bool{false, true, true}, input: "abcde", data: []string{"x", "b", "c"}},
+		{charf: p.skipCharFind, result: []bool{true, false}, input: "abcde ", data: []string{" ", " "}},
 
 		{stringf0: p.skipBlanks, result: []bool{false}, input: "", data: []string{}},
 		{stringf0: p.skipBlanks, result: []bool{false}, input: "abc    d", data: []string{}},
@@ -43,19 +43,14 @@ func (s *ExprInternalSuite) TestRunTable(c *C) {
 		{stringf: p.skipString, result: []bool{false}, input: "", data: []string{"a"}},
 		{stringf: p.skipString, result: []bool{true, true}, input: "helloworld", data: []string{"hElLo", "w"}},
 		{stringf: p.skipString, result: []bool{true, true}, input: "hello world", data: []string{"hello", " "}},
-
-		{stringf0: p.skipName, result: []bool{false}, input: " hi", data: []string{}},
-		{stringf0: p.skipName, result: []bool{false}, input: "*", data: []string{}},
-		{stringf0: p.skipName, result: []bool{true}, input: "hello", data: []string{}},
-		{stringf0: p.skipName, result: []bool{false}, input: "2d3d", data: []string{}},
 	}
 	for _, v := range parseTests {
 		// Reset the input.
 		p.init(v.input)
 		for i, _ := range v.result {
 			var result bool
-			if v.bytef != nil {
-				result = v.bytef(v.data[i][0])
+			if v.charf != nil {
+				result = v.charf(rune(v.data[i][0]))
 			}
 			if v.stringf != nil {
 				result = v.stringf(v.data[i])
