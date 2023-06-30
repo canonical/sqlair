@@ -219,3 +219,57 @@ func Example() {
 	//Alastair (Engineering), Ed (Engineering), Marco (Engineering), Pedro (Management), Serdar (Presentation Engineering), Lina (Presentation Engineering), are in The Basement
 	//Gustavo from team Leadership is in The Penthouse
 }
+
+func ExampleOutcome_get() {
+	sqldb, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		panic(err)
+	}
+	db := sqlair.NewDB(sqldb)
+	stmt := sqlair.MustPrepare(`
+	CREATE TABLE people (
+		name text,
+		id integer
+	);
+	`)
+
+	var outcome = sqlair.Outcome{}
+
+	err = db.Query(nil, stmt).Get(&outcome)
+
+	res := outcome.Result()
+	s, _ := res.RowsAffected()
+	fmt.Println(s)
+
+	// Output:
+	//0
+}
+
+func ExampleOutcome_iter() {
+	sqldb, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		panic(err)
+	}
+	db := sqlair.NewDB(sqldb)
+	stmt := sqlair.MustPrepare(`
+	CREATE TABLE people (
+		name text,
+		id integer
+	);
+	`)
+
+	var outcome = sqlair.Outcome{}
+
+	// If Iter is used on a statement with no output arguments, then Outcome
+	// can be passed to Iter.Get before Iter.Next is called.
+	iter := db.Query(nil, stmt).Iter()
+	err = iter.Get(&outcome)
+	iter.Close()
+
+	res := outcome.Result()
+	s, _ := res.RowsAffected()
+	fmt.Println(s)
+
+	// Output:
+	//0
+}
