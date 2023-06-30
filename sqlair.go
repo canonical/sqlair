@@ -146,7 +146,11 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 	}
 
 	cacheMutex.RLock()
-	dbCache := stmtCache[db.cacheID]
+	dbCache, ok := stmtCache[db.cacheID]
+	if !ok {
+		cacheMutex.RUnlock()
+		return &Query{ctx: ctx, err: fmt.Errorf("sql: database is closed")}
+	}
 	ps, ok := dbCache[s.cacheID]
 	cacheMutex.RUnlock()
 	if !ok {
@@ -446,14 +450,23 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 	}
 
 	cacheMutex.RLock()
-	txCache := stmtCache[tx.cacheID]
+	txCache, ok := stmtCache[tx.cacheID]
+	if !ok {
+		cacheMutex.RUnlock()
+		return &Query{ctx: ctx, err: sql.ErrTxDone}
+	}
 	ps, ok := txCache[s.cacheID]
 	cacheMutex.RUnlock()
 	if !ok {
 		// If we cannot find the prepared statement in the transaction cache,
 		// try the db cache and use tx.Stmt to prepare it on the tx.
 		cacheMutex.RLock()
-		ps, ok = stmtCache[tx.db.cacheID][s.cacheID]
+		dbCache, ok := stmtCache[tx.db.cacheID]
+		if !ok {
+			cacheMutex.RUnlock()
+			return &Query{ctx: ctx, err: fmt.Errorf("sql: database is closed")}
+		}
+		ps, ok = dbCache[s.cacheID]
 		cacheMutex.RUnlock()
 		if ok {
 			ps = tx.tx.Stmt(ps)
