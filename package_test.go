@@ -5,11 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"runtime"
-	"sync"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 	. "gopkg.in/check.v1"
 
@@ -914,16 +912,17 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 	var p = Person{}
 	var a = Address{}
 
-	lookup := func(c map[uuid.UUID]*sql.Stmt, m *sync.RWMutex) func(uuid.UUID) bool {
-		return func(k uuid.UUID) bool {
-			m.RLock()
-			_, ok := c[k]
-			m.RUnlock()
-			return ok
-		}
+	cache, cacheMutex := sqlair.Cache()
+	dbID := db.CacheID()
+
+	lookupStmt := func(txdbID int64, sID int64) bool {
+		cacheMutex.RLock()
+		_, ok := cache[txdbID][sID]
+		cacheMutex.RUnlock()
+		return ok
 	}
 
-	var markStmtID uuid.UUID
+	var markStmtID int64
 	{
 		selectMark, err := sqlair.Prepare(`
 			SELECT &Person.*
@@ -932,21 +931,21 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 		`, Person{})
 		c.Assert(err, IsNil)
 
-		markStmtID = selectMark.ID()
+		markStmtID = selectMark.CacheID()
 
 		err = db.Query(nil, selectMark).Get(&p)
 		c.Assert(err, IsNil)
 		c.Assert(p, Equals, mark)
 
 		// Check the prepared selectMark is in the cache.
-		c.Assert(lookup(db.Cache())(markStmtID), Equals, true)
+		c.Assert(lookupStmt(dbID, markStmtID), Equals, true)
 
 		err = db.Query(nil, selectMark).Get(&p)
 		c.Assert(err, IsNil)
 		c.Assert(p, Equals, mark)
 
 		// Check selectMark is still in the cache.
-		c.Assert(lookup(db.Cache())(markStmtID), Equals, true)
+		c.Assert(lookupStmt(dbID, markStmtID), Equals, true)
 
 		err = db.Query(nil, selectMark).Get(&p)
 		c.Assert(err, IsNil)
@@ -957,11 +956,12 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 	// Wait 1 millisecond for the finalizer to finish.
 	time.Sleep(1 * time.Millisecond)
 	// Check selectMark has been removed from the cache.
-	c.Assert(lookup(db.Cache())(markStmtID), Equals, false)
+	c.Assert(lookupStmt(dbID, markStmtID), Equals, false)
 
 	// Test with transactions.
 	var tx *sqlair.TX
-	var mainStreetStmtID uuid.UUID
+	var mainStreetStmtID int64
+	var txID int64
 	{
 		selectMark, err := sqlair.Prepare(`
 			SELECT &Person.*
@@ -970,31 +970,33 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 		`, Person{})
 		c.Assert(err, IsNil)
 
-		markStmtID = selectMark.ID()
+		markStmtID = selectMark.CacheID()
 
 		// Run selectMark on db.
 		err = db.Query(nil, selectMark).Get(&p)
 		c.Assert(err, IsNil)
 		c.Assert(p, Equals, mark)
 
-		c.Assert(lookup(db.Cache())(markStmtID), Equals, true)
+		c.Assert(lookupStmt(dbID, markStmtID), Equals, true)
 
 		tx, err = db.Begin(nil, nil)
 		c.Assert(err, IsNil)
+
+		txID = tx.CacheID()
 		// Run selectMark on a Tx. This should reprepare the same
 		// *sql.Stmt on the Tx since it is already prepared on the DB.
 		err = tx.Query(nil, selectMark).Get(&p)
 		c.Assert(err, IsNil)
 		c.Assert(p, Equals, mark)
 
-		c.Assert(lookup(tx.Cache())(markStmtID), Equals, true)
+		c.Assert(lookupStmt(txID, markStmtID), Equals, true)
 
 		// Check selectMark is still in the cache.
 		err = tx.Query(nil, selectMark).Get(&p)
 		c.Assert(err, IsNil)
 		c.Assert(p, Equals, mark)
 
-		c.Assert(lookup(tx.Cache())(markStmtID), Equals, true)
+		c.Assert(lookupStmt(txID, markStmtID), Equals, true)
 
 		// Run a different query on the Tx that has not already been
 		// prepared on the DB.
@@ -1005,12 +1007,12 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 		`, Address{})
 		c.Assert(err, IsNil)
 
-		mainStreetStmtID = selectMainStreet.ID()
+		mainStreetStmtID = selectMainStreet.CacheID()
 
 		err = tx.Query(nil, selectMainStreet).Get(&a)
 		c.Assert(err, IsNil)
 		c.Assert(a, Equals, mainStreet)
-		c.Assert(lookup(tx.Cache())(mainStreetStmtID), Equals, true)
+		c.Assert(lookupStmt(txID, mainStreetStmtID), Equals, true)
 
 		tx.Commit()
 	}
@@ -1018,14 +1020,16 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 	runtime.GC()
 	time.Sleep(1 * time.Millisecond)
 
-	c.Assert(lookup(tx.Cache())(mainStreetStmtID), Equals, false)
-	c.Assert(lookup(db.Cache())(markStmtID), Equals, false)
+	c.Assert(lookupStmt(dbID, markStmtID), Equals, false)
+
+	cacheMutex.RLock()
+	_, ok := cache[txID]
+	cacheMutex.RUnlock()
+	c.Assert(ok, Equals, false)
 
 	// Check the cache is empty at the end.
-	cache, _ := db.Cache()
-	c.Assert(cache, HasLen, 0)
-	cache, _ = tx.Cache()
-	c.Assert(cache, HasLen, 0)
+	c.Assert(cache[dbID], HasLen, 0)
+	c.Assert(cache[txID], HasLen, 0)
 
 	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
 	c.Assert(err, IsNil)

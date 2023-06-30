@@ -7,9 +7,9 @@ import (
 	"reflect"
 	"runtime"
 	"sync"
+	"sync/atomic"
 
 	"github.com/canonical/sqlair/internal/expr"
-	"github.com/google/uuid"
 )
 
 // M is a type that, as with other map types, can be used with SQLair for more dynamic behavior.
@@ -25,17 +25,36 @@ type M map[string]any
 
 var ErrNoRows = sql.ErrNoRows
 
+var stmtIDCount int64
+var dbIDCount int64
+
+type txdbID = int64
+type stmtID = int64
+
+var cacheMutex sync.RWMutex
+var dbStmts = make(map[stmtID][]txdbID)
+var stmtCache = make(map[txdbID]map[stmtID]*sql.Stmt)
+
 // Statement represents a SQL statement with valid SQLair expressions.
 // It is ready to be run on a SQLair DB.
 type Statement struct {
-	id uuid.UUID
-	pe *expr.PreparedExpr
+	cacheID stmtID
+	pe      *expr.PreparedExpr
+}
 
-	// A list of *sql.Stmt caches that this Statement appears in. This is
-	// needed to remove and close these the db-prepared statements when the
-	// finalizer for this Statement is run.
-	caches      []*cache
-	cachesMutex sync.Mutex
+func stmtFinalizer(s *Statement) {
+	cacheMutex.Lock()
+	dbtxIDs := dbStmts[s.cacheID]
+	delete(dbStmts, s.cacheID)
+	for _, dbtxID := range dbtxIDs {
+		dbCache := stmtCache[dbtxID]
+		ps, ok := dbCache[s.cacheID]
+		if ok {
+			ps.Close()
+			delete(dbCache, s.cacheID)
+		}
+	}
+	cacheMutex.Unlock()
 }
 
 // Prepare expands the types mentioned in the SQLair expressions and checks
@@ -52,11 +71,10 @@ func Prepare(query string, typeSamples ...any) (*Statement, error) {
 	if err != nil {
 		return nil, err
 	}
-	id, err := uuid.NewRandom()
-	if err != nil {
-		return nil, err
-	}
-	return &Statement{pe: preparedExpr, id: id}, nil
+
+	var s = Statement{pe: preparedExpr, cacheID: atomic.AddInt64(&stmtIDCount, 1)}
+	runtime.SetFinalizer(&s, stmtFinalizer)
+	return &s, nil
 }
 
 // MustPrepare is the same as prepare except that it panics on error.
@@ -69,12 +87,16 @@ func MustPrepare(query string, typeSamples ...any) *Statement {
 }
 
 type DB struct {
-	stmtCache *cache
-	db        *sql.DB
+	cacheID txdbID
+	db      *sql.DB
 }
 
 func NewDB(db *sql.DB) *DB {
-	return &DB{db: db, stmtCache: newCache()}
+	cacheID := atomic.AddInt64(&dbIDCount, 1)
+	cacheMutex.Lock()
+	stmtCache[cacheID] = make(map[stmtID]*sql.Stmt)
+	cacheMutex.Unlock()
+	return &DB{db: db, cacheID: cacheID}
 }
 
 // PlainDB returns the underlying database object.
@@ -100,28 +122,13 @@ type Iterator struct {
 	started bool
 }
 
-// cache is a cache for statements prepared on a database/transaction.
-type cache struct {
-	c map[uuid.UUID]*sql.Stmt
-	m sync.RWMutex
-}
-
-func newCache() *cache {
-	return &cache{c: make(map[uuid.UUID]*sql.Stmt)}
-}
-
-func stmtFinalizer(s *Statement) {
-	for _, c := range s.caches {
-		c.m.Lock()
-		ps, ok := c.c[s.id]
-		if ok {
-			// Close returns an error but it cannot be handled
-			// as everything returned from a finalizer is ignored.
-			ps.Close()
-			delete(c.c, s.id)
-		}
-		c.m.Unlock()
-	}
+func (db *DB) Close() error {
+	cacheMutex.Lock()
+	// There is no need to close the sql.Stmts here, the resources are freed
+	// when the database connection is closed.
+	delete(stmtCache, db.cacheID)
+	cacheMutex.Unlock()
+	return db.db.Close()
 }
 
 // Query takes a context, prepared SQLair Statement and the structs mentioned in the query arguments.
@@ -138,26 +145,20 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: err}
 	}
 
-	db.stmtCache.m.RLock()
-	ps, ok := db.stmtCache.c[s.id]
-	db.stmtCache.m.RUnlock()
+	cacheMutex.RLock()
+	dbCache := stmtCache[db.cacheID]
+	ps, ok := dbCache[s.cacheID]
+	cacheMutex.RUnlock()
 	if !ok {
 		ps, err = db.db.PrepareContext(ctx, qe.QuerySQL())
 		if err != nil {
 			return &Query{ctx: ctx, err: err}
 		}
-		db.stmtCache.m.Lock()
-		db.stmtCache.c[s.id] = ps
-		db.stmtCache.m.Unlock()
+		cacheMutex.Lock()
+		dbStmts[s.cacheID] = append(dbStmts[s.cacheID], db.cacheID)
+		dbCache[s.cacheID] = ps
+		cacheMutex.Unlock()
 
-		// If Query is called at the same time from two go routines then we
-		// may have db.stmtCache in the list twice. This is not a big problem.
-		s.cachesMutex.Lock()
-		if len(s.caches) == 0 {
-			runtime.SetFinalizer(s, stmtFinalizer)
-		}
-		s.caches = append(s.caches, db.stmtCache)
-		s.cachesMutex.Unlock()
 	}
 	return &Query{stmt: ps, qe: qe, ctx: ctx, err: nil}
 }
@@ -379,9 +380,9 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 }
 
 type TX struct {
-	tx        *sql.Tx
-	db        *DB
-	stmtCache *cache
+	cacheID txdbID
+	tx      *sql.Tx
+	db      *DB
 }
 
 // Begin starts a transaction.
@@ -389,17 +390,31 @@ func (db *DB) Begin(ctx context.Context, opts *TXOptions) (*TX, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	cacheID := atomic.AddInt64(&dbIDCount, 1)
+	cacheMutex.Lock()
+	stmtCache[cacheID] = make(map[stmtID]*sql.Stmt)
+	cacheMutex.Unlock()
 	tx, err := db.db.BeginTx(ctx, opts.plainTXOptions())
-	return &TX{tx: tx, db: db, stmtCache: newCache()}, err
+	return &TX{tx: tx, db: db, cacheID: cacheID}, err
 }
 
 // Commit commits the transaction.
 func (tx *TX) Commit() error {
+	cacheMutex.Lock()
+	// There is no need to close the sql.Stmts here, the resources are freed
+	// when the transaction is closed.
+	delete(stmtCache, tx.cacheID)
+	cacheMutex.Unlock()
 	return tx.tx.Commit()
 }
 
 // Rollback aborts the transaction.
 func (tx *TX) Rollback() error {
+	cacheMutex.Lock()
+	// There is no need to close the sql.Stmts here, the resources are freed
+	// when the transaction is closed.
+	delete(stmtCache, tx.cacheID)
+	cacheMutex.Unlock()
 	return tx.tx.Rollback()
 }
 
@@ -430,15 +445,16 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: err}
 	}
 
-	tx.stmtCache.m.RLock()
-	ps, ok := tx.stmtCache.c[s.id]
-	tx.stmtCache.m.RUnlock()
+	cacheMutex.RLock()
+	txCache := stmtCache[tx.cacheID]
+	ps, ok := txCache[s.cacheID]
+	cacheMutex.RUnlock()
 	if !ok {
 		// If we cannot find the prepared statement in the transaction cache,
 		// try the db cache and use tx.Stmt to prepare it on the tx.
-		tx.db.stmtCache.m.RLock()
-		ps, ok = tx.db.stmtCache.c[s.id]
-		tx.db.stmtCache.m.RUnlock()
+		cacheMutex.RLock()
+		ps, ok = stmtCache[tx.db.cacheID][s.cacheID]
+		cacheMutex.RUnlock()
 		if ok {
 			ps = tx.tx.Stmt(ps)
 		} else {
@@ -447,19 +463,10 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 				return &Query{ctx: ctx, err: err}
 			}
 		}
-		tx.stmtCache.m.Lock()
-		tx.stmtCache.c[s.id] = ps
-		tx.stmtCache.m.Unlock()
-
-		// If Query is called at the same time from two go routines then we
-		// may have tx.stmtCache in the list twice. This is ok.
-		s.cachesMutex.Lock()
-		if len(s.caches) == 0 {
-			runtime.SetFinalizer(s, stmtFinalizer)
-		}
-		s.caches = append(s.caches, tx.stmtCache)
-		s.cachesMutex.Unlock()
-
+		cacheMutex.Lock()
+		dbStmts[s.cacheID] = append(dbStmts[s.cacheID], tx.cacheID)
+		txCache[s.cacheID] = ps
+		cacheMutex.Unlock()
 	}
 	return &Query{stmt: ps, qe: qe, ctx: ctx, err: nil}
 }

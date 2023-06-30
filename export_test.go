@@ -3,18 +3,20 @@ package sqlair
 import (
 	"database/sql"
 	"sync"
-
-	"github.com/google/uuid"
 )
 
-func (s *Statement) ID() uuid.UUID {
-	return s.id
+func (s *Statement) CacheID() int64 {
+	return s.cacheID
 }
 
-func (db *DB) Cache() (map[uuid.UUID]*sql.Stmt, *sync.RWMutex) {
-	return db.stmtCache.c, &db.stmtCache.m
+func (tx *TX) CacheID() int64 {
+	return tx.cacheID
 }
 
-func (tx *TX) Cache() (map[uuid.UUID]*sql.Stmt, *sync.RWMutex) {
-	return tx.stmtCache.c, &tx.stmtCache.m
+func (db *DB) CacheID() int64 {
+	return db.cacheID
+}
+
+func Cache() (map[int64]map[int64]*sql.Stmt, *sync.RWMutex) {
+	return stmtCache, &cacheMutex
 }
