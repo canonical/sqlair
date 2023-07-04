@@ -31,9 +31,10 @@ var txdbIDCount int64
 type txdbID = int64
 type stmtID = int64
 
-var cacheMutex sync.RWMutex
+// txdbStmts stores the ids of the the tx/dbs that a statement is prepared on.
 var txdbStmts = make(map[stmtID][]txdbID)
 var stmtCache = make(map[txdbID]map[stmtID]*sql.Stmt)
+var cacheMutex sync.RWMutex
 
 // Statement represents a SQL statement with valid SQLair expressions.
 // It is ready to be run on a SQLair DB.
