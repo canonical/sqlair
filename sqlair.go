@@ -47,11 +47,13 @@ func stmtFinalizer(s *Statement) {
 	dbtxIDs := txdbStmts[s.cacheID]
 	delete(txdbStmts, s.cacheID)
 	for _, dbtxID := range dbtxIDs {
-		dbCache := stmtCache[dbtxID]
-		ps, ok := dbCache[s.cacheID]
+		dbCache, ok := stmtCache[dbtxID]
 		if ok {
-			ps.Close()
-			delete(dbCache, s.cacheID)
+			ps, ok := dbCache[s.cacheID]
+			if ok {
+				ps.Close()
+				delete(dbCache, s.cacheID)
+			}
 		}
 	}
 	cacheMutex.Unlock()
@@ -124,8 +126,8 @@ type Iterator struct {
 
 func (db *DB) Close() error {
 	cacheMutex.Lock()
-	// There is no need to close the sql.Stmts here, the resources are freed
-	// when the database connection is closed.
+	// There is no need to close the sql.Stmts here, the resources in the
+	// database are freed when the connection is closed.
 	delete(stmtCache, db.cacheID)
 	cacheMutex.Unlock()
 	return db.db.Close()
