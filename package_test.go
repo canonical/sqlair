@@ -1015,6 +1015,11 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 
 		tx.Commit()
 	}
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
+
+	err = db.Close()
+	c.Assert(err, IsNil)
 
 	runtime.GC()
 	time.Sleep(1 * time.Millisecond)
@@ -1029,8 +1034,32 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 	// Check the cache is empty at the end.
 	c.Assert(cache[dbID], HasLen, 0)
 	c.Assert(cache[txID], HasLen, 0)
+}
+
+func (s *PackageSuite) TestDBClose(c *C) {
+	dropTables, sqldb, err := personAndAddressDB()
+	c.Assert(err, IsNil)
+	db := sqlair.NewDB(sqldb)
 
 	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
+
+	err = db.Close()
+	c.Assert(err, IsNil)
+
+	selectMark, err := sqlair.Prepare(`
+		SELECT &Person.*
+		FROM person
+		WHERE name = "Mark"
+	`, Person{})
+	c.Assert(err, IsNil)
+
+	var p = Person{}
+	err = db.Query(nil, selectMark).Get(&p)
+	c.Assert(err, ErrorMatches, "sql: database is closed")
+
+	//Check Close is idemepotent
+	err = db.Close()
 	c.Assert(err, IsNil)
 }
 
