@@ -959,7 +959,6 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 	c.Assert(lookupStmt(dbID, markStmtID), Equals, false)
 
 	// Test with transactions.
-	var tx *sqlair.TX
 	var mainStreetStmtID int64
 	var txID int64
 	{
@@ -979,10 +978,10 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 
 		c.Assert(lookupStmt(dbID, markStmtID), Equals, true)
 
-		tx, err = db.Begin(nil, nil)
+		tx, err := db.Begin(nil, nil)
 		c.Assert(err, IsNil)
-
 		txID = tx.CacheID()
+
 		// Run selectMark on a Tx. This should reprepare the same
 		// *sql.Stmt on the Tx since it is already prepared on the DB.
 		err = tx.Query(nil, selectMark).Get(&p)

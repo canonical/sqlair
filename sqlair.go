@@ -26,13 +26,13 @@ type M map[string]any
 var ErrNoRows = sql.ErrNoRows
 
 var stmtIDCount int64
-var dbIDCount int64
+var txdbIDCount int64
 
 type txdbID = int64
 type stmtID = int64
 
 var cacheMutex sync.RWMutex
-var dbStmts = make(map[stmtID][]txdbID)
+var txdbStmts = make(map[stmtID][]txdbID)
 var stmtCache = make(map[txdbID]map[stmtID]*sql.Stmt)
 
 // Statement represents a SQL statement with valid SQLair expressions.
@@ -44,8 +44,8 @@ type Statement struct {
 
 func stmtFinalizer(s *Statement) {
 	cacheMutex.Lock()
-	dbtxIDs := dbStmts[s.cacheID]
-	delete(dbStmts, s.cacheID)
+	dbtxIDs := txdbStmts[s.cacheID]
+	delete(txdbStmts, s.cacheID)
 	for _, dbtxID := range dbtxIDs {
 		dbCache := stmtCache[dbtxID]
 		ps, ok := dbCache[s.cacheID]
@@ -92,7 +92,7 @@ type DB struct {
 }
 
 func NewDB(db *sql.DB) *DB {
-	cacheID := atomic.AddInt64(&dbIDCount, 1)
+	cacheID := atomic.AddInt64(&txdbIDCount, 1)
 	cacheMutex.Lock()
 	stmtCache[cacheID] = make(map[stmtID]*sql.Stmt)
 	cacheMutex.Unlock()
@@ -159,7 +159,7 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 			return &Query{ctx: ctx, err: err}
 		}
 		cacheMutex.Lock()
-		dbStmts[s.cacheID] = append(dbStmts[s.cacheID], db.cacheID)
+		txdbStmts[s.cacheID] = append(txdbStmts[s.cacheID], db.cacheID)
 		dbCache[s.cacheID] = ps
 		cacheMutex.Unlock()
 
@@ -394,7 +394,7 @@ func (db *DB) Begin(ctx context.Context, opts *TXOptions) (*TX, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	cacheID := atomic.AddInt64(&dbIDCount, 1)
+	cacheID := atomic.AddInt64(&txdbIDCount, 1)
 	cacheMutex.Lock()
 	stmtCache[cacheID] = make(map[stmtID]*sql.Stmt)
 	cacheMutex.Unlock()
@@ -477,7 +477,7 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 			}
 		}
 		cacheMutex.Lock()
-		dbStmts[s.cacheID] = append(dbStmts[s.cacheID], tx.cacheID)
+		txdbStmts[s.cacheID] = append(txdbStmts[s.cacheID], tx.cacheID)
 		txCache[s.cacheID] = ps
 		cacheMutex.Unlock()
 	}
