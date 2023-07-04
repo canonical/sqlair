@@ -100,6 +100,8 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	return &QueryExpr{outputs: pe.outputs, sql: pe.sql, args: qargs}, nil
 }
 
+var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
+
 // ScanArgs returns list of pointers to the struct fields that are listed in qe.outputs.
 // All the structs and maps mentioned in the query must be in outputArgs.
 func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []any, onSuccess func(), err error) {
@@ -113,12 +115,13 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 		}
 	}
 
-	type mapSetInfo struct {
-		keyVal  reflect.Value
-		scanVal reflect.Value
-		mapVal  reflect.Value
+	type scanProxy struct {
+		original reflect.Value
+		scan     reflect.Value
+		key      reflect.Value
 	}
-	var mapSetInfos = []mapSetInfo{}
+	var scanProxies []scanProxy
+
 	var typeDest = make(map[reflect.Type]reflect.Value)
 	outputVals := []reflect.Value{}
 	for _, outputArg := range outputArgs {
@@ -174,17 +177,37 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 			if !val.CanSet() {
 				return nil, nil, fmt.Errorf("internal error: cannot set field %s of struct %s", tm.name, tm.structType.Name())
 			}
-			ptrs = append(ptrs, val.Addr().Interface())
+			pt := reflect.PointerTo(val.Type())
+			if val.Type().Kind() != reflect.Pointer && !pt.Implements(scannerInterface) {
+				// Rows.Scan will return an error if it tries to scan NULL into a type that cannot be set to nil.
+				// For types that are not a pointer and do not implement sql.Scanner a pointer to them is generated
+				// and passed to Rows.Scan. If Scan has set this pointer to nil the value is zeroed.
+				scanVal := reflect.New(pt).Elem()
+				ptrs = append(ptrs, scanVal.Addr().Interface())
+				scanProxies = append(scanProxies, scanProxy{original: val, scan: scanVal})
+			} else {
+				ptrs = append(ptrs, val.Addr().Interface())
+			}
 		case *mapKey:
 			scanVal := reflect.New(tm.mapType.Elem()).Elem()
 			ptrs = append(ptrs, scanVal.Addr().Interface())
-			mapSetInfos = append(mapSetInfos, mapSetInfo{keyVal: reflect.ValueOf(tm.name), scanVal: scanVal, mapVal: outputVal})
+			scanProxies = append(scanProxies, scanProxy{original: outputVal, scan: scanVal, key: reflect.ValueOf(tm.name)})
 		}
 	}
 
 	onSuccess = func() {
-		for _, mi := range mapSetInfos {
-			mi.mapVal.SetMapIndex(mi.keyVal, mi.scanVal)
+		for _, sp := range scanProxies {
+			if sp.key.IsValid() {
+				sp.original.SetMapIndex(sp.key, sp.scan)
+			} else {
+				var val reflect.Value
+				if !sp.scan.IsNil() {
+					val = sp.scan.Elem()
+				} else {
+					val = reflect.Zero(sp.original.Type())
+				}
+				sp.original.Set(val)
+			}
 		}
 	}
 
