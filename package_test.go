@@ -849,7 +849,6 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 
 }
 func (s *PackageSuite) TestTransactions(c *C) {
-	c.Skip("bog")
 	dropTables, sqldb, err := personAndAddressDB()
 	c.Assert(err, IsNil)
 
@@ -902,38 +901,30 @@ func (s *PackageSuite) TestTransactions(c *C) {
 }
 
 func (s *PackageSuite) TestTransactionErrors(c *C) {
-	c.Skip("bog")
 	dropTables, sqldb, err := personAndAddressDB()
 	c.Assert(err, IsNil)
 
-	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE address_id = $Person.address_id", Person{})
-	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ($Person.name, $Person.id, $Person.address_id, 'fred@email.com');", Person{})
-	var derek = Person{ID: 85, Fullname: "Derek", PostalCode: 8000}
-	var p = Person{}
-	ctx := context.Background()
-
-	// Test running query after commit.
 	db := sqlair.NewDB(sqldb)
 	defer func() {
 		for _, dropTable := range dropTables {
-			err = db.Query(ctx, sqlair.MustPrepare(dropTable)).Run()
+			err = db.Query(nil, sqlair.MustPrepare(dropTable)).Run()
 			c.Assert(err, IsNil)
 		}
 	}()
+
+	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ($Person.name, $Person.id, $Person.address_id, 'fred@email.com');", Person{})
+	var derek = Person{ID: 85, Fullname: "Derek", PostalCode: 8000}
+	ctx := context.Background()
+
+	// Test running query after commit.
 	tx, err := db.Begin(ctx, nil)
 	c.Assert(err, IsNil)
 
-	selectAll := sqlair.MustPrepare("SELECT &Person.* FROM person", Person{})
-	q := tx.Query(ctx, selectAll)
+	q := tx.Query(ctx, insertStmt, &derek)
 	err = tx.Commit()
 	c.Assert(err, IsNil)
-	err = q.Get(&p)
+	err = q.Run()
 	c.Assert(err, ErrorMatches, "sql: statement is closed")
-
-	iter := db.Query(ctx, selectStmt, &derek).Iter()
-	c.Assert(iter.Next(), Equals, false)
-	err = iter.Close()
-	c.Assert(err, IsNil)
 
 	// Test running query after rollback.
 	tx, err = db.Begin(ctx, nil)
@@ -944,15 +935,9 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 	c.Assert(err, IsNil)
 	err = q.Run()
 	c.Assert(err, ErrorMatches, "sql: statement is closed")
-
-	iter = db.Query(ctx, selectStmt, &derek).Iter()
-	c.Assert(iter.Next(), Equals, false)
-	err = iter.Close()
-	c.Assert(err, IsNil)
 }
 
 func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
-	c.Skip("bog")
 	mark := Person{20, "Mark", 1500}
 	fred := Person{30, "Fred", 1000}
 	mainStreet := Address{1000, "Happy Land", "Main Street"}

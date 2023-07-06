@@ -140,7 +140,7 @@ type Iterator struct {
 	err     error
 	result  sql.Result
 	started bool
-	closer  func() error
+	onClose func() error
 }
 
 // Query takes a context, prepared SQLair Statement and the structs mentioned in the query arguments.
@@ -249,13 +249,13 @@ func (q *Query) Iter() *Iterator {
 	if err != nil {
 		return &Iterator{qe: q.qe, err: err}
 	}
-	var closer func() error
+	var onClose func() error
 	if q.isTX {
-		closer = func() error {
+		onClose = func() error {
 			return q.stmt.Close()
 		}
 	}
-	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err, result: result, closer: closer}
+	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err, result: result, onClose: onClose}
 }
 
 // Next prepares the next row for Get.
@@ -306,8 +306,8 @@ func (iter *Iterator) Get(outputArgs ...any) (err error) {
 // Close finishes the iteration and returns any errors encountered.
 func (iter *Iterator) Close() error {
 	var cerr error
-	if iter.closer != nil {
-		cerr = iter.closer()
+	if iter.onClose != nil {
+		cerr = iter.onClose()
 	}
 	iter.started = true
 	if iter.rows == nil {
