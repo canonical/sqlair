@@ -8,10 +8,6 @@ import (
 	"strings"
 )
 
-func (qe *QueryExpr) QuerySQL() string {
-	return qe.sql
-}
-
 func (qe *QueryExpr) QueryArgs() []any {
 	return qe.args
 }

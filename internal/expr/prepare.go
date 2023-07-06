@@ -16,6 +16,10 @@ type PreparedExpr struct {
 	sql     string
 }
 
+func (pe *PreparedExpr) SQL() string {
+	return pe.sql
+}
+
 const markerPrefix = "_sqlair_"
 
 func markerName(n int) string {
