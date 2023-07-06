@@ -140,6 +140,7 @@ type Iterator struct {
 	err     error
 	result  sql.Result
 	started bool
+	closer  func() error
 }
 
 // Query takes a context, prepared SQLair Statement and the structs mentioned in the query arguments.
@@ -248,10 +249,13 @@ func (q *Query) Iter() *Iterator {
 	if err != nil {
 		return &Iterator{qe: q.qe, err: err}
 	}
+	var closer func() error
 	if q.isTX {
-		err = q.stmt.Close()
+		closer = func() error {
+			return q.stmt.Close()
+		}
 	}
-	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err, result: result}
+	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err, result: result, closer: closer}
 }
 
 // Next prepares the next row for Get.
@@ -301,6 +305,10 @@ func (iter *Iterator) Get(outputArgs ...any) (err error) {
 
 // Close finishes the iteration and returns any errors encountered.
 func (iter *Iterator) Close() error {
+	var cerr error
+	if iter.closer != nil {
+		cerr = iter.closer()
+	}
 	iter.started = true
 	if iter.rows == nil {
 		return iter.err
@@ -309,6 +317,9 @@ func (iter *Iterator) Close() error {
 	iter.rows = nil
 	if iter.err != nil {
 		return iter.err
+	}
+	if err == nil {
+		err = cerr
 	}
 	return err
 }
@@ -457,10 +468,16 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: err}
 	}
 
-	ps, err := tx.db.prepareStmt(ctx, s)
+	var ps *sql.Stmt
+	dbStats := tx.db.db.Stats()
+	if dbStats.MaxOpenConnections > 0 && dbStats.MaxOpenConnections == dbStats.InUse {
+		ps, err = tx.tx.PrepareContext(ctx, s.pe.SQL())
+	} else {
+		ps, err = tx.db.prepareStmt(ctx, s)
+		ps = tx.tx.Stmt(ps)
+	}
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
-	ps = tx.tx.Stmt(ps)
 	return &Query{stmt: ps, qe: qe, isTX: true, ctx: ctx, err: nil}
 }
