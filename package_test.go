@@ -1056,7 +1056,7 @@ func (s *PackageSuite) TestWithErrors(c *C) {
 	db.With(Manager{})
 	q = "SELECT p.* AS &Manager.* FROM person AS p"
 	c.Assert(db.Query(nil, q).Get(&Manager{}), IsNil)
-	c.Assert(db.Query(nil, q).Get(&Manager{}), ErrorMatches, `cannot prepare expression: type "Manager" not passed as a parameter, have: `)
+	c.Assert(db.Query(nil, q).Get(&Manager{}), ErrorMatches, `cannot prepare expression: type "Manager" not passed as a parameter`)
 
 	err = db.Query(nil, dropTables).Run()
 	c.Assert(err, IsNil)
