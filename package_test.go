@@ -60,11 +60,6 @@ type Manager Person
 type District struct{}
 
 type CustomMap map[string]any
-type StringMap map[string]string
-type lowerCaseMap map[string]any
-type M struct {
-	F string `db:"id"`
-}
 
 func personAndAddressDB() (string, *sql.DB, error) {
 	createTables := `
@@ -103,6 +98,11 @@ DROP TABLE address;
 }
 
 func (s *PackageSuite) TestValidIterGet(c *C) {
+	type StringMap map[string]string
+	type lowerCaseMap map[string]any
+	type M struct {
+		F string `db:"id"`
+	}
 	var tests = []struct {
 		summary  string
 		query    string
@@ -680,7 +680,7 @@ func (s *PackageSuite) TestValidGetAll(c *C) {
 		slices:   []any{&[]*Person{}},
 		expected: []any{&[]*Person{}},
 	}, {
-		summary:  "maps",
+		summary:  "select into maps",
 		query:    "SELECT &M.name, &CustomMap.id FROM person WHERE name = 'Mark'",
 		types:    []any{sqlair.M{}, CustomMap{}},
 		inputs:   []any{},
