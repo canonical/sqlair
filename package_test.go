@@ -468,6 +468,14 @@ func (s *PackageSuite) TestNulls(c *C) {
 	}
 
 	db := sqlair.NewDB(sqldb)
+	defer func() {
+		for _, dropTable := range dropTables {
+			err = db.Query(nil, sqlair.MustPrepare(dropTable)).Run()
+			if err != nil {
+				c.Fatal(err)
+			}
+		}
+	}()
 
 	insertNullPerson, err := sqlair.Prepare("INSERT INTO person VALUES ('Nully', NULL, NULL, NULL);")
 	c.Assert(err, IsNil)
@@ -490,11 +498,6 @@ func (s *PackageSuite) TestNulls(c *C) {
 			c.Assert(t.outputs[i], DeepEquals, s,
 				Commentf("\ntest %q failed:\ninput: %s", t.summary, t.query))
 		}
-	}
-
-	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
-	if err != nil {
-		c.Fatal(err)
 	}
 }
 
