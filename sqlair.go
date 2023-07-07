@@ -165,8 +165,8 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 	return &Query{stmt: ps, qe: qe, ctx: ctx, err: nil}
 }
 
-// Prepares a Statement on a database. prepareStmt first checks in the cache
-// if it has already been preapred.
+// prepareStmt prepares a Statement on a database. prepareStmt first checks in the cache
+// to see if it has already been preapred.
 func (db *DB) prepareStmt(ctx context.Context, s *Statement) (*sql.Stmt, error) {
 	var err error
 	cacheMutex.RLock()
@@ -423,8 +423,11 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 }
 
 type TX struct {
-	tx   *sql.Tx
-	db   *DB
+	tx *sql.Tx
+	db *DB
+	// done transitions from 0 to 1 exactly once, on Commit or Rollback.
+	// Once done, all operations fail with ErrTxDone. Use atomic operations
+	// only when checking value.
 	done int32
 }
 

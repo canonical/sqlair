@@ -920,27 +920,11 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 	tx, err := db.Begin(ctx, nil)
 	c.Assert(err, IsNil)
 
-	err = tx.Commit()
-	c.Assert(err, IsNil)
-	err = tx.Query(ctx, insertStmt, &derek).Run()
-	c.Assert(err, ErrorMatches, "sql: transaction has already been committed or rolled back")
-
-	// Test running query after rollback.
-	tx, err = db.Begin(ctx, nil)
-	c.Assert(err, IsNil)
-
-	err = tx.Rollback()
-	c.Assert(err, IsNil)
-	err = tx.Query(ctx, insertStmt, &derek).Run()
-	c.Assert(err, ErrorMatches, "sql: transaction has already been committed or rolled back")
-
-	// Test running query after commit.
-	tx, err = db.Begin(ctx, nil)
-	c.Assert(err, IsNil)
-
 	q := tx.Query(ctx, insertStmt, &derek)
 	err = tx.Commit()
 	c.Assert(err, IsNil)
+	err = tx.Query(ctx, insertStmt, &derek).Run()
+	c.Assert(err, ErrorMatches, "sql: transaction has already been committed or rolled back")
 	err = q.Run()
 	c.Assert(err, ErrorMatches, "sql: transaction has already been committed or rolled back")
 
@@ -951,6 +935,8 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 	q = tx.Query(ctx, insertStmt, &derek)
 	err = tx.Rollback()
 	c.Assert(err, IsNil)
+	err = tx.Query(ctx, insertStmt, &derek).Run()
+	c.Assert(err, ErrorMatches, "sql: transaction has already been committed or rolled back")
 	err = q.Run()
 	c.Assert(err, ErrorMatches, "sql: transaction has already been committed or rolled back")
 }
