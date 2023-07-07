@@ -24,6 +24,7 @@ import (
 type M map[string]any
 
 var ErrNoRows = sql.ErrNoRows
+var ErrTxDone = sql.ErrTxDone
 
 var stmtIDCount int64
 var dbIDCount int64
@@ -129,7 +130,8 @@ type Query struct {
 	stmt *sql.Stmt
 	ctx  context.Context
 	err  error
-	isTX bool
+	// If this query is not over a transaction tx is nil.
+	tx *TX
 }
 
 // Iterator is used to iterate over the results of the query.
@@ -234,6 +236,9 @@ func (q *Query) Iter() *Iterator {
 	if q.err != nil {
 		return &Iterator{err: q.err}
 	}
+	if q.tx != nil && q.tx.isDone() {
+		return &Iterator{err: ErrTxDone}
+	}
 	var result sql.Result
 	var rows *sql.Rows
 	var err error
@@ -250,7 +255,7 @@ func (q *Query) Iter() *Iterator {
 		return &Iterator{qe: q.qe, err: err}
 	}
 	var onClose func() error
-	if q.isTX {
+	if q.tx != nil {
 		onClose = func() error {
 			return q.stmt.Close()
 		}
@@ -418,8 +423,13 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 }
 
 type TX struct {
-	tx *sql.Tx
-	db *DB
+	tx   *sql.Tx
+	db   *DB
+	done int32
+}
+
+func (tx *TX) isDone() bool {
+	return atomic.LoadInt32(&tx.done) == 1
 }
 
 // Begin starts a transaction.
@@ -433,11 +443,17 @@ func (db *DB) Begin(ctx context.Context, opts *TXOptions) (*TX, error) {
 
 // Commit commits the transaction.
 func (tx *TX) Commit() error {
+	if !atomic.CompareAndSwapInt32(&tx.done, 0, 1) {
+		return ErrTxDone
+	}
 	return tx.tx.Commit()
 }
 
 // Rollback aborts the transaction.
 func (tx *TX) Rollback() error {
+	if !atomic.CompareAndSwapInt32(&tx.done, 0, 1) {
+		return ErrTxDone
+	}
 	return tx.tx.Rollback()
 }
 
@@ -462,6 +478,9 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	if tx.isDone() {
+		return &Query{ctx: ctx, err: ErrTxDone}
+	}
 
 	qe, err := s.pe.Query(inputArgs...)
 	if err != nil {
@@ -479,5 +498,5 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
-	return &Query{stmt: ps, qe: qe, isTX: true, ctx: ctx, err: nil}
+	return &Query{stmt: ps, qe: qe, tx: tx, ctx: ctx, err: nil}
 }

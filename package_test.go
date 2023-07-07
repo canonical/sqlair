@@ -704,8 +704,8 @@ func (s *PackageSuite) TestRun(c *C) {
 	err = db.Query(nil, selectStmt, &jim).Get(&jimCheck)
 	c.Assert(err, IsNil)
 	c.Assert(jimCheck, Equals, jim)
-
 }
+
 func (s *PackageSuite) TestOutcome(c *C) {
 	dropTables, sqldb, err := personAndAddressDB()
 	c.Assert(err, IsNil)
@@ -767,8 +767,8 @@ func (s *PackageSuite) TestOutcome(c *C) {
 	err = q2.GetAll(&outcome, &jims)
 	c.Assert(err, IsNil)
 	c.Assert(outcome.Result(), IsNil)
-
 }
+
 func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	allOutput := &[]*Person{}
 	allExpected := &[]*Person{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "James", 4500}}
@@ -846,8 +846,8 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	err = q.Get(oneOutput)
 	c.Assert(err, IsNil)
 	c.Assert(oneExpected, DeepEquals, oneOutput)
-
 }
+
 func (s *PackageSuite) TestTransactions(c *C) {
 	dropTables, sqldb, err := personAndAddressDB()
 	c.Assert(err, IsNil)
@@ -920,11 +920,29 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 	tx, err := db.Begin(ctx, nil)
 	c.Assert(err, IsNil)
 
+	err = tx.Commit()
+	c.Assert(err, IsNil)
+	err = tx.Query(ctx, insertStmt, &derek).Run()
+	c.Assert(err, ErrorMatches, "sql: transaction has already been committed or rolled back")
+
+	// Test running query after rollback.
+	tx, err = db.Begin(ctx, nil)
+	c.Assert(err, IsNil)
+
+	err = tx.Rollback()
+	c.Assert(err, IsNil)
+	err = tx.Query(ctx, insertStmt, &derek).Run()
+	c.Assert(err, ErrorMatches, "sql: transaction has already been committed or rolled back")
+
+	// Test running query after commit.
+	tx, err = db.Begin(ctx, nil)
+	c.Assert(err, IsNil)
+
 	q := tx.Query(ctx, insertStmt, &derek)
 	err = tx.Commit()
 	c.Assert(err, IsNil)
 	err = q.Run()
-	c.Assert(err, ErrorMatches, "sql: statement is closed")
+	c.Assert(err, ErrorMatches, "sql: transaction has already been committed or rolled back")
 
 	// Test running query after rollback.
 	tx, err = db.Begin(ctx, nil)
@@ -934,7 +952,7 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 	err = tx.Rollback()
 	c.Assert(err, IsNil)
 	err = q.Run()
-	c.Assert(err, ErrorMatches, "sql: statement is closed")
+	c.Assert(err, ErrorMatches, "sql: transaction has already been committed or rolled back")
 }
 
 func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
@@ -1203,8 +1221,8 @@ func (s *PackageSuite) TestIterMethodOrder(c *C) {
 	c.Assert(err, ErrorMatches, `cannot get result: sql: Scan error on column index 0, name "_sqlair_0": converting driver.Value type string \("Fred"\) to a int: invalid syntax`)
 	err = iter.Close()
 	c.Assert(err, IsNil)
-
 }
+
 func (s *PackageSuite) TestJujuStore(c *C) {
 	var tests = []struct {
 		summary  string
