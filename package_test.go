@@ -59,6 +59,13 @@ type Manager Person
 
 type District struct{}
 
+type CustomMap map[string]any
+type StringMap map[string]string
+type lowerCaseMap map[string]any
+type M struct {
+	F string `db:"id"`
+}
+
 func personAndAddressDB() (string, *sql.DB, error) {
 	createTables := `
 CREATE TABLE person (
@@ -96,12 +103,6 @@ DROP TABLE address;
 }
 
 func (s *PackageSuite) TestValidIterGet(c *C) {
-	type CustomMap map[string]any
-	type StringMap map[string]string
-	type lowerCaseMap map[string]any
-	type M struct {
-		F string `db:"id"`
-	}
 	var tests = []struct {
 		summary  string
 		query    string
@@ -516,6 +517,13 @@ func (s *PackageSuite) TestValidGet(c *C) {
 		inputs:   []any{Address{ID: 1000}, Person{ID: 30}},
 		outputs:  []any{&Person{}, &Address{}, &Manager{}},
 		expected: []any{&Person{30, "Fred", 1000}, &Address{1000, "Happy Land", "Main Street"}, &Manager{30, "Fred", 1000}},
+	}, {
+		summary:  "select into map",
+		query:    "SELECT &M.name FROM person WHERE address_id = $M.p1",
+		types:    []any{sqlair.M{}},
+		inputs:   []any{sqlair.M{"p1": 1000}},
+		outputs:  []any{sqlair.M{}},
+		expected: []any{sqlair.M{"name": "Fred"}},
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()
@@ -572,6 +580,13 @@ func (s *PackageSuite) TestGetErrors(c *C) {
 		inputs:  []any{},
 		outputs: []any{&Person{}},
 		err:     "cannot get results: output variables provided but not referenced in query",
+	}, {
+		summary: "key not in map",
+		query:   "SELECT &M.name FROM person WHERE address_id = $M.p1",
+		types:   []any{sqlair.M{}},
+		inputs:  []any{sqlair.M{}},
+		outputs: []any{sqlair.M{}},
+		err:     `invalid input parameter: map "M" does not contain key "p1"`,
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()
@@ -663,7 +678,14 @@ func (s *PackageSuite) TestValidGetAll(c *C) {
 		types:    []any{Person{}},
 		inputs:   []any{Person{ID: 1243321}},
 		slices:   []any{&[]*Person{}},
-		expected: []any{},
+		expected: []any{&[]*Person{}},
+	}, {
+		summary:  "maps",
+		query:    "SELECT &M.name, &CustomMap.id FROM person WHERE name = 'Mark'",
+		types:    []any{sqlair.M{}, CustomMap{}},
+		inputs:   []any{},
+		slices:   []any{&[]sqlair.M{}, &[]CustomMap{}},
+		expected: []any{&[]sqlair.M{{"name": "Mark"}}, &[]CustomMap{{"id": int64(20)}}},
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()
@@ -742,12 +764,26 @@ func (s *PackageSuite) TestGetAllErrors(c *C) {
 		slices:  []any{&[]*Address{}},
 		err:     `cannot populate slice: cannot get result: type "Address" does not appear in query, have: Person`,
 	}, {
-		summary: "wrong struct argument",
+		summary: "wrong struct argument type",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
 		slices:  []any{&[]int{}},
-		err:     `cannot populate slice: need slice of struct, got slice of int`,
+		err:     `cannot populate slice: need slice of structs/maps, got slice of int`,
+	}, {
+		summary: "wrong struct argument pointer type",
+		query:   "SELECT * AS &Person.* FROM person",
+		types:   []any{Person{}},
+		inputs:  []any{},
+		slices:  []any{&[]*int{}},
+		err:     `cannot populate slice: need slice of structs/maps, got slice of pointer to int`,
+	}, {
+		summary: "wrong struct argument pointer map type",
+		query:   "SELECT &M.name FROM person",
+		types:   []any{sqlair.M{}},
+		inputs:  []any{},
+		slices:  []any{&[]*sqlair.M{}},
+		err:     `cannot populate slice: need slice of structs/maps, got slice of pointer to map`,
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()
