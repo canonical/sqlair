@@ -473,17 +473,17 @@ func (p *Parser) parseColumns() ([]fullName, bool) {
 // ampersand. This can be one or more references to Go types.
 func (p *Parser) parseTargets() ([]fullName, bool, error) {
 	// Case 1: A single target e.g. "&Person.name".
-	if target, ok, err := p.parseTarget(); err != nil {
+	if targetTypes, ok, err := p.parseTarget(); err != nil {
 		return nil, false, err
 	} else if ok {
-		return []fullName{target}, true, nil
+		return []fullName{targetTypes}, true, nil
 	}
 
-	// Case 2: Multiple targets e.g. "(&Person.name, &Person.id)".
-	if targets, ok, err := p.parseList((*Parser).parseTarget); err != nil {
+	// Case 2: Multiple types e.g. "(&Person.name, &Person.id)".
+	if targetTypes, ok, err := p.parseList((*Parser).parseTarget); err != nil {
 		return nil, false, err
 	} else if ok {
-		return targets, true, nil
+		return targetTypes, true, nil
 	}
 
 	return nil, false, nil
@@ -495,13 +495,13 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 	start := p.pos
 
 	// Case 1: There are no columns e.g. "&Person.*".
-	if targets, ok, err := p.parseTargets(); err != nil {
+	if targetTypes, ok, err := p.parseTargets(); err != nil {
 		return nil, false, err
 	} else if ok {
 		return &outputPart{
-			source: []fullName{},
-			target: targets,
-			raw:    p.input[start:p.pos],
+			sourceColumns: []fullName{},
+			targetTypes:   targetTypes,
+			raw:           p.input[start:p.pos],
 		}, true, nil
 	}
 
@@ -512,13 +512,13 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 		p.skipBlanks()
 		if p.skipString("AS") {
 			p.skipBlanks()
-			if targets, ok, err := p.parseTargets(); err != nil {
+			if targetTypes, ok, err := p.parseTargets(); err != nil {
 				return nil, false, err
 			} else if ok {
 				return &outputPart{
-					source: cols,
-					target: targets,
-					raw:    p.input[start:p.pos],
+					sourceColumns: cols,
+					targetTypes:   targetTypes,
+					raw:           p.input[start:p.pos],
 				}, true, nil
 			}
 		}
@@ -537,7 +537,7 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 			if fn.name == "*" {
 				return nil, false, fmt.Errorf(`asterisk not allowed in input expression "$%s"`, fn)
 			}
-			return &inputPart{source: fn, raw: p.input[cp.pos:p.pos]}, true, nil
+			return &inputPart{sourceType: fn, raw: p.input[cp.pos:p.pos]}, true, nil
 		} else if err != nil {
 			return nil, false, err
 		}
