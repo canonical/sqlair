@@ -748,6 +748,13 @@ func (s *PackageSuite) TestGetAllErrors(c *C) {
 		inputs:  []any{},
 		slices:  []any{&[]int{}},
 		err:     `cannot populate slice: need slice of struct, got slice of int`,
+	}, {
+		summary: "output not referenced in query",
+		query:   "SELECT name FROM person",
+		types:   []any{},
+		inputs:  []any{},
+		slices:  []any{&[]Person{}},
+		err:     `cannot populate slice: output variables provided but not referenced in query`,
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()

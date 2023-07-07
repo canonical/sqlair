@@ -255,6 +255,9 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 			sliceArgs = sliceArgs[1:]
 		}
 	}
+	if !q.qe.HasOutputs() && len(sliceArgs) > 0 {
+		return fmt.Errorf("output variables provided but not referenced in query")
+	}
 	// Check slice inputs
 	var slicePtrVals = []reflect.Value{}
 	var sliceVals = []reflect.Value{}
