@@ -11,6 +11,7 @@ import (
 
 type typeMember interface {
 	outerType() reflect.Type
+	memberName() string
 }
 
 type mapKey struct {
@@ -18,8 +19,12 @@ type mapKey struct {
 	mapType reflect.Type
 }
 
-func (mk mapKey) outerType() reflect.Type {
+func (mk *mapKey) outerType() reflect.Type {
 	return mk.mapType
+}
+
+func (mk mapKey) memberName() string {
+	return mk.name
 }
 
 // structField represents reflection information about a field from some struct type.
@@ -29,16 +34,23 @@ type structField struct {
 	// The type of the containing struct.
 	structType reflect.Type
 
-	// Index sequence for Type.FieldByIndex.
-	index []int
+	// Index for Type.Field.
+	index int
+
+	// The tag assosiated with this field
+	tag string
 
 	// OmitEmpty is true when "omitempty" is
 	// a property of the field's "db" tag.
 	omitEmpty bool
 }
 
-func (f structField) outerType() reflect.Type {
+func (f *structField) outerType() reflect.Type {
 	return f.structType
+}
+
+func (f structField) memberName() string {
+	return f.tag
 }
 
 type typeInfo interface {
@@ -51,7 +63,7 @@ type structInfo struct {
 	// Ordered list of tags
 	tags []string
 
-	tagToField map[string]structField
+	tagToField map[string]*structField
 }
 
 func (si *structInfo) typ() reflect.Type {
@@ -108,7 +120,7 @@ func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 		return &mapInfo{mapType: t}, nil
 	case reflect.Struct:
 		info := structInfo{
-			tagToField: make(map[string]structField),
+			tagToField: make(map[string]*structField),
 			structType: t,
 		}
 		tags := []string{}
@@ -129,10 +141,11 @@ func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 				return nil, fmt.Errorf("cannot parse tag for field %s.%s: %s", t.Name(), f.Name, err)
 			}
 			tags = append(tags, tag)
-			info.tagToField[tag] = structField{
+			info.tagToField[tag] = &structField{
 				name:       f.Name,
-				index:      f.Index,
+				index:      i,
 				omitEmpty:  omitEmpty,
+				tag:        tag,
 				structType: t,
 			}
 		}
