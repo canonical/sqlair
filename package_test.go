@@ -1087,7 +1087,7 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 	err = q.Run()
 	c.Assert(err, ErrorMatches, "sql: transaction has already been committed or rolled back")
 
-	// Test running query after rollback.
+	// Test running query after rollback with the public error variable and sql equivalent.
 	tx, err = db.Begin(ctx, nil)
 	c.Assert(err, IsNil)
 
@@ -1095,9 +1095,13 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 	err = tx.Rollback()
 	c.Assert(err, IsNil)
 	err = tx.Query(ctx, insertStmt, &derek).Run()
-	c.Assert(err, ErrorMatches, "sql: transaction has already been committed or rolled back")
+	if !errors.Is(err, sqlair.ErrTXDone) {
+		c.Errorf("expected %q, got %q", sqlair.ErrTXDone, err)
+	}
 	err = q.Run()
-	c.Assert(err, ErrorMatches, "sql: transaction has already been committed or rolled back")
+	if !errors.Is(err, sql.ErrTxDone) {
+		c.Errorf("expected %q, got %q", sql.ErrTxDone, err)
+	}
 }
 
 func (s *PackageSuite) TestPreparedStmtCaching(c *C) {

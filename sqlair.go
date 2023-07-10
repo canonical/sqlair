@@ -24,7 +24,7 @@ import (
 type M map[string]any
 
 var ErrNoRows = sql.ErrNoRows
-var ErrTxDone = sql.ErrTxDone
+var ErrTXDone = sql.ErrTxDone
 
 var stmtIDCount int64
 var dbIDCount int64
@@ -32,8 +32,16 @@ var dbIDCount int64
 type dbID = int64
 type stmtID = int64
 
-var dbStmtCache = make(map[dbID]map[stmtID]bool)
+// When a SQLair Statement is run on a DB/TX with the Query method it is first
+// prepared on the database. The prepared statement is then stored in the
+// stmtDBCache.
+// When the statement is placed in the cache a finalizer function is set on it.
+// On garbage collection it cycles through the dbIDs and closes each sql.Stmt.
+// The finalizer then removes the stmtID from stmtDBCache and dbStmts.
+// Similarly a finalizer is set on the SQLair DB which closes the sql.DB and
+// removes its dbID from dbStmts and stmtDBCache.
 var stmtDBCache = make(map[stmtID]map[dbID]*sql.Stmt)
+var dbStmts = make(map[dbID]map[stmtID]bool)
 var cacheMutex sync.RWMutex
 
 // Statement represents a SQL statement with valid SQLair expressions.
@@ -49,22 +57,9 @@ func stmtFinalizer(s *Statement) {
 	dbCache := stmtDBCache[s.cacheID]
 	for dbCacheID, ps := range dbCache {
 		ps.Close()
-		delete(dbStmtCache[dbCacheID], s.cacheID)
+		delete(dbStmts[dbCacheID], s.cacheID)
 	}
 	delete(stmtDBCache, s.cacheID)
-}
-
-func dbFinalizer(db *DB) {
-	// There is no need to close the sql.Stmts here, the resources in the
-	// database are freed on db.Close.
-	cacheMutex.Lock()
-	defer cacheMutex.Unlock()
-	db.Close()
-	stmtCache := dbStmtCache[db.cacheID]
-	for stmtCacheID, _ := range stmtCache {
-		delete(stmtDBCache[stmtCacheID], db.cacheID)
-	}
-	delete(dbStmtCache, db.cacheID)
 }
 
 // Prepare expands the types mentioned in the SQLair expressions and checks
@@ -105,10 +100,23 @@ type DB struct {
 	db      *sql.DB
 }
 
+func dbFinalizer(db *DB) {
+	// There is no need to close the sql.Stmts here, the resources in the
+	// database are freed on db.Close.
+	cacheMutex.Lock()
+	defer cacheMutex.Unlock()
+	db.db.Close()
+	stmtCache := dbStmts[db.cacheID]
+	for stmtCacheID, _ := range stmtCache {
+		delete(stmtDBCache[stmtCacheID], db.cacheID)
+	}
+	delete(dbStmts, db.cacheID)
+}
+
 func NewDB(sqldb *sql.DB) *DB {
 	cacheID := atomic.AddInt64(&dbIDCount, 1)
 	cacheMutex.Lock()
-	dbStmtCache[cacheID] = make(map[stmtID]bool)
+	dbStmts[cacheID] = make(map[stmtID]bool)
 	cacheMutex.Unlock()
 	var db = DB{db: sqldb, cacheID: cacheID}
 	runtime.SetFinalizer(&db, dbFinalizer)
@@ -120,17 +128,13 @@ func (db *DB) PlainDB() *sql.DB {
 	return db.db
 }
 
-func (db *DB) Close() error {
-	return db.db.Close()
-}
-
 // Query holds the results of a database query.
 type Query struct {
 	qe   *expr.QueryExpr
 	stmt *sql.Stmt
 	ctx  context.Context
 	err  error
-	// If this query is not over a transaction tx is nil.
+	// If this query is not in a transaction tx is nil.
 	tx *TX
 }
 
@@ -165,13 +169,13 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 	return &Query{stmt: ps, qe: qe, ctx: ctx, err: nil}
 }
 
-// prepareStmt prepares a Statement on a database. prepareStmt first checks in the cache
+// prepareStmt prepares a Statement on a database. It first checks in the cache
 // to see if it has already been preapred.
 func (db *DB) prepareStmt(ctx context.Context, s *Statement) (*sql.Stmt, error) {
 	var err error
 	cacheMutex.RLock()
-	// The statement is only removed from the cache when the finalizer is run
-	// so it should always be in the cache.
+	// The statement ID is only removed from the cache when the finalizer is
+	// run so it is always in the map.
 	ps, ok := stmtDBCache[s.cacheID][db.cacheID]
 	cacheMutex.RUnlock()
 	if !ok {
@@ -181,7 +185,7 @@ func (db *DB) prepareStmt(ctx context.Context, s *Statement) (*sql.Stmt, error) 
 		}
 		cacheMutex.Lock()
 		stmtDBCache[s.cacheID][db.cacheID] = ps
-		dbStmtCache[db.cacheID][s.cacheID] = true
+		dbStmts[db.cacheID][s.cacheID] = true
 		cacheMutex.Unlock()
 	}
 	return ps, nil
@@ -237,7 +241,7 @@ func (q *Query) Iter() *Iterator {
 		return &Iterator{err: q.err}
 	}
 	if q.tx != nil && q.tx.isDone() {
-		return &Iterator{err: ErrTxDone}
+		return &Iterator{err: ErrTXDone}
 	}
 	var result sql.Result
 	var rows *sql.Rows
@@ -453,7 +457,7 @@ func (db *DB) Begin(ctx context.Context, opts *TXOptions) (*TX, error) {
 // Commit commits the transaction.
 func (tx *TX) Commit() error {
 	if !atomic.CompareAndSwapInt32(&tx.done, 0, 1) {
-		return ErrTxDone
+		return ErrTXDone
 	}
 	return tx.tx.Commit()
 }
@@ -461,7 +465,7 @@ func (tx *TX) Commit() error {
 // Rollback aborts the transaction.
 func (tx *TX) Rollback() error {
 	if !atomic.CompareAndSwapInt32(&tx.done, 0, 1) {
-		return ErrTxDone
+		return ErrTXDone
 	}
 	return tx.tx.Rollback()
 }
@@ -488,7 +492,7 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		ctx = context.Background()
 	}
 	if tx.isDone() {
-		return &Query{ctx: ctx, err: ErrTxDone}
+		return &Query{ctx: ctx, err: ErrTXDone}
 	}
 
 	qe, err := s.pe.Query(inputArgs...)
@@ -497,6 +501,12 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 	}
 
 	var ps *sql.Stmt
+	// A transaction is tied to a specific database connection. When a
+	// Statement is prepared on a database it requires a free connection that
+	// does not have a transaction in progress. If all connections are busy
+	// then it is possible to enter a deadlock.
+	// If all connections are busy then prepare on the transaction rather
+	// than the DB.
 	dbStats := tx.db.db.Stats()
 	if dbStats.MaxOpenConnections > 0 && dbStats.MaxOpenConnections == dbStats.InUse {
 		ps, err = tx.tx.PrepareContext(ctx, s.pe.SQL())

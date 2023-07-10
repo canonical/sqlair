@@ -14,5 +14,5 @@ func (db *DB) CacheID() int64 {
 }
 
 func Cache() (map[int64]map[int64]*sql.Stmt, map[int64]map[int64]bool, *sync.RWMutex) {
-	return stmtDBCache, dbStmtCache, &cacheMutex
+	return stmtDBCache, dbStmts, &cacheMutex
 }
