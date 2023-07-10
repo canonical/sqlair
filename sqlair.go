@@ -282,12 +282,18 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 			var outputArg reflect.Value
 			switch elemType.Kind() {
 			case reflect.Pointer:
+				if elemType.Elem().Kind() != reflect.Struct {
+					iter.Close()
+					return fmt.Errorf("need slice of structs/maps, got slice of pointer to %s", elemType.Elem().Kind())
+				}
 				outputArg = reflect.New(elemType.Elem())
 			case reflect.Struct:
 				outputArg = reflect.New(elemType)
+			case reflect.Map:
+				outputArg = reflect.MakeMap(elemType)
 			default:
 				iter.Close()
-				return fmt.Errorf("need slice of struct, got slice of %s", elemType.Kind())
+				return fmt.Errorf("need slice of structs/maps, got slice of %s", elemType.Kind())
 			}
 			outputArgs = append(outputArgs, outputArg.Interface())
 		}
@@ -297,7 +303,7 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 		}
 		for i, outputArg := range outputArgs {
 			switch k := sliceVals[i].Type().Elem().Kind(); k {
-			case reflect.Pointer:
+			case reflect.Pointer, reflect.Map:
 				sliceVals[i] = reflect.Append(sliceVals[i], reflect.ValueOf(outputArg))
 			case reflect.Struct:
 				sliceVals[i] = reflect.Append(sliceVals[i], reflect.ValueOf(outputArg).Elem())
