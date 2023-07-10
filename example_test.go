@@ -146,7 +146,7 @@ func Example() {
 	// Example 2
 	// Find out who is in location l1 and what team they work for.
 	selectPeopleInRoom := sqlair.MustPrepare(`
-		SELECT e.* AS &Employee.*, t.* AS &Team.*
+		SELECT e.* AS &Employee.*, (t.team_name, t.id) AS &Team.*
 		FROM employees AS e, teams AS t
 		WHERE t.room_id = $Location.room_id AND t.id = e.team_id`,
 		Employee{}, Team{}, Location{},
