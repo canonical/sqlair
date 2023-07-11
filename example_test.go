@@ -126,7 +126,6 @@ func Example() {
 
 	// Example 1
 	// Find the team the employee 1 works in.
-
 	selectSomeoneInTeam := sqlair.MustPrepare(`
 		SELECT &Team.*
 		FROM teams
@@ -141,7 +140,7 @@ func Example() {
 		panic(err)
 	}
 
-	fmt.Printf("%s is on the %s team\n", e1.Name, team.Name)
+	fmt.Printf("%s is on the %s team.\n", e1.Name, team.Name)
 
 	// Example 2
 	// Find out who is in location l1 and what team they work for.
@@ -163,7 +162,7 @@ func Example() {
 	for i := range roomDwellers {
 		fmt.Printf("%s (%s), ", roomDwellers[i].Name, dwellersTeams[i].Name)
 	}
-	fmt.Printf("are in %s\n", l1.Name)
+	fmt.Printf("are in %s.\n", l1.Name)
 
 	// Example 3
 	// Cycle through employees until we find one in the Penthouse.
@@ -195,7 +194,7 @@ func Example() {
 			panic(err)
 		}
 		if m["location"] == "The Penthouse" {
-			fmt.Printf("%s from team %s is in %s\n", m["employee_name"], m["team"], m["location"])
+			fmt.Printf("%s from team %s is in %s.\n", m["employee_name"], m["team"], m["location"])
 			break
 		}
 	}
@@ -215,9 +214,9 @@ func Example() {
 	}
 
 	// Output:
-	//Alastair is on the Engineering team
-	//Alastair (Engineering), Ed (Engineering), Marco (Engineering), Pedro (Management), Serdar (Presentation Engineering), Lina (Presentation Engineering), are in The Basement
-	//Gustavo from team Leadership is in The Penthouse
+	//Alastair is on the Engineering team.
+	//Alastair (Engineering), Ed (Engineering), Marco (Engineering), Pedro (Management), Serdar (Presentation Engineering), Lina (Presentation Engineering), are in The Basement.
+	//Gustavo from team Leadership is in The Penthouse.
 }
 
 func ExampleOutcome_get() {
