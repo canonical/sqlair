@@ -15,6 +15,9 @@ type queryPart interface {
 	part()
 }
 
+// A columnExpr represents the columns we expect to find at the start of an
+// output expression. e.g. "t.col1" (a fullName) in "t.col1 AS &MyStruct.*" or
+// "func(2 + $Person.id)" (a funcExpr) in "func(2 + $Person.id) AS &Manager.id".
 type columnExpr interface {
 	ce()
 }

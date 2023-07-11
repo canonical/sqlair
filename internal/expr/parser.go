@@ -400,15 +400,19 @@ func (p *Parser) parseFuncName() (columnExpr, bool, error) {
 			if p.pos == len(p.input) {
 				return funcExpr{}, false, nil
 			}
+			// Ignore closing brackets in string literals.
 			if ok, err := p.skipStringLiteral(); err != nil {
 				return funcExpr{}, false, err
 			} else if ok {
 				continue
 			}
+
+			// Ignore closing brackets in comments.
 			if ok := p.skipComment(); ok {
 				continue
 			}
 			if p.skipByte('(') {
+				// Keep track of bracket nesting level.
 				bracketLevel++
 				continue
 			}
@@ -422,6 +426,7 @@ func (p *Parser) parseFuncName() (columnExpr, bool, error) {
 			p.pos++
 		}
 		rawFunc := p.input[cp.pos:p.pos]
+		// Parse any expressions inside the function.
 		funcParser := NewParser()
 		pe, err := funcParser.Parse(rawFunc)
 		if err != nil {
