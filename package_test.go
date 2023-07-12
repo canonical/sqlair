@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"runtime"
 	"testing"
 	"time"
@@ -44,6 +45,20 @@ func createExampleDB(createTables string, inserts []string) (*sql.DB, error) {
 	return db, nil
 }
 
+func dropTables(db *sqlair.DB, tables ...string) error {
+	for _, table := range tables {
+		stmt, err := sqlair.Prepare(fmt.Sprintf("DROP TABLE %s;", table))
+		if err != nil {
+			return err
+		}
+		err = db.Query(nil, stmt).Run()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 type Address struct {
 	ID       int    `db:"id"`
 	District string `db:"district"`
@@ -77,8 +92,6 @@ CREATE TABLE address (
 	street text
 );
 `
-	dropTables := []string{`DROP TABLE person`, `DROP TABLE address`}
-
 	inserts := []string{
 		"INSERT INTO person VALUES ('Fred', 30, 1000, 'fred@email.com');",
 		"INSERT INTO person VALUES ('Mark', 20, 1500, 'mark@email.com');",
@@ -93,7 +106,7 @@ CREATE TABLE address (
 	if err != nil {
 		return nil, nil, err
 	}
-	return dropTables, db, nil
+	return []string{"person", "address"}, db, nil
 }
 
 func (s *PackageSuite) TestValidIterGet(c *C) {
@@ -220,19 +233,14 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 
 	tests = append(tests, testsWithShadowPerson...)
 
-	dropTables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB()
 	if err != nil {
 		c.Fatal(err)
 	}
 
 	db := sqlair.NewDB(sqldb)
 	defer func() {
-		for _, dropTable := range dropTables {
-			err = db.Query(nil, sqlair.MustPrepare(dropTable)).Run()
-			if err != nil {
-				c.Fatal(err)
-			}
-		}
+		c.Assert(dropTables(db, tables...), IsNil)
 	}()
 
 	for _, t := range tests {
@@ -336,19 +344,14 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		err:     `cannot get result: type "M" provided more than once, rename one of them`,
 	}}
 
-	dropTables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB()
 	if err != nil {
 		c.Fatal(err)
 	}
 
 	db := sqlair.NewDB(sqldb)
 	defer func() {
-		for _, dropTable := range dropTables {
-			err = db.Query(nil, sqlair.MustPrepare(dropTable)).Run()
-			if err != nil {
-				c.Fatal(err)
-			}
-		}
+		c.Assert(dropTables(db, tables...), IsNil)
 	}()
 
 	for _, t := range tests {
@@ -464,19 +467,14 @@ func (s *PackageSuite) TestNulls(c *C) {
 		expected: []any{&ScannerDude{Fullname: ScannerString{SS: "ScannerString scanned well!"}, ID: ScannerInt{SI: 666}, PostalCode: ScannerInt{SI: 666}}},
 	}}
 
-	dropTables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB()
 	if err != nil {
 		c.Fatal(err)
 	}
 
 	db := sqlair.NewDB(sqldb)
 	defer func() {
-		for _, dropTable := range dropTables {
-			err = db.Query(nil, sqlair.MustPrepare(dropTable)).Run()
-			if err != nil {
-				c.Fatal(err)
-			}
-		}
+		c.Assert(dropTables(db, tables...), IsNil)
 	}()
 
 	insertNullPerson, err := sqlair.Prepare("INSERT INTO person VALUES ('Nully', NULL, NULL, NULL);")
@@ -534,19 +532,14 @@ func (s *PackageSuite) TestValidGet(c *C) {
 		expected: []any{sqlair.M{"name": "Fred"}},
 	}}
 
-	dropTables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB()
 	if err != nil {
 		c.Fatal(err)
 	}
 
 	db := sqlair.NewDB(sqldb)
 	defer func() {
-		for _, dropTable := range dropTables {
-			err = db.Query(nil, sqlair.MustPrepare(dropTable)).Run()
-			if err != nil {
-				c.Fatal(err)
-			}
-		}
+		c.Assert(dropTables(db, tables...), IsNil)
 	}()
 
 	for _, t := range tests {
@@ -600,19 +593,14 @@ func (s *PackageSuite) TestGetErrors(c *C) {
 		err:     `invalid input parameter: map "M" does not contain key "p1"`,
 	}}
 
-	dropTables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB()
 	if err != nil {
 		c.Fatal(err)
 	}
 
 	db := sqlair.NewDB(sqldb)
 	defer func() {
-		for _, dropTable := range dropTables {
-			err = db.Query(nil, sqlair.MustPrepare(dropTable)).Run()
-			if err != nil {
-				c.Fatal(err)
-			}
-		}
+		c.Assert(dropTables(db, tables...), IsNil)
 	}()
 
 	for _, t := range tests {
@@ -629,20 +617,16 @@ func (s *PackageSuite) TestGetErrors(c *C) {
 }
 
 func (s *PackageSuite) TestErrNoRows(c *C) {
-	dropTables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB()
 	if err != nil {
 		c.Fatal(err)
 	}
 
 	db := sqlair.NewDB(sqldb)
 	defer func() {
-		for _, dropTable := range dropTables {
-			err = db.Query(nil, sqlair.MustPrepare(dropTable)).Run()
-			if err != nil {
-				c.Fatal(err)
-			}
-		}
+		c.Assert(dropTables(db, tables...), IsNil)
 	}()
+
 	stmt := sqlair.MustPrepare("SELECT * AS &Person.* FROM person WHERE id=12312", Person{})
 	err = db.Query(nil, stmt).Get(&Person{})
 	if !errors.Is(err, sqlair.ErrNoRows) {
@@ -705,19 +689,14 @@ func (s *PackageSuite) TestValidGetAll(c *C) {
 		expected: []any{&[]sqlair.M{{"name": "Mark"}}, &[]CustomMap{{"id": int64(20)}}},
 	}}
 
-	dropTables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB()
 	if err != nil {
 		c.Fatal(err)
 	}
 
 	db := sqlair.NewDB(sqldb)
 	defer func() {
-		for _, dropTable := range dropTables {
-			err = db.Query(nil, sqlair.MustPrepare(dropTable)).Run()
-			if err != nil {
-				c.Fatal(err)
-			}
-		}
+		c.Assert(dropTables(db, tables...), IsNil)
 	}()
 
 	for _, t := range tests {
@@ -806,19 +785,14 @@ func (s *PackageSuite) TestGetAllErrors(c *C) {
 		err:     `cannot populate slice: need slice of structs/maps, got slice of pointer to map`,
 	}}
 
-	dropTables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB()
 	if err != nil {
 		c.Fatal(err)
 	}
 
 	db := sqlair.NewDB(sqldb)
 	defer func() {
-		for _, dropTable := range dropTables {
-			err = db.Query(nil, sqlair.MustPrepare(dropTable)).Run()
-			if err != nil {
-				c.Fatal(err)
-			}
-		}
+		c.Assert(dropTables(db, tables...), IsNil)
 	}()
 
 	for _, t := range tests {
@@ -835,7 +809,7 @@ func (s *PackageSuite) TestGetAllErrors(c *C) {
 }
 
 func (s *PackageSuite) TestRun(c *C) {
-	dropTables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB()
 	c.Assert(err, IsNil)
 
 	var jim = Person{
@@ -846,10 +820,7 @@ func (s *PackageSuite) TestRun(c *C) {
 
 	db := sqlair.NewDB(sqldb)
 	defer func() {
-		for _, dropTable := range dropTables {
-			err = db.Query(nil, sqlair.MustPrepare(dropTable)).Run()
-			c.Assert(err, IsNil)
-		}
+		c.Assert(dropTables(db, tables...), IsNil)
 	}()
 
 	// Insert Jim.
@@ -866,7 +837,7 @@ func (s *PackageSuite) TestRun(c *C) {
 }
 
 func (s *PackageSuite) TestOutcome(c *C) {
-	dropTables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB()
 	c.Assert(err, IsNil)
 
 	var jim = Person{
@@ -877,10 +848,7 @@ func (s *PackageSuite) TestOutcome(c *C) {
 
 	db := sqlair.NewDB(sqldb)
 	defer func() {
-		for _, dropTable := range dropTables {
-			err = db.Query(nil, sqlair.MustPrepare(dropTable)).Run()
-			c.Assert(err, IsNil)
-		}
+		c.Assert(dropTables(db, tables...), IsNil)
 	}()
 
 	var outcome = sqlair.Outcome{}
@@ -938,16 +906,14 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	oneOutput := &Person{}
 	oneExpected := &Person{30, "Fred", 1000}
 
-	dropTables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB()
 	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
 	defer func() {
-		for _, dropTable := range dropTables {
-			err = db.Query(nil, sqlair.MustPrepare(dropTable)).Run()
-			c.Assert(err, IsNil)
-		}
+		c.Assert(dropTables(db, tables...), IsNil)
 	}()
+
 	stmt := sqlair.MustPrepare("SELECT &Person.* FROM person", Person{})
 
 	// Run different Query methods.
@@ -1008,7 +974,7 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 }
 
 func (s *PackageSuite) TestTransactions(c *C) {
-	dropTables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB()
 	c.Assert(err, IsNil)
 
 	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE address_id = $Person.address_id", Person{})
@@ -1018,11 +984,9 @@ func (s *PackageSuite) TestTransactions(c *C) {
 
 	db := sqlair.NewDB(sqldb)
 	defer func() {
-		for _, dropTable := range dropTables {
-			err = db.Query(ctx, sqlair.MustPrepare(dropTable)).Run()
-			c.Assert(err, IsNil)
-		}
+		c.Assert(dropTables(db, tables...), IsNil)
 	}()
+
 	tx, err := db.Begin(ctx, nil)
 	c.Assert(err, IsNil)
 
@@ -1060,15 +1024,12 @@ func (s *PackageSuite) TestTransactions(c *C) {
 }
 
 func (s *PackageSuite) TestTransactionErrors(c *C) {
-	dropTables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB()
 	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
 	defer func() {
-		for _, dropTable := range dropTables {
-			err = db.Query(nil, sqlair.MustPrepare(dropTable)).Run()
-			c.Assert(err, IsNil)
-		}
+		c.Assert(dropTables(db, tables...), IsNil)
 	}()
 
 	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ($Person.name, $Person.id, $Person.address_id, 'fred@email.com');", Person{})
@@ -1130,7 +1091,7 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 		`, Person{})
 		c.Assert(err, IsNil)
 		{
-			dropTables, sqldb, err := personAndAddressDB()
+			tables, sqldb, err := personAndAddressDB()
 			c.Assert(err, IsNil)
 			db := sqlair.NewDB(sqldb)
 
@@ -1202,10 +1163,7 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 			c.Assert(inDBStmt, Equals, false)
 			c.Assert(inStmtDB, Equals, false)
 
-			for _, dropTable := range dropTables {
-				err = db.Query(nil, sqlair.MustPrepare(dropTable)).Run()
-				c.Assert(err, IsNil)
-			}
+			c.Assert(dropTables(db, tables...), IsNil)
 
 		}
 		runtime.GC()
@@ -1238,16 +1196,14 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 }
 
 func (s *PackageSuite) TestTransactionWithOneConn(c *C) {
-	dropTables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB()
 	c.Assert(err, IsNil)
 	sqldb.SetMaxOpenConns(1)
 	ctx := context.Background()
+
 	db := sqlair.NewDB(sqldb)
 	defer func() {
-		for _, dropTable := range dropTables {
-			err = db.Query(ctx, sqlair.MustPrepare(dropTable)).Run()
-			c.Assert(err, IsNil)
-		}
+		c.Assert(dropTables(db, tables...), IsNil)
 	}()
 
 	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE name = 'Mark'", Person{})
@@ -1292,7 +1248,7 @@ CREATE TABLE lease_type (
 );
 
 `
-	dropTables := []string{`DROP TABLE lease`, `DROP TABLE lease_type`}
+	tables := []string{`lease`, `lease_type`}
 
 	inserts := []string{
 		"INSERT INTO lease VALUES ('uuid1', 'name1', 'holder1', 1, 'type_id1');",
@@ -1306,22 +1262,19 @@ CREATE TABLE lease_type (
 	if err != nil {
 		return nil, nil, err
 	}
-	return dropTables, db, nil
+	return tables, db, nil
 
 }
 
 func (s *PackageSuite) TestIterMethodOrder(c *C) {
-	dropTables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB()
 	if err != nil {
 		c.Fatal(err)
 	}
 
 	db := sqlair.NewDB(sqldb)
 	defer func() {
-		for _, dropTable := range dropTables {
-			_, err = db.PlainDB().Exec(dropTable)
-			c.Assert(err, IsNil)
-		}
+		c.Assert(dropTables(db, tables...), IsNil)
 	}()
 
 	var p = Person{}
@@ -1393,19 +1346,14 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 		expected: [][]any{{&JujuLeaseKey{Namespace: "type1", ModelUUID: "uuid1", Lease: "name1"}, &JujuLeaseInfo{Holder: "holder1", Expiry: 1}}},
 	}}
 
-	dropTables, sqldb, err := JujuStoreLeaseDB()
+	tables, sqldb, err := JujuStoreLeaseDB()
 	if err != nil {
 		c.Fatal(err)
 	}
 
 	db := sqlair.NewDB(sqldb)
 	defer func() {
-		for _, dropTable := range dropTables {
-			err = db.Query(nil, sqlair.MustPrepare(dropTable)).Run()
-			if err != nil {
-				c.Fatal(err)
-			}
-		}
+		c.Assert(dropTables(db, tables...), IsNil)
 	}()
 
 	for _, t := range tests {
