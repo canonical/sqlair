@@ -1066,109 +1066,26 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 }
 
 func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
-	mark := Person{20, "Mark", 1500}
-	fred := Person{30, "Fred", 1000}
-	mainStreet := Address{1000, "Happy Land", "Main Street"}
 	var p = Person{}
-	var a = Address{}
 
 	stmtDBCache, dbStmtCache, cacheMutex := sqlair.Cache()
 
-	lookupStmt := func(dbID int64, sID int64) (bool, bool) {
+	// checkStmtCache is a helper function to check if a prepared statement is
+	// cached or not.
+	checkStmtCache := func(dbID int64, sID int64, inCache bool) {
 		cacheMutex.RLock()
-		_, ok1 := stmtDBCache[sID][dbID]
-		_, ok2 := dbStmtCache[dbID][sID]
-		cacheMutex.RUnlock()
-		return ok1, ok2
+		defer cacheMutex.RUnlock()
+		dbCache, ok1 := stmtDBCache[sID]
+		var ok2 bool
+		if ok1 {
+			_, ok2 = dbCache[dbID]
+		}
+		_, ok3 := dbStmtCache[dbID][sID]
+		c.Assert(ok2, Equals, inCache)
+		c.Assert(ok3, Equals, inCache)
 	}
 
-	var dbID int64
-	{
-		selectFred, err := sqlair.Prepare(`
-			SELECT &Person.*
-			FROM person
-			WHERE name = "Fred"
-		`, Person{})
-		c.Assert(err, IsNil)
-		{
-			tables, sqldb, err := personAndAddressDB()
-			c.Assert(err, IsNil)
-			db := sqlair.NewDB(sqldb)
-
-			dbID = db.CacheID()
-
-			selectMark, err := sqlair.Prepare(`
-				SELECT &Person.*
-				FROM person
-				WHERE name = "Mark"
-			`, Person{})
-			c.Assert(err, IsNil)
-
-			markStmtID := selectMark.CacheID()
-			var mainStreetStmtID int64
-			{
-				c.Assert(db.Query(nil, selectMark).Get(&p), IsNil)
-				c.Assert(p, Equals, mark)
-
-				// Check the prepared selectMark is in the cache.
-				inDBStmt, inStmtDB := lookupStmt(dbID, markStmtID)
-				c.Assert(inDBStmt, Equals, true)
-				c.Assert(inStmtDB, Equals, true)
-
-				c.Assert(db.Query(nil, selectFred).Get(&p), IsNil)
-				c.Assert(p, Equals, fred)
-
-				// Check the prepared selectFred is in the cache.
-				inDBStmt, inStmtDB = lookupStmt(dbID, selectFred.CacheID())
-				c.Assert(inDBStmt, Equals, true)
-				c.Assert(inStmtDB, Equals, true)
-
-				tx, err := db.Begin(nil, nil)
-				c.Assert(err, IsNil)
-
-				c.Assert(tx.Query(nil, selectMark).Get(&p), IsNil)
-				c.Assert(p, Equals, mark)
-
-				// Check selectMark is still in the cache after tx.
-				inDBStmt, inStmtDB = lookupStmt(dbID, markStmtID)
-				c.Assert(inDBStmt, Equals, true)
-				c.Assert(inStmtDB, Equals, true)
-
-				// Run a different query that has not already been prepared on the DB.
-				selectMainStreet, err := sqlair.Prepare(`
-					SELECT &Address.*
-					FROM address
-					WHERE street = "Main Street"
-				`, Address{})
-				c.Assert(err, IsNil)
-
-				mainStreetStmtID = selectMainStreet.CacheID()
-
-				err = tx.Query(nil, selectMainStreet).Get(&a)
-				c.Assert(err, IsNil)
-				c.Assert(a, Equals, mainStreet)
-
-				inDBStmt, inStmtDB = lookupStmt(dbID, markStmtID)
-				c.Assert(inDBStmt, Equals, true)
-				c.Assert(inStmtDB, Equals, true)
-
-				c.Assert(tx.Commit(), IsNil)
-			}
-			// The finalizer for selectMark will run after the GC.
-			runtime.GC()
-			// Wait 1 millisecond for the finalizer to finish.
-			time.Sleep(1 * time.Millisecond)
-			// Check selectMark has been removed from the cache.
-			inDBStmt, inStmtDB := lookupStmt(dbID, mainStreetStmtID)
-			c.Assert(inDBStmt, Equals, false)
-			c.Assert(inStmtDB, Equals, false)
-
-			c.Assert(dropTables(db, tables...), IsNil)
-
-		}
-		runtime.GC()
-		time.Sleep(1 * time.Millisecond)
-
+	checkDBNotInCache := func(dbID int64) {
 		cacheMutex.RLock()
 		defer cacheMutex.RUnlock()
 		for _, dbCache := range stmtDBCache {
@@ -1177,22 +1094,99 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 		}
 		_, ok := dbStmtCache[dbID]
 		c.Assert(ok, Equals, false)
-
-		// Check the database cache is empty at the end.
-		c.Assert(dbStmtCache, HasLen, 0)
-
-		// Check fred is still in the statement cache
-		_, ok = stmtDBCache[selectFred.CacheID()]
-		c.Assert(ok, Equals, true)
-		cacheMutex.RUnlock()
 	}
+
+	checkCacheEmpty := func() {
+		cacheMutex.RLock()
+		defer cacheMutex.RUnlock()
+		c.Assert(dbStmtCache, HasLen, 0)
+		c.Assert(stmtDBCache, HasLen, 0)
+	}
+
+	q1 := `
+		SELECT &Person.*
+		FROM person
+		WHERE name = "Fred"
+	`
+	q2 := `
+		SELECT &Person.*
+		FROM person
+		WHERE name = "Mark"
+	`
+
+	// For a Statement or DB to be removed from the cache it needs to go out of
+	// scope. Because of this the tests below make extensive use of functions
+	// to control to "forget" statements and databases.
+
+	// createAndCacheStmt takes a db and prepares a statement on it.
+	createAndCacheStmt := func(db *sqlair.DB) (stmtID int64) {
+		// Create stmt.
+		stmt, err := sqlair.Prepare(q1, Person{})
+		c.Assert(err, IsNil)
+
+		// Start a query with stmt on db.
+		// This will prepare the stmt on the db.
+		c.Assert(db.Query(nil, stmt).Get(&p), IsNil)
+		// Check that it now is in the cache.
+		checkStmtCache(db.CacheID(), stmt.CacheID(), true)
+		return stmt.CacheID()
+	}
+
+	// testStmtsOnDB prepares a given statement on the db then creates a
+	// statement inside another function and checks it has been cleared from
+	// the cache on GC.
+	testStmtsOnDB := func(db *sqlair.DB, stmt *sqlair.Statement) {
+		// Start a query with stmt on db. This will prepare stmt on db.
+		c.Assert(db.Query(nil, stmt).Get(&p), IsNil)
+		// Check that it now is in the cache.
+		checkStmtCache(db.CacheID(), stmt.CacheID(), true)
+
+		funcStmtID := createAndCacheStmt(db)
+		// Run the garbage collecter and wait one millisecond for the finalizer to finish.
+		runtime.GC()
+		time.Sleep(1 * time.Millisecond)
+
+		checkStmtCache(db.CacheID(), funcStmtID, false)
+	}
+
+	createDBAndTestStmt := func(stmt *sqlair.Statement) (dbID int64) {
+		// Create db.
+		tables, sqldb, err := personAndAddressDB()
+		c.Assert(err, IsNil)
+		db := sqlair.NewDB(sqldb)
+		defer func() {
+			c.Assert(dropTables(db, tables...), IsNil)
+		}()
+
+		// Test stmt.
+		testStmtsOnDB(db, stmt)
+
+		return db.CacheID()
+	}
+
+	createStmtAndTestOnDBs := func() {
+		// Create stmt.
+		stmt, err := sqlair.Prepare(q2, Person{})
+		c.Assert(err, IsNil)
+
+		db1ID := createDBAndTestStmt(stmt)
+		db2ID := createDBAndTestStmt(stmt)
+
+		// Run the garbage collecter and wait one millisecond for the finalizer to finish.
+		runtime.GC()
+		time.Sleep(1 * time.Millisecond)
+
+		checkDBNotInCache(db1ID)
+		checkDBNotInCache(db2ID)
+	}
+
+	createStmtAndTestOnDBs()
+	// Run the garbage collecter and wait one millisecond for the finalizer to finish.
 	runtime.GC()
 	time.Sleep(1 * time.Millisecond)
 
-	cacheMutex.RLock()
-	c.Assert(dbStmtCache, HasLen, 0)
-	c.Assert(stmtDBCache, HasLen, 0)
-	// cacheMutex is unlocked by the defered Unlock.
+	checkCacheEmpty()
+
 }
 
 func (s *PackageSuite) TestTransactionWithOneConn(c *C) {

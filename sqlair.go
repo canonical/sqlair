@@ -37,11 +37,11 @@ type stmtID = int64
 // stmtDBCache.
 // When the statement is placed in the cache a finalizer function is set on it.
 // On garbage collection it cycles through the dbIDs and closes each sql.Stmt.
-// The finalizer then removes the stmtID from stmtDBCache and dbStmts.
+// The finalizer then removes the stmtID from stmtDBCache and dbStmtCache.
 // Similarly a finalizer is set on the SQLair DB which closes the sql.DB and
-// removes its dbID from dbStmts and stmtDBCache.
+// removes its dbID from dbStmtCache and stmtDBCache.
 var stmtDBCache = make(map[stmtID]map[dbID]*sql.Stmt)
-var dbStmts = make(map[dbID]map[stmtID]bool)
+var dbStmtCache = make(map[dbID]map[stmtID]bool)
 var cacheMutex sync.RWMutex
 
 // Statement represents a SQL statement with valid SQLair expressions.
@@ -55,9 +55,9 @@ func stmtFinalizer(s *Statement) {
 	cacheMutex.Lock()
 	defer cacheMutex.Unlock()
 	dbCache := stmtDBCache[s.cacheID]
-	for dbCacheID, ps := range dbCache {
-		ps.Close()
-		delete(dbStmts[dbCacheID], s.cacheID)
+	for dbCacheID, sqlstmt := range dbCache {
+		sqlstmt.Close()
+		delete(dbStmtCache[dbCacheID], s.cacheID)
 	}
 	delete(stmtDBCache, s.cacheID)
 }
@@ -81,9 +81,9 @@ func Prepare(query string, typeSamples ...any) (*Statement, error) {
 	cacheMutex.Lock()
 	defer cacheMutex.Unlock()
 	stmtDBCache[cacheID] = make(map[dbID]*sql.Stmt)
-	var s = Statement{pe: preparedExpr, cacheID: cacheID}
-	runtime.SetFinalizer(&s, stmtFinalizer)
-	return &s, nil
+	var s = &Statement{pe: preparedExpr, cacheID: cacheID}
+	runtime.SetFinalizer(s, stmtFinalizer)
+	return s, nil
 }
 
 // MustPrepare is the same as prepare except that it panics on error.
@@ -97,7 +97,7 @@ func MustPrepare(query string, typeSamples ...any) *Statement {
 
 type DB struct {
 	cacheID dbID
-	db      *sql.DB
+	sqldb   *sql.DB
 }
 
 func dbFinalizer(db *DB) {
@@ -105,41 +105,37 @@ func dbFinalizer(db *DB) {
 	// database are freed on db.Close.
 	cacheMutex.Lock()
 	defer cacheMutex.Unlock()
-	db.db.Close()
-	stmts := dbStmts[db.cacheID]
-	for stmtCacheID, _ := range stmts {
-		err := stmtDBCache[stmtCacheID][db.cacheID].Close()
-		if err != nil {
-			panic(err)
-		}
+	stmtCache := dbStmtCache[db.cacheID]
+	for stmtCacheID, _ := range stmtCache {
+		stmtDBCache[stmtCacheID][db.cacheID].Close()
 		delete(stmtDBCache[stmtCacheID], db.cacheID)
 	}
-	delete(dbStmts, db.cacheID)
+	delete(dbStmtCache, db.cacheID)
+	db.sqldb.Close()
 }
 
 func NewDB(sqldb *sql.DB) *DB {
 	cacheID := atomic.AddInt64(&dbIDCount, 1)
 	cacheMutex.Lock()
-	dbStmts[cacheID] = make(map[stmtID]bool)
+	dbStmtCache[cacheID] = make(map[stmtID]bool)
 	cacheMutex.Unlock()
-	var db = DB{db: sqldb, cacheID: cacheID}
+	var db = DB{sqldb: sqldb, cacheID: cacheID}
 	runtime.SetFinalizer(&db, dbFinalizer)
 	return &db
 }
 
 // PlainDB returns the underlying database object.
 func (db *DB) PlainDB() *sql.DB {
-	return db.db
+	return db.sqldb
 }
 
 // Query holds the results of a database query.
 type Query struct {
-	qe   *expr.QueryExpr
-	stmt *sql.Stmt
-	ctx  context.Context
-	err  error
-	// If this query is not in a transaction tx is nil.
-	tx *TX
+	qe      *expr.QueryExpr
+	sqlstmt *sql.Stmt
+	ctx     context.Context
+	err     error
+	tx      *TX // Only set for queries in transactions.
 }
 
 // Iterator is used to iterate over the results of the query.
@@ -150,7 +146,9 @@ type Iterator struct {
 	err     error
 	result  sql.Result
 	started bool
-	onClose func() error
+	// sqlstmt is only set for queries in transactions so it can be closed once
+	// the query is complete.
+	sqlstmt *sql.Stmt
 }
 
 // Query takes a context, prepared SQLair Statement and the structs mentioned in the query arguments.
@@ -160,7 +158,7 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		ctx = context.Background()
 	}
 
-	ps, err := db.prepareStmt(ctx, s)
+	sqlstmt, err := db.prepareStmt(ctx, s)
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
@@ -170,7 +168,7 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: err}
 	}
 
-	return &Query{stmt: ps, qe: qe, ctx: ctx, err: nil}
+	return &Query{sqlstmt: sqlstmt, qe: qe, ctx: ctx, err: nil}
 }
 
 // prepareStmt prepares a Statement on a database. It first checks in the cache
@@ -180,19 +178,26 @@ func (db *DB) prepareStmt(ctx context.Context, s *Statement) (*sql.Stmt, error) 
 	cacheMutex.RLock()
 	// The statement ID is only removed from the cache when the finalizer is
 	// run so it is always in the map.
-	ps, ok := stmtDBCache[s.cacheID][db.cacheID]
+	sqlstmt, ok := stmtDBCache[s.cacheID][db.cacheID]
 	cacheMutex.RUnlock()
 	if !ok {
-		ps, err = db.db.PrepareContext(ctx, s.pe.SQL())
+		sqlstmt, err = db.sqldb.PrepareContext(ctx, s.pe.SQL())
 		if err != nil {
 			return nil, err
 		}
 		cacheMutex.Lock()
-		stmtDBCache[s.cacheID][db.cacheID] = ps
-		dbStmts[db.cacheID][s.cacheID] = true
+		// Check if a statement has been inserted in the mean time.
+		sqlstmtAlt, ok := stmtDBCache[s.cacheID][db.cacheID]
+		if ok {
+			sqlstmt.Close()
+			sqlstmt = sqlstmtAlt
+		} else {
+			stmtDBCache[s.cacheID][db.cacheID] = sqlstmt
+			dbStmtCache[db.cacheID][s.cacheID] = true
+		}
 		cacheMutex.Unlock()
 	}
-	return ps, nil
+	return sqlstmt, nil
 }
 
 // Run is an alias for Get that takes no arguments.
@@ -252,23 +257,21 @@ func (q *Query) Iter() *Iterator {
 	var err error
 	var cols []string
 	if q.qe.HasOutputs() {
-		rows, err = q.stmt.QueryContext(q.ctx, q.qe.QueryArgs()...)
+		rows, err = q.sqlstmt.QueryContext(q.ctx, q.qe.QueryArgs()...)
 		if err == nil { // if err IS nil
 			cols, err = rows.Columns()
 		}
 	} else {
-		result, err = q.stmt.ExecContext(q.ctx, q.qe.QueryArgs()...)
+		result, err = q.sqlstmt.ExecContext(q.ctx, q.qe.QueryArgs()...)
 	}
 	if err != nil {
 		return &Iterator{qe: q.qe, err: err}
 	}
-	var onClose func() error
+	var sqlstmt *sql.Stmt
 	if q.tx != nil {
-		onClose = func() error {
-			return q.stmt.Close()
-		}
+		sqlstmt = q.sqlstmt
 	}
-	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err, result: result, onClose: onClose}
+	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err, result: result, sqlstmt: sqlstmt}
 }
 
 // Next prepares the next row for Get.
@@ -319,8 +322,8 @@ func (iter *Iterator) Get(outputArgs ...any) (err error) {
 // Close finishes the iteration and returns any errors encountered.
 func (iter *Iterator) Close() error {
 	var cerr error
-	if iter.onClose != nil {
-		cerr = iter.onClose()
+	if iter.sqlstmt != nil {
+		cerr = iter.sqlstmt.Close()
 	}
 	iter.started = true
 	if iter.rows == nil {
@@ -437,16 +440,20 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 }
 
 type TX struct {
-	tx *sql.Tx
-	db *DB
-	// done transitions from 0 to 1 exactly once, on Commit or Rollback.
-	// Once done, all operations fail with ErrTxDone. Use atomic operations
-	// only when checking value.
-	done int32
+	sqltx *sql.Tx
+	db    *DB
+	done  int32
 }
 
 func (tx *TX) isDone() bool {
 	return atomic.LoadInt32(&tx.done) == 1
+}
+
+func (tx *TX) setDone() error {
+	if !atomic.CompareAndSwapInt32(&tx.done, 0, 1) {
+		return ErrTXDone
+	}
+	return nil
 }
 
 // Begin starts a transaction.
@@ -454,24 +461,24 @@ func (db *DB) Begin(ctx context.Context, opts *TXOptions) (*TX, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	tx, err := db.db.BeginTx(ctx, opts.plainTXOptions())
-	return &TX{tx: tx, db: db}, err
+	sqltx, err := db.sqldb.BeginTx(ctx, opts.plainTXOptions())
+	return &TX{sqltx: sqltx, db: db}, err
 }
 
 // Commit commits the transaction.
 func (tx *TX) Commit() error {
-	if !atomic.CompareAndSwapInt32(&tx.done, 0, 1) {
-		return ErrTXDone
+	if err := tx.setDone(); err != nil {
+		return err
 	}
-	return tx.tx.Commit()
+	return tx.sqltx.Commit()
 }
 
 // Rollback aborts the transaction.
 func (tx *TX) Rollback() error {
-	if !atomic.CompareAndSwapInt32(&tx.done, 0, 1) {
-		return ErrTXDone
+	if err := tx.setDone(); err != nil {
+		return err
 	}
-	return tx.tx.Rollback()
+	return tx.sqltx.Rollback()
 }
 
 // TXOptions holds the transaction options to be used in DB.Begin.
@@ -504,22 +511,22 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: err}
 	}
 
-	var ps *sql.Stmt
 	// A transaction is tied to a specific database connection. When a
 	// Statement is prepared on a database it requires a free connection that
 	// does not have a transaction in progress. If all connections are busy
 	// then it is possible to enter a deadlock.
 	// If all connections are busy then prepare on the transaction rather
 	// than the DB.
-	dbStats := tx.db.db.Stats()
+	var sqlstmt *sql.Stmt
+	dbStats := tx.db.sqldb.Stats()
 	if dbStats.MaxOpenConnections > 0 && dbStats.MaxOpenConnections == dbStats.InUse {
-		ps, err = tx.tx.PrepareContext(ctx, s.pe.SQL())
+		sqlstmt, err = tx.sqltx.PrepareContext(ctx, s.pe.SQL())
 	} else {
-		ps, err = tx.db.prepareStmt(ctx, s)
-		ps = tx.tx.Stmt(ps)
+		sqlstmt, err = tx.db.prepareStmt(ctx, s)
+		sqlstmt = tx.sqltx.Stmt(sqlstmt)
 	}
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
-	return &Query{stmt: ps, qe: qe, tx: tx, ctx: ctx, err: nil}
+	return &Query{sqlstmt: sqlstmt, qe: qe, tx: tx, ctx: ctx, err: nil}
 }
