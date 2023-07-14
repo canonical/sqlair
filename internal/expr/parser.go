@@ -386,7 +386,7 @@ func (p *Parser) parseColumn() (fullName, bool, error) {
 	return fullName{}, false, nil
 }
 
-func (p *Parser) parseOutputType() (fullName, bool, error) {
+func (p *Parser) parseTargetType() (fullName, bool, error) {
 	if p.skipByte('&') {
 		return p.parseGoFullName()
 	}
@@ -416,17 +416,7 @@ func (p *Parser) parseGoFullName() (fullName, bool, error) {
 
 // parseList takes a parsing function that returns a fullName and parses a
 // bracketed, comma seperated, list.
-func (p *Parser) parseList(singletons bool, parseFn func(p *Parser) (fullName, bool, error)) ([]fullName, bool, error) {
-	if singletons {
-		// Case 1: Unbracketed singleton
-		if obj, ok, err := parseFn(p); err != nil {
-			return nil, false, err
-		} else if ok {
-			return []fullName{obj}, true, nil
-		}
-	}
-
-	//Case 2: Bracketed list
+func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]fullName, bool, error) {
 	cp := p.save()
 	if !p.skipByte('(') {
 		return nil, false, nil
@@ -457,16 +447,23 @@ func (p *Parser) parseList(singletons bool, parseFn func(p *Parser) (fullName, b
 
 		nextItem = p.skipByte(',')
 	}
-	return nil, false, fmt.Errorf("column %d: missing closing parentheses", parenPos)
+	return nil, false, fmt.Errorf("column %d: missing closing brackets", parenPos)
 }
 
 // parseColumns parses a list of columns. For lists of more than one column the
 // columns must be enclosed in brackets e.g. "(col1, col2) AS &Person.*".
-func (p *Parser) parseColumns(singletons bool) ([]fullName, bool) {
-	if cols, ok, _ := p.parseList(singletons, (*Parser).parseColumn); ok {
-		return cols, true
+func (p *Parser) parseColumns() (cols []fullName, bracketed bool, ok bool, err error) {
+	if col, ok, err := p.parseColumn(); err != nil {
+		return nil, false, false, err
+	} else if ok {
+		return []fullName{col}, false, true, nil
 	}
-	return nil, false
+	if cols, ok, err := p.parseList((*Parser).parseColumn); err != nil {
+		return nil, true, false, err
+	} else if ok {
+		return cols, true, true, nil
+	}
+	return nil, false, false, nil
 }
 
 // parseOutputExpression requires that the ampersand before the identifiers must
@@ -474,25 +471,42 @@ func (p *Parser) parseColumns(singletons bool) ([]fullName, bool) {
 func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 	start := p.pos
 	// Case 1: There are no columns e.g. "&Person.*".
-	if targetTypes, ok, err := p.parseList(true, (*Parser).parseOutputType); err != nil {
+	if targetType, ok, err := p.parseTargetType(); err != nil {
 		return nil, false, err
 	} else if ok {
 		return &outputPart{
 			sourceColumns: []fullName{},
-			targetTypes:   targetTypes,
+			targetTypes:   []fullName{targetType},
 			raw:           p.input[start:p.pos],
 		}, true, nil
 	}
 
-	cp := p.save()
 	// Case 2: There are columns e.g. "p.col1 AS &Person.*".
-	if cols, ok := p.parseColumns(true); ok {
+	cp := p.save()
+	// The error from parseColumns is ignored. It indicates we have not found
+	// an output expression.
+	if cols, bracketed, ok, _ := p.parseColumns(); ok {
 		p.skipBlanks()
 		if p.skipString("AS") {
 			p.skipBlanks()
-			if targetTypes, ok, err := p.parseList(true, (*Parser).parseOutputType); err != nil {
+			if targetType, ok, err := p.parseTargetType(); err != nil {
 				return nil, false, err
 			} else if ok {
+				if bracketed {
+					return nil, false, fmt.Errorf(`column %d: missing brackets around types after "AS"`, p.pos)
+				}
+				return &outputPart{
+					sourceColumns: cols,
+					targetTypes:   []fullName{targetType},
+					raw:           p.input[start:p.pos],
+				}, true, nil
+			}
+			if targetTypes, ok, err := p.parseList((*Parser).parseTargetType); err != nil {
+				return nil, false, err
+			} else if ok {
+				if !bracketed {
+					return nil, false, fmt.Errorf(`column %d: unexpected brackets around types after "AS"`, p.pos)
+				}
 				return &outputPart{
 					sourceColumns: cols,
 					targetTypes:   targetTypes,
@@ -505,7 +519,7 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 	return nil, false, nil
 }
 
-func (p *Parser) parseInputType() (fullName, bool, error) {
+func (p *Parser) parseSourceType() (fullName, bool, error) {
 	if p.skipByte('$') {
 		return p.parseGoFullName()
 	}
@@ -516,7 +530,7 @@ func (p *Parser) parseInputType() (fullName, bool, error) {
 func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 	start := p.pos
 	// Case 1: Standalone input expression e.g. "$Type.col".
-	if fn, ok, err := p.parseInputType(); err != nil {
+	if fn, ok, err := p.parseSourceType(); err != nil {
 		return nil, false, err
 	} else if ok {
 		if fn.name == "*" {
@@ -529,13 +543,15 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 		}, true, nil
 	}
 
-	cp := p.save()
 	// Case 2: INSERT VALUES statement e.g. "(name, id) VALUES $Person.*".
-	if columns, ok := p.parseColumns(false); ok {
+	cp := p.save()
+	// The error from parseColumns is ignored. It indicates we have not found
+	// an input expression.
+	if columns, bracketed, ok, _ := p.parseColumns(); ok && bracketed {
 		p.skipBlanks()
 		if p.skipString("VALUES") {
 			p.skipBlanks()
-			if sources, ok, err := p.parseList(true, (*Parser).parseInputType); err != nil {
+			if sources, ok, err := p.parseList((*Parser).parseSourceType); err != nil {
 				return nil, false, err
 			} else if ok {
 				return &inputPart{
@@ -543,6 +559,12 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 					sourceTypes:   sources,
 					raw:           p.input[start:p.pos],
 				}, true, nil
+			}
+			// Check if they have forgotten brackets around the types.
+			if _, ok, err := p.parseSourceType(); err != nil {
+				return nil, false, err
+			} else if ok {
+				return nil, false, fmt.Errorf(`column %d: missing brackets around types after "VALUES"`, p.pos)
 			}
 		}
 	}

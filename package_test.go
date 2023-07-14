@@ -140,7 +140,7 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 		expected: [][]any{{&Address{Street: "Fred", ID: 1000}}},
 	}, {
 		summary:  "select into star struct",
-		query:    "SELECT (name, address_id) AS &Person.* FROM person WHERE address_id IN ( $Manager.address_id, $Address.district )",
+		query:    "SELECT (name, address_id) AS (&Person.*) FROM person WHERE address_id IN ( $Manager.address_id, $Address.district )",
 		types:    []any{Person{}, Address{}, Manager{}},
 		inputs:   []any{Manager{PostalCode: 1000}, Address{ID: 2000}},
 		outputs:  [][]any{{&Person{}}},
@@ -154,14 +154,14 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 		expected: [][]any{{sqlair.M{"name": "Fred"}}, {sqlair.M{"name": "Mark"}}},
 	}, {
 		summary:  "select into star map",
-		query:    "SELECT (name, address_id) AS &M.* FROM person WHERE address_id = $M.p1",
+		query:    "SELECT (name, address_id) AS (&M.*) FROM person WHERE address_id = $M.p1",
 		types:    []any{sqlair.M{}},
 		inputs:   []any{sqlair.M{"p1": 1000}},
 		outputs:  [][]any{{&sqlair.M{"address_id": 0}}},
 		expected: [][]any{{&sqlair.M{"name": "Fred", "address_id": int64(1000)}}},
 	}, {
 		summary:  "select into custom map",
-		query:    "SELECT (name, address_id) AS &CustomMap.* FROM person WHERE address_id IN ( $CustomMap.address_id, $CustomMap.district)",
+		query:    "SELECT (name, address_id) AS (&CustomMap.*) FROM person WHERE address_id IN ( $CustomMap.address_id, $CustomMap.district)",
 		types:    []any{CustomMap{}},
 		inputs:   []any{CustomMap{"address_id": 1000, "district": 2000}},
 		outputs:  [][]any{{&CustomMap{"address_id": 0}}},
@@ -1250,7 +1250,7 @@ func (s *PackageSuite) TestJujuStore(c *C) {
 	}{{
 		summary: "juju store lease group query",
 		query: `
-SELECT (t.type, l.model_uuid, l.name) AS &JujuLeaseKey.*, (l.holder, l.expiry) AS &JujuLeaseInfo.*
+SELECT (t.type, l.model_uuid, l.name) AS (&JujuLeaseKey.*), (l.holder, l.expiry) AS (&JujuLeaseInfo.*)
 FROM   lease l JOIN lease_type t ON l.lease_type_id = t.id
 WHERE  t.type = $JujuLeaseKey.type
 AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
