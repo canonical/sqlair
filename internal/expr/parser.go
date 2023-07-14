@@ -452,17 +452,57 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 
 // parseColumns parses a list of columns. For lists of more than one column the
 // columns must be enclosed in brackets e.g. "(col1, col2) AS &Person.*".
-func (p *Parser) parseColumns() (cols []fullName, bracketed bool, ok bool, err error) {
-	if col, ok, err := p.parseColumn(); err != nil {
+func (p *Parser) parseColumns() (cols []fullName, bracketed bool, ok bool) {
+	// Case 1: A single column e.g. "p.name".
+	if col, ok, _ := p.parseColumn(); ok {
+		return []fullName{col}, false, true
+	}
+
+	// Case 2: Multiple columns e.g. "(p.name, p.id)".
+	if cols, ok, _ := p.parseList((*Parser).parseColumn); ok {
+		return cols, true, true
+	}
+
+	return nil, false, false
+}
+
+// parseTargetTypes parses a single output type or a list of output types.
+// Lists of types must be enclosed in brackets.
+func (p *Parser) parseTargetTypes() (targets []fullName, bracketed bool, ok bool, err error) {
+	// Case 1: A single target e.g. "&Person.name".
+	if targetType, ok, err := p.parseTargetType(); err != nil {
 		return nil, false, false, err
 	} else if ok {
-		return []fullName{col}, false, true, nil
+		return []fullName{targetType}, false, true, nil
 	}
-	if cols, ok, err := p.parseList((*Parser).parseColumn); err != nil {
+
+	// Case 2: Multiple types e.g. "(&Person.name, &Person.id)".
+	if targetTypes, ok, err := p.parseList((*Parser).parseTargetType); err != nil {
+		return nil, true, false, err
+	} else if ok {
+		return targetTypes, true, true, nil
+	}
+
+	return nil, false, false, nil
+}
+
+// parseSourceTypes parses a single input type or a list of input types.
+// Lists of types must be enclosed in brackets.
+func (p *Parser) parseSourceTypes() (sources []fullName, bracketed bool, ok bool, err error) {
+	// Case 1: A single column e.g. "p.name".
+	if sourceType, ok, err := p.parseSourceType(); err != nil {
+		return nil, false, false, err
+	} else if ok {
+		return []fullName{sourceType}, false, true, nil
+	}
+
+	// Case 2: Multiple columns e.g. "(p.name, p.id)".
+	if cols, ok, err := p.parseList((*Parser).parseSourceType); err != nil {
 		return nil, true, false, err
 	} else if ok {
 		return cols, true, true, nil
 	}
+
 	return nil, false, false, nil
 }
 
@@ -481,30 +521,20 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 		}, true, nil
 	}
 
-	// Case 2: There are columns e.g. "p.col1 AS &Person.*".
 	cp := p.save()
-	// The error from parseColumns is ignored. It indicates we have not found
-	// an output expression.
-	if cols, bracketed, ok, _ := p.parseColumns(); ok {
+
+	// Case 2: There are columns e.g. "p.col1 AS &Person.*".
+	if cols, colsBracketed, ok := p.parseColumns(); ok {
 		p.skipBlanks()
 		if p.skipString("AS") {
 			p.skipBlanks()
-			if targetType, ok, err := p.parseTargetType(); err != nil {
+			if targetTypes, typesBracketed, ok, err := p.parseTargetTypes(); err != nil {
 				return nil, false, err
 			} else if ok {
-				if bracketed {
+				if colsBracketed && !typesBracketed {
 					return nil, false, fmt.Errorf(`column %d: missing brackets around types after "AS"`, p.pos)
 				}
-				return &outputPart{
-					sourceColumns: cols,
-					targetTypes:   []fullName{targetType},
-					raw:           p.input[start:p.pos],
-				}, true, nil
-			}
-			if targetTypes, ok, err := p.parseList((*Parser).parseTargetType); err != nil {
-				return nil, false, err
-			} else if ok {
-				if !bracketed {
+				if !colsBracketed && typesBracketed {
 					return nil, false, fmt.Errorf(`column %d: unexpected brackets around types after "AS"`, p.pos)
 				}
 				return &outputPart{
@@ -543,11 +573,10 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 		}, true, nil
 	}
 
-	// Case 2: INSERT VALUES statement e.g. "(name, id) VALUES $Person.*".
 	cp := p.save()
-	// The error from parseColumns is ignored. It indicates we have not found
-	// an input expression.
-	if columns, bracketed, ok, _ := p.parseColumns(); ok && bracketed {
+
+	// Case 2: INSERT VALUES statement e.g. "(name, id) VALUES $Person.*".
+	if columns, bracketed, ok := p.parseColumns(); ok && bracketed {
 		p.skipBlanks()
 		if p.skipString("VALUES") {
 			p.skipBlanks()
