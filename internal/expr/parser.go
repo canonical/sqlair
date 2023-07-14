@@ -530,15 +530,15 @@ func (p *Parser) parseSourceType() (fullName, bool, error) {
 func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 	start := p.pos
 	// Case 1: Standalone input expression e.g. "$Type.col".
-	if fn, ok, err := p.parseSourceType(); err != nil {
+	if sourceType, ok, err := p.parseSourceType(); err != nil {
 		return nil, false, err
 	} else if ok {
-		if fn.name == "*" {
-			return nil, false, fmt.Errorf(`asterisk not allowed in standalone input expression "$%s"`, fn)
+		if sourceType.name == "*" {
+			return nil, false, fmt.Errorf(`asterisk not allowed in standalone input expression "$%s"`, sourceType)
 		}
 		return &inputPart{
 			targetColumns: []fullName{},
-			sourceTypes:   []fullName{fn},
+			sourceTypes:   []fullName{sourceType},
 			raw:           p.input[start:p.pos],
 		}, true, nil
 	}
@@ -560,7 +560,7 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 					raw:           p.input[start:p.pos],
 				}, true, nil
 			}
-			// Check if they have forgotten brackets around the types.
+			// Check for types with missing brackets.
 			if _, ok, err := p.parseSourceType(); err != nil {
 				return nil, false, err
 			} else if ok {

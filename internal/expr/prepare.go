@@ -433,7 +433,7 @@ func printCols(cs []fullName) string {
 	return s.String()
 }
 
-// namedParams returns n incrementing parameters with the first index being start.
+// namedParams returns n incrementing parameters begining at start.
 func namedParams(start int, n int) string {
 	var s bytes.Buffer
 	s.WriteString("(")

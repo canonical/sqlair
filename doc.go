@@ -54,7 +54,7 @@ SQLair output expressions can take the following formats:
  3. table.* AS &Type.*
     - Does the same as 2 but prepends all columns with the table name.
 
- 4. (t1.col_name1, t2.col_name2) AS &Type.*
+ 4. (t1.col_name1, t2.col_name2) AS (&Type.*)
     - Fetches and sets only the specified columns (the table is optional).
     - If Type is a map they will be stored at "col_name1" and "col_name2".
 
