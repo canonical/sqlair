@@ -453,22 +453,18 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 
 // parseColumns parses a single column or a list of columns. Lists must be
 // enclosed in brackets.
-func (p *Parser) parseColumns() (cols []fullName, bracketed bool, ok bool, err error) {
+func (p *Parser) parseColumns() (cols []fullName, bracketed bool, ok bool) {
 	// Case 1: A single column e.g. "p.name".
-	if col, ok, err := p.parseColumn(); err != nil {
-		return nil, false, false, err
-	} else if ok {
-		return []fullName{col}, false, true, nil
+	if col, ok, _ := p.parseColumn(); ok {
+		return []fullName{col}, false, true
 	}
 
 	// Case 2: Multiple columns e.g. "(p.name, p.id)".
-	if cols, ok, err := p.parseList((*Parser).parseColumn); err != nil {
-		return nil, true, false, err
-	} else if ok {
-		return cols, true, true, nil
+	if cols, ok, _ := p.parseList((*Parser).parseColumn); ok {
+		return cols, true, true
 	}
 
-	return nil, false, false, nil
+	return nil, false, false
 }
 
 // parseTargetTypes parses a single output type or a list of output types.
@@ -507,11 +503,10 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 		}, true, nil
 	}
 
-	// Case 2: There are columns e.g. "p.col1 AS &Person.*".
 	cp := p.save()
-	// The error from parseColumns is ignored. It indicates we have not found
-	// an output expression.
-	if cols, colsBracketed, ok, _ := p.parseColumns(); ok {
+
+	// Case 2: There are columns e.g. "p.col1 AS &Person.*".
+	if cols, colsBracketed, ok := p.parseColumns(); ok {
 		p.skipBlanks()
 		if p.skipString("AS") {
 			p.skipBlanks()
