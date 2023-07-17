@@ -30,8 +30,6 @@ type Person struct {
 
 type Manager Person
 
-type District struct{}
-
 type HardMaths struct {
 	X    int `db:"x"`
 	Y    int `db:"y"`
@@ -236,10 +234,10 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2 FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = @sqlair_0) UNION SELECT a.district AS _sqlair_3, a.street AS _sqlair_4 FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = @sqlair_1)`,
 }, {
 	"complex query v5",
-	"SELECT p.* AS &Person.*, &District.* FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
-	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[] [District.*]] Bypass[ FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] Input[Person.name] Bypass[ AND p.address_id = ] Input[Person.address_id]]",
-	[]any{Person{}, District{}},
-	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2,  FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = @sqlair_0 AND p.address_id = @sqlair_1`,
+	"SELECT p.* AS &Person.* FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
+	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[ FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] Input[Person.name] Bypass[ AND p.address_id = ] Input[Person.address_id]]",
+	[]any{Person{}},
+	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2 FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = @sqlair_0 AND p.address_id = @sqlair_1`,
 }, {
 	"complex query v6",
 	"SELECT p.* AS &Person.*, FROM person AS p INNER JOIN address AS a ON p.address_id = $Address.id WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
@@ -401,6 +399,9 @@ func FuzzParser(f *testing.F) {
 }
 
 func (s *ExprSuite) TestPrepareErrors(c *C) {
+	type NoTags struct {
+		S string
+	}
 	tests := []struct {
 		query       string
 		prepareArgs []any
@@ -493,6 +494,10 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 		query:       "SELECT * AS &.* FROM t",
 		prepareArgs: []any{struct{ f int }{f: 1}},
 		err:         `cannot prepare expression: cannot use anonymous struct`,
+	}, {
+		query:       "SELECT &NoTags.* FROM t",
+		prepareArgs: []any{NoTags{}},
+		err:         `cannot prepare expression: type "NoTags" in "&NoTags.*" does not have any db tags`,
 	}}
 
 	for i, test := range tests {
