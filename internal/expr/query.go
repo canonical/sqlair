@@ -155,6 +155,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 
 	// Generate the pointers.
 	var ptrs = []any{}
+	var columnInResult = make(map[int]bool)
 	for _, column := range columns {
 		idx, ok := markerIndex(column)
 		if !ok {
@@ -166,6 +167,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 		if idx >= len(qe.outputs) {
 			return nil, nil, fmt.Errorf("internal error: sqlair column not in outputs (%d>=%d)", idx, len(qe.outputs))
 		}
+		columnInResult[idx] = true
 		typeMember := qe.outputs[idx]
 		outputVal, ok := typeDest[typeMember.outerType()]
 		if !ok {
@@ -192,6 +194,12 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 			scanVal := reflect.New(tm.mapType.Elem()).Elem()
 			ptrs = append(ptrs, scanVal.Addr().Interface())
 			scanProxies = append(scanProxies, scanProxy{original: outputVal, scan: scanVal, key: reflect.ValueOf(tm.name)})
+		}
+	}
+
+	for i := 0; i < len(qe.outputs); i++ {
+		if !columnInResult[i] {
+			return nil, nil, fmt.Errorf("column %q for struct %q not found in results", qe.outputs[i].memberName(), qe.outputs[i].outerType().Name())
 		}
 	}
 
