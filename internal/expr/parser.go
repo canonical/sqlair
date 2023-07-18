@@ -203,6 +203,12 @@ loop:
 		}
 
 		p.pos++
+
+		// An opening bracket might be that start of an expression.
+		if p.peekByte('(') {
+			break loop
+		}
+
 		switch p.input[p.pos-1] {
 		// If the preceding byte is one of these then we might be at the start
 		// of an expression.
@@ -447,7 +453,7 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 
 		nextItem = p.skipByte(',')
 	}
-	return nil, false, fmt.Errorf("column %d: missing closing brackets", parenPos)
+	return nil, false, fmt.Errorf("column %d: missing closing parentheses", parenPos)
 }
 
 // parseColumns parses a list of columns. For lists of more than one column the
@@ -532,10 +538,10 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 				return nil, false, err
 			} else if ok {
 				if colsBracketed && !typesBracketed {
-					return nil, false, fmt.Errorf(`column %d: missing brackets around types after "AS"`, p.pos)
+					return nil, false, fmt.Errorf(`column %d: missing parentheses around types after "AS"`, p.pos)
 				}
 				if !colsBracketed && typesBracketed {
-					return nil, false, fmt.Errorf(`column %d: unexpected brackets around types after "AS"`, p.pos)
+					return nil, false, fmt.Errorf(`column %d: unexpected parentheses around types after "AS"`, p.pos)
 				}
 				return &outputPart{
 					sourceColumns: cols,
@@ -593,7 +599,7 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 			if _, ok, err := p.parseSourceType(); err != nil {
 				return nil, false, err
 			} else if ok {
-				return nil, false, fmt.Errorf(`column %d: missing brackets around types after "VALUES"`, p.pos)
+				return nil, false, fmt.Errorf(`column %d: missing parentheses around types after "VALUES"`, p.pos)
 			}
 		}
 	}

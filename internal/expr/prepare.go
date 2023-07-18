@@ -56,19 +56,8 @@ func starCount(fns []fullName) int {
 }
 
 // prepareInput checks that the input expression corresponds to a known type.
-func prepareInput(ti typeNameToInfo, p *inputPart) ([]fullName, []typeMember, error) {
-	var inCols = make([]fullName, 0)
-	var typeMembers = make([]typeMember, 0)
-
-	numTypes := len(p.sourceTypes)
-	numColumns := len(p.targetColumns)
-	starTypes := starCount(p.sourceTypes)
-	starColumns := starCount(p.targetColumns)
-
+func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembers []typeMember, err error) {
 	// Check target struct type and its tags are valid.
-	var info typeInfo
-	var ok bool
-	var err error
 
 	fetchInfo := func(typeName string) (typeInfo, error) {
 		info, ok := ti[typeName]
@@ -85,6 +74,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) ([]fullName, []typeMember, er
 
 	addColumns := func(info typeInfo, tag string, column fullName) error {
 		var tm typeMember
+		var ok bool
 		switch info := info.(type) {
 		case *structInfo:
 			tm, ok = info.tagToField[tag]
@@ -102,6 +92,11 @@ func prepareInput(ti typeNameToInfo, p *inputPart) ([]fullName, []typeMember, er
 	}
 
 	// Generate columns to inject into SQL query.
+
+	numTypes := len(p.sourceTypes)
+	numColumns := len(p.targetColumns)
+	starTypes := starCount(p.sourceTypes)
+	starColumns := starCount(p.targetColumns)
 
 	// Case 0: A simple standalone input expression e.g. "$P.name".
 	if numColumns == 0 {
@@ -124,7 +119,8 @@ func prepareInput(ti typeNameToInfo, p *inputPart) ([]fullName, []typeMember, er
 	// Case 1: Generated columns e.g. "(*) VALUES ($P.*, $A.id)".
 	if numColumns == 1 && starColumns == 1 {
 		for _, t := range p.sourceTypes {
-			if info, err = fetchInfo(t.prefix); err != nil {
+			info, err := fetchInfo(t.prefix)
+			if err != nil {
 				return nil, nil, err
 			}
 			// Generate asterisk columns.
@@ -154,7 +150,8 @@ func prepareInput(ti typeNameToInfo, p *inputPart) ([]fullName, []typeMember, er
 
 	// Case 2: Explicit columns, single asterisk type e.g. "(col1, col2) VALUES ($P.*)".
 	if starTypes == 1 && numTypes == 1 {
-		if info, err = fetchInfo(p.sourceTypes[0].prefix); err != nil {
+		info, err := fetchInfo(p.sourceTypes[0].prefix)
+		if err != nil {
 			return nil, nil, err
 		}
 		switch info := info.(type) {
@@ -176,7 +173,8 @@ func prepareInput(ti typeNameToInfo, p *inputPart) ([]fullName, []typeMember, er
 	if numColumns == numTypes {
 		for i, c := range p.targetColumns {
 			t := p.sourceTypes[i]
-			if info, err = fetchInfo(t.prefix); err != nil {
+			info, err := fetchInfo(t.prefix)
+			if err != nil {
 				return nil, nil, err
 			}
 
@@ -193,20 +191,8 @@ func prepareInput(ti typeNameToInfo, p *inputPart) ([]fullName, []typeMember, er
 
 // prepareOutput checks that the output expressions correspond to known types.
 // It then checks they are formatted correctly and finally generates the columns for the query.
-func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, error) {
-	var outCols = make([]fullName, 0)
-	var typeMembers = make([]typeMember, 0)
-
-	numTypes := len(p.targetTypes)
-	numColumns := len(p.sourceColumns)
-	starTypes := starCount(p.targetTypes)
-	starColumns := starCount(p.sourceColumns)
-
+func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMembers []typeMember, err error) {
 	// Check target struct type and its tags are valid.
-	var info typeInfo
-	var ok bool
-	var err error
-
 	fetchInfo := func(typeName string) (typeInfo, error) {
 		info, ok := ti[typeName]
 		if !ok {
@@ -222,6 +208,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 
 	addColumns := func(info typeInfo, tag string, column fullName) error {
 		var tm typeMember
+		var ok bool
 		switch info := info.(type) {
 		case *structInfo:
 			tm, ok = info.tagToField[tag]
@@ -236,6 +223,13 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 		return nil
 	}
 
+	// Generate columns to inject into SQL query.
+
+	numTypes := len(p.targetTypes)
+	numColumns := len(p.sourceColumns)
+	starTypes := starCount(p.targetTypes)
+	starColumns := starCount(p.sourceColumns)
+
 	// Case 1: Generated columns e.g. "* AS (&P.*, &A.id)" or "&P.*".
 	if numColumns == 0 || (numColumns == 1 && starColumns == 1) {
 		pref := ""
@@ -245,7 +239,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 		}
 
 		for _, t := range p.targetTypes {
-			if info, err = fetchInfo(t.prefix); err != nil {
+			info, err := fetchInfo(t.prefix)
+			if err != nil {
 				return nil, nil, err
 			}
 			// Generate asterisk columns.
@@ -273,7 +268,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 
 	// Case 2: Explicit columns, single asterisk type e.g. "(col1, t.col2) AS &P.*".
 	if starTypes == 1 && numTypes == 1 {
-		if info, err = fetchInfo(p.targetTypes[0].prefix); err != nil {
+		info, err := fetchInfo(p.targetTypes[0].prefix)
+		if err != nil {
 			return nil, nil, err
 		}
 		for _, c := range p.sourceColumns {
@@ -290,7 +286,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 	if numColumns == numTypes {
 		for i, c := range p.sourceColumns {
 			t := p.targetTypes[i]
-			if info, err = fetchInfo(t.prefix); err != nil {
+			info, err := fetchInfo(t.prefix)
+			if err != nil {
 				return nil, nil, err
 			}
 
@@ -380,9 +377,9 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 				sql.WriteString("@sqlair_" + strconv.Itoa(inCount))
 				inCount += 1
 			} else {
-				sql.WriteString(printCols(inCols))
+				sql.WriteString(formatColNames(inCols))
 				sql.WriteString(" VALUES ")
-				sql.WriteString(namedParams(inCount, len(inCols)))
+				sql.WriteString(generateNamedParams(inCount, len(inCols)))
 				inCount += len(inCols)
 			}
 			inputs = append(inputs, typeMembers...)
@@ -419,8 +416,9 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	return &PreparedExpr{inputs: inputs, outputs: outputs, sql: sql.String()}, nil
 }
 
-// printCols prints a bracketed, comma seperated list of fullNames.
-func printCols(cs []fullName) string {
+// formatColNames prints a bracketed, comma seperated list of columns including
+// the table name if present.
+func formatColNames(cs []fullName) string {
 	var s bytes.Buffer
 	s.WriteString("(")
 	for i, c := range cs {
@@ -433,8 +431,11 @@ func printCols(cs []fullName) string {
 	return s.String()
 }
 
-// namedParams returns n incrementing parameters begining at start.
-func namedParams(start int, n int) string {
+// generateNamedParams returns n incrementing named parameters begining at
+// start.
+// For example:
+// generateNamedParams(0, 2) == "(@sqlair_0, @sqlair_1)"
+func generateNamedParams(start int, n int) string {
 	var s bytes.Buffer
 	s.WriteString("(")
 	for i := start; i < start+n; i++ {

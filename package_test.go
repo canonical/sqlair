@@ -1069,6 +1069,10 @@ func (s *PackageSuite) TestInsert(c *C) {
 	insertAddressStmt, err := sqlair.Prepare("INSERT INTO address (*) VALUES ($Address.id, $Address.street, $Address.district)", Person{}, Address{})
 	c.Assert(err, IsNil)
 
+	// Returning statements are supported by SQLite with syntax taken from postgresql.
+	returningStmt, err := sqlair.Prepare("INSERT INTO address(*) VALUES($Address.*) RETURNING &Address.*", Person{}, Address{})
+	c.Assert(err, IsNil)
+
 	selectPerson, err := sqlair.Prepare("SELECT &Person.* FROM person WHERE id = $Person.id", Person{})
 	c.Assert(err, IsNil)
 
@@ -1079,6 +1083,9 @@ func (s *PackageSuite) TestInsert(c *C) {
 	c.Assert(err, IsNil)
 
 	deleteAddressStmt, err := sqlair.Prepare("DELETE FROM address WHERE id = $Address.id", Address{})
+	c.Assert(err, IsNil)
+
+	deleteAddressStmtReturning, err := sqlair.Prepare("DELETE FROM address WHERE id = $Address.id RETURNING &Address.*", Address{})
 	c.Assert(err, IsNil)
 
 	dropTables, db, err = personAndAddressDB()
@@ -1121,6 +1128,13 @@ func (s *PackageSuite) TestInsert(c *C) {
 	i, err = outcome.Result().RowsAffected()
 	c.Assert(err, IsNil)
 	c.Assert(i, Equals, int64(1))
+
+	c.Assert(db.Query(nil, returningStmt, millLane).Get(&a), IsNil)
+	c.Assert(a.Street, Equals, millLane.Street)
+	c.Assert(a.District, Equals, millLane.District)
+	var a0 = Address{}
+	c.Assert(db.Query(nil, deleteAddressStmtReturning, a).Get(&a0), IsNil)
+	c.Assert(a, Equals, a0)
 
 	c.Assert(db.Query(nil, sqlair.MustPrepare(dropTables)).Run(), IsNil)
 }

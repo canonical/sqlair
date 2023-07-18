@@ -301,7 +301,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	[]any{Person{}, Address{}},
 	`INSERT INTO person (name, postalcode) VALUES (@sqlair_0, @sqlair_1)`,
 }, {
-	"double insert values",
+	"double insert values (no space)",
 	"INSERT INTO person (*) VALUES ($Person.*)ON CONFLICT DO NOTHING",
 	"[Bypass[INSERT INTO person ] Input[[*] [Person.*]] Bypass[ON CONFLICT DO NOTHING]]",
 	[]any{Person{}},
@@ -424,22 +424,22 @@ func (s *ExprSuite) TestParseErrors(c *C) {
 		err:   `cannot parse expression: column 36: unqualified type, expected Address.* or Address.<db tag>`,
 	}, {
 		query: "INSERT INTO person (*) VALUES $Person.*",
-		err:   `cannot parse expression: column 39: missing brackets around types after "VALUES"`,
+		err:   `cannot parse expression: column 39: missing parentheses around types after "VALUES"`,
 	}, {
 		query: "INSERT INTO person (name, id) VALUES $Person.*",
-		err:   `cannot parse expression: column 46: missing brackets around types after "VALUES"`,
+		err:   `cannot parse expression: column 46: missing parentheses around types after "VALUES"`,
 	}, {
 		query: "SELECT name AS (&Person.*)",
-		err:   `cannot parse expression: column 26: unexpected brackets around types after "AS"`,
+		err:   `cannot parse expression: column 26: unexpected parentheses around types after "AS"`,
 	}, {
 		query: "SELECT name AS (&Person.name, &Person.id)",
-		err:   `cannot parse expression: column 41: unexpected brackets around types after "AS"`,
+		err:   `cannot parse expression: column 41: unexpected parentheses around types after "AS"`,
 	}, {
 		query: "SELECT (name) AS &Person.*",
-		err:   `cannot parse expression: column 26: missing brackets around types after "AS"`,
+		err:   `cannot parse expression: column 26: missing parentheses around types after "AS"`,
 	}, {
 		query: "SELECT (name, id) AS &Person.*",
-		err:   `cannot parse expression: column 30: missing brackets around types after "AS"`,
+		err:   `cannot parse expression: column 30: missing parentheses around types after "AS"`,
 	}}
 
 	for _, t := range tests {
