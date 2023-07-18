@@ -573,9 +573,6 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 	if sourceType, ok, err := p.parseSourceType(); err != nil {
 		return nil, false, err
 	} else if ok {
-		if sourceType.name == "*" {
-			return nil, false, fmt.Errorf(`asterisk not allowed in standalone input expression "$%s"`, sourceType)
-		}
 		return &inputPart{
 			targetColumns: []fullName{},
 			sourceTypes:   []fullName{sourceType},

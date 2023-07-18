@@ -587,6 +587,10 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 		query:       "INSERT INTO person (*) VALUES ($M.*)",
 		prepareArgs: []any{sqlair.M{}},
 		err:         `cannot prepare expression: map type "M" cannot be used with asterisk in input expression: (*) VALUES ($M.*)`,
+	}, {
+		query:       "SELECT name FROM person WHERE id = $Person.*",
+		prepareArgs: []any{Person{}},
+		err:         `cannot prepare expression: invalid asterisk in input expression: $Person.*`,
 	}}
 
 	for i, test := range tests {
@@ -695,6 +699,21 @@ func (s *ExprSuite) TestValidQuery(c *C) {
 		[]any{Person{}, StringMap{}},
 		[]any{Person{ID: 666}, StringMap{"street": "Highway to Hell"}},
 		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
+	}, {
+		"INSERT INTO t (*) VALUES ($Person.*)",
+		[]any{Person{}},
+		[]any{Person{ID: 666, Fullname: "Jim", PostalCode: 10}},
+		[]any{sql.Named("sqlair_0", 10), sql.Named("sqlair_1", 666), sql.Named("sqlair_2", "Jim")},
+	}, {
+		"INSERT INTO t (*) VALUES ($Person.id)",
+		[]any{Person{}},
+		[]any{Person{ID: 666}},
+		[]any{sql.Named("sqlair_0", 666)},
+	}, {
+		"INSERT INTO t (id) VALUES ($M.*)",
+		[]any{sqlair.M{}},
+		[]any{sqlair.M{"id": 666}},
+		[]any{sql.Named("sqlair_0", 666)},
 	}}
 	for _, t := range tests {
 		parser := expr.NewParser()
@@ -773,6 +792,11 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		prepareArgs: []any{Person{}},
 		queryArgs:   []any{Person{}, Person{}},
 		err:         `invalid input parameter: type "Person" provided more than once`,
+	}, {
+		query:       "INSERT INTO t (id) VALUES ($M.*)",
+		prepareArgs: []any{sqlair.M{}},
+		queryArgs:   []any{sqlair.M{"di": 666}},
+		err:         `invalid input parameter: map "M" does not contain key "id"`,
 	}}
 
 	outerP := Person{}
