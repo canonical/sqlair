@@ -191,8 +191,20 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembe
 
 // prepareOutput checks that the output expressions correspond to known types.
 // It then checks they are formatted correctly and finally generates the columns for the query.
-func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMembers []typeMember, err error) {
+func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, error) {
+	var outCols = make([]fullName, 0)
+	var typeMembers = make([]typeMember, 0)
+
+	numTypes := len(p.targetTypes)
+	numColumns := len(p.sourceColumns)
+	starTypes := starCount(p.targetTypes)
+	starColumns := starCount(p.sourceColumns)
+
 	// Check target struct type and its tags are valid.
+	var info typeInfo
+	var ok bool
+	var err error
+
 	fetchInfo := func(typeName string) (typeInfo, error) {
 		info, ok := ti[typeName]
 		if !ok {
@@ -208,7 +220,6 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 
 	addColumns := func(info typeInfo, tag string, column fullName) error {
 		var tm typeMember
-		var ok bool
 		switch info := info.(type) {
 		case *structInfo:
 			tm, ok = info.tagToField[tag]
@@ -223,13 +234,6 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 		return nil
 	}
 
-	// Generate columns to inject into SQL query.
-
-	numTypes := len(p.targetTypes)
-	numColumns := len(p.sourceColumns)
-	starTypes := starCount(p.targetTypes)
-	starColumns := starCount(p.sourceColumns)
-
 	// Case 1: Generated columns e.g. "* AS (&P.*, &A.id)" or "&P.*".
 	if numColumns == 0 || (numColumns == 1 && starColumns == 1) {
 		pref := ""
@@ -239,8 +243,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 		}
 
 		for _, t := range p.targetTypes {
-			info, err := fetchInfo(t.prefix)
-			if err != nil {
+			if info, err = fetchInfo(t.prefix); err != nil {
 				return nil, nil, err
 			}
 			// Generate asterisk columns.
@@ -268,8 +271,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 
 	// Case 2: Explicit columns, single asterisk type e.g. "(col1, t.col2) AS &P.*".
 	if starTypes == 1 && numTypes == 1 {
-		info, err := fetchInfo(p.targetTypes[0].prefix)
-		if err != nil {
+		if info, err = fetchInfo(p.targetTypes[0].prefix); err != nil {
 			return nil, nil, err
 		}
 		for _, c := range p.sourceColumns {
@@ -286,8 +288,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 	if numColumns == numTypes {
 		for i, c := range p.sourceColumns {
 			t := p.targetTypes[i]
-			info, err := fetchInfo(t.prefix)
-			if err != nil {
+			if info, err = fetchInfo(t.prefix); err != nil {
 				return nil, nil, err
 			}
 
@@ -354,7 +355,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	var outputs = make([]typeMember, 0)
 	var inputs = make([]typeMember, 0)
 
-	var typeMemberInOutputs = make(map[typeMember]bool)
+	var typeMemberPresentInOuts = make(map[typeMember]bool)
 
 	// Check and expand each query part.
 	for _, part := range pe.queryParts {
@@ -390,10 +391,10 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			}
 
 			for _, tm := range typeMembers {
-				if ok := typeMemberInOutputs[tm]; ok {
+				if ok := typeMemberPresentInOuts[tm]; ok {
 					return nil, fmt.Errorf("member %q of type %q appears more than once in outputs", tm.memberName(), tm.outerType().Name())
 				}
-				typeMemberInOutputs[tm] = true
+				typeMemberPresentInOuts[tm] = true
 			}
 
 			for i, c := range outCols {

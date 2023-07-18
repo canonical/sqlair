@@ -396,6 +396,7 @@ func (p *Parser) parseTargetType() (fullName, bool, error) {
 	if p.skipByte('&') {
 		return p.parseGoFullName()
 	}
+
 	return fullName{}, false, nil
 }
 
@@ -429,6 +430,7 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 	}
 
 	parenPos := p.pos
+
 	nextItem := true
 	var objs []fullName
 	for i := 0; nextItem; i++ {
@@ -516,6 +518,7 @@ func (p *Parser) parseSourceTypes() (sources []fullName, bracketed bool, ok bool
 // be followed by a name byte.
 func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 	start := p.pos
+
 	// Case 1: There are no columns e.g. "&Person.*".
 	if targetType, ok, err := p.parseTargetType(); err != nil {
 		return nil, false, err
@@ -551,6 +554,7 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 			}
 		}
 	}
+
 	cp.restore()
 	return nil, false, nil
 }
@@ -603,6 +607,7 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 			}
 		}
 	}
+
 	cp.restore()
 	return nil, false, nil
 }
