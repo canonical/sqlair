@@ -89,13 +89,12 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembe
 		return nil
 	}
 
-	// Generate columns to inject into SQL query.
-
 	numTypes := len(p.sourceTypes)
 	numColumns := len(p.targetColumns)
 	starTypes := starCount(p.sourceTypes)
 	starColumns := starCount(p.targetColumns)
 
+	// Generate columns to inject into SQL query.
 	// Case 0: A simple standalone input expression e.g. "$P.name".
 	if numColumns == 0 {
 		if numTypes != 1 {

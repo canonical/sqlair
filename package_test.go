@@ -1057,6 +1057,9 @@ func (s *PackageSuite) TestInsert(c *C) {
 	dropTables, db, err := personAndAddressDB()
 	c.Assert(err, IsNil)
 
+	// The INSERT statements are prepared along with SELECT statements for
+	// checking that the insert has worked correctly, and DELETE statements to
+	// remove the inserted row.
 	insertPersonStmt, err := sqlair.Prepare("INSERT INTO person (*) VALUES ($Person.*)", Person{})
 	c.Assert(err, IsNil)
 
@@ -1069,7 +1072,8 @@ func (s *PackageSuite) TestInsert(c *C) {
 	insertAddressStmt, err := sqlair.Prepare("INSERT INTO address (*) VALUES ($Address.id, $Address.street, $Address.district)", Person{}, Address{})
 	c.Assert(err, IsNil)
 
-	// Returning statements are supported by SQLite with syntax taken from postgresql.
+	// RETURNING clauses are supported by SQLite with syntax taken from
+	// postgresql. The inserted values are returned as query results.
 	returningStmt, err := sqlair.Prepare("INSERT INTO address(*) VALUES($Address.*) RETURNING &Address.*", Person{}, Address{})
 	c.Assert(err, IsNil)
 
@@ -1096,6 +1100,13 @@ func (s *PackageSuite) TestInsert(c *C) {
 	var outcome = sqlair.Outcome{}
 	var eric = Person{Name: "Eric", ID: 60, Postcode: 7000}
 	var millLane = Address{Street: "Mill Lane", District: "Crazy County", ID: 7000}
+
+	// Each block follows the sequence:
+	// - Insert value
+	// - Select value from DB
+	// - Check the selected value matches the inserted one
+	// - Delete the value from the database
+	// - Check that one row was deleted
 
 	c.Assert(db.Query(nil, insertPersonStmt, eric).Run(), IsNil)
 	c.Assert(db.Query(nil, selectPerson, eric).Get(&p), IsNil)
@@ -1129,6 +1140,7 @@ func (s *PackageSuite) TestInsert(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(i, Equals, int64(1))
 
+	// The RETURNING clause in this statement returns the inserted data.
 	c.Assert(db.Query(nil, returningStmt, millLane).Get(&a), IsNil)
 	c.Assert(a.Street, Equals, millLane.Street)
 	c.Assert(a.District, Equals, millLane.District)
