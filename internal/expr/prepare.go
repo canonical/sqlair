@@ -3,7 +3,6 @@ package expr
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"reflect"
 	"sort"
 	"strconv"
@@ -12,9 +11,9 @@ import (
 
 // PreparedExpr contains an SQL expression that is ready for execution.
 type PreparedExpr struct {
-	outputs            []typeMember
-	inputs             []typeMember
-	preparedQueryParts []preparedQueryPart
+	outputs       []typeMember
+	inputs        []typeMember
+	preparedParts []preparedPart
 }
 
 const markerPrefix = "_sqlair_"
@@ -236,7 +235,7 @@ type ioCounter struct {
 	inputCount  int
 }
 
-type preparedQueryPart interface {
+type preparedPart interface {
 	sql(*ioCounter) string
 }
 
@@ -281,7 +280,6 @@ func (ic *preparedInPart) sql(c *ioCounter) string {
 		case *mapKey:
 			length := 1
 			if tm.sliceAllowed != nil {
-				log.Printf("length is %d", tm.sliceAllowed.length)
 				length = tm.sliceAllowed.length
 			}
 			for j := 0; j < length; j++ {
@@ -356,9 +354,9 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	var outputs = make([]typeMember, 0)
 	var inputs = make([]typeMember, 0)
 
-	var preparedQueryParts []preparedQueryPart
+	var preparedParts []preparedPart
 	var typeMembers []typeMember
-	var preparedQueryPart preparedQueryPart
+	var preparedPart preparedPart
 
 	var typeMemberPresent = make(map[typeMember]bool)
 
@@ -366,13 +364,13 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	for _, part := range pe.queryParts {
 		switch p := part.(type) {
 		case *inputPart:
-			preparedQueryPart, typeMembers, err = prepareInput(ti, p)
+			preparedPart, typeMembers, err = prepareInput(ti, p)
 			if err != nil {
 				return nil, err
 			}
 			inputs = append(inputs, typeMembers...)
 		case *outputPart:
-			preparedQueryPart, typeMembers, err = prepareOutput(ti, p)
+			preparedPart, typeMembers, err = prepareOutput(ti, p)
 			if err != nil {
 				return nil, err
 			}
@@ -386,27 +384,27 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 
 			outputs = append(outputs, typeMembers...)
 		case *inPart:
-			preparedQueryPart, typeMembers, err = prepareIn(ti, p)
+			preparedPart, typeMembers, err = prepareIn(ti, p)
 			if err != nil {
 				return nil, err
 			}
 			inputs = append(inputs, typeMembers...)
 		case *bypassPart:
-			preparedQueryPart = &preparedBypassPart{p.chunk}
+			preparedPart = &preparedBypassPart{p.chunk}
 		default:
 			return nil, fmt.Errorf("internal error: unknown query part type %T", part)
 		}
-		preparedQueryParts = append(preparedQueryParts, preparedQueryPart)
+		preparedParts = append(preparedParts, preparedPart)
 	}
 
-	return &PreparedExpr{inputs: inputs, outputs: outputs, preparedQueryParts: preparedQueryParts}, nil
+	return &PreparedExpr{inputs: inputs, outputs: outputs, preparedParts: preparedParts}, nil
 }
 
 func (pe *PreparedExpr) sql() string {
 	var c = &ioCounter{}
 	var sql bytes.Buffer
-	for _, preparedQueryPart := range pe.preparedQueryParts {
-		sql.WriteString(preparedQueryPart.sql(c))
+	for _, preparedPart := range pe.preparedParts {
+		sql.WriteString(preparedPart.sql(c))
 	}
 	return sql.String()
 }

@@ -393,7 +393,7 @@ func (p *Parser) parseColumn() (fullName, bool, error) {
 	return fullName{}, false, nil
 }
 
-func (p *Parser) parseOutputType() (fullName, bool, error) {
+func (p *Parser) parseTargetType() (fullName, bool, error) {
 	if p.skipByte('&') {
 		return p.parseGoFullName()
 	}
@@ -483,7 +483,7 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 	start := p.pos
 
 	// Case 1: There are no columns e.g. "&Person.*".
-	if targetTypes, ok, err := p.parseList(true, (*Parser).parseOutputType); err != nil {
+	if targetTypes, ok, err := p.parseList(true, (*Parser).parseTargetType); err != nil {
 		return nil, false, err
 	} else if ok {
 		return &outputPart{
@@ -500,7 +500,7 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 		p.skipBlanks()
 		if p.skipString("AS") {
 			p.skipBlanks()
-			if targetTypes, ok, err := p.parseList(true, (*Parser).parseOutputType); err != nil {
+			if targetTypes, ok, err := p.parseList(true, (*Parser).parseTargetType); err != nil {
 				return nil, false, err
 			} else if ok {
 				return &outputPart{
