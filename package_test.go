@@ -532,6 +532,20 @@ func (s *PackageSuite) TestValidGet(c *C) {
 		outputs:  []any{&Person{}},
 		expected: []any{&Person{ID: 40}},
 	}, {
+		summary:  "complex nested input in function",
+		query:    `SELECT MAX($Person.id, length($Person.name)+4) AS &Person.id, iif(length($Address.district) > 1, 'Mike' , 'Dave') AS &Person.name FROM person`,
+		types:    []any{Person{}, Address{}},
+		inputs:   []any{Person{ID: 40, Fullname: "Harry"}, Address{District: "Notts"}},
+		outputs:  []any{&Person{}},
+		expected: []any{&Person{ID: 40, Fullname: "Mike"}},
+	}, {
+		summary:  "nested input in function",
+		query:    `SELECT MAX($Person.id, 10) AS &Person.id FROM person`,
+		types:    []any{Person{}},
+		inputs:   []any{Person{ID: 40}},
+		outputs:  []any{&Person{}},
+		expected: []any{&Person{ID: 40}},
+	}, {
 		summary:  "select into map",
 		query:    "SELECT &M.name FROM person WHERE address_id = $M.p1",
 		types:    []any{sqlair.M{}},

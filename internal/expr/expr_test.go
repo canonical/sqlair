@@ -506,13 +506,13 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 		prepareArgs: []any{struct{ f int }{f: 1}},
 		err:         `cannot prepare expression: cannot use anonymous struct`,
 	}, {
-		query:       "SELECT avg(*) AS &Person.* FROM t",
+		query:       "SELECT avg(num) AS &Person.* FROM t",
 		prepareArgs: []any{Person{}},
-		err:         `cannot prepare expression: invalid tag/column name "avg(*)" in "avg(*) AS &Person.*"`,
+		err:         `cannot prepare expression: cannot use function "avg(num)" with asterisk output expression: "avg(num) AS &Person.*"`,
 	}, {
-		query:       "SELECT avg(*) AS &M.* FROM t",
+		query:       "SELECT avg(id) AS &M.* FROM t",
 		prepareArgs: []any{sqlair.M{}},
-		err:         `cannot prepare expression: invalid tag/column name "avg(*)" in "avg(*) AS &M.*"`,
+		err:         `cannot prepare expression: cannot use function "avg(id)" with asterisk output expression: "avg(id) AS &M.*"`,
 	}}
 
 	for i, test := range tests {

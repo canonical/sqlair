@@ -188,7 +188,7 @@ func (pe *PreparedExpr) prepareOutput(ti typeNameToInfo, p *outputPart) (err err
 		for _, c := range p.sourceColumns {
 			switch c := c.(type) {
 			case funcExpr:
-				return fmt.Errorf(`invalid tag/column name %q in %q`, c.f, p.raw)
+				return fmt.Errorf(`cannot use function %q with asterisk output expression: %q`, c.f, p.raw)
 			case fullName:
 				if err = addColumn(info, c.name, c); err != nil {
 					return err
@@ -277,7 +277,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 }
 
 func (pe *PreparedExpr) prepareParts(ti typeNameToInfo, qp []queryPart) error {
-	// Check and expand each query part.
+	// Check, and generate SQL for each query part.
 	for _, part := range qp {
 		switch p := part.(type) {
 		case *inputPart:
