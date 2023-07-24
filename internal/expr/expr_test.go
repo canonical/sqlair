@@ -45,6 +45,8 @@ type IntMap map[string]int
 
 type StringMap map[string]string
 
+type CustomMap map[string]any
+
 var tests = []struct {
 	summary          string
 	query            string
@@ -264,6 +266,12 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	"[Bypass[SELECT name FROM person WHERE id ] In[[M.slice]]]",
 	[]any{sqlair.M{}},
 	"SELECT name FROM person WHERE id IN (@sqlair_0)",
+}, {
+	"complex in",
+	"SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $M.ids, $Manager.id, $CustomMap.ids, $M.ids2)",
+	"[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE id ] In[[Person.id M.ids Manager.id CustomMap.ids M.ids2]]]",
+	[]any{sqlair.M{}, Person{}, Manager{}, CustomMap{}},
+	"SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4)",
 }, {
 	"insert",
 	"INSERT INTO person (name) VALUES $Person.name",

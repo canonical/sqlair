@@ -105,9 +105,9 @@ func prepareIn(ti typeNameToInfo, p *inPart) (*preparedInPart, []typeMember, err
 			typeMembers = append(typeMembers, field)
 		case *mapInfo:
 			typeMembers = append(typeMembers, &mapKey{
-				name:         t.name,
-				mapType:      info.typ(),
-				sliceAllowed: &sliceInfo{length: 1},
+				name:        t.name,
+				mapType:     info.typ(),
+				listAllowed: &listInfo{length: 1},
 			})
 		}
 	}
@@ -279,8 +279,8 @@ func (ic *preparedInPart) sql(c *ioCounter) string {
 			c.inputCount++
 		case *mapKey:
 			length := 1
-			if tm.sliceAllowed != nil {
-				length = tm.sliceAllowed.length
+			if tm.listAllowed != nil {
+				length = tm.listAllowed.length
 			}
 			for j := 0; j < length; j++ {
 				sql.WriteString("@sqlair_")

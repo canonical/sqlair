@@ -94,19 +94,21 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 			argCount++
 		case *mapKey:
 			val = v.MapIndex(reflect.ValueOf(tm.name))
-			if val.Kind() == reflect.Invalid {
+			kind := val.Kind()
+			if kind == reflect.Invalid {
 				return nil, fmt.Errorf(`map %q does not contain key %q`, outerType.Name(), tm.name)
 			}
-			if val.Kind() == reflect.Interface {
+			if kind == reflect.Interface {
 				val = val.Elem()
+				kind = val.Kind()
 			}
-			if val.Kind() == reflect.Slice {
-				if tm.sliceAllowed == nil {
+			if kind == reflect.Slice || kind == reflect.Array {
+				if tm.listAllowed == nil {
 					return nil, fmt.Errorf(`map value %q: invalid slice outside of IN clause`, tm.name)
 				}
-				if val.Len() != tm.sliceAllowed.length {
+				if val.Len() != tm.listAllowed.length {
 					// This should change it in the same object that is used to generate the SQL.
-					tm.sliceAllowed.length = val.Len()
+					tm.listAllowed.length = val.Len()
 				}
 				for i := 0; i < val.Len(); i++ {
 					sval := val.Index(i)

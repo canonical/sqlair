@@ -14,15 +14,16 @@ type typeMember interface {
 	memberName() string
 }
 
-type sliceInfo struct {
+type listInfo struct {
 	length int
 }
 
 type mapKey struct {
 	name    string
 	mapType reflect.Type
-	// sliceInfo is nil if the map value is not allowed to be a slice.
-	sliceAllowed *sliceInfo
+	// The listInfo pointer is nil if the map value is not allowed to be a
+	// slice or array.
+	listAllowed *listInfo
 }
 
 func (mk *mapKey) outerType() reflect.Type {

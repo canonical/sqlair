@@ -208,6 +208,13 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 		inputs:   []any{Person{ID: 20}, sqlair.M{"ids": []int{21, 22, 23, 24, 25, 26, 27, 28, 29}, "ids2": []int{31, 32, 33, 34, 35}}, &Manager{ID: 30}, CustomMap{"ids": []string{"36", "37", "38", "39", "40"}}},
 		outputs:  [][]any{{&Person{}}, {&Person{}}, {&Person{}}, {&Person{}}},
 		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{20, "Mark", 1500}}, {&Person{40, "Mary", 3500}}, {&Person{35, "James", 4500}}},
+	}, {
+		summary:  "array in",
+		query:    "SELECT * AS &Person.* FROM person WHERE id IN $M.array ",
+		types:    []any{Person{}, sqlair.M{}},
+		inputs:   []any{sqlair.M{"array": [3]int{30, 35, 40}}},
+		outputs:  [][]any{{&Person{}}, {&Person{}}, {&Person{}}},
+		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{40, "Mary", 3500}}, {&Person{35, "James", 4500}}},
 	}}
 
 	// A Person struct that shadows the one in tests above and has different int types.
