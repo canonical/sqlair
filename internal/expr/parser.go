@@ -539,7 +539,7 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 			}
 			return &inputPart{
 				sourceType: fn,
-				raw: p.input[cp.pos:p.pos]
+				raw:        p.input[cp.pos:p.pos],
 			}, true, nil
 		} else if err != nil {
 			return nil, false, err
