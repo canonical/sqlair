@@ -9,8 +9,13 @@ import (
 	"sync"
 )
 
+// typeMember represents either a struct and db tag or a map and key.
 type typeMember interface {
+
+	// The struct or map type.
 	outerType() reflect.Type
+
+	// The db tag or key.
 	memberName() string
 }
 
@@ -27,21 +32,21 @@ func (mk mapKey) memberName() string {
 	return mk.name
 }
 
-// structField represents reflection information about a field from some struct type.
+// structField represents reflection information about a struct field.
 type structField struct {
 	name string
 
 	// The type of the containing struct.
 	structType reflect.Type
 
-	// Index for Type.Field.
+	// Index of the field in the type. This is used with reflect.Type.Field().
 	index int
 
-	// The tag assosiated with this field
+	// The tag assosiated with this struct field.
 	tag string
 
-	// OmitEmpty is true when "omitempty" is
-	// a property of the field's "db" tag.
+	// OmitEmpty is true when "omitempty" is a property of the field's "db"
+	// tag.
 	omitEmpty bool
 }
 
@@ -53,6 +58,7 @@ func (f structField) memberName() string {
 	return f.tag
 }
 
+// typeInfo can represent reflection information about a struct or a map.
 type typeInfo interface {
 	typ() reflect.Type
 }
@@ -60,7 +66,7 @@ type typeInfo interface {
 type structInfo struct {
 	structType reflect.Type
 
-	// Ordered list of tags
+	// tags is an ordered list of all db tags of the struct.
 	tags []string
 
 	tagToField map[string]*structField
@@ -81,8 +87,8 @@ func (mi *mapInfo) typ() reflect.Type {
 var cacheMutex sync.RWMutex
 var cache = make(map[reflect.Type]typeInfo)
 
-// Reflect will return the typeInfo of a given type,
-// generating and caching as required.
+// getTypeInfo will return the typeInfo of a given type, generating and caching
+// as required.
 func getTypeInfo(value any) (typeInfo, error) {
 	if value == (any)(nil) {
 		return nil, fmt.Errorf("cannot reflect nil value")
@@ -109,8 +115,8 @@ func getTypeInfo(value any) (typeInfo, error) {
 	return typeInfo, nil
 }
 
-// generate produces and returns reflection information for the input
-// reflect.Value that is specifically required for SQLair operation.
+// generateTypeInfo generates reflection information about a type that is
+// required for SQLair.
 func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 	switch t.Kind() {
 	case reflect.Map:
@@ -127,7 +133,6 @@ func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 
 		for i := 0; i < t.NumField(); i++ {
 			f := t.Field(i)
-			// Fields without a "db" tag are outside of SQLAir's remit.
 			tag := f.Tag.Get("db")
 			if tag == "" {
 				continue
@@ -159,12 +164,12 @@ func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 	}
 }
 
-// This expression should be aligned with the bytes we allow in isNameByte in
+// This expression should be aligned with the bytes allowed in isNameByte in
 // the parser.
 var validColNameRx = regexp.MustCompile(`^([a-zA-Z_])+([a-zA-Z_0-9])*$`)
 
-// parseTag parses the input tag string and returns its
-// name and whether it contains the "omitempty" option.
+// parseTag parses the full db tag and returns the column name it specifies,
+// and whether it contains the "omitempty" flag.
 func parseTag(tag string) (string, bool, error) {
 	options := strings.Split(tag, ",")
 
