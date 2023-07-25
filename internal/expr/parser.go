@@ -448,7 +448,7 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 
 		nextItem = p.skipByte(',')
 	}
-	return nil, false, fmt.Errorf("column %d: missing closing brackets", parenPos)
+	return nil, false, fmt.Errorf("column %d: missing closing parentheses", parenPos)
 }
 
 // parseColumns parses a single column or a list of columns. Lists must be
