@@ -6,17 +6,20 @@ import (
 	"strings"
 )
 
+// Parser is an object for parsing SQL queries containing SQLair expressions.
+// It is used for generating a ParsedExpr with the Parse method.
 type Parser struct {
 	input string
 	pos   int
 	// prevPart is the value of pos when we last finished parsing a part.
 	prevPart int
 	// partStart is the value of pos just before we started parsing the part
-	// under pos. We maintain partStart >= prevPart.
+	// under pos. Invariant: partStart >= prevPart.
 	partStart int
 	parts     []queryPart
 }
 
+// NewParser returns an uninitiated Parser.
 func NewParser() *Parser {
 	return &Parser{}
 }
@@ -30,9 +33,7 @@ func (p *Parser) init(input string) {
 	p.parts = []queryPart{}
 }
 
-// A checkpoint struct for saving parser state to restore later. We only use
-// a checkpoint within an attempted parsing of an part, not at a higher level
-// since we don't keep track of the parts in the checkpoint.
+// A checkpoint struct for saving parser state to restore later.
 type checkpoint struct {
 	parser    *Parser
 	pos       int
@@ -42,7 +43,7 @@ type checkpoint struct {
 }
 
 // save takes a snapshot of the state of the parser and returns a pointer to a
-// checkpoint that represents it.
+// checkpoint that can be used to restore it.
 func (p *Parser) save() *checkpoint {
 	return &checkpoint{
 		parser:    p,
@@ -62,20 +63,20 @@ func (cp *checkpoint) restore() {
 	cp.parser.parts = cp.parts
 }
 
-// ParsedExpr is the AST representation of an SQL expression. The AST is made up
-// of queryParts. For example, a SQL statement like this:
+// ParsedExpr stores the parsed SQL query as a slice of queryParts.
+// For example, the SQL statement:
 //
-// Select p.* as &Person.* from person where p.name = $Boss.col_name
+//	SELECT p.* AS &Person.* FROM person AS p WHERE p.name = $Manager.name
 //
-// would be represented as:
+// Would be represented as:
 //
-// [bypassPart outputPart bypassPart inputPart]
+//	[bypassPart{...} outputPart{...} bypassPart{...} inputPart{...}]
 type ParsedExpr struct {
 	queryParts []queryPart
 }
 
-// String returns a textual representation of the AST contained in the
-// ParsedExpr for debugging purposes.
+// String returns a textual representation of the queryParts contained in the
+// ParsedExpr for debugging and testing purposes.
 func (pe *ParsedExpr) String() string {
 	var out bytes.Buffer
 	out.WriteString("[")
@@ -89,7 +90,7 @@ func (pe *ParsedExpr) String() string {
 	return out.String()
 }
 
-// add pushes the parsed part to the parsedExprBuilder along with the bypassPart
+// add pushes the parsed part to the list of parts along with the bypassPart
 // that stretches from the end of the previous part to the beginning of this
 // part.
 func (p *Parser) add(part queryPart) {
@@ -124,7 +125,8 @@ func (p *Parser) skipComment() bool {
 			}
 			for p.pos < len(p.input) {
 				if p.input[p.pos] == end {
-					// if end == '\n' (i.e. its a -- comment) dont p.pos++ to keep the newline.
+					// if end == '\n' (i.e. its a -- comment) dont do p.pos++
+					// so that the newline is kept.
 					if end == '*' {
 						p.pos++
 						if !p.skipByte('/') {
@@ -135,7 +137,7 @@ func (p *Parser) skipComment() bool {
 				}
 				p.pos++
 			}
-			// Reached end of input (valid comment end).
+			// The end of the input is a valid end of comment.
 			return true
 		}
 		cp.restore()
@@ -144,8 +146,9 @@ func (p *Parser) skipComment() bool {
 	return false
 }
 
-// Parse takes an input string and parses the input and output parts. It returns
-// a pointer to a ParsedExpr.
+// Parse takes an SQL query string and parses all SQLair expressions within it.
+// Any parts of the query not pertaining to SQLair are parsed as a bypassPart
+// leaving them untouched.
 func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 	defer func() {
 		if err != nil {
@@ -156,7 +159,7 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 	p.init(input)
 
 	for {
-		// Advance the parser to the start of the next expression.
+		// Advance the parser to the start of the next SQLair expression.
 		if err := p.advance(); err != nil {
 			return nil, err
 		}
@@ -187,8 +190,8 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 	return &ParsedExpr{p.parts}, nil
 }
 
-// advance increments p.pos until it reaches content that might preceed a token
-// we want to parse.
+// advance increments p.pos until it reaches a char that might preceed a
+// substring we want to parse.
 func (p *Parser) advance() error {
 
 loop:
@@ -204,9 +207,10 @@ loop:
 
 		p.pos++
 		switch p.input[p.pos-1] {
-		// If the preceding byte is one of these then we might be at the start
-		// of an expression.
-		case ' ', '\t', '\n', '\r', '=', ',', '(', '[', '>', '<', '+', '-', '*', '/', '|', '%':
+		// If the preceding char is one of the following then we might be at
+		// the start of an expression.
+		case ' ', '\t', '\n', '\r', '=', ',', '(', '[', '>', '<', '+', '-',
+			'*', '/', '|', '%':
 			break loop
 		}
 	}
@@ -237,20 +241,22 @@ func (p *Parser) skipStringLiteral() (bool, error) {
 			maybeCloser = !maybeCloser
 		}
 
-		// Reached end of string and didn't find the closing quote
+		// Reached end of string and didn't find the closing quote.
 		cp.restore()
-		return false, fmt.Errorf("column %d: missing closing quote in string literal", cp.pos)
+		return false, fmt.Errorf(
+			"column %d: missing closing quote in string literal", cp.pos)
 	}
 	return false, nil
 }
 
-// peekByte returns true if the current byte equals the one passed as parameter.
+// peekByte returns true if the current byte equals the byte passed as
+// parameter.
 func (p *Parser) peekByte(b byte) bool {
 	return p.pos < len(p.input) && p.input[p.pos] == b
 }
 
 // skipByte jumps over the current byte if it matches the byte passed as a
-// parameter. Returns true in that case, false otherwise.
+// parameter. If the byte did match, it returns true.
 func (p *Parser) skipByte(b byte) bool {
 	if p.pos < len(p.input) && p.input[p.pos] == b {
 		p.pos++
@@ -259,10 +265,10 @@ func (p *Parser) skipByte(b byte) bool {
 	return false
 }
 
-// skipByteFind advances the parser until it finds a byte that matches the one
-// passed as parameter and then jumps over it. In that case returns true. If the
-// end of the string is reached and no matching byte was found, it returns
-// false.
+// skipByteFind advances the parser until it finds a byte that matches the byte
+// passed as parameter and then jumps over it. If it finds the byte it returns
+// true. If the end of the string is reached and no matching byte was found, it
+// returns false.
 func (p *Parser) skipByteFind(b byte) bool {
 	for i := p.pos; i < len(p.input); i++ {
 		if p.input[i] == b {
@@ -273,8 +279,8 @@ func (p *Parser) skipByteFind(b byte) bool {
 	return false
 }
 
-// skipBlanks advances the parser past spaces, tabs and newlines. Returns
-// whether the parser position was changed.
+// skipBlanks advances the parser past spaces, tabs and newlines. It returns
+// true if the parser position was changed.
 func (p *Parser) skipBlanks() bool {
 	mark := p.pos
 	for p.pos < len(p.input) {
@@ -291,11 +297,11 @@ func (p *Parser) skipBlanks() bool {
 	return p.pos != mark
 }
 
-// skipString advances the parser and jumps over the string passed as parameter.
-// In that case returns true, false otherwise.
-// This function is case insensitive.
+// skipString tries jumps over the string passed as parameter. skipString is
+// case insensitive. If the string is found it returns true. Otherwise, false.
 func (p *Parser) skipString(s string) bool {
 	if p.pos+len(s) <= len(p.input) &&
+		// EqualFold is case insensitive.
 		strings.EqualFold(p.input[p.pos:p.pos+len(s)], s) {
 		p.pos += len(s)
 		return true
@@ -303,21 +309,21 @@ func (p *Parser) skipString(s string) bool {
 	return false
 }
 
-// isNameByte returns true if the given byte can be part of a name. It returns
-// false otherwise.
+// isNameByte returns true if the parameter byte is alphanumeric or an
+// underscore.
 func isNameByte(c byte) bool {
 	return 'A' <= c && c <= 'Z' || 'a' <= c && c <= 'z' ||
 		'0' <= c && c <= '9' || c == '_'
 }
 
-// isNameInitialByte returns true if the given byte can appear at the start of a
-// name. It returns false otherwise.
+// isNameInitialByte returns true if the parameter byte is a letter or an
+// underscore.
 func isInitialNameByte(c byte) bool {
 	return 'A' <= c && c <= 'Z' || 'a' <= c && c <= 'z' || c == '_'
 }
 
 // skipName advances the parser until it is on the first non name byte and
-// returns true. If the p.pos does not start on a name byte it returns false.
+// returns true. If the parser is not on a name byte it returns false.
 func (p *Parser) skipName() bool {
 	if p.pos >= len(p.input) {
 		return false
@@ -333,20 +339,19 @@ func (p *Parser) skipName() bool {
 }
 
 // Functions with the prefix parse attempt to parse some construct. They return
-// the construct, and an error and/or a bool that indicates if the the construct
+// the construct, and an error and/or a bool that indicates if the construct
 // was successfully parsed.
 //
 // Return cases:
 //  - bool == true, err == nil
-//		The construct was sucessfully parsed
+//		The construct was successfully parsed.
 //  - bool == false, err != nil
-//		The construct was recognised but was not correctly formatted
+//		The construct was recognised but was not correctly formatted.
 //  - bool == false, err == nil
-//		The construct was not the one we are looking for
+//		The construct was not the one being looked for.
 
-// parseIdentifierAsterisk parses a name made up of only nameBytes or of a
-// single asterisk. On success it returns the parsed string and true. Otherwise,
-// it returns the empty string and false.
+// parseIdentifierAsterisk parses a name made up of only name bytes or of a
+// single asterisk.
 func (p *Parser) parseIdentifierAsterisk() (string, bool) {
 	if p.skipByte('*') {
 		return "*", true
@@ -354,9 +359,7 @@ func (p *Parser) parseIdentifierAsterisk() (string, bool) {
 	return p.parseIdentifier()
 }
 
-// parseIdentifier parses a name made up of only nameBytes. On success it
-// returns the parsed string and true. Otherwise, it returns the empty string
-// and false.
+// parseIdentifier parses a name made up of only name bytes.
 func (p *Parser) parseIdentifier() (string, bool) {
 	mark := p.pos
 	if p.skipName() {
@@ -365,9 +368,9 @@ func (p *Parser) parseIdentifier() (string, bool) {
 	return "", false
 }
 
-// parseColumn parses a column made up of name bytes, optionally dot-prefixed by
-// its table name.
-// parseColumn returns an error so that it can be used with parseList.
+// parseColumn parses a column made up of name bytes, optionally dot-prefixed
+// by its table name. parseColumn returns an error so that it can be used with
+// parseList. This error is currently always nil.
 func (p *Parser) parseColumn() (fullName, bool, error) {
 	cp := p.save()
 
@@ -394,19 +397,22 @@ func (p *Parser) parseTarget() (fullName, bool, error) {
 	return fullName{}, false, nil
 }
 
-// parseGoFullName parses a Go type name qualified by a tag name (or asterisk)
-// of the form "&TypeName.col_name".
+// parseGoFullName parses a Go type name qualified by a tag name (or asterisk).
+// For example: "TypeName.col_name".
 func (p *Parser) parseGoFullName() (fullName, bool, error) {
 	cp := p.save()
 
 	if id, ok := p.parseIdentifier(); ok {
 		if !p.skipByte('.') {
-			return fullName{}, false, fmt.Errorf("column %d: unqualified type, expected %s.* or %s.<db tag>", p.pos, id, id)
+			return fullName{}, false, fmt.Errorf(
+				"column %d: unqualified type, expected %s.* or %s.<db tag>",
+				p.pos, id, id)
 		}
 
 		idField, ok := p.parseIdentifierAsterisk()
 		if !ok {
-			return fullName{}, false, fmt.Errorf("column %d: invalid identifier suffix following %q", p.pos, id)
+			return fullName{}, false, fmt.Errorf(
+				"column %d: invalid identifier suffix following %q", p.pos, id)
 		}
 		return fullName{id, idField}, true, nil
 	}
@@ -415,8 +421,8 @@ func (p *Parser) parseGoFullName() (fullName, bool, error) {
 	return fullName{}, false, nil
 }
 
-// parseList takes a parsing function that returns a fullName and parses a
-// bracketed, comma seperated, list.
+// parseList takes a parsing function that parses into a fullName and parses a
+// bracketed, comma separated, list.
 func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]fullName, bool, error) {
 	cp := p.save()
 	if !p.skipByte('(') {
@@ -434,11 +440,11 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 		} else if err != nil {
 			return nil, false, err
 		} else if i == 0 {
-			// If the first item is not what we are looking for, we exit.
+			// If the first item does not parse, we exit.
 			cp.restore()
 			return nil, false, nil
 		} else {
-			// On subsequent items we return an error.
+			// On subsequent items an error is returned.
 			return nil, false, fmt.Errorf("column %d: invalid expression in list", p.pos)
 		}
 
@@ -452,8 +458,7 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 	return nil, false, fmt.Errorf("column %d: missing closing parentheses", parenPos)
 }
 
-// parseColumns parses a list of columns. For lists of more than one column the
-// columns must be enclosed in brackets e.g. "(col1, col2) AS &Person.*".
+// parseColumns parses a single column or a bracketed list of columns.
 func (p *Parser) parseColumns() ([]fullName, bool) {
 
 	// Case 1: A single column e.g. "p.name".
@@ -469,8 +474,8 @@ func (p *Parser) parseColumns() ([]fullName, bool) {
 	return nil, false
 }
 
-// parseTargets parses the part of the output expression following the
-// ampersand. This can be one or more references to Go types.
+// parseTargets parses a single target type or a bracketed list of target
+// types.
 func (p *Parser) parseTargets() ([]fullName, bool, error) {
 	// Case 1: A single target e.g. "&Person.name".
 	if targetTypes, ok, err := p.parseTarget(); err != nil {
@@ -489,8 +494,8 @@ func (p *Parser) parseTargets() ([]fullName, bool, error) {
 	return nil, false, nil
 }
 
-// parseOutputExpression requires that the ampersand before the identifiers must
-// be followed by a name byte.
+// parseOutputExpression parsers a SQLair output expression. See the package
+// documentation for all forms of output expression.
 func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 	start := p.pos
 
@@ -535,9 +540,11 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 	if p.skipByte('$') {
 		if fn, ok, err := p.parseGoFullName(); ok {
 			if fn.name == "*" {
-				return nil, false, fmt.Errorf(`asterisk not allowed in input expression "$%s"`, fn)
+				return nil, false, fmt.Errorf(
+					`asterisk not allowed in input expression "$%s"`, fn)
 			}
-			return &inputPart{sourceType: fn, raw: p.input[cp.pos:p.pos]}, true, nil
+			return &inputPart{sourceType: fn, raw: p.input[cp.pos:p.pos]},
+				true, nil
 		} else if err != nil {
 			return nil, false, err
 		}
