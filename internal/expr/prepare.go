@@ -16,6 +16,7 @@ type PreparedExpr struct {
 	sql     string
 }
 
+// markerPrefix is the prefix for SQLair generated named parameters.
 const markerPrefix = "_sqlair_"
 
 func markerName(n int) string {
@@ -45,6 +46,9 @@ func getKeys[T any](m map[string]T) []string {
 	return keys
 }
 
+// starCount counts the number of fullNames in the list with asterisks in the
+// name field. It is used to check if there are any asterisk expressions in a
+// list of types or columns.
 func starCount(fns []fullName) int {
 	s := 0
 	for _, fn := range fns {
@@ -61,9 +65,12 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
 	if !ok {
 		ts := getKeys(ti)
 		if len(ts) == 0 {
-			return nil, fmt.Errorf(`type %q not passed as a parameter`, p.sourceType.prefix)
+			return nil, fmt.Errorf(`type %q not passed as a parameter`,
+				p.sourceType.prefix)
 		} else {
-			return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, p.sourceType.prefix, strings.Join(ts, ", "))
+			return nil, fmt.Errorf(
+				`type %q not passed as a parameter, have: %s`,
+				p.sourceType.prefix, strings.Join(ts, ", "))
 		}
 	}
 	switch info := info.(type) {
@@ -72,7 +79,8 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
 	case *structInfo:
 		f, ok := info.tagToField[p.sourceType.name]
 		if !ok {
-			return nil, fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), p.sourceType.name)
+			return nil, fmt.Errorf(`type %q has no %q db tag`,
+				info.typ().Name(), p.sourceType.name)
 		}
 		return f, nil
 	default:
@@ -80,8 +88,8 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
 	}
 }
 
-// prepareOutput checks that the output expressions correspond to known types.
-// It then checks they are formatted correctly and finally generates the columns for the query.
+// prepareOutput generates the columns for the SQL query and checks that the
+// output expressions correspond to known types.
 func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, error) {
 	var outCols = make([]fullName, 0)
 	var typeMembers = make([]typeMember, 0)
@@ -91,19 +99,23 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 	starTypes := starCount(p.targetTypes)
 	starColumns := starCount(p.sourceColumns)
 
-	// Check target struct type and its tags are valid.
 	var info typeInfo
 	var ok bool
 	var err error
 
+	// fetchInfo fetches the previously generated reflection information for a
+	// type found in the output expression.
 	fetchInfo := func(typeName string) (typeInfo, error) {
 		info, ok := ti[typeName]
 		if !ok {
 			ts := getKeys(ti)
 			if len(ts) == 0 {
-				return nil, fmt.Errorf(`type %q not passed as a parameter`, typeName)
+				return nil, fmt.Errorf(`type %q not passed as a parameter`,
+					typeName)
 			} else {
-				return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, typeName, strings.Join(ts, ", "))
+				return nil, fmt.Errorf(
+					`type %q not passed as a parameter, have: %s`,
+					typeName, strings.Join(ts, ", "))
 			}
 		}
 		return info, nil
@@ -115,7 +127,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 		case *structInfo:
 			tm, ok = info.tagToField[tag]
 			if !ok {
-				return fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), tag)
+				return fmt.Errorf(`type %q has no %q db tag`,
+					info.typ().Name(), tag)
 			}
 		case *mapInfo:
 			tm = &mapKey{name: tag, mapType: info.typ()}
@@ -125,10 +138,13 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 		return nil
 	}
 
-	// Case 1: Generated columns e.g. "* AS (&P.*, &A.id)" or "&P.*".
+	// Enumerate the different forms of output expressions.
+
+	// Case 1: SQLair generated column names.
+	//	For example: "* AS (&P.*, &A.id)" or "&P.*".
 	if numColumns == 0 || (numColumns == 1 && starColumns == 1) {
+		// Prepend table name e.g. "t" in "t.* AS &P.*".
 		pref := ""
-		// Prepend table name. E.g. "t" in "t.* AS &P.*".
 		if numColumns > 0 {
 			pref = p.sourceColumns[0].prefix
 		}
@@ -141,7 +157,9 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 			if t.name == "*" {
 				switch info := info.(type) {
 				case *mapInfo:
-					return nil, nil, fmt.Errorf(`&%s.* cannot be used for maps when no column names are specified`, info.typ().Name())
+					return nil, nil, fmt.Errorf("&%s.* cannot be used for "+
+						"maps when no column names are specified",
+						info.typ().Name())
 				case *structInfo:
 					for _, tag := range info.tags {
 						outCols = append(outCols, fullName{pref, tag})
@@ -150,17 +168,20 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 				}
 			} else {
 				// Generate explicit columns.
-				if err = addColumns(info, t.name, fullName{pref, t.name}); err != nil {
+				err = addColumns(info, t.name, fullName{pref, t.name})
+				if err != nil {
 					return nil, nil, err
 				}
 			}
 		}
 		return outCols, typeMembers, nil
 	} else if numColumns > 1 && starColumns > 0 {
-		return nil, nil, fmt.Errorf("invalid asterisk in output expression columns: %s", p.raw)
+		return nil, nil, fmt.Errorf(
+			"invalid asterisk in output expression columns: %s", p.raw)
 	}
 
-	// Case 2: Explicit columns, single asterisk type e.g. "(col1, t.col2) AS &P.*".
+	// Case 2: Explicit columns, single asterisk type.
+	//	For example: "(col1, t.col2) AS &P.*".
 	if starTypes == 1 && numTypes == 1 {
 		if info, err = fetchInfo(p.targetTypes[0].prefix); err != nil {
 			return nil, nil, err
@@ -172,10 +193,12 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 		}
 		return outCols, typeMembers, nil
 	} else if starTypes > 0 && numTypes > 1 {
-		return nil, nil, fmt.Errorf("invalid asterisk in output expression types: %s", p.raw)
+		return nil, nil, fmt.Errorf(
+			"invalid asterisk in output expression types: %s", p.raw)
 	}
 
-	// Case 3: Explicit columns and types e.g. "(col1, col2) AS (&P.name, &P.id)".
+	// Case 3: Explicit columns and types.
+	// 	For example: "(col1, col2) AS (&P.name, &P.id)".
 	if numColumns == numTypes {
 		for i, c := range p.sourceColumns {
 			t := p.targetTypes[i]
@@ -188,7 +211,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 			}
 		}
 	} else {
-		return nil, nil, fmt.Errorf("mismatched number of columns and targets in output expression: %s", p.raw)
+		return nil, nil, fmt.Errorf("mismatched number of columns and "+
+			"targets in output expression: %s", p.raw)
 	}
 
 	return outCols, typeMembers, nil
@@ -196,10 +220,9 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 
 type typeNameToInfo map[string]typeInfo
 
-// Prepare takes a parsed expression and struct instantiations of all the types
-// mentioned in it.
-// The IO parts of the statement are checked for validity against the types
-// and expanded if necessary.
+// Prepare takes a parsed expression and samples of all the types mentioned in
+// its SQLair expressions. The input and output parts of the statement are
+// validated against the sample types and columns are expanded where necessary.
 func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	defer func() {
 		if err != nil {
@@ -224,15 +247,21 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			if err != nil {
 				return nil, err
 			}
+
 			if dupeInfo, ok := ti[t.Name()]; ok {
 				if dupeInfo.typ() == t {
-					return nil, fmt.Errorf("found multiple instances of type %q", t.Name())
+					return nil, fmt.Errorf(
+						"found multiple instances of type %q", t.Name())
 				}
-				return nil, fmt.Errorf("two types found with name %q: %q and %q", t.Name(), dupeInfo.typ().String(), t.String())
+				return nil, fmt.Errorf(
+					"two types found with name %q: %q and %q",
+					t.Name(), dupeInfo.typ().String(), t.String())
 			}
+
 			ti[t.Name()] = info
 		case reflect.Pointer:
-			return nil, fmt.Errorf("need struct or map, got pointer to %s", t.Elem().Kind())
+			return nil, fmt.Errorf("need struct or map, got pointer to %s",
+				t.Elem().Kind())
 		default:
 			return nil, fmt.Errorf("need struct or map, got %s", t.Kind())
 		}
@@ -267,7 +296,9 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 
 			for _, tm := range typeMembers {
 				if ok := typeMemberPresent[tm]; ok {
-					return nil, fmt.Errorf("member %q of type %q appears more than once", tm.memberName(), tm.outerType().Name())
+					return nil, fmt.Errorf(
+						"member %q of type %q appears more than once",
+						tm.memberName(), tm.outerType().Name())
 				}
 				typeMemberPresent[tm] = true
 			}
@@ -285,9 +316,14 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 		case *bypassPart:
 			sql.WriteString(p.chunk)
 		default:
-			return nil, fmt.Errorf("internal error: unknown query part type %T", part)
+			return nil, fmt.Errorf(
+				"internal error: unknown query part type %T", part)
 		}
 	}
 
-	return &PreparedExpr{inputs: inputs, outputs: outputs, sql: sql.String()}, nil
+	return &PreparedExpr{
+		inputs:  inputs,
+		outputs: outputs,
+		sql:     sql.String(),
+	}, nil
 }
