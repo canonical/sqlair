@@ -209,8 +209,7 @@ loop:
 		switch p.input[p.pos-1] {
 		// If the preceding char is one of the following then we might be at
 		// the start of an expression.
-		case ' ', '\t', '\n', '\r', '=', ',', '(', '[', '>', '<', '+', '-',
-			'*', '/', '|', '%':
+		case ' ', '\t', '\n', '\r', '=', ',', '(', '[', '>', '<', '+', '-', '*', '/', '|', '%':
 			break loop
 		}
 	}
@@ -243,8 +242,7 @@ func (p *Parser) skipStringLiteral() (bool, error) {
 
 		// Reached end of string and didn't find the closing quote.
 		cp.restore()
-		return false, fmt.Errorf(
-			"column %d: missing closing quote in string literal", cp.pos)
+		return false, fmt.Errorf("column %d: missing closing quote in string literal", cp.pos)
 	}
 	return false, nil
 }
@@ -404,15 +402,12 @@ func (p *Parser) parseGoFullName() (fullName, bool, error) {
 
 	if id, ok := p.parseIdentifier(); ok {
 		if !p.skipByte('.') {
-			return fullName{}, false, fmt.Errorf(
-				"column %d: unqualified type, expected %s.* or %s.<db tag>",
-				p.pos, id, id)
+			return fullName{}, false, fmt.Errorf("column %d: unqualified type, expected %s.* or %s.<db tag>", p.pos, id, id)
 		}
 
 		idField, ok := p.parseIdentifierAsterisk()
 		if !ok {
-			return fullName{}, false, fmt.Errorf(
-				"column %d: invalid identifier suffix following %q", p.pos, id)
+			return fullName{}, false, fmt.Errorf("column %d: invalid identifier suffix following %q", p.pos, id)
 		}
 		return fullName{id, idField}, true, nil
 	}
@@ -540,11 +535,12 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 	if p.skipByte('$') {
 		if fn, ok, err := p.parseGoFullName(); ok {
 			if fn.name == "*" {
-				return nil, false, fmt.Errorf(
-					`asterisk not allowed in input expression "$%s"`, fn)
+				return nil, false, fmt.Errorf(`asterisk not allowed in input expression "$%s"`, fn)
 			}
-			return &inputPart{sourceType: fn, raw: p.input[cp.pos:p.pos]},
-				true, nil
+			return &inputPart{
+				sourceType: fn,
+				raw: p.input[cp.pos:p.pos]
+			}, true, nil
 		} else if err != nil {
 			return nil, false, err
 		}
