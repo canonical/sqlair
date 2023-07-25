@@ -149,7 +149,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 			if t.name == "*" {
 				switch info := info.(type) {
 				case *mapInfo:
-					return nil, nil, fmt.Errorf("&%s.* cannot be used for maps when no column names are specified", info.typ().Name())
+					return nil, nil, fmt.Errorf(`&%s.* cannot be used for maps when no column names are specified`, info.typ().Name())
 				case *structInfo:
 					for _, tag := range info.tags {
 						outCols = append(outCols, fullName{pref, tag})
@@ -236,11 +236,9 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 
 			if dupeInfo, ok := ti[t.Name()]; ok {
 				if dupeInfo.typ() == t {
-					return nil, fmt.Errorf(
-						"found multiple instances of type %q", t.Name())
+					return nil, fmt.Errorf("found multiple instances of type %q", t.Name())
 				}
-				return nil, fmt.Errorf(
-					"two types found with name %q: %q and %q", t.Name(), dupeInfo.typ().String(), t.String())
+				return nil, fmt.Errorf("two types found with name %q: %q and %q", t.Name(), dupeInfo.typ().String(), t.String())
 			}
 
 			ti[t.Name()] = info
