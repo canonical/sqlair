@@ -78,7 +78,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		}
 	}
 
-	// Extract query parameteres from arguments.
+	// Extract query parameters from arguments.
 	qargs := []any{}
 	for i, typeMember := range pe.inputs {
 		outerType := typeMember.outerType()
@@ -213,12 +213,12 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 				ptrs = append(ptrs, val.Addr().Interface())
 			}
 		case *mapKey:
-			// If a result column is to be scanned into a map at a specfic key
+			// If a result column is to be scanned into a map at a specific key
 			// then a pointer to a new proxy variable of type any is added to
 			// ptrs.
 			// The onSuccess function will then populate the target map with
 			// the values in these proxies.
-			// Proxy values are used for map values becuase it is not possible
+			// Proxy values are used for map values because it is not possible
 			// to generate a pointer to a value in a map.
 			scanVal := reflect.New(tm.mapType.Elem()).Elem()
 			ptrs = append(ptrs, scanVal.Addr().Interface())
