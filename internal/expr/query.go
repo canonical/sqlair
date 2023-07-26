@@ -8,31 +8,32 @@ import (
 	"strings"
 )
 
+// QuerySQL returns the SQL string for running on the database.
 func (qe *QueryExpr) QuerySQL() string {
 	return qe.sql
 }
 
+// QueryArgs returns the query parameters to be passed to the database.
 func (qe *QueryExpr) QueryArgs() []any {
 	return qe.args
 }
 
+// HasOutputs is true if the query contains one or more SQLair output
+// expressions.
 func (qe *QueryExpr) HasOutputs() bool {
 	return len(qe.outputs) > 0
 }
 
+// QueryExpr represents a SQLair query that is ready for execution and then
+// scanning of query results.
 type QueryExpr struct {
 	sql     string
 	args    []any
 	outputs []typeMember
 }
 
-// Query returns a query expression ready for execution, using the provided values to
-// substitute the input placeholders in the prepared expression. These placeholders use
-// the syntax "$Person.fullname", where Person would be a type such as:
-//
-//	type Person struct {
-//	        Name string `db:"fullname"`
-//	}
+// Query takes all maps and structs mentioned in the input expressions of the
+// PreparedExpr and builds a QueryExpr ready for running on a database.
 func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	defer func() {
 		if err != nil {
@@ -45,17 +46,20 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		inQuery[typeMember.outerType()] = true
 	}
 
+	// Check args are as expected using reflection.
 	var typeValue = make(map[reflect.Type]reflect.Value)
 	var typeNames []string
 	for _, arg := range args {
 		v := reflect.ValueOf(arg)
-		if v.Kind() == reflect.Invalid || (v.Kind() == reflect.Pointer && v.IsNil()) {
+		k := v.Kind()
+		if k == reflect.Invalid || (k == reflect.Pointer && v.IsNil()) {
 			return nil, fmt.Errorf("need struct or map, got nil")
 		}
 		v = reflect.Indirect(v)
+		k = v.Kind()
 		t := v.Type()
-		if v.Kind() != reflect.Struct && v.Kind() != reflect.Map {
-			return nil, fmt.Errorf("need struct or map, got %s", t.Kind())
+		if k != reflect.Struct && k != reflect.Map {
+			return nil, fmt.Errorf("need struct or map, got %s", k)
 		}
 		if _, ok := typeValue[t]; ok {
 			return nil, fmt.Errorf("type %q provided more than once", t.Name())
@@ -63,7 +67,8 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		typeValue[t] = v
 		typeNames = append(typeNames, t.Name())
 		if !inQuery[t] {
-			// Check if we have a type with the same name from a different package.
+			// Check if we have a type with the same name from a different
+			// package.
 			for _, typeMember := range pe.inputs {
 				if t.Name() == typeMember.outerType().Name() {
 					return nil, fmt.Errorf("type %s not passed as a parameter, have %s", typeMember.outerType().String(), t.String())
@@ -73,7 +78,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		}
 	}
 
-	// Query parameteres.
+	// Extract query parameteres from arguments.
 	qargs := []any{}
 	for i, typeMember := range pe.inputs {
 		outerType := typeMember.outerType()
@@ -102,8 +107,11 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 
 var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
 
-// ScanArgs returns list of pointers to the struct fields that are listed in qe.outputs.
-// All the structs and maps mentioned in the query must be in outputArgs.
+// ScanArgs takes the result column names and all the target structs/maps that
+// the query results will be scanned into.
+// It returns a list of pointers for use with sql.Rows.Scan.
+// The onSuccess function should be called after the row has been scanned into
+// scanArgs.
 func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []any, onSuccess func(), err error) {
 	var typesInQuery = []string{}
 	var inQuery = make(map[reflect.Type]bool)
@@ -115,6 +123,8 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 		}
 	}
 
+	// scanProxy represents a result value that is scanned into a proxy
+	// variable. The original target is set in onSuccess.
 	type scanProxy struct {
 		original reflect.Value
 		scan     reflect.Value
@@ -122,6 +132,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 	}
 	var scanProxies []scanProxy
 
+	// Check outputArgs are as expected using reflection.
 	var typeDest = make(map[reflect.Type]reflect.Value)
 	outputVals := []reflect.Value{}
 	for _, outputArg := range outputArgs {
@@ -153,12 +164,13 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 		outputVals = append(outputVals, outputVal)
 	}
 
-	// Generate the pointers.
+	// Generate the pointers for sql.Rows.Scan.
 	var ptrs = []any{}
 	for _, column := range columns {
 		idx, ok := markerIndex(column)
 		if !ok {
-			// Columns not mentioned in output expressions are scanned into x.
+			// Columns not mentioned in output expressions are scanned into a
+			// placeholder variable.
 			var x any
 			ptrs = append(ptrs, &x)
 			continue
@@ -179,19 +191,42 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 			}
 			pt := reflect.PointerTo(val.Type())
 			if val.Type().Kind() != reflect.Pointer && !pt.Implements(scannerInterface) {
-				// Rows.Scan will return an error if it tries to scan NULL into a type that cannot be set to nil.
-				// For types that are not a pointer and do not implement sql.Scanner a pointer to them is generated
-				// and passed to Rows.Scan. If Scan has set this pointer to nil the value is zeroed.
+				// For any scan targets that are not pointers and do not
+				// implement the Scanner interface, e.g. int, string, ect., a
+				// pointer to a new proxy variable will be added to ptrs.
+				// The type of this new proxy will be a pointer to the target
+				// type.
+				// This is done because sql.Rows.Scan will panic when trying to
+				// scan a NULL from the database into a type that is not a
+				// pointer. If the type is a pointer then sql.Rows.Scan will
+				// set it to nil.
+				// The onSuccess function sets the original targets according
+				// to the values in the proxies. If the pointer is nil then the
+				// target will be zeroed.
 				scanVal := reflect.New(pt).Elem()
 				ptrs = append(ptrs, scanVal.Addr().Interface())
-				scanProxies = append(scanProxies, scanProxy{original: val, scan: scanVal})
+				scanProxies = append(scanProxies, scanProxy{
+					original: val,
+					scan:     scanVal,
+				})
 			} else {
 				ptrs = append(ptrs, val.Addr().Interface())
 			}
 		case *mapKey:
+			// If a result column is to be scanned into a map at a specfic key
+			// then a pointer to a new proxy variable of type any is added to
+			// ptrs.
+			// The onSuccess function will then populate the target map with
+			// the values in these proxies.
+			// Proxy values are used for map values becuase it is not possible
+			// to generate a pointer to a value in a map.
 			scanVal := reflect.New(tm.mapType.Elem()).Elem()
 			ptrs = append(ptrs, scanVal.Addr().Interface())
-			scanProxies = append(scanProxies, scanProxy{original: outputVal, scan: scanVal, key: reflect.ValueOf(tm.name)})
+			scanProxies = append(scanProxies, scanProxy{
+				original: outputVal,
+				scan:     scanVal,
+				key:      reflect.ValueOf(tm.name),
+			})
 		}
 	}
 
