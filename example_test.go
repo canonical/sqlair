@@ -27,7 +27,7 @@ type Team struct {
 }
 
 func Example() {
-	sqldb, err := sql.Open("sqlite3", ":memory:")
+	sqldb, err := sql.Open("sqlite3", "file:example.db?cache=shared&mode=memory")
 	if err != nil {
 		panic(err)
 	}
@@ -220,7 +220,7 @@ func Example() {
 }
 
 func ExampleOutcome_get() {
-	sqldb, err := sql.Open("sqlite3", ":memory:")
+	sqldb, err := sql.Open("sqlite3", "file:exampleoutcomeget.db?cache=shared&mode=memory")
 	if err != nil {
 		panic(err)
 	}
@@ -245,7 +245,7 @@ func ExampleOutcome_get() {
 }
 
 func ExampleOutcome_iter() {
-	sqldb, err := sql.Open("sqlite3", ":memory:")
+	sqldb, err := sql.Open("sqlite3", "file:exampleoutcomeiter.db?cache=shared&mode=memory")
 	if err != nil {
 		panic(err)
 	}
@@ -271,4 +271,62 @@ func ExampleOutcome_iter() {
 
 	// Output:
 	//0
+}
+
+func ExampleM() {
+	sqldb, err := sql.Open("sqlite3", "file:examplem.db?cache=shared&mode=memory")
+	if err != nil {
+		panic(err)
+	}
+	db := sqlair.NewDB(sqldb)
+
+	stmt := sqlair.MustPrepare(`
+		CREATE TABLE people (
+			name text,
+			id integer
+		);
+	`)
+	err = db.Query(nil, stmt).Run()
+	if err != nil {
+		panic(err)
+	}
+
+	// sqlair.M has type map[string]any.
+	m := sqlair.M{}
+	m["name"] = "Fred"
+	m["id"] = 30
+
+	stmt = sqlair.MustPrepare(`
+		INSERT INTO people (name, id)
+		VALUES ($M.name, $M.id)
+	`, sqlair.M{})
+
+	// This will insert Fred with id 30 into the database.
+	err = db.Query(nil, stmt, m).Run()
+	if err != nil {
+		panic(err)
+	}
+
+	// Any named map with a key type of string can be used with SQLair.
+	type MyIntMap map[string]int
+	mm := MyIntMap{}
+
+	stmt = sqlair.MustPrepare(`
+		SELECT &MyIntMap.id
+		FROM people
+		WHERE name = $M.name
+	`, sqlair.M{}, MyIntMap{})
+
+	// Select the id of Fred into mm["id"].
+	// Maps do not have to be passed as a pointer.
+	err = db.Query(nil, stmt, m).Get(mm)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("Fred's id is %d", mm["id"])
+
+	// Output:
+	//Fred's id is 30
+
 }
