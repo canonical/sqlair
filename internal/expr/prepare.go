@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// PreparedExpr contains an SQL expression that is ready for execution.
+// PreparedExpr represents a SQL statement for use in a query.
 type PreparedExpr struct {
 	outputs []typeMember
 	inputs  []typeMember
