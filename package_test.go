@@ -860,7 +860,7 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	// Note: Query structs are not designed to be reused (hence why they store a context as a struct field).
 	//       It is, however, possible.
 	allOutput := &[]*Person{}
-	allExpected := &[]*Person{{30, "Fred", 1000}, {20, "Mark", 1500}, {40, "Mary", 3500}, {35, "James", 4500}}
+	allExpected := &[]*Person{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "James", 4500}}
 
 	iterOutputs := []any{&Person{}, &Person{}, &Person{}, &Person{}}
 	iterExpected := []any{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "James", 4500}}
