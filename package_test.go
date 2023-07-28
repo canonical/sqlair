@@ -797,46 +797,59 @@ func (s *PackageSuite) TestOutcome(c *C) {
 
 	var outcome = sqlair.Outcome{}
 
-	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ($Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
-	q1 := db.Query(nil, insertStmt, &jim)
 	// Test INSERT with Get
-	c.Assert(q1.Get(&outcome), IsNil)
-	if outcome.Result() == nil {
-		c.Errorf("result in outcome is nil")
-	}
+	insertStmt := sqlair.MustPrepare(`
+		INSERT INTO person 
+		VALUES ($Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');
+	`, Person{})
+	err = db.Query(nil, insertStmt, &jim).Get(&outcome)
+	c.Assert(err, IsNil)
+
+	res := outcome.Result()
+	c.Assert(res, Not(IsNil))
 	rowsAffected, err := outcome.Result().RowsAffected()
 	c.Assert(err, IsNil)
-	if rowsAffected != 1 {
-		c.Errorf("got %d for rowsAffected, expected 1", rowsAffected)
-	}
+	c.Assert(rowsAffected, Equals, int64(1))
+
 	// Test SELECT with Get
-	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person", Person{})
-	q2 := db.Query(nil, selectStmt)
-	c.Assert(q2.Get(&outcome, &jim), IsNil)
+	selectStmt := sqlair.MustPrepare(`
+		SELECT &Person.*
+		FROM person
+	`, Person{})
+	err = db.Query(nil, selectStmt).Get(&outcome, &jim)
+	c.Assert(err, IsNil)
+
 	c.Assert(outcome.Result(), IsNil)
+
 	// Test INSERT with Iter
-	iter := q1.Iter()
-	c.Assert(iter.Get(&outcome), IsNil)
-	if outcome.Result() == nil {
-		c.Fatalf("result in outcome is nil")
-	}
+	iter := db.Query(nil, insertStmt, &jim).Iter()
+	err = iter.Get(&outcome)
+	c.Assert(err, IsNil)
+
+	res = outcome.Result()
+	c.Assert(res, Not(IsNil))
 	rowsAffected, err = outcome.Result().RowsAffected()
 	c.Assert(err, IsNil)
 	c.Assert(rowsAffected, Equals, int64(1))
+
 	c.Assert(iter.Next(), Equals, false)
+	c.Assert(iter.Close(), IsNil)
 
 	// Test SELECT with Iter.Get
-	iter = q2.Iter()
+	iter = db.Query(nil, selectStmt).Iter()
 	c.Assert(iter.Get(&outcome), IsNil)
+
 	c.Assert(outcome.Result(), IsNil)
+
 	c.Assert(iter.Next(), Equals, true)
 	c.Assert(iter.Get(&jim), IsNil)
 	c.Assert(iter.Close(), IsNil)
 
 	// Test SELECT with GetAll
 	var jims = []Person{}
-	err = q2.GetAll(&outcome, &jims)
+	err = db.Query(nil, selectStmt).GetAll(&outcome, &jims)
 	c.Assert(err, IsNil)
+
 	c.Assert(outcome.Result(), IsNil)
 
 	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
