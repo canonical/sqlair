@@ -639,21 +639,21 @@ func (s *PackageSuite) TestValidGetAll(c *C) {
 		types:    []any{Person{}, Address{}},
 		inputs:   []any{},
 		slices:   []any{&[]*Person{}, &[]*Address{}},
-		expected: []any{&[]*Person{&Person{ID: 30}, &Person{ID: 30}, &Person{ID: 30}, &Person{ID: 20}, &Person{ID: 20}, &Person{ID: 20}, &Person{ID: 40}, &Person{ID: 40}, &Person{ID: 40}, &Person{ID: 35}, &Person{ID: 35}, &Person{ID: 35}}, &[]*Address{&Address{ID: 1000}, &Address{ID: 1500}, &Address{ID: 3500}, &Address{ID: 1000}, &Address{ID: 1500}, &Address{ID: 3500}, &Address{ID: 1000}, &Address{ID: 1500}, &Address{ID: 3500}, &Address{ID: 1000}, &Address{ID: 1500}, &Address{ID: 3500}}},
+		expected: []any{&[]*Person{{ID: 30}, {ID: 30}, {ID: 30}, {ID: 20}, {ID: 20}, {ID: 20}, {ID: 40}, {ID: 40}, {ID: 40}, {ID: 35}, {ID: 35}, {ID: 35}}, &[]*Address{{ID: 1000}, {ID: 1500}, {ID: 3500}, {ID: 1000}, {ID: 1500}, {ID: 3500}, {ID: 1000}, {ID: 1500}, {ID: 3500}, {ID: 1000}, {ID: 1500}, {ID: 3500}}},
 	}, {
 		summary:  "select all columns into person",
 		query:    "SELECT * AS &Person.* FROM person",
 		types:    []any{Person{}},
 		inputs:   []any{},
 		slices:   []any{&[]*Person{}},
-		expected: []any{&[]*Person{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "James", 4500}}},
+		expected: []any{&[]*Person{{30, "Fred", 1000}, {20, "Mark", 1500}, {40, "Mary", 3500}, {35, "James", 4500}}},
 	}, {
 		summary:  "select all columns into person with no pointers",
 		query:    "SELECT * AS &Person.* FROM person",
 		types:    []any{Person{}},
 		inputs:   []any{},
 		slices:   []any{&[]Person{}},
-		expected: []any{&[]Person{Person{30, "Fred", 1000}, Person{20, "Mark", 1500}, Person{40, "Mary", 3500}, Person{35, "James", 4500}}},
+		expected: []any{&[]Person{{30, "Fred", 1000}, {20, "Mark", 1500}, {40, "Mary", 3500}, {35, "James", 4500}}},
 	}, {
 		summary:  "single line of query with inputs",
 		query:    "SELECT p.* AS &Person.*, a.* AS &Address.*, p.* AS &Manager.* FROM person AS p, address AS a WHERE p.id = $Person.id AND a.id = $Address.id ",
@@ -902,7 +902,7 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	// Note: Query structs are not designed to be reused (hence why they store a context as a struct field).
 	//       It is, however, possible.
 	allOutput := &[]*Person{}
-	allExpected := &[]*Person{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "James", 4500}}
+	allExpected := &[]*Person{{30, "Fred", 1000}, {20, "Mark", 1500}, {40, "Mary", 3500}, {35, "James", 4500}}
 
 	iterOutputs := []any{&Person{}, &Person{}, &Person{}, &Person{}}
 	iterExpected := []any{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "James", 4500}}
