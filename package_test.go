@@ -257,7 +257,8 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 		}
 	}
 
-	c.Assert(db.Query(nil, sqlair.MustPrepare(dropTables)).Run(), IsNil)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
 }
 
 func (s *PackageSuite) TestIterGetErrors(c *C) {
@@ -347,6 +348,7 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 			if err := iter.Get(t.outputs[i]...); err != nil {
 				c.Assert(err, ErrorMatches, t.err,
 					Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
+				iter.Close()
 				break
 			}
 			i++
@@ -356,7 +358,8 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 			Commentf("\ntest %q failed (Close):\ninput: %s\n", t.summary, t.query))
 	}
 
-	c.Assert(db.Query(nil, sqlair.MustPrepare(dropTables)).Run(), IsNil)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
 }
 
 type ScannerInt struct {
@@ -466,7 +469,8 @@ func (s *PackageSuite) TestNulls(c *C) {
 		}
 	}
 
-	c.Assert(db.Query(nil, sqlair.MustPrepare(dropTables)).Run(), IsNil)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
 }
 
 func (s *PackageSuite) TestValidGet(c *C) {
@@ -522,7 +526,8 @@ func (s *PackageSuite) TestValidGet(c *C) {
 		}
 	}
 
-	c.Assert(db.Query(nil, sqlair.MustPrepare(dropTables)).Run(), IsNil)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
 }
 
 func (s *PackageSuite) TestGetErrors(c *C) {
@@ -571,7 +576,8 @@ func (s *PackageSuite) TestGetErrors(c *C) {
 			Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
 	}
 
-	c.Assert(db.Query(nil, sqlair.MustPrepare(dropTables)).Run(), IsNil)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
 }
 
 func (s *PackageSuite) TestErrNoRows(c *C) {
@@ -584,7 +590,8 @@ func (s *PackageSuite) TestErrNoRows(c *C) {
 	c.Assert(err, Equals, sqlair.ErrNoRows)
 	c.Assert(err, Equals, sql.ErrNoRows)
 
-	c.Assert(db.Query(nil, sqlair.MustPrepare(dropTables)).Run(), IsNil)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
 }
 
 func (s *PackageSuite) TestValidGetAll(c *C) {
@@ -659,7 +666,8 @@ func (s *PackageSuite) TestValidGetAll(c *C) {
 		}
 	}
 
-	c.Assert(db.Query(nil, sqlair.MustPrepare(dropTables)).Run(), IsNil)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
 }
 
 func (s *PackageSuite) TestGetAllErrors(c *C) {
@@ -743,7 +751,8 @@ func (s *PackageSuite) TestGetAllErrors(c *C) {
 			Commentf("\ntest %q failed:\ninput: %s\nslices: %s", t.summary, t.query, t.slices))
 	}
 
-	c.Assert(db.Query(nil, sqlair.MustPrepare(dropTables)).Run(), IsNil)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
 }
 
 func (s *PackageSuite) TestRun(c *C) {
@@ -770,7 +779,8 @@ func (s *PackageSuite) TestRun(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(jimCheck, Equals, jim)
 
-	c.Assert(db.Query(nil, sqlair.MustPrepare(dropTables)).Run(), IsNil)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
 }
 
 func (s *PackageSuite) TestOutcome(c *C) {
@@ -829,7 +839,8 @@ func (s *PackageSuite) TestOutcome(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(outcome.Result(), IsNil)
 
-	c.Assert(db.Query(nil, sqlair.MustPrepare(dropTables)).Run(), IsNil)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
 }
 
 func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
@@ -852,10 +863,12 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 
 	// Run different Query methods.
 	q := db.Query(nil, stmt)
-	c.Assert(q.Get(oneOutput), IsNil)
+	err = q.Get(oneOutput)
+	c.Assert(err, IsNil)
 	c.Assert(oneExpected, DeepEquals, oneOutput)
 
-	c.Assert(q.GetAll(allOutput), IsNil)
+	err = q.GetAll(allOutput)
+	c.Assert(err, IsNil)
 	c.Assert(allOutput, DeepEquals, allExpected)
 
 	iter := q.Iter()
@@ -865,13 +878,17 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 		if i >= len(iterOutputs) {
 			c.Fatalf("expected %d rows, got more", len(iterOutputs))
 		}
-		c.Assert(iter.Get(iterOutputs[i]), IsNil)
+		err = iter.Get(iterOutputs[i])
+		c.Assert(err, IsNil)
 		i++
 	}
-	c.Assert(iter.Close(), IsNil)
+
+	err = iter.Close()
+	c.Assert(err, IsNil)
 	c.Assert(iterOutputs, DeepEquals, iterExpected)
 
-	c.Assert(db.Query(nil, sqlair.MustPrepare(dropTables)).Run(), IsNil)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
 }
 
 func (s *PackageSuite) TestTransactions(c *C) {
@@ -917,7 +934,8 @@ func (s *PackageSuite) TestTransactions(c *C) {
 	err = tx.Commit()
 	c.Assert(err, IsNil)
 
-	c.Assert(db.Query(ctx, sqlair.MustPrepare(dropTables)).Run(), IsNil)
+	err = db.Query(ctx, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
 }
 
 func (s *PackageSuite) TestTransactionErrors(c *C) {
@@ -949,7 +967,8 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 	err = q.Run()
 	c.Assert(err, ErrorMatches, "sql: transaction has already been committed or rolled back")
 
-	c.Assert(db.Query(ctx, sqlair.MustPrepare(dropTables)).Run(), IsNil)
+	err = db.Query(ctx, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
 }
 
 type JujuLeaseKey struct {
@@ -1052,7 +1071,8 @@ func (s *PackageSuite) TestIterMethodOrder(c *C) {
 	err = iter.Close()
 	c.Assert(err, IsNil)
 
-	c.Assert(db.Query(nil, sqlair.MustPrepare(dropTables)).Run(), IsNil)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
 }
 
 func (s *PackageSuite) TestJujuStore(c *C) {
@@ -1084,10 +1104,8 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 	for _, t := range tests {
 
 		stmt, err := sqlair.Prepare(t.query, t.types...)
-		if err != nil {
-			c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			continue
-		}
+		c.Assert(err, IsNil,
+			Commentf("\ntest %q failed (Prepare):\ninput: %s\n", t.summary, t.query))
 
 		iter := db.Query(nil, stmt, t.inputs...).Iter()
 		defer iter.Close()
@@ -1097,17 +1115,18 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d > %d)\n", t.summary, t.query, i+1, len(t.outputs))
 				break
 			}
-			if err := iter.Get(t.outputs[i]...); err != nil {
-				c.Errorf("\ntest %q failed (Get):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			}
+			err := iter.Get(t.outputs[i]...)
+			c.Assert(err, IsNil,
+				Commentf("\ntest %q failed (Get):\ninput: %s\n", t.summary, t.query))
+
 			i++
 		}
 
 		err = iter.Close()
-		if err != nil {
-			c.Errorf("\ntest %q failed (Close):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-		}
+		c.Assert(err, IsNil,
+			Commentf("\ntest %q failed (Close):\ninput: %s\n", t.summary, t.query))
 	}
 
-	c.Assert(db.Query(nil, sqlair.MustPrepare(dropTables)).Run(), IsNil)
+	err = db.Query(nil, sqlair.MustPrepare(dropTables)).Run()
+	c.Assert(err, IsNil)
 }
