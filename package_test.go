@@ -1115,8 +1115,8 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 	`
 
 	// For a Statement or DB to be removed from the cache it needs to go out of
-	// scope. Because of this the tests below make extensive use of functions
-	// to control to "forget" statements and databases.
+	// scope and be garbage collected. Because of this, the tests below make
+	// extensive use of functions to "forget" statements and databases.
 
 	// createAndCacheStmt takes a db and prepares a statement on it.
 	createAndCacheStmt := func(db *sqlair.DB) (stmtID int64) {
@@ -1134,7 +1134,7 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 
 	// testStmtsOnDB prepares a given statement on the db then creates a
 	// statement inside another function and checks it has been cleared from
-	// the cache on GC.
+	// the cache on garbage collection.
 	testStmtsOnDB := func(db *sqlair.DB, stmt *sqlair.Statement) {
 		// Start a query with stmt on db. This will prepare stmt on db.
 		c.Assert(db.Query(nil, stmt).Get(&p), IsNil)
@@ -1142,7 +1142,7 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 		checkStmtCache(db.CacheID(), stmt.CacheID(), true)
 
 		funcStmtID := createAndCacheStmt(db)
-		// Run the garbage collecter and wait one millisecond for the finalizer to finish.
+		// Run the garbage collector and wait one millisecond for the finalizer to finish.
 		runtime.GC()
 		time.Sleep(1 * time.Millisecond)
 
@@ -1172,7 +1172,7 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 		db1ID := createDBAndTestStmt(stmt)
 		db2ID := createDBAndTestStmt(stmt)
 
-		// Run the garbage collecter and wait one millisecond for the finalizer to finish.
+		// Run the garbage collector and wait one millisecond for the finalizer to finish.
 		runtime.GC()
 		time.Sleep(1 * time.Millisecond)
 
@@ -1181,12 +1181,11 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 	}
 
 	createStmtAndTestOnDBs()
-	// Run the garbage collecter and wait one millisecond for the finalizer to finish.
+	// Run the garbage collector and wait one millisecond for the finalizer to finish.
 	runtime.GC()
 	time.Sleep(1 * time.Millisecond)
 
 	checkCacheEmpty()
-
 }
 
 func (s *PackageSuite) TestTransactionWithOneConn(c *C) {
@@ -1199,6 +1198,13 @@ func (s *PackageSuite) TestTransactionWithOneConn(c *C) {
 	defer func() {
 		c.Assert(dropTables(db, tables...), IsNil)
 	}()
+
+	// This test sets the maximum number of connections to the DB to 1. The
+	// database/sql library makes use of a pool of connections to communicate
+	// with the DB and certain operations require a unused connection to run,
+	// such as transactions.
+	// This test ensures that we do not enter a deadlock when doing a behind
+	// the scenes prepare for a transaction.
 
 	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE name = 'Mark'", Person{})
 	mark := Person{20, "Mark", 1500}

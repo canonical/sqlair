@@ -32,14 +32,14 @@ var dbIDCount int64
 type dbID = int64
 type stmtID = int64
 
-// When a SQLair Statement is run on a DB/TX with the Query method it is first
+// When a SQLair Statement is run on a DB/TX with the Query method, it is first
 // prepared on the database. The prepared statement is then stored in the
 // stmtDBCache.
 // When the statement is placed in the cache a finalizer function is set on it.
-// On garbage collection it cycles through the dbIDs and closes each sql.Stmt.
-// The finalizer then removes the stmtID from stmtDBCache and dbStmtCache.
-// Similarly a finalizer is set on the SQLair DB which closes the sql.DB and
-// removes its dbID from dbStmtCache and stmtDBCache.
+// On garbage collection, the finalizer cycles through the dbIDs and closes
+// each sql.Stmt. The finalizer then removes the stmtID from stmtDBCache and
+// dbStmtCache. Similarly a finalizer is set on the SQLair DB which closes the
+// sql.DB and removes its dbID from dbStmtCache and stmtDBCache.
 var stmtDBCache = make(map[stmtID]map[dbID]*sql.Stmt)
 var dbStmtCache = make(map[dbID]map[stmtID]bool)
 var cacheMutex sync.RWMutex
@@ -101,8 +101,6 @@ type DB struct {
 }
 
 func dbFinalizer(db *DB) {
-	// There is no need to close the sql.Stmts here, the resources in the
-	// database are freed on db.Close.
 	cacheMutex.Lock()
 	defer cacheMutex.Unlock()
 	stmtCache := dbStmtCache[db.cacheID]
@@ -146,8 +144,8 @@ type Iterator struct {
 	err     error
 	result  sql.Result
 	started bool
-	// sqlstmt is only set for queries in transactions so it can be closed once
-	// the query is complete.
+	// sqlstmt is only set for queries in transactions so that the statement
+	// can be closed once the query is complete.
 	sqlstmt *sql.Stmt
 }
 
@@ -172,12 +170,12 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 }
 
 // prepareStmt prepares a Statement on a database. It first checks in the cache
-// to see if it has already been preapred.
+// to see if it has already been prepared on the DB.
 func (db *DB) prepareStmt(ctx context.Context, s *Statement) (*sql.Stmt, error) {
 	var err error
 	cacheMutex.RLock()
 	// The statement ID is only removed from the cache when the finalizer is
-	// run so it is always in the map.
+	// run, so it is always in the map.
 	sqlstmt, ok := stmtDBCache[s.cacheID][db.cacheID]
 	cacheMutex.RUnlock()
 	if !ok {
@@ -515,8 +513,8 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 	// Statement is prepared on a database it requires a free connection that
 	// does not have a transaction in progress. If all connections are busy
 	// then it is possible to enter a deadlock.
-	// If all connections are busy then prepare on the transaction rather
-	// than the DB.
+	// When all connections are busy, prepare on the transaction rather than
+	// the DB.
 	var sqlstmt *sql.Stmt
 	dbStats := tx.db.sqldb.Stats()
 	if dbStats.MaxOpenConnections > 0 && dbStats.MaxOpenConnections == dbStats.InUse {
