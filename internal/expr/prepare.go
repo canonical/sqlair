@@ -277,7 +277,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 }
 
 func (pe *PreparedExpr) prepareParts(ti typeNameToInfo, qp []queryPart) error {
-	// Check, and generate SQL for each query part.
+	// Check expression, and generate SQL for each query part.
 	for _, part := range qp {
 		switch p := part.(type) {
 		case *inputPart:
