@@ -199,7 +199,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 
 	for i := 0; i < len(qe.outputs); i++ {
 		if !columnInResult[i] {
-			return nil, nil, fmt.Errorf("column %q for struct %q not found in results", qe.outputs[i].memberName(), qe.outputs[i].outerType().Name())
+			return nil, nil, fmt.Errorf(`query uses "&%s" outside of result context`, qe.outputs[i].outerType().Name())
 		}
 	}
 

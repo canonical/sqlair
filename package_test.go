@@ -334,17 +334,12 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		err:     `cannot get result: type "M" provided more than once, rename one of them`,
 	}, {
 		summary: "output expr in a with clause",
-		query: `WITH averageID(avgid) AS
-		        (SELECT &Person.id
-		        FROM person)
-		        SELECT id
-		        FROM person, averageID
-		        WHERE id > averageID.avgid
-				LIMIT 1`,
+		query: `WITH averageID(avgid) AS (SELECT &Person.id FROM person)
+		        SELECT id FROM person, averageID WHERE id > averageID.avgid LIMIT 1`,
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: []any{&Person{}},
-		err:     `cannot get result: column "id" for struct "Person" not found in results`,
+		err:     `cannot get result: query uses "&Person" outside of result context`,
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()
