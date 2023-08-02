@@ -105,8 +105,9 @@ func dbFinalizer(db *DB) {
 	defer cacheMutex.Unlock()
 	stmtCache := dbStmtCache[db.cacheID]
 	for stmtCacheID, _ := range stmtCache {
-		stmtDBCache[stmtCacheID][db.cacheID].Close()
-		delete(stmtDBCache[stmtCacheID], db.cacheID)
+		dbCache := stmtDBCache[stmtCacheID]
+		dbCache[db.cacheID].Close()
+		delete(dbCache, db.cacheID)
 	}
 	delete(dbStmtCache, db.cacheID)
 	db.sqldb.Close()
