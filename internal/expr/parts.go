@@ -23,8 +23,8 @@ type columnExpr interface {
 }
 
 type funcExpr struct {
-	f  string
-	pe *ParsedExpr
+	raw string
+	pe  *ParsedExpr
 }
 
 // columnExpr marker method.

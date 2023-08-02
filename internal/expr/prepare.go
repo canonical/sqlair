@@ -188,7 +188,7 @@ func (pe *PreparedExpr) prepareOutput(ti typeNameToInfo, p *outputPart) (err err
 		for _, c := range p.sourceColumns {
 			switch c := c.(type) {
 			case funcExpr:
-				return fmt.Errorf(`cannot use function %q with asterisk output expression: %q`, c.f, p.raw)
+				return fmt.Errorf(`cannot use function %q with asterisk output expression: %q`, c.raw, p.raw)
 			case fullName:
 				if err = addColumn(info, c.name, c); err != nil {
 					return err

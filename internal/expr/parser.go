@@ -432,7 +432,7 @@ func (p *Parser) parseFuncName() (columnExpr, bool, error) {
 		if err != nil {
 			return funcExpr{}, false, err
 		}
-		return funcExpr{f: rawFunc, pe: pe}, true, nil
+		return funcExpr{raw: rawFunc, pe: pe}, true, nil
 	}
 	cp.restore()
 	return funcExpr{}, false, nil
