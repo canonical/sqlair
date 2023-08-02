@@ -812,6 +812,13 @@ func (s *PackageSuite) TestGetAllErrors(c *C) {
 		inputs:  []any{},
 		slices:  []any{&[]*sqlair.M{}},
 		err:     `cannot populate slice: need slice of structs/maps, got slice of pointer to map`,
+	}, {
+		summary: "output not referenced in query",
+		query:   "SELECT name FROM person",
+		types:   []any{},
+		inputs:  []any{},
+		slices:  []any{&[]Person{}},
+		err:     `cannot populate slice: output variables provided but not referenced in query`,
 	}}
 
 	dropTables, sqldb, err := personAndAddressDB()

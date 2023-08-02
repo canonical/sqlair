@@ -161,6 +161,9 @@ func (pe *PreparedExpr) prepareOutput(ti typeNameToInfo, p *outputPart) (err err
 				case *mapInfo:
 					return fmt.Errorf(`&%s.* cannot be used for maps when no column names are specified`, info.typ().Name())
 				case *structInfo:
+					if len(info.tags) == 0 {
+						return fmt.Errorf("type %q in %q does not have any db tags", info.typ().Name(), p.raw)
+					}
 					for _, tag := range info.tags {
 						err := addSQL(fullName{prefix: pref, name: tag}.String(), info.tagToField[tag])
 						if err != nil {
