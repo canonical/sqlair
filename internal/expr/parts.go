@@ -19,7 +19,7 @@ type queryPart interface {
 // For example the qualified column name "t.col1" in "t.col1 AS &MyStruct.*"
 // or the function "func(2 + $Person.id)" in "func(2 + $Person.id) AS &Manager.id".
 type columnExpr interface {
-	ce()
+	colExpr()
 }
 
 type funcExpr struct {
@@ -27,7 +27,8 @@ type funcExpr struct {
 	pe *ParsedExpr
 }
 
-func (fe funcExpr) ce() {}
+// columnExpr marker method.
+func (fe funcExpr) colExpr() {}
 
 func (fe funcExpr) String() string {
 	return fe.pe.String()
@@ -39,7 +40,8 @@ type fullName struct {
 	prefix, name string
 }
 
-func (fn fullName) ce() {}
+// columnExpr marker method.
+func (fn fullName) colExpr() {}
 
 func (fn fullName) String() string {
 	if fn.prefix == "" {
