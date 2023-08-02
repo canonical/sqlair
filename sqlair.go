@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/canonical/sqlair/internal/expr"
 )
@@ -510,22 +511,52 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: err}
 	}
 
-	// A transaction is tied to a specific database connection. When a
-	// Statement is prepared on a database it requires a free connection that
-	// does not have a transaction in progress. If all connections are busy
-	// then it is possible to enter a deadlock.
-	// When all connections are busy, prepare on the transaction rather than
-	// the DB.
+	cacheMutex.RLock()
 	var sqlstmt *sql.Stmt
-	dbStats := tx.db.sqldb.Stats()
-	if dbStats.MaxOpenConnections > 0 && dbStats.MaxOpenConnections == dbStats.InUse {
-		sqlstmt, err = tx.sqltx.PrepareContext(ctx, s.pe.SQL())
-	} else {
-		sqlstmt, err = tx.db.prepareStmt(ctx, s)
-		sqlstmt = tx.sqltx.Stmt(sqlstmt)
+	// The statement ID is only removed from the cache when the finalizer is
+	// run, so it is always in the map.
+	sqlstmt, ok := stmtDBCache[s.cacheID][tx.db.cacheID]
+	var conn *sql.Conn
+	cacheMutex.RUnlock()
+	if !ok {
+		// A transaction is tied to a specific database connection. When a
+		// Statement is prepared on a database it requires a free connection that
+		// does not have a transaction in progress. If all connections are busy
+		// then it is possible to enter a deadlock.
+		connCtx, _ := context.WithTimeout(ctx, time.Millisecond)
+		conn, err = tx.db.sqldb.Conn(connCtx)
+		if err == context.DeadlineExceeded {
+			// If it takes to long to aquire a connection to the database,
+			// prepare directly on the transaction and do not cache.
+			sqlstmt, err = tx.sqltx.PrepareContext(ctx, s.pe.SQL())
+			return &Query{sqlstmt: sqlstmt, qe: qe, tx: tx, ctx: ctx, err: nil}
+		} else if err == nil {
+			sqlstmt, err = conn.PrepareContext(ctx, s.pe.SQL())
+		}
+		if err != nil {
+			return &Query{ctx: ctx, err: err}
+		}
+
+		// Put statement in cache.
+		cacheMutex.Lock()
+		// Check if a statement has been inserted in the mean time.
+		sqlstmtAlt, ok := stmtDBCache[s.cacheID][tx.db.cacheID]
+		if ok {
+			sqlstmt.Close()
+			sqlstmt = sqlstmtAlt
+		} else {
+			stmtDBCache[s.cacheID][tx.db.cacheID] = sqlstmt
+			dbStmtCache[tx.db.cacheID][s.cacheID] = true
+		}
+		cacheMutex.Unlock()
 	}
-	if err != nil {
-		return &Query{ctx: ctx, err: err}
+	sqlstmt = tx.sqltx.Stmt(sqlstmt)
+	if conn != nil {
+		err = conn.Close()
+		if err != nil {
+			return &Query{ctx: ctx, err: err}
+		}
 	}
+
 	return &Query{sqlstmt: sqlstmt, qe: qe, tx: tx, ctx: ctx, err: nil}
 }
