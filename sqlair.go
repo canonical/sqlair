@@ -487,7 +487,7 @@ func (db *DB) Begin(ctx context.Context, opts *TXOptions) (*TX, error) {
 // Commit commits the transaction.
 func (tx *TX) Commit() (err error) {
 	defer func() {
-		cerr == tx.sqlconn.Close()
+		cerr := tx.sqlconn.Close()
 		if err == nil {
 			err = cerr
 		}
@@ -504,7 +504,7 @@ func (tx *TX) Commit() (err error) {
 // Rollback aborts the transaction.
 func (tx *TX) Rollback() (err error) {
 	defer func() {
-		cerr == tx.sqlconn.Close()
+		cerr := tx.sqlconn.Close()
 		if err == nil {
 			err = cerr
 		}
