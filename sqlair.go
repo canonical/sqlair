@@ -478,29 +478,44 @@ func (db *DB) Begin(ctx context.Context, opts *TXOptions) (*TX, error) {
 		return nil, err
 	}
 	sqltx, err := sqlconn.BeginTx(ctx, opts.plainTXOptions())
-	return &TX{sqltx: sqltx, sqlconn: sqlconn, db: db}, err
+	if err != nil {
+		return nil, err
+	}
+	return &TX{sqltx: sqltx, sqlconn: sqlconn, db: db}, nil
 }
 
 // Commit commits the transaction.
-func (tx *TX) Commit() error {
+func (tx *TX) Commit() (err error) {
+	defer func() {
+		cerr == tx.sqlconn.Close()
+		if err == nil {
+			err = cerr
+		}
+	}()
 	if err := tx.setDone(); err != nil {
 		return err
 	}
 	if err := tx.sqltx.Commit(); err != nil {
 		return err
 	}
-	return tx.sqlconn.Close()
+	return nil
 }
 
 // Rollback aborts the transaction.
-func (tx *TX) Rollback() error {
+func (tx *TX) Rollback() (err error) {
+	defer func() {
+		cerr == tx.sqlconn.Close()
+		if err == nil {
+			err = cerr
+		}
+	}()
 	if err := tx.setDone(); err != nil {
 		return err
 	}
 	if err := tx.sqltx.Rollback(); err != nil {
 		return err
 	}
-	return tx.sqlconn.Close()
+	return nil
 }
 
 // TXOptions holds the transaction options to be used in DB.Begin.
