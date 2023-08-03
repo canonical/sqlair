@@ -8,7 +8,6 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/canonical/sqlair/internal/expr"
 )
@@ -158,7 +157,7 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		ctx = context.Background()
 	}
 
-	sqlstmt, err := db.prepareStmt(ctx, s)
+	sqlstmt, err := db.prepareStmt(ctx, db.sqldb, s)
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
@@ -171,9 +170,13 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 	return &Query{sqlstmt: sqlstmt, qe: qe, ctx: ctx, err: nil}
 }
 
+type prepareSubstrate interface {
+	PrepareContext(context.Context, string) (*sql.Stmt, error)
+}
+
 // prepareStmt prepares a Statement on a database. It first checks in the cache
 // to see if it has already been prepared on the DB.
-func (db *DB) prepareStmt(ctx context.Context, s *Statement) (*sql.Stmt, error) {
+func (db *DB) prepareStmt(ctx context.Context, ps prepareSubstrate, s *Statement) (*sql.Stmt, error) {
 	var err error
 	cacheMutex.RLock()
 	// The statement ID is only removed from the cache when the finalizer is
@@ -181,7 +184,7 @@ func (db *DB) prepareStmt(ctx context.Context, s *Statement) (*sql.Stmt, error) 
 	sqlstmt, ok := stmtDBCache[s.cacheID][db.cacheID]
 	cacheMutex.RUnlock()
 	if !ok {
-		sqlstmt, err = db.sqldb.PrepareContext(ctx, s.pe.SQL())
+		sqlstmt, err = ps.PrepareContext(ctx, s.pe.SQL())
 		if err != nil {
 			return nil, err
 		}
@@ -443,9 +446,10 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 }
 
 type TX struct {
-	sqltx *sql.Tx
-	db    *DB
-	done  int32
+	sqltx   *sql.Tx
+	sqlconn *sql.Conn
+	db      *DB
+	done    int32
 }
 
 func (tx *TX) isDone() bool {
@@ -464,8 +468,12 @@ func (db *DB) Begin(ctx context.Context, opts *TXOptions) (*TX, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	sqltx, err := db.sqldb.BeginTx(ctx, opts.plainTXOptions())
-	return &TX{sqltx: sqltx, db: db}, err
+	sqlconn, err := db.sqldb.Conn(ctx)
+	if err != nil {
+		return nil, err
+	}
+	sqltx, err := sqlconn.BeginTx(ctx, opts.plainTXOptions())
+	return &TX{sqltx: sqltx, sqlconn: sqlconn, db: db}, err
 }
 
 // Commit commits the transaction.
@@ -473,7 +481,10 @@ func (tx *TX) Commit() error {
 	if err := tx.setDone(); err != nil {
 		return err
 	}
-	return tx.sqltx.Commit()
+	if err := tx.sqltx.Commit(); err != nil {
+		return err
+	}
+	return tx.sqlconn.Close()
 }
 
 // Rollback aborts the transaction.
@@ -481,7 +492,10 @@ func (tx *TX) Rollback() error {
 	if err := tx.setDone(); err != nil {
 		return err
 	}
-	return tx.sqltx.Rollback()
+	if err := tx.sqltx.Rollback(); err != nil {
+		return err
+	}
+	return tx.sqlconn.Close()
 }
 
 // TXOptions holds the transaction options to be used in DB.Begin.
@@ -509,57 +523,16 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: ErrTXDone}
 	}
 
+	sqlstmt, err := tx.db.prepareStmt(ctx, tx.sqlconn, s)
+	if err != nil {
+		return &Query{ctx: ctx, err: err}
+	}
+
 	qe, err := s.pe.Query(inputArgs...)
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
 
-	cacheMutex.RLock()
-	var sqlstmt *sql.Stmt
-	// The statement ID is only removed from the cache when the finalizer is
-	// run, so it is always in the map.
-	sqlstmt, ok := stmtDBCache[s.cacheID][tx.db.cacheID]
-	var conn *sql.Conn
-	cacheMutex.RUnlock()
-	if !ok {
-		// A transaction is tied to a specific database connection. When a
-		// Statement is prepared on a database it requires a free connection that
-		// does not have a transaction in progress. If all connections are busy
-		// then it is possible to enter a deadlock.
-		connCtx, _ := context.WithTimeout(ctx, time.Millisecond)
-		conn, err = tx.db.sqldb.Conn(connCtx)
-		if err == context.DeadlineExceeded {
-			// If it takes to long to aquire a connection to the database,
-			// prepare directly on the transaction and do not cache.
-			sqlstmt, err = tx.sqltx.PrepareContext(ctx, s.pe.SQL())
-			return &Query{sqlstmt: sqlstmt, qe: qe, tx: tx, ctx: ctx, err: nil}
-		} else if err == nil {
-			sqlstmt, err = conn.PrepareContext(ctx, s.pe.SQL())
-		}
-		if err != nil {
-			return &Query{ctx: ctx, err: err}
-		}
-
-		// Put statement in cache.
-		cacheMutex.Lock()
-		// Check if a statement has been inserted in the mean time.
-		sqlstmtAlt, ok := stmtDBCache[s.cacheID][tx.db.cacheID]
-		if ok {
-			sqlstmt.Close()
-			sqlstmt = sqlstmtAlt
-		} else {
-			stmtDBCache[s.cacheID][tx.db.cacheID] = sqlstmt
-			dbStmtCache[tx.db.cacheID][s.cacheID] = true
-		}
-		cacheMutex.Unlock()
-	}
 	sqlstmt = tx.sqltx.Stmt(sqlstmt)
-	if conn != nil {
-		err = conn.Close()
-		if err != nil {
-			return &Query{ctx: ctx, err: err}
-		}
-	}
-
 	return &Query{sqlstmt: sqlstmt, qe: qe, tx: tx, ctx: ctx, err: nil}
 }
