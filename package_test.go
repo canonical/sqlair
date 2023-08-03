@@ -1110,8 +1110,8 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 		c.Assert(stmtDBCache, HasLen, 0)
 	}
 
-	q1 := `SELECT &Person.*	FROM person	WHERE name = "Fred"`
-	q2 := `SELECT &Person.* FROM person	WHERE name = "Mark"`
+	q1 := `SELECT &Person.*	FROM person WHERE name = "Fred"`
+	q2 := `SELECT &Person.* FROM person WHERE name = "Mark"`
 
 	// For a Statement or DB to be removed from the cache it needs to go out of
 	// scope and be garbage collected. Because of this, the tests below make
@@ -1204,7 +1204,6 @@ func (s *PackageSuite) TestTransactionWithOneConn(c *C) {
 	// such as transactions.
 	// This test ensures that we do not enter a deadlock when doing a behind
 	// the scenes prepare for a transaction.
-
 	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE name = 'Mark'", Person{})
 	mark := Person{20, "Mark", 1500}
 

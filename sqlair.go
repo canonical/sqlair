@@ -170,12 +170,16 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 	return &Query{sqlstmt: sqlstmt, qe: qe, ctx: ctx, err: nil}
 }
 
+// prepareSubstrate is an object that queries can be prepared on, e.g. a sql.DB
+// or sql.Conn. It is used to prepare Statements with prepareStmt.
 type prepareSubstrate interface {
 	PrepareContext(context.Context, string) (*sql.Stmt, error)
 }
 
-// prepareStmt prepares a Statement on a database. It first checks in the cache
-// to see if it has already been prepared on the DB.
+// prepareStmt prepares a Statement on a prepareSubstrate. It first checks in
+// the cache to see if it has already been prepared on the DB. The
+// prepareSubstrate must be assosiated with the DB that prepareStmt is a method
+// of.
 func (db *DB) prepareStmt(ctx context.Context, ps prepareSubstrate, s *Statement) (*sql.Stmt, error) {
 	var err error
 	cacheMutex.RLock()
