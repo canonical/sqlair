@@ -327,6 +327,7 @@ func (iter *Iterator) Close() error {
 	var cerr error
 	if iter.sqlstmt != nil {
 		cerr = iter.sqlstmt.Close()
+		iter.sqlstmt = nil
 	}
 	iter.started = true
 	if iter.rows == nil {

@@ -1110,16 +1110,8 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 		c.Assert(stmtDBCache, HasLen, 0)
 	}
 
-	q1 := `
-		SELECT &Person.*
-		FROM person
-		WHERE name = "Fred"
-	`
-	q2 := `
-		SELECT &Person.*
-		FROM person
-		WHERE name = "Mark"
-	`
+	q1 := `SELECT &Person.*	FROM person	WHERE name = "Fred"`
+	q2 := `SELECT &Person.* FROM person	WHERE name = "Mark"`
 
 	// For a Statement or DB to be removed from the cache it needs to go out of
 	// scope and be garbage collected. Because of this, the tests below make
