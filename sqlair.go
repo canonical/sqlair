@@ -288,7 +288,17 @@ func (iter *Iterator) Next() bool {
 	if iter.err != nil || iter.rows == nil {
 		return false
 	}
-	return iter.rows.Next()
+	if !iter.rows.Next() {
+		if iter.sqlstmt != nil {
+			err := iter.sqlstmt.Close()
+			iter.sqlstmt = nil
+			if iter.err == nil {
+				iter.err = err
+			}
+		}
+		return false
+	}
+	return true
 }
 
 // Get decodes the result from the previous Next call into the provided output arguments.

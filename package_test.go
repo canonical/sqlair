@@ -1212,12 +1212,14 @@ func (s *PackageSuite) TestTransactionWithOneConn(c *C) {
 
 	var p = Person{}
 	q := tx.Query(ctx, selectStmt)
-	err = q.Get(&p)
-	c.Assert(err, IsNil)
+	defer func() {
+		c.Assert(tx.Commit(), IsNil)
+	}()
+	iter := q.Iter()
+	c.Assert(iter.Next(), Equals, true)
+	c.Assert(iter.Get(&p), IsNil)
 	c.Assert(mark, Equals, p)
-
-	err = tx.Commit()
-	c.Assert(err, IsNil)
+	c.Assert(iter.Next(), Equals, false)
 }
 
 type JujuLeaseKey struct {
