@@ -284,7 +284,7 @@ func (q *Query) Iter() *Iterator {
 	if err != nil {
 		return &Iterator{qe: q.qe, err: err}
 	}
-	// Only save sqlstmt for closure if in a transaction.
+	// Only save sqlstmt to close later if it is prepared on a transaction.
 	if q.tx == nil {
 		sqlstmt = nil
 	}
