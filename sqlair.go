@@ -142,14 +142,6 @@ type Query struct {
 	tx      *TX // Only set for queries in transactions.
 }
 
-// txQueryFinalizer closes the statement prepared on the query transaction.
-func txQueryFinalizer(q *Query) {
-	if q.tx == nil {
-		return
-	}
-	q.sqlstmt.Close()
-}
-
 // Iterator is used to iterate over the results of the query.
 type Iterator struct {
 	qe      *expr.QueryExpr
@@ -158,6 +150,9 @@ type Iterator struct {
 	err     error
 	result  sql.Result
 	started bool
+	// sqlstmt is only set for queries in transactions so that the statement
+	// can be closed once the query is complete.
+	sqlstmt *sql.Stmt
 }
 
 // Query takes a context, prepared SQLair Statement and the structs mentioned in the query arguments.
@@ -284,7 +279,11 @@ func (q *Query) Iter() *Iterator {
 	if err != nil {
 		return &Iterator{qe: q.qe, err: err}
 	}
-	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err, result: result}
+	var sqlstmt *sql.Stmt
+	if q.tx != nil {
+		sqlstmt = q.sqlstmt
+	}
+	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err, result: result, sqlstmt: sqlstmt}
 }
 
 // Next prepares the next row for Get.
@@ -294,7 +293,17 @@ func (iter *Iterator) Next() bool {
 	if iter.err != nil || iter.rows == nil {
 		return false
 	}
-	return iter.rows.Next()
+	if !iter.rows.Next() {
+		if iter.sqlstmt != nil {
+			err := iter.sqlstmt.Close()
+			iter.sqlstmt = nil
+			if iter.err == nil {
+				iter.err = err
+			}
+		}
+		return false
+	}
+	return true
 }
 
 // Get decodes the result from the previous Next call into the provided output arguments.
@@ -334,6 +343,11 @@ func (iter *Iterator) Get(outputArgs ...any) (err error) {
 
 // Close finishes the iteration and returns any errors encountered.
 func (iter *Iterator) Close() error {
+	var cerr error
+	if iter.sqlstmt != nil {
+		cerr = iter.sqlstmt.Close()
+		iter.sqlstmt = nil
+	}
 	iter.started = true
 	if iter.rows == nil {
 		return iter.err
@@ -342,6 +356,9 @@ func (iter *Iterator) Close() error {
 	iter.rows = nil
 	if iter.err != nil {
 		return iter.err
+	}
+	if err == nil {
+		err = cerr
 	}
 	return err
 }
@@ -552,7 +569,5 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 	}
 
 	sqlstmt = tx.sqltx.Stmt(sqlstmt)
-	var q = &Query{sqlstmt: sqlstmt, qe: qe, tx: tx, ctx: ctx, err: nil}
-	runtime.SetFinalizer(q, txQueryFinalizer)
-	return q
+	return &Query{sqlstmt: sqlstmt, qe: qe, tx: tx, ctx: ctx, err: nil}
 }
