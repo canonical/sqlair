@@ -268,20 +268,25 @@ func (q *Query) Iter() *Iterator {
 	var rows *sql.Rows
 	var err error
 	var cols []string
+
+	sqlstmt := q.sqlstmt
+	if q.tx != nil {
+		sqlstmt = q.tx.sqltx.Stmt(q.sqlstmt)
+	}
 	if q.qe.HasOutputs() {
-		rows, err = q.sqlstmt.QueryContext(q.ctx, q.qe.QueryArgs()...)
+		rows, err = sqlstmt.QueryContext(q.ctx, q.qe.QueryArgs()...)
 		if err == nil { // if err IS nil
 			cols, err = rows.Columns()
 		}
 	} else {
-		result, err = q.sqlstmt.ExecContext(q.ctx, q.qe.QueryArgs()...)
+		result, err = sqlstmt.ExecContext(q.ctx, q.qe.QueryArgs()...)
 	}
 	if err != nil {
 		return &Iterator{qe: q.qe, err: err}
 	}
-	var sqlstmt *sql.Stmt
-	if q.tx != nil {
-		sqlstmt = q.sqlstmt
+	// Only save sqlstmt for closure if in a transaction.
+	if q.tx == nil {
+		sqlstmt = nil
 	}
 	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err, result: result, sqlstmt: sqlstmt}
 }
@@ -568,6 +573,5 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: err}
 	}
 
-	sqlstmt = tx.sqltx.Stmt(sqlstmt)
 	return &Query{sqlstmt: sqlstmt, qe: qe, tx: tx, ctx: ctx, err: nil}
 }
