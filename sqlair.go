@@ -32,14 +32,16 @@ var dbIDCount int64
 type dbID = int64
 type stmtID = int64
 
-// When a SQLair Statement is run on a DB/TX with the Query method, it is first
-// prepared on the database. The prepared statement is then stored in the
-// stmtDBCache.
-// When the statement is placed in the cache a finalizer function is set on it.
+// A SQLair Statement is prepared on a database when a Query method is run on a
+// DB/TX. The prepared statement is then stored in the stmtDBCache and a flag
+// is set in dbStmtCache.
+// A finilizer function is set on the Statement when it is placed in the cache.
 // On garbage collection, the finalizer cycles through the dbIDs and closes
 // each sql.Stmt. The finalizer then removes the stmtID from stmtDBCache and
-// dbStmtCache. Similarly a finalizer is set on the SQLair DB which closes the
-// sql.DB and removes its dbID from dbStmtCache and stmtDBCache.
+// dbStmtCache.
+// Similarly, a finalizer is set on the SQLair DB which closes all statements
+// prepared on the DB and then the sql.DB itself. It removes the dbID from
+// dbStmtCache and stmtDBCache.
 var stmtDBCache = make(map[stmtID]map[dbID]*sql.Stmt)
 var dbStmtCache = make(map[dbID]map[stmtID]bool)
 var cacheMutex sync.RWMutex
