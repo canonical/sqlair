@@ -949,10 +949,17 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(iterOutputs, DeepEquals, iterExpected)
 
-	// Run them all again for good measure.
+	// Repeat in a transaction.
 	allOutput = &[]*Person{}
 	iterOutputs = []any{&Person{}, &Person{}, &Person{}, &Person{}}
 	oneOutput = &Person{}
+
+	tx, err := db.Begin(nil, nil)
+	c.Assert(err, IsNil)
+	q = tx.Query(nil, stmt)
+	err = q.Get(oneOutput)
+	c.Assert(err, IsNil)
+	c.Assert(oneExpected, DeepEquals, oneOutput)
 
 	err = q.GetAll(allOutput)
 	c.Assert(err, IsNil)
@@ -974,10 +981,12 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(iterOutputs, DeepEquals, iterExpected)
 
-	q = db.Query(nil, stmt)
 	err = q.Get(oneOutput)
 	c.Assert(err, IsNil)
 	c.Assert(oneExpected, DeepEquals, oneOutput)
+
+	err = tx.Commit()
+	c.Assert(err, IsNil)
 }
 
 func (s *PackageSuite) TestTransactions(c *C) {
