@@ -51,6 +51,7 @@ type Statement struct {
 	pe      *expr.PreparedExpr
 }
 
+// stmtFinalizer removes a Statement from the statement caches and closes it.
 func stmtFinalizer(s *Statement) {
 	cacheMutex.Lock()
 	defer cacheMutex.Unlock()
@@ -100,6 +101,8 @@ type DB struct {
 	sqldb   *sql.DB
 }
 
+// dbFinalizer closes and removes from the cache all statements prepared on db.
+// It then closes the DB.
 func dbFinalizer(db *DB) {
 	cacheMutex.Lock()
 	defer cacheMutex.Unlock()
