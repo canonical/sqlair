@@ -575,15 +575,15 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "INSERT INTO person (*) VALUES ($Person.*, $Address.*)",
 		prepareArgs: []any{Address{}, Person{}},
-		err:         `cannot prepare expression: column "id" is set more than once in: (*) VALUES ($Person.*, $Address.*)`,
+		err:         `cannot prepare expression: column "id" is set more than once in input expression: (*) VALUES ($Person.*, $Address.*)`,
 	}, {
 		query:       "INSERT INTO person (*) VALUES ($M.name, $Person.name)",
 		prepareArgs: []any{sqlair.M{}, Person{}},
-		err:         `cannot prepare expression: column "name" is set more than once in: (*) VALUES ($M.name, $Person.name)`,
+		err:         `cannot prepare expression: column "name" is set more than once in input expression: (*) VALUES ($M.name, $Person.name)`,
 	}, {
 		query:       "INSERT INTO person (id, id) VALUES ($Person.*)",
 		prepareArgs: []any{Person{}},
-		err:         `cannot prepare expression: column "id" is set more than once in: (id, id) VALUES ($Person.*)`,
+		err:         `cannot prepare expression: column "id" is set more than once in input expression: (id, id) VALUES ($Person.*)`,
 	}, {
 		query:       "INSERT INTO person (*) VALUES ($M.*)",
 		prepareArgs: []any{sqlair.M{}},

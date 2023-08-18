@@ -351,7 +351,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 
 			for _, col := range inCols {
 				if ok := columnInInput[col]; ok {
-					return nil, fmt.Errorf("column %q is set more than once in: %s", col.name, p.raw)
+					return nil, fmt.Errorf("column %q is set more than once in input expression: %s", col.name, p.raw)
 				}
 				columnInInput[col] = true
 			}
