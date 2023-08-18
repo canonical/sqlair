@@ -494,26 +494,6 @@ func (p *Parser) parseTargetTypes() (targetTypes []fullName, parentheses bool, o
 	return nil, false, false, nil
 }
 
-// parseSourceTypes parses a single input type or a list of input types.
-// Lists of types must be enclosed in parentheses.
-func (p *Parser) parseSourceTypes() (sources []fullName, parentheses bool, ok bool, err error) {
-	// Case 1: A single column e.g. "p.name".
-	if sourceType, ok, err := p.parseSourceType(); err != nil {
-		return nil, false, false, err
-	} else if ok {
-		return []fullName{sourceType}, false, true, nil
-	}
-
-	// Case 2: Multiple columns e.g. "(p.name, p.id)".
-	if cols, ok, err := p.parseList((*Parser).parseSourceType); err != nil {
-		return nil, true, false, err
-	} else if ok {
-		return cols, true, true, nil
-	}
-
-	return nil, false, false, nil
-}
-
 // parseOutputExpression requires that the ampersand before the identifiers must
 // be followed by a name byte.
 func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
