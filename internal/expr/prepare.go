@@ -55,7 +55,7 @@ func starCount(fns []fullName) int {
 	return s
 }
 
-func fetchTypeInfo(ti typeNameToInfo, typeName string) (typeInfo, error) {
+func findTypeInfo(ti typeNameToInfo, typeName string) (typeInfo, error) {
 	info, ok := ti[typeName]
 	if !ok {
 		ts := getKeys(ti)
@@ -103,7 +103,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembe
 		if starTypes > 0 {
 			return nil, nil, fmt.Errorf("invalid asterisk in input expression: %s", p.raw)
 		}
-		info, err := fetchTypeInfo(ti, p.sourceTypes[0].prefix)
+		info, err := findTypeInfo(ti, p.sourceTypes[0].prefix)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -116,7 +116,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembe
 	// Case 1: Generated columns e.g. "(*) VALUES ($P.*, $A.id)".
 	if numColumns == 1 && starColumns == 1 {
 		for _, t := range p.sourceTypes {
-			info, err := fetchTypeInfo(ti, t.prefix)
+			info, err := findTypeInfo(ti, t.prefix)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -147,7 +147,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembe
 
 	// Case 2: Explicit columns, single asterisk type e.g. "(col1, col2) VALUES ($P.*)".
 	if starTypes == 1 && numTypes == 1 {
-		info, err := fetchTypeInfo(ti, p.sourceTypes[0].prefix)
+		info, err := findTypeInfo(ti, p.sourceTypes[0].prefix)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -165,7 +165,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembe
 	if numColumns == numTypes {
 		for i, c := range p.targetColumns {
 			t := p.sourceTypes[i]
-			info, err := fetchTypeInfo(ti, t.prefix)
+			info, err := findTypeInfo(ti, t.prefix)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -222,7 +222,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 		}
 
 		for _, t := range p.targetTypes {
-			if info, err = fetchTypeInfo(ti, t.prefix); err != nil {
+			if info, err = findTypeInfo(ti, t.prefix); err != nil {
 				return nil, nil, err
 			}
 			// Generate asterisk columns.
@@ -253,7 +253,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 
 	// Case 2: Explicit columns, single asterisk type e.g. "(col1, t.col2) AS &P.*".
 	if starTypes == 1 && numTypes == 1 {
-		if info, err = fetchTypeInfo(ti, p.targetTypes[0].prefix); err != nil {
+		if info, err = findTypeInfo(ti, p.targetTypes[0].prefix); err != nil {
 			return nil, nil, err
 		}
 		for _, c := range p.sourceColumns {
@@ -270,7 +270,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 	if numColumns == numTypes {
 		for i, c := range p.sourceColumns {
 			t := p.targetTypes[i]
-			if info, err = fetchTypeInfo(ti, t.prefix); err != nil {
+			if info, err = findTypeInfo(ti, t.prefix); err != nil {
 				return nil, nil, err
 			}
 
