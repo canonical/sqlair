@@ -140,7 +140,7 @@ type Query struct {
 	sqlstmt *sql.Stmt
 	ctx     context.Context
 	err     error
-	tx      *TX // Only set for queries in transactions.
+	tx      *TX // tx is only set for queries in transactions.
 }
 
 // Iterator is used to iterate over the results of the query.
