@@ -68,7 +68,8 @@ func findTypeInfo(ti typeNameToInfo, typeName string) (typeInfo, error) {
 	return info, nil
 }
 
-// prepareInput checks that the input expression corresponds to a known type.
+// prepareInput checks that the input expression is correctly formatted,
+// corresponds to known types, and then generates input columns and values.
 func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembers []typeMember, err error) {
 	addColumns := func(info typeInfo, tag string, column fullName) error {
 		var tm typeMember
@@ -113,15 +114,16 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembe
 		return inCols, typeMembers, nil
 	}
 
-	// Case 1: Generated columns e.g. "(*) VALUES ($P.*, $A.id)".
+	// Case 1: Generate input columns e.g. "(*) VALUES ($P.*, $A.id)".
 	if numColumns == 1 && starColumns == 1 {
 		for _, t := range p.sourceTypes {
 			info, err := findTypeInfo(ti, t.prefix)
 			if err != nil {
 				return nil, nil, err
 			}
-			// Generate asterisk columns.
+
 			if t.name == "*" {
+				// Generate asterisk columns.
 				switch info := info.(type) {
 				case *mapInfo:
 					return nil, nil, fmt.Errorf(`map type %q cannot be used with asterisk in input expression: %s`, info.typ().Name(), p.raw)
