@@ -177,20 +177,20 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 }
 
 // prepareSubstrate is an object that queries can be prepared on, e.g. a sql.DB
-// or sql.Conn. It is used to prepare Statements with prepareStmt.
+// or sql.Conn. It is used in prepareStmt.
 type prepareSubstrate interface {
 	PrepareContext(context.Context, string) (*sql.Stmt, error)
 }
 
 // prepareStmt prepares a Statement on a prepareSubstrate. It first checks in
-// the cache to see if it has already been prepared on the DB. The
-// prepareSubstrate must be assosiated with the DB that prepareStmt is a method
-// of.
+// the cache to see if it has already been prepared on the DB.
+// The prepareSubstrate must be assosiated with the same DB that prepareStmt is
+// a method of.
 func (db *DB) prepareStmt(ctx context.Context, ps prepareSubstrate, s *Statement) (*sql.Stmt, error) {
 	var err error
 	cacheMutex.RLock()
 	// The statement ID is only removed from the cache when the finalizer is
-	// run, so it is always in the map.
+	// run, so it is always in stmtDBCache.
 	sqlstmt, ok := stmtDBCache[s.cacheID][db.cacheID]
 	cacheMutex.RUnlock()
 	if !ok {
@@ -199,7 +199,8 @@ func (db *DB) prepareStmt(ctx context.Context, ps prepareSubstrate, s *Statement
 			return nil, err
 		}
 		cacheMutex.Lock()
-		// Check if a statement has been inserted in the mean time.
+		// Check if a statement has been inserted by someone else since we last
+		// checked.
 		sqlstmtAlt, ok := stmtDBCache[s.cacheID][db.cacheID]
 		if ok {
 			sqlstmt.Close()
@@ -265,11 +266,11 @@ func (q *Query) Iter() *Iterator {
 	if q.tx != nil && q.tx.isDone() {
 		return &Iterator{err: ErrTXDone}
 	}
+
 	var result sql.Result
 	var rows *sql.Rows
 	var err error
 	var cols []string
-
 	sqlstmt := q.sqlstmt
 	if q.tx != nil {
 		sqlstmt = q.tx.sqltx.Stmt(q.sqlstmt)
