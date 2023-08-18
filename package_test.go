@@ -45,16 +45,12 @@ func createExampleDB(createTables string, inserts []string) (*sql.DB, error) {
 	return db, nil
 }
 
-func dropTables(db *sqlair.DB, tables ...string) error {
+func dropTables(c *C, db *sqlair.DB, tables ...string) error {
 	for _, table := range tables {
 		stmt, err := sqlair.Prepare(fmt.Sprintf("DROP TABLE %s;", table))
-		if err != nil {
-			return err
-		}
+		c.Assert(err, IsNil)
 		err = db.Query(nil, stmt).Run()
-		if err != nil {
-			return err
-		}
+		c.Assert(err, IsNil)
 	}
 	return nil
 }
@@ -239,9 +235,7 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 	}
 
 	db := sqlair.NewDB(sqldb)
-	defer func() {
-		c.Assert(dropTables(db, tables...), IsNil)
-	}()
+	defer dropTables(c, db, tables...)
 
 	for _, t := range tests {
 		stmt, err := sqlair.Prepare(t.query, t.types...)
@@ -350,9 +344,7 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 	}
 
 	db := sqlair.NewDB(sqldb)
-	defer func() {
-		c.Assert(dropTables(db, tables...), IsNil)
-	}()
+	defer dropTables(c, db, tables...)
 
 	for _, t := range tests {
 		stmt, err := sqlair.Prepare(t.query, t.types...)
@@ -473,9 +465,7 @@ func (s *PackageSuite) TestNulls(c *C) {
 	}
 
 	db := sqlair.NewDB(sqldb)
-	defer func() {
-		c.Assert(dropTables(db, tables...), IsNil)
-	}()
+	defer dropTables(c, db, tables...)
 
 	insertNullPerson, err := sqlair.Prepare("INSERT INTO person VALUES ('Nully', NULL, NULL, NULL);")
 	c.Assert(err, IsNil)
@@ -538,9 +528,7 @@ func (s *PackageSuite) TestValidGet(c *C) {
 	}
 
 	db := sqlair.NewDB(sqldb)
-	defer func() {
-		c.Assert(dropTables(db, tables...), IsNil)
-	}()
+	defer dropTables(c, db, tables...)
 
 	for _, t := range tests {
 		stmt, err := sqlair.Prepare(t.query, t.types...)
@@ -599,9 +587,7 @@ func (s *PackageSuite) TestGetErrors(c *C) {
 	}
 
 	db := sqlair.NewDB(sqldb)
-	defer func() {
-		c.Assert(dropTables(db, tables...), IsNil)
-	}()
+	defer dropTables(c, db, tables...)
 
 	for _, t := range tests {
 		stmt, err := sqlair.Prepare(t.query, t.types...)
@@ -623,9 +609,7 @@ func (s *PackageSuite) TestErrNoRows(c *C) {
 	}
 
 	db := sqlair.NewDB(sqldb)
-	defer func() {
-		c.Assert(dropTables(db, tables...), IsNil)
-	}()
+	defer dropTables(c, db, tables...)
 
 	stmt := sqlair.MustPrepare("SELECT * AS &Person.* FROM person WHERE id=12312", Person{})
 	err = db.Query(nil, stmt).Get(&Person{})
@@ -695,9 +679,7 @@ func (s *PackageSuite) TestValidGetAll(c *C) {
 	}
 
 	db := sqlair.NewDB(sqldb)
-	defer func() {
-		c.Assert(dropTables(db, tables...), IsNil)
-	}()
+	defer dropTables(c, db, tables...)
 
 	for _, t := range tests {
 		stmt, err := sqlair.Prepare(t.query, t.types...)
@@ -798,9 +780,7 @@ func (s *PackageSuite) TestGetAllErrors(c *C) {
 	}
 
 	db := sqlair.NewDB(sqldb)
-	defer func() {
-		c.Assert(dropTables(db, tables...), IsNil)
-	}()
+	defer dropTables(c, db, tables...)
 
 	for _, t := range tests {
 		stmt, err := sqlair.Prepare(t.query, t.types...)
@@ -826,9 +806,7 @@ func (s *PackageSuite) TestRun(c *C) {
 	}
 
 	db := sqlair.NewDB(sqldb)
-	defer func() {
-		c.Assert(dropTables(db, tables...), IsNil)
-	}()
+	defer dropTables(c, db, tables...)
 
 	// Insert Jim.
 	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ($Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
@@ -854,9 +832,7 @@ func (s *PackageSuite) TestOutcome(c *C) {
 	}
 
 	db := sqlair.NewDB(sqldb)
-	defer func() {
-		c.Assert(dropTables(db, tables...), IsNil)
-	}()
+	defer dropTables(c, db, tables...)
 
 	var outcome = sqlair.Outcome{}
 
@@ -917,9 +893,7 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
-	defer func() {
-		c.Assert(dropTables(db, tables...), IsNil)
-	}()
+	defer dropTables(c, db, tables...)
 
 	stmt := sqlair.MustPrepare("SELECT &Person.* FROM person", Person{})
 
@@ -990,9 +964,7 @@ func (s *PackageSuite) TestTransactions(c *C) {
 	ctx := context.Background()
 
 	db := sqlair.NewDB(sqldb)
-	defer func() {
-		c.Assert(dropTables(db, tables...), IsNil)
-	}()
+	defer dropTables(c, db, tables...)
 
 	tx, err := db.Begin(ctx, nil)
 	c.Assert(err, IsNil)
@@ -1035,9 +1007,7 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
-	defer func() {
-		c.Assert(dropTables(db, tables...), IsNil)
-	}()
+	defer dropTables(c, db, tables...)
 
 	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ($Person.name, $Person.id, $Person.address_id, 'fred@email.com');", Person{})
 	var derek = Person{ID: 85, Fullname: "Derek", PostalCode: 8000}
@@ -1153,9 +1123,7 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 		tables, sqldb, err := personAndAddressDB()
 		c.Assert(err, IsNil)
 		db := sqlair.NewDB(sqldb)
-		defer func() {
-			c.Assert(dropTables(db, tables...), IsNil)
-		}()
+		defer dropTables(c, db, tables...)
 
 		// Test stmt.
 		testStmtsOnDB(db, stmt)
@@ -1194,9 +1162,7 @@ func (s *PackageSuite) TestTransactionWithOneConn(c *C) {
 	ctx := context.Background()
 
 	db := sqlair.NewDB(sqldb)
-	defer func() {
-		c.Assert(dropTables(db, tables...), IsNil)
-	}()
+	defer dropTables(c, db, tables...)
 
 	// This test sets the maximum number of connections to the DB to 1. The
 	// database/sql library makes use of a pool of connections to communicate
@@ -1273,9 +1239,7 @@ func (s *PackageSuite) TestIterMethodOrder(c *C) {
 	}
 
 	db := sqlair.NewDB(sqldb)
-	defer func() {
-		c.Assert(dropTables(db, tables...), IsNil)
-	}()
+	defer dropTables(c, db, tables...)
 
 	var p = Person{}
 	stmt := sqlair.MustPrepare("SELECT &Person.* FROM person", Person{})
@@ -1352,9 +1316,7 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 	}
 
 	db := sqlair.NewDB(sqldb)
-	defer func() {
-		c.Assert(dropTables(db, tables...), IsNil)
-	}()
+	defer dropTables(c, db, tables...)
 
 	for _, t := range tests {
 
