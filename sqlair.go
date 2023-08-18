@@ -152,7 +152,7 @@ type Iterator struct {
 	result  sql.Result
 	started bool
 	// txStmt is only set for queries in transactions so that the statement
-	// prepared on the transaction can be closed on Iter.Close.
+	// prepared on the transaction can be closed on iter.Close.
 	txStmt *sql.Stmt
 }
 
