@@ -376,16 +376,16 @@ func (s *ExprSuite) TestParseErrors(c *C) {
 		err:   `cannot parse expression: column 36: unqualified type, expected Address.* or Address.<db tag>`,
 	}, {
 		query: "SELECT name AS (&Person.*)",
-		err:   `cannot parse expression: column 26: unexpected brackets around types after "AS"`,
+		err:   `cannot parse expression: column 26: unexpected parentheses around types after "AS"`,
 	}, {
 		query: "SELECT name AS (&Person.name, &Person.id)",
-		err:   `cannot parse expression: column 41: unexpected brackets around types after "AS"`,
+		err:   `cannot parse expression: column 41: unexpected parentheses around types after "AS"`,
 	}, {
 		query: "SELECT (name) AS &Person.*",
-		err:   `cannot parse expression: column 26: missing brackets around types after "AS"`,
+		err:   `cannot parse expression: column 26: missing parentheses around types after "AS"`,
 	}, {
 		query: "SELECT (name, id) AS &Person.*",
-		err:   `cannot parse expression: column 30: missing brackets around types after "AS"`,
+		err:   `cannot parse expression: column 30: missing parentheses around types after "AS"`,
 	}}
 
 	for _, t := range tests {

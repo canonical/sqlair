@@ -452,8 +452,8 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 }
 
 // parseColumns parses a single column or a list of columns. Lists must be
-// enclosed in brackets.
-func (p *Parser) parseColumns() (cols []fullName, bracketed bool, ok bool) {
+// enclosed in parentheses.
+func (p *Parser) parseColumns() (cols []fullName, parentheses bool, ok bool) {
 	// Case 1: A single column e.g. "p.name".
 	if col, ok, _ := p.parseColumn(); ok {
 		return []fullName{col}, false, true
@@ -468,8 +468,8 @@ func (p *Parser) parseColumns() (cols []fullName, bracketed bool, ok bool) {
 }
 
 // parseTargetTypes parses a single output type or a list of output types.
-// Lists of types must be enclosed in brackets.
-func (p *Parser) parseTargetTypes() (types []fullName, bracketed bool, ok bool, err error) {
+// Lists of types must be enclosed in parentheses.
+func (p *Parser) parseTargetTypes() (types []fullName, parentheses bool, ok bool, err error) {
 	// Case 1: A single target e.g. "&Person.name".
 	if targetTypes, ok, err := p.parseTargetType(); err != nil {
 		return nil, false, false, err
@@ -506,18 +506,18 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 	cp := p.save()
 
 	// Case 2: There are columns e.g. "p.col1 AS &Person.*".
-	if cols, colsBracketed, ok := p.parseColumns(); ok {
+	if cols, parenCols, ok := p.parseColumns(); ok {
 		p.skipBlanks()
 		if p.skipString("AS") {
 			p.skipBlanks()
-			if targetTypes, typesBracketed, ok, err := p.parseTargetTypes(); err != nil {
+			if targetTypes, parenTypes, ok, err := p.parseTargetTypes(); err != nil {
 				return nil, false, err
 			} else if ok {
-				if colsBracketed && !typesBracketed {
-					return nil, false, fmt.Errorf(`column %d: missing brackets around types after "AS"`, p.pos)
+				if parenCols && !parenTypes {
+					return nil, false, fmt.Errorf(`column %d: missing parentheses around types after "AS"`, p.pos)
 				}
-				if !colsBracketed && typesBracketed {
-					return nil, false, fmt.Errorf(`column %d: unexpected brackets around types after "AS"`, p.pos)
+				if !parenCols && parenTypes {
+					return nil, false, fmt.Errorf(`column %d: unexpected parentheses around types after "AS"`, p.pos)
 				}
 				return &outputPart{
 					sourceColumns: cols,
