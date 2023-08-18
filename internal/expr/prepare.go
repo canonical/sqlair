@@ -401,7 +401,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	return &PreparedExpr{inputs: inputs, outputs: outputs, sql: sql.String()}, nil
 }
 
-// formatColNames prints a bracketed, comma seperated list of columns including
+// formatColNames prints a parenthesised, comma separated list of columns including
 // the table name if present.
 func formatColNames(cs []fullName) string {
 	var s bytes.Buffer
@@ -416,10 +416,10 @@ func formatColNames(cs []fullName) string {
 	return s.String()
 }
 
-// generateNamedParams returns n incrementing named parameters begining at
-// start.
+// generateNamedParams returns n incrementing named parameters beginning at
+// n=start.
 // For example:
-// generateNamedParams(0, 2) == "(@sqlair_0, @sqlair_1)"
+// 	generateNamedParams(0, 2) == "(@sqlair_0, @sqlair_1)"
 func generateNamedParams(start int, n int) string {
 	var s bytes.Buffer
 	s.WriteString("(")
