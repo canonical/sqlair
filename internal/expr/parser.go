@@ -576,7 +576,7 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 					raw:           p.input[start:p.pos],
 				}, true, nil
 			}
-			// Check for types with missing paren.
+			// Check for types with missing parentheses.
 			if _, ok, err := p.parseSourceType(); err != nil {
 				return nil, false, err
 			} else if ok {
