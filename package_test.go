@@ -1016,35 +1016,42 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 	// Test running query after commit.
 	tx, err := db.Begin(ctx, nil)
 	c.Assert(err, IsNil)
-
+	// Create Query.
 	q := tx.Query(ctx, insertStmt, &derek)
+	// Commit.
 	err = tx.Commit()
 	c.Assert(err, IsNil)
-	err = tx.Query(ctx, insertStmt, &derek).Run()
-	c.Assert(err, ErrorMatches, "sql: transaction has already been committed or rolled back")
+	// Test Query created before commit.
 	err = q.Run()
 	c.Assert(err, ErrorMatches, "sql: transaction has already been committed or rolled back")
+	// Test Query created after commit.
+	err = tx.Query(ctx, insertStmt, &derek).Run()
+	c.Assert(err, ErrorMatches, "sql: transaction has already been committed or rolled back")
 
-	// Test running query after rollback with the public error variable and sql equivalent.
+	// Test error when running query after rollback against the public error variable.
 	tx, err = db.Begin(ctx, nil)
 	c.Assert(err, IsNil)
-
+	// Create Query.
 	q = tx.Query(ctx, insertStmt, &derek)
+	// Rollback.
 	err = tx.Rollback()
 	c.Assert(err, IsNil)
 	err = tx.Query(ctx, insertStmt, &derek).Run()
+	// Check against sqlair package error.
 	if !errors.Is(err, sqlair.ErrTXDone) {
 		c.Errorf("expected %q, got %q", sqlair.ErrTXDone, err)
 	}
 	err = q.Run()
+	// Check against sql package error.
 	if !errors.Is(err, sql.ErrTxDone) {
 		c.Errorf("expected %q, got %q", sql.ErrTxDone, err)
 	}
 }
 
+// TestPreparedStmtCaching checks that the cache of statements prepared on databases behaves
+// as expected.
 func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
-	var p = Person{}
-
+	// Get cache variables.
 	stmtDBCache, dbStmtCache, cacheMutex := sqlair.Cache()
 
 	// checkStmtCache is a helper function to check if a prepared statement is
@@ -1062,6 +1069,8 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 		c.Assert(ok3, Equals, inCache)
 	}
 
+	// checkDBNotInCache is a helper function to check a db is not mentioned in
+	// the cache.
 	checkDBNotInCache := func(dbID int64) {
 		cacheMutex.RLock()
 		defer cacheMutex.RUnlock()
@@ -1073,6 +1082,7 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 		c.Assert(ok, Equals, false)
 	}
 
+	// checkCacheEmpty asserts both the sides of the cache are empty.
 	checkCacheEmpty := func() {
 		cacheMutex.RLock()
 		defer cacheMutex.RUnlock()
@@ -1080,12 +1090,13 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 		c.Assert(stmtDBCache, HasLen, 0)
 	}
 
-	q1 := `SELECT &Person.*	FROM person WHERE name = "Fred"`
-	q2 := `SELECT &Person.* FROM person WHERE name = "Mark"`
-
 	// For a Statement or DB to be removed from the cache it needs to go out of
 	// scope and be garbage collected. Because of this, the tests below make
 	// extensive use of functions to "forget" statements and databases.
+
+	q1 := `SELECT &Person.*	FROM person WHERE name = "Fred"`
+	q2 := `SELECT &Person.* FROM person WHERE name = "Mark"`
+	p := Person{}
 
 	// createAndCacheStmt takes a db and prepares a statement on it.
 	createAndCacheStmt := func(db *sqlair.DB) (stmtID int64) {
@@ -1093,65 +1104,64 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 		stmt, err := sqlair.Prepare(q1, Person{})
 		c.Assert(err, IsNil)
 
-		// Start a query with stmt on db.
-		// This will prepare the stmt on the db.
+		// Start a query with stmt on db. This will prepare the stmt on the db.
 		c.Assert(db.Query(nil, stmt).Get(&p), IsNil)
-		// Check that it now is in the cache.
+		// Check that stmt is now in the cache.
 		checkStmtCache(db.CacheID(), stmt.CacheID(), true)
 		return stmt.CacheID()
 	}
 
-	// testStmtsOnDB prepares a given statement on the db then creates a
+	// testStmtsOnDB prepares a given statement on the db then creates a second
 	// statement inside another function and checks it has been cleared from
 	// the cache on garbage collection.
 	testStmtsOnDB := func(db *sqlair.DB, stmt *sqlair.Statement) {
 		// Start a query with stmt on db. This will prepare stmt on db.
 		c.Assert(db.Query(nil, stmt).Get(&p), IsNil)
-		// Check that it now is in the cache.
+		// Check the stmt now is in the cache.
 		checkStmtCache(db.CacheID(), stmt.CacheID(), true)
 
-		funcStmtID := createAndCacheStmt(db)
+		// Run createAndCacheStmt and check that once the function has finished
+		// the stmt it created is not in the cache.
+		stmt2ID := createAndCacheStmt(db)
 		// Run the garbage collector and wait one millisecond for the finalizer to finish.
 		runtime.GC()
 		time.Sleep(1 * time.Millisecond)
-
-		checkStmtCache(db.CacheID(), funcStmtID, false)
+		checkStmtCache(db.CacheID(), stmt2ID, false)
 	}
 
+	// createDBAndTestStmt opens a new database and runs testStmtsOnDB on it.
 	createDBAndTestStmt := func(stmt *sqlair.Statement) (dbID int64) {
 		// Create db.
 		tables, sqldb, err := personAndAddressDB()
 		c.Assert(err, IsNil)
 		db := sqlair.NewDB(sqldb)
 		defer dropTables(c, db, tables...)
-
 		// Test stmt.
 		testStmtsOnDB(db, stmt)
-
 		return db.CacheID()
 	}
 
+	// createStmtAndTestOnDBs creates a statement then runs createDBAndTestStmt
+	// twice. It then checks that the stmts prepared on the databases have been
+	// cleared from the cache once createDBAndTestStmt is finished.
 	createStmtAndTestOnDBs := func() {
 		// Create stmt.
 		stmt, err := sqlair.Prepare(q2, Person{})
 		c.Assert(err, IsNil)
-
 		db1ID := createDBAndTestStmt(stmt)
 		db2ID := createDBAndTestStmt(stmt)
-
 		// Run the garbage collector and wait one millisecond for the finalizer to finish.
 		runtime.GC()
 		time.Sleep(1 * time.Millisecond)
-
 		checkDBNotInCache(db1ID)
 		checkDBNotInCache(db2ID)
 	}
 
+	// Run the functions above.
 	createStmtAndTestOnDBs()
 	// Run the garbage collector and wait one millisecond for the finalizer to finish.
 	runtime.GC()
 	time.Sleep(1 * time.Millisecond)
-
 	checkCacheEmpty()
 }
 
@@ -1164,9 +1174,9 @@ func (s *PackageSuite) TestTransactionWithOneConn(c *C) {
 	db := sqlair.NewDB(sqldb)
 	defer dropTables(c, db, tables...)
 
-	// This test sets the maximum number of connections to the DB to 1. The
+	// This test sets the maximum number of connections to the DB to one. The
 	// database/sql library makes use of a pool of connections to communicate
-	// with the DB and certain operations require a unused connection to run,
+	// with the DB. Certain operations require a dedicated connection to run,
 	// such as transactions.
 	// This test ensures that we do not enter a deadlock when doing a behind
 	// the scenes prepare for a transaction.
@@ -1176,16 +1186,17 @@ func (s *PackageSuite) TestTransactionWithOneConn(c *C) {
 	tx, err := db.Begin(ctx, nil)
 	c.Assert(err, IsNil)
 
-	var p = Person{}
 	q := tx.Query(ctx, selectStmt)
 	defer func() {
 		c.Assert(tx.Commit(), IsNil)
 	}()
 	iter := q.Iter()
 	c.Assert(iter.Next(), Equals, true)
+	p := Person{}
 	c.Assert(iter.Get(&p), IsNil)
 	c.Assert(mark, Equals, p)
 	c.Assert(iter.Next(), Equals, false)
+	c.Assert(iter.Close(), IsNil)
 }
 
 type JujuLeaseKey struct {
