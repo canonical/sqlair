@@ -36,9 +36,9 @@ type stmtID = int64
 // DB/TX. The prepared statement is then stored in the stmtDBCache and a flag
 // is set in dbStmtCache.
 // A finilizer function is set on the Statement when it is placed in the cache.
-// On garbage collection, the finalizer cycles through the dbIDs and closes
-// each sql.Stmt. The finalizer then removes the stmtID from stmtDBCache and
-// dbStmtCache.
+// On garbage collection, the finalizer cycles through the open databases in
+// the cache and closes each matching sql.Stmt. The finalizer then removes the
+// stmtID from stmtDBCache and dbStmtCache.
 // Similarly, a finalizer is set on the SQLair DB which closes all statements
 // prepared on the DB and then the sql.DB itself. It removes the dbID from
 // dbStmtCache and stmtDBCache.
@@ -104,7 +104,7 @@ type DB struct {
 }
 
 // dbFinalizer closes and removes from the cache all statements prepared on db.
-// It then closes the DB.
+// It then closes the associated sql.DB.
 func dbFinalizer(db *DB) {
 	cacheMutex.Lock()
 	defer cacheMutex.Unlock()
@@ -118,6 +118,7 @@ func dbFinalizer(db *DB) {
 	db.sqldb.Close()
 }
 
+// NewDB creates a new SQLair DB from a sql.DB.
 func NewDB(sqldb *sql.DB) *DB {
 	cacheID := atomic.AddInt64(&dbIDCount, 1)
 	cacheMutex.Lock()
@@ -150,9 +151,9 @@ type Iterator struct {
 	err     error
 	result  sql.Result
 	started bool
-	// sqlstmt is only set for queries in transactions so that the statement
-	// can be closed once the query is complete.
-	sqlstmt *sql.Stmt
+	// txStmt is only set for queries in transactions so that the statement
+	// prepared on the transaction can be closed on Iter.Close.
+	txStmt *sql.Stmt
 }
 
 // Query takes a context, prepared SQLair Statement and the structs mentioned in the query arguments.
@@ -284,11 +285,12 @@ func (q *Query) Iter() *Iterator {
 	if err != nil {
 		return &Iterator{qe: q.qe, err: err}
 	}
-	// Only save sqlstmt to close later if it is prepared on a transaction.
-	if q.tx == nil {
-		sqlstmt = nil
+
+	var txStmt *sql.Stmt
+	if q.tx != nil {
+		txStmt = sqlstmt
 	}
-	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err, result: result, sqlstmt: sqlstmt}
+	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err, result: result, txStmt: txStmt}
 }
 
 // Next prepares the next row for Get.
@@ -299,9 +301,9 @@ func (iter *Iterator) Next() bool {
 		return false
 	}
 	if !iter.rows.Next() {
-		if iter.sqlstmt != nil {
-			err := iter.sqlstmt.Close()
-			iter.sqlstmt = nil
+		if iter.txStmt != nil {
+			err := iter.txStmt.Close()
+			iter.txStmt = nil
 			if iter.err == nil {
 				iter.err = err
 			}
@@ -349,9 +351,9 @@ func (iter *Iterator) Get(outputArgs ...any) (err error) {
 // Close finishes the iteration and returns any errors encountered.
 func (iter *Iterator) Close() error {
 	var cerr error
-	if iter.sqlstmt != nil {
-		cerr = iter.sqlstmt.Close()
-		iter.sqlstmt = nil
+	if iter.txStmt != nil {
+		cerr = iter.txStmt.Close()
+		iter.txStmt = nil
 	}
 	iter.started = true
 	if iter.rows == nil {
