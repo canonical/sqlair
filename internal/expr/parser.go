@@ -204,7 +204,7 @@ loop:
 
 		p.pos++
 
-		// An opening bracket might be that start of an expression.
+		// An opening parentheses might be that start of an expression.
 		if p.peekByte('(') {
 			break loop
 		}
@@ -460,7 +460,7 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 
 // parseColumns parses a list of columns. For lists of more than one column the
 // columns must be enclosed in parentheses e.g. "(col1, col2) AS &Person.*".
-func (p *Parser) parseColumns() (cols []fullName, bracketed bool, ok bool) {
+func (p *Parser) parseColumns() (cols []fullName, parentheses bool, ok bool) {
 	// Case 1: A single column e.g. "p.name".
 	if col, ok, _ := p.parseColumn(); ok {
 		return []fullName{col}, false, true
@@ -495,8 +495,8 @@ func (p *Parser) parseTargetTypes() (targetTypes []fullName, parentheses bool, o
 }
 
 // parseSourceTypes parses a single input type or a list of input types.
-// Lists of types must be enclosed in brackets.
-func (p *Parser) parseSourceTypes() (sources []fullName, bracketed bool, ok bool, err error) {
+// Lists of types must be enclosed in parentheses.
+func (p *Parser) parseSourceTypes() (sources []fullName, parentheses bool, ok bool, err error) {
 	// Case 1: A single column e.g. "p.name".
 	if sourceType, ok, err := p.parseSourceType(); err != nil {
 		return nil, false, false, err
@@ -583,7 +583,7 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 	cp := p.save()
 
 	// Case 2: INSERT VALUES statement e.g. "(name, id) VALUES $Person.*".
-	if columns, bracketed, ok := p.parseColumns(); ok && bracketed {
+	if columns, paren, ok := p.parseColumns(); ok && paren {
 		p.skipBlanks()
 		if p.skipString("VALUES") {
 			p.skipBlanks()
@@ -596,7 +596,7 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 					raw:           p.input[start:p.pos],
 				}, true, nil
 			}
-			// Check for types with missing brackets.
+			// Check for types with missing paren.
 			if _, ok, err := p.parseSourceType(); err != nil {
 				return nil, false, err
 			} else if ok {
