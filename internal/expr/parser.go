@@ -13,8 +13,9 @@ type Parser struct {
 	prevPart int
 	// partStart is the value of pos just before we started parsing the part
 	// under pos. We maintain partStart >= prevPart.
-	partStart int
-	parts     []queryPart
+	partStart    int
+	parts        []queryPart
+	bracketLevel int
 }
 
 func NewParser() *Parser {
@@ -28,38 +29,45 @@ func (p *Parser) init(input string) {
 	p.prevPart = 0
 	p.partStart = 0
 	p.parts = []queryPart{}
+	p.bracketLevel = 0
 }
 
 // A checkpoint struct for saving parser state to restore later. We only use
 // a checkpoint within an attempted parsing of an part, not at a higher level
 // since we don't keep track of the parts in the checkpoint.
 type checkpoint struct {
-	parser    *Parser
-	pos       int
-	prevPart  int
-	partStart int
-	parts     []queryPart
+	parser       *Parser
+	input        string
+	pos          int
+	prevPart     int
+	partStart    int
+	parts        []queryPart
+	bracketLevel int
 }
 
 // save takes a snapshot of the state of the parser and returns a pointer to a
 // checkpoint that represents it.
 func (p *Parser) save() *checkpoint {
 	return &checkpoint{
-		parser:    p,
-		pos:       p.pos,
-		prevPart:  p.prevPart,
-		partStart: p.partStart,
-		parts:     p.parts,
+		parser:       p,
+		input:        p.input,
+		pos:          p.pos,
+		prevPart:     p.prevPart,
+		partStart:    p.partStart,
+		parts:        p.parts,
+		bracketLevel: p.bracketLevel,
 	}
 }
 
 // restore sets the internal state of the parser to the values stored in the
 // checkpoint.
 func (cp *checkpoint) restore() {
+	cp.parser.input = cp.input
 	cp.parser.pos = cp.pos
 	cp.parser.prevPart = cp.prevPart
 	cp.parser.partStart = cp.partStart
 	cp.parser.parts = cp.parts
+	cp.parser.bracketLevel = cp.bracketLevel
 }
 
 // ParsedExpr is the AST representation of an SQL expression. The AST is made up
@@ -89,14 +97,19 @@ func (pe *ParsedExpr) String() string {
 	return out.String()
 }
 
+// bypass adds the string between the previous I/O part and the current part.
+func (p *Parser) addBypass() {
+	if p.prevPart != p.partStart {
+		p.parts = append(p.parts, &bypassPart{p.input[p.prevPart:p.partStart]})
+	}
+}
+
 // add pushes the parsed part to the parsedExprBuilder along with the bypassPart
 // that stretches from the end of the previous part to the beginning of this
 // part.
 func (p *Parser) add(part queryPart) {
-	// Add the string between the previous I/O part and the current part.
 	if p.prevPart != p.partStart {
-		p.parts = append(p.parts,
-			&bypassPart{p.input[p.prevPart:p.partStart]})
+		p.parts = append(p.parts, &bypassPart{p.input[p.prevPart:p.partStart]})
 	}
 
 	if part != nil {
@@ -154,14 +167,15 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 	}()
 
 	p.init(input)
+	return p.parse()
+}
 
+func (p *Parser) parse() (*ParsedExpr, error) {
 	for {
 		// Advance the parser to the start of the next expression.
 		if err := p.advance(); err != nil {
 			return nil, err
 		}
-
-		p.partStart = p.pos
 
 		if p.pos == len(p.input) {
 			break
@@ -181,7 +195,6 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 			continue
 		}
 	}
-
 	// Add any remaining unparsed string input to the parser.
 	p.add(nil)
 	return &ParsedExpr{p.parts}, nil
@@ -206,15 +219,36 @@ loop:
 		switch p.input[p.pos-1] {
 		// If the preceding byte is one of these then we might be at the start
 		// of an expression.
-		case ' ', '\t', '\n', '\r', '=', ',', '(', '[', '>', '<', '+', '-', '*', '/', '|', '%':
+		case ' ', '\t', '\n', '\r', '=', ',', '[', '>', '<', '+', '-', '*', '/', '|', '%':
+			break loop
+		case '(':
+			p.bracketLevel++
+			break loop
+		case ')':
+			p.bracketLevel--
 			break loop
 		}
 	}
 
-	p.skipBlanks()
-
+	p.partStart = p.pos
 	return nil
 
+}
+
+// startSubpart is called to allow parsing of nested parts.
+func (p *Parser) startSubpart() *checkpoint {
+	scp := p.save()
+	p.init(p.input[p.pos:])
+	return scp
+}
+
+// collectSubpart must be called to collect all parts parsed since startSubpart and move the parser up a nesting level.
+func (p *Parser) collectSubpart(scp *checkpoint) *ParsedExpr {
+	pos := p.pos
+	pe := &ParsedExpr{p.parts}
+	scp.restore()
+	p.pos = p.pos + pos
+	return pe
 }
 
 // skipStringLiteral jumps over single and double quoted sections of input.
@@ -371,7 +405,7 @@ func (p *Parser) parseIdentifier() (string, bool) {
 func (p *Parser) parseColumn() (columnExpr, bool, error) {
 	cp := p.save()
 
-	if ce, ok, err := p.parseFuncName(); err != nil {
+	if ce, ok, err := p.parseFunc(); err != nil {
 		return funcExpr{}, false, err
 	} else if ok {
 		return ce, true, nil
@@ -392,47 +426,36 @@ func (p *Parser) parseColumn() (columnExpr, bool, error) {
 	return fullName{}, false, nil
 }
 
-func (p *Parser) parseFuncName() (columnExpr, bool, error) {
+func (p *Parser) parseFunc() (columnExpr, bool, error) {
 	cp := p.save()
-	if p.skipName() && p.skipByte('(') {
-		bracketLevel := 1
+	scp := p.startSubpart()
+	if p.skipName() && p.peekByte('(') {
 		for {
-			if p.pos == len(p.input) {
-				return funcExpr{}, false, nil
+			if err := p.advance(); err != nil {
+				cp.restore()
+				return funcExpr{}, false, err
 			}
 
-			if ok, err := p.skipStringLiteral(); err != nil {
+			if p.bracketLevel == 0 {
+				break
+			}
+
+			if p.pos == len(p.input) {
+				break
+			}
+
+			if in, ok, err := p.parseInputExpression(); err != nil {
+				cp.restore()
 				return funcExpr{}, false, err
 			} else if ok {
+				p.add(in)
 				continue
 			}
-			if ok := p.skipComment(); ok {
-				continue
-			}
-
-			if p.skipByte('(') {
-				// Keep track of bracket nesting level in function to identify
-				// closing bracket.
-				bracketLevel++
-				continue
-			}
-			if p.skipByte(')') {
-				bracketLevel--
-				if bracketLevel == 0 {
-					break
-				}
-				continue
-			}
-			p.pos++
 		}
-		rawFunc := p.input[cp.pos:p.pos]
-		// Parse any expressions inside the function.
-		funcParser := NewParser()
-		pe, err := funcParser.Parse(rawFunc)
-		if err != nil {
-			return funcExpr{}, false, err
-		}
-		return funcExpr{raw: rawFunc, pe: pe}, true, nil
+		// Add any remaining unparsed string input to the parser.
+		p.add(nil)
+		pe := p.collectSubpart(scp)
+		return funcExpr{raw: p.input[cp.pos:p.pos], pe: pe}, true, nil
 	}
 	cp.restore()
 	return funcExpr{}, false, nil

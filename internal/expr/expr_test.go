@@ -50,6 +50,12 @@ var tests = []struct {
 	prepareArgs      []any
 	expectedPrepared string
 }{{
+	"function with nested input",
+	`SELECT max($Person.id, 20) AS &Manager.id FROM person`,
+	`[Bypass[SELECT ] Output[[[Bypass[max(] Input[Person.id] Bypass[, 20)]]] [Manager.id]] Bypass[ FROM person]]`,
+	[]any{Person{}, Manager{}},
+	`SELECT max(@sqlair_0, 20) AS _sqlair_0 FROM person`,
+}, {
 	"star table as output",
 	"SELECT p.* AS &Person.*",
 	"[Bypass[SELECT ] Output[[p.*] [Person.*]]]",
@@ -313,12 +319,6 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	`[Bypass[SELECT ] Output[[[Bypass[max(AVG(id), AVG(address_id), length("((((''""(("))]] [Bypass[IFNULL(name, "Mr &Person.id of $M.name")]]] [M.avg M.name]] Bypass[, ] Output[[[Bypass[random()]]] [M.random]] Bypass[ FROM person]]`,
 	[]any{sqlair.M{}},
 	`SELECT max(AVG(id), AVG(address_id), length("((((''""((")) AS _sqlair_0, IFNULL(name, "Mr &Person.id of $M.name") AS _sqlair_1, random() AS _sqlair_2 FROM person`,
-}, {
-	"function with nested input",
-	`SELECT max($Person.id, 20) AS &Manager.id FROM person`,
-	`[Bypass[SELECT ] Output[[[Bypass[max(] Input[Person.id] Bypass[, 20)]]] [Manager.id]] Bypass[ FROM person]]`,
-	[]any{Person{}, Manager{}},
-	`SELECT max(@sqlair_0, 20) AS _sqlair_0 FROM person`,
 }}
 
 func (s *ExprSuite) TestExpr(c *C) {
