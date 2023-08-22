@@ -16,6 +16,11 @@ type PreparedExpr struct {
 	sql     string
 }
 
+// SQL returns the SQL ready for execution.
+func (pe *PreparedExpr) SQL() string {
+	return pe.sql
+}
+
 const markerPrefix = "_sqlair_"
 
 func markerName(n int) string {
@@ -143,6 +148,9 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 				case *mapInfo:
 					return nil, nil, fmt.Errorf(`&%s.* cannot be used for maps when no column names are specified`, info.typ().Name())
 				case *structInfo:
+					if len(info.tags) == 0 {
+						return nil, nil, fmt.Errorf("type %q in %q does not have any db tags", info.typ().Name(), p.raw)
+					}
 					for _, tag := range info.tags {
 						outCols = append(outCols, fullName{pref, tag})
 						typeMembers = append(typeMembers, info.tagToField[tag])

@@ -8,11 +8,6 @@ import (
 	"strings"
 )
 
-// QuerySQL returns the SQL string for running on the database.
-func (qe *QueryExpr) QuerySQL() string {
-	return qe.sql
-}
-
 // QueryArgs returns the query parameters to be passed to the database.
 func (qe *QueryExpr) QueryArgs() []any {
 	return qe.args
