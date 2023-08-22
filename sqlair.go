@@ -35,7 +35,7 @@ type stmtID = int64
 // A SQLair Statement is prepared on a database when a Query method is run on a
 // DB/TX. The prepared statement is then stored in the stmtDBCache and a flag
 // is set in dbStmtCache.
-// A finilizer function is set on the Statement when it is placed in the cache.
+// A finalizer function is set on the Statement when it is placed in the cache.
 // On garbage collection, the finalizer cycles through the open databases in
 // the cache and closes each matching sql.Stmt. The finalizer then removes the
 // stmtID from stmtDBCache and dbStmtCache.
@@ -151,9 +151,7 @@ type Iterator struct {
 	err     error
 	result  sql.Result
 	started bool
-	// txStmt is only set for queries in transactions so that the statement
-	// prepared on the transaction can be closed on iter.Close.
-	txStmt *sql.Stmt
+	close   func() error
 }
 
 // Query takes a context, prepared SQLair Statement and the structs mentioned in the query arguments.
@@ -287,11 +285,11 @@ func (q *Query) Iter() *Iterator {
 		return &Iterator{qe: q.qe, err: err}
 	}
 
-	var txStmt *sql.Stmt
+	var close func() error
 	if q.tx != nil {
-		txStmt = sqlstmt
+		close = sqlstmt.Close
 	}
-	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err, result: result, txStmt: txStmt}
+	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err, result: result, close: close}
 }
 
 // Next prepares the next row for Get.
@@ -302,9 +300,9 @@ func (iter *Iterator) Next() bool {
 		return false
 	}
 	if !iter.rows.Next() {
-		if iter.txStmt != nil {
-			err := iter.txStmt.Close()
-			iter.txStmt = nil
+		if iter.close != nil {
+			err := iter.close()
+			iter.close = nil
 			if iter.err == nil {
 				iter.err = err
 			}
@@ -352,9 +350,9 @@ func (iter *Iterator) Get(outputArgs ...any) (err error) {
 // Close finishes the iteration and returns any errors encountered.
 func (iter *Iterator) Close() error {
 	var cerr error
-	if iter.txStmt != nil {
-		cerr = iter.txStmt.Close()
-		iter.txStmt = nil
+	if iter.close != nil {
+		cerr = iter.close()
+		iter.close = nil
 	}
 	iter.started = true
 	if iter.rows == nil {
