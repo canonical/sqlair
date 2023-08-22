@@ -104,7 +104,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 			}
 			if kind == reflect.Slice || kind == reflect.Array {
 				if tm.listAllowed == nil {
-					return nil, fmt.Errorf(`map value %q: invalid slice outside of IN clause`, tm.name)
+					return nil, fmt.Errorf(`map value %q: slice can only be used with an IN clause`, tm.name)
 				}
 				if val.Len() != tm.listAllowed.length {
 					// This should change it in the same object that is used to generate the SQL.

@@ -719,7 +719,7 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $M.slice",
 		prepareArgs: []any{sqlair.M{}},
 		queryArgs:   []any{sqlair.M{"slice": []int{1, 2}}},
-		err:         `invalid input parameter: map value "slice": invalid slice outside of IN clause`,
+		err:         `invalid input parameter: map value "slice": slice can only be used with an IN clause`,
 	}}
 
 	outerP := Person{}
