@@ -269,9 +269,11 @@ func (q *Query) Iter() *Iterator {
 	var rows *sql.Rows
 	var err error
 	var cols []string
+	var close func() error
 	sqlstmt := q.sqlstmt
 	if q.tx != nil {
 		sqlstmt = q.tx.sqltx.Stmt(q.sqlstmt)
+		close = sqlstmt.Close
 	}
 	if q.qe.HasOutputs() {
 		rows, err = sqlstmt.QueryContext(q.ctx, q.qe.QueryArgs()...)
@@ -285,10 +287,6 @@ func (q *Query) Iter() *Iterator {
 		return &Iterator{qe: q.qe, err: err}
 	}
 
-	var close func() error
-	if q.tx != nil {
-		close = sqlstmt.Close
-	}
 	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err, result: result, close: close}
 }
 
