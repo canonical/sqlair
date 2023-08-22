@@ -16,6 +16,11 @@ type PreparedExpr struct {
 	sql     string
 }
 
+// SQL returns the SQL ready for execution.
+func (pe *PreparedExpr) SQL() string {
+	return pe.sql
+}
+
 const markerPrefix = "_sqlair_"
 
 func markerName(n int) string {
