@@ -430,7 +430,6 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 	}
 
 	parenPos := p.pos
-
 	nextItem := true
 	var objs []fullName
 	for i := 0; nextItem; i++ {
@@ -476,12 +475,12 @@ func (p *Parser) parseColumns() (cols []fullName, parentheses bool, ok bool) {
 
 // parseTargetTypes parses a single output type or a list of output types.
 // Lists of types must be enclosed in parentheses.
-func (p *Parser) parseTargetTypes() (targetTypes []fullName, parentheses bool, ok bool, err error) {
+func (p *Parser) parseTargetTypes() (types []fullName, parentheses bool, ok bool, err error) {
 	// Case 1: A single target e.g. "&Person.name".
-	if targetType, ok, err := p.parseTargetType(); err != nil {
+	if targetTypes, ok, err := p.parseTargetType(); err != nil {
 		return nil, false, false, err
 	} else if ok {
-		return []fullName{targetType}, false, true, nil
+		return []fullName{targetTypes}, false, true, nil
 	}
 
 	// Case 2: Multiple types e.g. "(&Person.name, &Person.id)".
