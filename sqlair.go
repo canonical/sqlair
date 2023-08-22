@@ -284,6 +284,9 @@ func (q *Query) Iter() *Iterator {
 		result, err = sqlstmt.ExecContext(q.ctx, q.qe.QueryArgs()...)
 	}
 	if err != nil {
+		if close != nil {
+			close()
+		}
 		return &Iterator{qe: q.qe, err: err}
 	}
 
