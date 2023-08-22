@@ -386,7 +386,7 @@ func (p *Parser) parseColumn() (fullName, bool, error) {
 	return fullName{}, false, nil
 }
 
-func (p *Parser) parseTarget() (fullName, bool, error) {
+func (p *Parser) parseTargetType() (fullName, bool, error) {
 	if p.skipByte('&') {
 		return p.parseGoFullName()
 	}
@@ -424,7 +424,6 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 	}
 
 	parenPos := p.pos
-
 	nextItem := true
 	var objs []fullName
 	for i := 0; nextItem; i++ {
@@ -452,41 +451,40 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 	return nil, false, fmt.Errorf("column %d: missing closing parentheses", parenPos)
 }
 
-// parseColumns parses a list of columns. For lists of more than one column the
-// columns must be enclosed in brackets e.g. "(col1, col2) AS &Person.*".
-func (p *Parser) parseColumns() ([]fullName, bool) {
-
+// parseColumns parses a single column or a list of columns. Lists must be
+// enclosed in parentheses.
+func (p *Parser) parseColumns() (cols []fullName, parentheses bool, ok bool) {
 	// Case 1: A single column e.g. "p.name".
 	if col, ok, _ := p.parseColumn(); ok {
-		return []fullName{col}, true
+		return []fullName{col}, false, true
 	}
 
 	// Case 2: Multiple columns e.g. "(p.name, p.id)".
 	if cols, ok, _ := p.parseList((*Parser).parseColumn); ok {
-		return cols, true
+		return cols, true, true
 	}
 
-	return nil, false
+	return nil, false, false
 }
 
-// parseTargets parses the part of the output expression following the
-// ampersand. This can be one or more references to Go types.
-func (p *Parser) parseTargets() ([]fullName, bool, error) {
+// parseTargetTypes parses a single output type or a list of output types.
+// Lists of types must be enclosed in parentheses.
+func (p *Parser) parseTargetTypes() (types []fullName, parentheses bool, ok bool, err error) {
 	// Case 1: A single target e.g. "&Person.name".
-	if targetTypes, ok, err := p.parseTarget(); err != nil {
-		return nil, false, err
+	if targetTypes, ok, err := p.parseTargetType(); err != nil {
+		return nil, false, false, err
 	} else if ok {
-		return []fullName{targetTypes}, true, nil
+		return []fullName{targetTypes}, false, true, nil
 	}
 
 	// Case 2: Multiple types e.g. "(&Person.name, &Person.id)".
-	if targetTypes, ok, err := p.parseList((*Parser).parseTarget); err != nil {
-		return nil, false, err
+	if targetTypes, ok, err := p.parseList((*Parser).parseTargetType); err != nil {
+		return nil, true, false, err
 	} else if ok {
-		return targetTypes, true, nil
+		return targetTypes, true, true, nil
 	}
 
-	return nil, false, nil
+	return nil, false, false, nil
 }
 
 // parseOutputExpression requires that the ampersand before the identifiers must
@@ -495,12 +493,12 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 	start := p.pos
 
 	// Case 1: There are no columns e.g. "&Person.*".
-	if targetTypes, ok, err := p.parseTargets(); err != nil {
+	if targetType, ok, err := p.parseTargetType(); err != nil {
 		return nil, false, err
 	} else if ok {
 		return &outputPart{
 			sourceColumns: []fullName{},
-			targetTypes:   targetTypes,
+			targetTypes:   []fullName{targetType},
 			raw:           p.input[start:p.pos],
 		}, true, nil
 	}
@@ -508,13 +506,19 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 	cp := p.save()
 
 	// Case 2: There are columns e.g. "p.col1 AS &Person.*".
-	if cols, ok := p.parseColumns(); ok {
+	if cols, parenCols, ok := p.parseColumns(); ok {
 		p.skipBlanks()
 		if p.skipString("AS") {
 			p.skipBlanks()
-			if targetTypes, ok, err := p.parseTargets(); err != nil {
+			if targetTypes, parenTypes, ok, err := p.parseTargetTypes(); err != nil {
 				return nil, false, err
 			} else if ok {
+				if parenCols && !parenTypes {
+					return nil, false, fmt.Errorf(`column %d: missing parentheses around types after "AS"`, p.pos)
+				}
+				if !parenCols && parenTypes {
+					return nil, false, fmt.Errorf(`column %d: unexpected parentheses around types after "AS"`, p.pos)
+				}
 				return &outputPart{
 					sourceColumns: cols,
 					targetTypes:   targetTypes,
