@@ -120,8 +120,8 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 `,
 }, {
 	"comments v2",
-	`SELECT (&Person.name, /* ... */ &Person.id), (&Address.id /* ... */, &Address.street) FROM p -- End of the line`,
-	`[Bypass[SELECT ] Output[[] [Person.name Person.id]] Bypass[, ] Output[[] [Address.id Address.street]] Bypass[ FROM p -- End of the line]]`,
+	`SELECT (*) AS (&Person.name, /* ... */ &Person.id), (*) AS (&Address.id /* ... */, &Address.street) FROM p -- End of the line`,
+	`[Bypass[SELECT ] Output[[*] [Person.name Person.id]] Bypass[, ] Output[[*] [Address.id Address.street]] Bypass[ FROM p -- End of the line]]`,
 	[]any{Person{}, Address{}},
 	`SELECT name AS _sqlair_0, id AS _sqlair_1, id AS _sqlair_2, street AS _sqlair_3 FROM p -- End of the line`,
 }, {
@@ -138,13 +138,13 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	"SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM t",
 }, {
 	"star as output multitype",
-	"SELECT * AS (&Person.*, &Address.*) FROM t",
+	"SELECT (*) AS (&Person.*, &Address.*) FROM t",
 	"[Bypass[SELECT ] Output[[*] [Person.* Address.*]] Bypass[ FROM t]]",
 	[]any{Person{}, Address{}},
 	"SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2, district AS _sqlair_3, id AS _sqlair_4, street AS _sqlair_5 FROM t",
 }, {
 	"multiple multitype",
-	"SELECT t.* AS (&Person.*, &M.uid), (district, street, postcode) AS (&Address.district, &Address.street, &M.postcode) FROM t",
+	"SELECT (t.*) AS (&Person.*, &M.uid), (district, street, postcode) AS (&Address.district, &Address.street, &M.postcode) FROM t",
 	"[Bypass[SELECT ] Output[[t.*] [Person.* M.uid]] Bypass[, ] Output[[district street postcode] [Address.district Address.street M.postcode]] Bypass[ FROM t]]",
 	[]any{Person{}, Address{}, sqlair.M{}},
 	"SELECT t.address_id AS _sqlair_0, t.id AS _sqlair_1, t.name AS _sqlair_2, t.uid AS _sqlair_3, district AS _sqlair_4, street AS _sqlair_5, postcode AS _sqlair_6 FROM t",
@@ -180,7 +180,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	"SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2, a.district AS _sqlair_3, a.id AS _sqlair_4, a.street AS _sqlair_5 FROM person, address a WHERE name = 'Fred'",
 }, {
 	"map input and output",
-	"SELECT (p.name, a.id) AS &M.*, street AS &StringMap.*, &IntMap.id FROM person, address a WHERE name = $M.name",
+	"SELECT (p.name, a.id) AS (&M.*), street AS &StringMap.*, &IntMap.id FROM person, address a WHERE name = $M.name",
 	"[Bypass[SELECT ] Output[[p.name a.id] [M.*]] Bypass[, ] Output[[street] [StringMap.*]] Bypass[, ] Output[[] [IntMap.id]] Bypass[ FROM person, address a WHERE name = ] Input[M.name]]",
 	[]any{sqlair.M{}, IntMap{}, StringMap{}},
 	"SELECT p.name AS _sqlair_0, a.id AS _sqlair_1, street AS _sqlair_2, id AS _sqlair_3 FROM person, address a WHERE name = @sqlair_0",
@@ -198,43 +198,43 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	"SELECT a.district AS _sqlair_0, a.id AS _sqlair_1 FROM address AS a",
 }, {
 	"multicolumn output v3",
-	"SELECT * AS (&Person.address_id, &Address.*, &Manager.id) FROM address AS a",
+	"SELECT (*) AS (&Person.address_id, &Address.*, &Manager.id) FROM address AS a",
 	"[Bypass[SELECT ] Output[[*] [Person.address_id Address.* Manager.id]] Bypass[ FROM address AS a]]",
 	[]any{Person{}, Address{}, Manager{}},
 	"SELECT address_id AS _sqlair_0, district AS _sqlair_1, id AS _sqlair_2, street AS _sqlair_3, id AS _sqlair_4 FROM address AS a",
 }, {
 	"multicolumn output v4",
-	"SELECT (a.district, a.street) AS &Address.* FROM address AS a WHERE p.name = 'Fred'",
+	"SELECT (a.district, a.street) AS (&Address.*) FROM address AS a WHERE p.name = 'Fred'",
 	"[Bypass[SELECT ] Output[[a.district a.street] [Address.*]] Bypass[ FROM address AS a WHERE p.name = 'Fred']]",
 	[]any{Address{}},
 	"SELECT a.district AS _sqlair_0, a.street AS _sqlair_1 FROM address AS a WHERE p.name = 'Fred'",
 }, {
 	"multicolumn output v5",
 	"SELECT (&Address.street, &Person.id) FROM address AS a WHERE p.name = 'Fred'",
-	"[Bypass[SELECT ] Output[[] [Address.street Person.id]] Bypass[ FROM address AS a WHERE p.name = 'Fred']]",
+	"[Bypass[SELECT (] Output[[] [Address.street]] Bypass[, ] Output[[] [Person.id]] Bypass[) FROM address AS a WHERE p.name = 'Fred']]",
 	[]any{Address{}, Person{}},
-	"SELECT street AS _sqlair_0, id AS _sqlair_1 FROM address AS a WHERE p.name = 'Fred'",
+	"SELECT (street AS _sqlair_0, id AS _sqlair_1) FROM address AS a WHERE p.name = 'Fred'",
 }, {
 	"complex query v1",
-	"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.*, (5+7), (col1 * col2) AS calculated_value FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = 'Fred'",
+	"SELECT p.* AS &Person.*, (a.district, a.street) AS (&Address.*), (5+7), (col1 * col2) AS calculated_value FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = 'Fred'",
 	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district a.street] [Address.*]] Bypass[, (5+7), (col1 * col2) AS calculated_value FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = 'Fred']]",
 	[]any{Person{}, Address{}},
 	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, a.district AS _sqlair_3, a.street AS _sqlair_4, (5+7), (col1 * col2) AS calculated_value FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = 'Fred'`,
 }, {
 	"complex query v2",
-	"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* FROM person AS p JOIN address AS a ON p .address_id = a.id WHERE p.name = 'Fred'",
+	"SELECT p.* AS &Person.*, (a.district, a.street) AS (&Address.*) FROM person AS p JOIN address AS a ON p .address_id = a.id WHERE p.name = 'Fred'",
 	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district a.street] [Address.*]] Bypass[ FROM person AS p JOIN address AS a ON p .address_id = a.id WHERE p.name = 'Fred']]",
 	[]any{Person{}, Address{}},
 	"SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, a.district AS _sqlair_3, a.street AS _sqlair_4 FROM person AS p JOIN address AS a ON p .address_id = a.id WHERE p.name = 'Fred'",
 }, {
 	"complex query v3",
-	"SELECT p.* AS &Person.*, (a.district, a.street) AS &Address.* FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name)",
+	"SELECT p.* AS &Person.*, (a.district, a.street) AS (&Address.*) FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name)",
 	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district a.street] [Address.*]] Bypass[ FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name IN (SELECT name FROM table WHERE table.n = ] Input[Person.name] Bypass[)]]",
 	[]any{Person{}, Address{}},
 	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, a.district AS _sqlair_3, a.street AS _sqlair_4 FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name IN (SELECT name FROM table WHERE table.n = @sqlair_0)`,
 }, {
 	"complex query v4",
-	"SELECT p.* AS &Person.* FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name) UNION SELECT (a.district, a.street) AS &Address.* FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name)",
+	"SELECT p.* AS &Person.* FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name) UNION SELECT (a.district, a.street) AS (&Address.*) FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name)",
 	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[ FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = ] Input[Person.name] Bypass[) UNION SELECT ] Output[[a.district a.street] [Address.*]] Bypass[ FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = ] Input[Person.name] Bypass[)]]",
 	[]any{Person{}, Address{}},
 	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2 FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = @sqlair_0) UNION SELECT a.district AS _sqlair_3, a.street AS _sqlair_4 FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = @sqlair_1)`,
@@ -338,8 +338,8 @@ func (s *ExprSuite) TestExpr(c *C) {
 		if preparedExpr, err = parsedExpr.Prepare(t.prepareArgs...); err != nil {
 			c.Errorf("test %d failed (Prepare):\nsummary: %s\nquery: %s\nexpected: %s\nerr: %s\n", i, t.summary, t.query, t.expectedPrepared, err)
 		} else {
-			c.Check(expr.PreparedSQL(preparedExpr), Equals, t.expectedPrepared,
-				Commentf("test %d failed (Prepare):\nsummary: %s\nquery: %s\nexpected: %s\nactual:   %s\n", i, t.summary, t.query, t.expectedPrepared, expr.PreparedSQL(preparedExpr)))
+			c.Check(preparedExpr.SQL(), Equals, t.expectedPrepared,
+				Commentf("test %d failed (Prepare):\nsummary: %s\nquery: %s\nexpected: %s\nactual:   %s\n", i, t.summary, t.query, t.expectedPrepared, preparedExpr.SQL()))
 		}
 	}
 }
@@ -384,6 +384,18 @@ func (s *ExprSuite) TestParseErrors(c *C) {
 	}, {
 		query: "SELECT foo FROM t WHERE x = $Address",
 		err:   `cannot parse expression: column 36: unqualified type, expected Address.* or Address.<db tag>`,
+	}, {
+		query: "SELECT name AS (&Person.*)",
+		err:   `cannot parse expression: column 26: unexpected parentheses around types after "AS"`,
+	}, {
+		query: "SELECT name AS (&Person.name, &Person.id)",
+		err:   `cannot parse expression: column 41: unexpected parentheses around types after "AS"`,
+	}, {
+		query: "SELECT (name) AS &Person.*",
+		err:   `cannot parse expression: column 26: missing parentheses around types after "AS"`,
+	}, {
+		query: "SELECT (name, id) AS &Person.*",
+		err:   `cannot parse expression: column 30: missing parentheses around types after "AS"`,
 	}}
 
 	for _, t := range tests {
@@ -419,21 +431,21 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 		prepareArgs []any
 		err         string
 	}{{
-		query:       "SELECT (p.name, t.id) AS &Address.id FROM t",
+		query:       "SELECT (p.name, t.id) AS (&Address.id) FROM t",
 		prepareArgs: []any{Address{}},
-		err:         "cannot prepare expression: mismatched number of columns and targets in output expression: (p.name, t.id) AS &Address.id",
+		err:         "cannot prepare expression: mismatched number of columns and targets in output expression: (p.name, t.id) AS (&Address.id)",
 	}, {
-		query:       "SELECT p.name AS (&Address.district, &Address.street) FROM t",
+		query:       "SELECT (p.name) AS (&Address.district, &Address.street) FROM t",
 		prepareArgs: []any{Address{}},
-		err:         "cannot prepare expression: mismatched number of columns and targets in output expression: p.name AS (&Address.district, &Address.street)",
+		err:         "cannot prepare expression: mismatched number of columns and targets in output expression: (p.name) AS (&Address.district, &Address.street)",
 	}, {
 		query:       "SELECT (&Address.*, &Address.id) FROM t",
 		prepareArgs: []any{Address{}, Person{}},
 		err:         `cannot prepare expression: member "id" of type "Address" appears more than once`,
 	}, {
-		query:       "SELECT (p.*, t.name) AS &Address.* FROM t",
+		query:       "SELECT (p.*, t.name) AS (&Address.*) FROM t",
 		prepareArgs: []any{Address{}},
-		err:         "cannot prepare expression: invalid asterisk in output expression columns: (p.*, t.name) AS &Address.*",
+		err:         "cannot prepare expression: invalid asterisk in output expression columns: (p.*, t.name) AS (&Address.*)",
 	}, {
 		query:       "SELECT (name, p.*) AS (&Person.id, &Person.*) FROM t",
 		prepareArgs: []any{Address{}, Person{}},
@@ -443,9 +455,9 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 		prepareArgs: []any{Address{}, Person{}},
 		err:         `cannot prepare expression: member "address_id" of type "Person" appears more than once`,
 	}, {
-		query:       "SELECT (p.*, t.*) AS &Address.* FROM t",
+		query:       "SELECT (p.*, t.*) AS (&Address.*) FROM t",
 		prepareArgs: []any{Address{}},
-		err:         "cannot prepare expression: invalid asterisk in output expression columns: (p.*, t.*) AS &Address.*",
+		err:         "cannot prepare expression: invalid asterisk in output expression columns: (p.*, t.*) AS (&Address.*)",
 	}, {
 		query:       "SELECT (id, name) AS (&Person.id, &Address.*) FROM t",
 		prepareArgs: []any{Address{}, Person{}},
@@ -463,7 +475,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 		prepareArgs: []any{Address{}},
 		err:         `cannot prepare expression: type "Address" has no "number" db tag`,
 	}, {
-		query:       "SELECT (street, road) AS &Address.* FROM t",
+		query:       "SELECT (street, road) AS (&Address.*) FROM t",
 		prepareArgs: []any{Address{}},
 		err:         `cannot prepare expression: type "Address" has no "road" db tag`,
 	}, {
