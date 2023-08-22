@@ -97,29 +97,31 @@ func (pe *ParsedExpr) String() string {
 	return out.String()
 }
 
-// bypass adds the string between the previous I/O part and the current part.
-func (p *Parser) addBypass() {
-	if p.prevPart != p.partStart {
-		p.parts = append(p.parts, &bypassPart{p.input[p.prevPart:p.partStart]})
-	}
-}
-
 // add pushes the parsed part to the parsedExprBuilder along with the bypassPart
 // that stretches from the end of the previous part to the beginning of this
 // part.
 func (p *Parser) add(part queryPart) {
+	// Add the string between the previous I/O part and the current part.
 	if p.prevPart != p.partStart {
-		p.parts = append(p.parts, &bypassPart{p.input[p.prevPart:p.partStart]})
+		p.parts = append(p.parts,
+			&bypassPart{p.input[p.prevPart:p.partStart]})
 	}
 
-	if part != nil {
-		p.parts = append(p.parts, part)
-	}
+	p.parts = append(p.parts, part)
 
 	// Save this position at the end of the part.
 	p.prevPart = p.pos
 	// Ensure that partStart >= prevPart.
 	p.partStart = p.pos
+}
+
+// addRemainder adds a bypass part begining at prevPart and ending at
+// partStart.
+func (p *Parser) addRemainder() {
+	if p.prevPart != p.partStart {
+		p.parts = append(p.parts, &bypassPart{p.input[p.prevPart:p.partStart]})
+	}
+	p.prevPart = p.partStart
 }
 
 // skipComment jumps over comments as defined by the SQLite spec.
@@ -167,10 +169,6 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 	}()
 
 	p.init(input)
-	return p.parse()
-}
-
-func (p *Parser) parse() (*ParsedExpr, error) {
 	for {
 		// Advance the parser to the start of the next expression.
 		if err := p.advance(); err != nil {
@@ -195,8 +193,7 @@ func (p *Parser) parse() (*ParsedExpr, error) {
 			continue
 		}
 	}
-	// Add any remaining unparsed string input to the parser.
-	p.add(nil)
+	p.addRemainder()
 	return &ParsedExpr{p.parts}, nil
 }
 
@@ -232,22 +229,26 @@ loop:
 
 	p.partStart = p.pos
 	return nil
-
 }
 
-// startSubpart is called to allow parsing of nested parts.
+// startSubpart creates a checkpoint and prepares to parse a nested part.
+// The checkpoint can be used to revert the state of the parser, but to parse
+// the sub-part collectSubpart must be called.
 func (p *Parser) startSubpart() *checkpoint {
 	scp := p.save()
+	// Clear parser state.
 	p.init(p.input[p.pos:])
 	return scp
 }
 
-// collectSubpart must be called to collect all parts parsed since startSubpart and move the parser up a nesting level.
+// collectSubpart returns the nested expression parsed since the corresponding
+// sub-part checkpoint, at startSubpart, and restores the parser to its new
+// position.
 func (p *Parser) collectSubpart(scp *checkpoint) *ParsedExpr {
 	pos := p.pos
 	pe := &ParsedExpr{p.parts}
 	scp.restore()
-	p.pos = p.pos + pos
+	p.pos += pos
 	return pe
 }
 
@@ -427,37 +428,32 @@ func (p *Parser) parseColumn() (columnExpr, bool, error) {
 }
 
 func (p *Parser) parseFunc() (columnExpr, bool, error) {
-	cp := p.save()
+	// Start parsing a nested expression.
 	scp := p.startSubpart()
 	if p.skipName() && p.peekByte('(') {
 		for {
 			if err := p.advance(); err != nil {
-				cp.restore()
+				scp.restore()
 				return funcExpr{}, false, err
 			}
 
-			if p.bracketLevel == 0 {
-				break
-			}
-
-			if p.pos == len(p.input) {
+			if p.bracketLevel == 0 || p.pos == len(p.input) {
 				break
 			}
 
 			if in, ok, err := p.parseInputExpression(); err != nil {
-				cp.restore()
+				scp.restore()
 				return funcExpr{}, false, err
 			} else if ok {
 				p.add(in)
 				continue
 			}
 		}
-		// Add any remaining unparsed string input to the parser.
-		p.add(nil)
+		p.addRemainder()
 		pe := p.collectSubpart(scp)
-		return funcExpr{raw: p.input[cp.pos:p.pos], pe: pe}, true, nil
+		return funcExpr{raw: p.input[scp.pos:p.pos], pe: pe}, true, nil
 	}
-	cp.restore()
+	scp.restore()
 	return funcExpr{}, false, nil
 }
 
