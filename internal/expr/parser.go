@@ -424,17 +424,7 @@ func (p *Parser) parseGoFullName() (fullName, bool, error) {
 
 // parseList takes a parsing function that returns a fullName and parses a
 // bracketed, comma seperated, list.
-func (p *Parser) parseList(singletons bool, parseFn func(p *Parser) (fullName, bool, error)) ([]fullName, bool, error) {
-	// Case 1: Unbracketed singleton.
-	if singletons {
-		if obj, ok, err := parseFn(p); err != nil {
-			return nil, false, err
-		} else if ok {
-			return []fullName{obj}, true, nil
-		}
-	}
-
-	// Case 2: Bracketed, comma seperated, list.
+func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]fullName, bool, error) {
 	cp := p.save()
 	if !p.skipByte('(') {
 		return nil, false, nil
@@ -468,13 +458,40 @@ func (p *Parser) parseList(singletons bool, parseFn func(p *Parser) (fullName, b
 	return nil, false, fmt.Errorf("column %d: missing closing parentheses", parenPos)
 }
 
-// parseColumns parses a list of columns. For lists of more than one column the
-// columns must be enclosed in brackets e.g. "(col1, col2) AS &Person.*".
-func (p *Parser) parseColumns(singletons bool) ([]fullName, bool) {
-	if cols, ok, _ := p.parseList(singletons, (*Parser).parseColumn); ok {
-		return cols, true
+// parseColumns parses a single column or a list of columns. Lists must be
+// enclosed in parentheses.
+func (p *Parser) parseColumns() (cols []fullName, parentheses bool, ok bool) {
+	// Case 1: A single column e.g. "p.name".
+	if col, ok, _ := p.parseColumn(); ok {
+		return []fullName{col}, false, true
 	}
-	return nil, false
+
+	// Case 2: Multiple columns e.g. "(p.name, p.id)".
+	if cols, ok, _ := p.parseList((*Parser).parseColumn); ok {
+		return cols, true, true
+	}
+
+	return nil, false, false
+}
+
+// parseTargetTypes parses a single output type or a list of output types.
+// Lists of types must be enclosed in parentheses.
+func (p *Parser) parseTargetTypes() (types []fullName, parentheses bool, ok bool, err error) {
+	// Case 1: A single target e.g. "&Person.name".
+	if targetTypes, ok, err := p.parseTargetType(); err != nil {
+		return nil, false, false, err
+	} else if ok {
+		return []fullName{targetTypes}, false, true, nil
+	}
+
+	// Case 2: Multiple types e.g. "(&Person.name, &Person.id)".
+	if targetTypes, ok, err := p.parseList((*Parser).parseTargetType); err != nil {
+		return nil, true, false, err
+	} else if ok {
+		return targetTypes, true, true, nil
+	}
+
+	return nil, false, false, nil
 }
 
 // parseOutputExpression requires that the ampersand before the identifiers must
@@ -483,12 +500,12 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 	start := p.pos
 
 	// Case 1: There are no columns e.g. "&Person.*".
-	if targetTypes, ok, err := p.parseList(true, (*Parser).parseTargetType); err != nil {
+	if targetType, ok, err := p.parseTargetType(); err != nil {
 		return nil, false, err
 	} else if ok {
 		return &outputPart{
 			sourceColumns: []fullName{},
-			targetTypes:   targetTypes,
+			targetTypes:   []fullName{targetType},
 			raw:           p.input[start:p.pos],
 		}, true, nil
 	}
@@ -496,13 +513,19 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 	cp := p.save()
 
 	// Case 2: There are columns e.g. "p.col1 AS &Person.*".
-	if cols, ok := p.parseColumns(true); ok {
+	if cols, parenCols, ok := p.parseColumns(); ok {
 		p.skipBlanks()
 		if p.skipString("AS") {
 			p.skipBlanks()
-			if targetTypes, ok, err := p.parseList(true, (*Parser).parseTargetType); err != nil {
+			if targetTypes, parenTypes, ok, err := p.parseTargetTypes(); err != nil {
 				return nil, false, err
 			} else if ok {
+				if parenCols && !parenTypes {
+					return nil, false, fmt.Errorf(`column %d: missing parentheses around types after "AS"`, p.pos)
+				}
+				if !parenCols && parenTypes {
+					return nil, false, fmt.Errorf(`column %d: unexpected parentheses around types after "AS"`, p.pos)
+				}
 				return &outputPart{
 					sourceColumns: cols,
 					targetTypes:   targetTypes,
@@ -520,7 +543,7 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 	cp := p.save()
 
-	if fn, ok, err := p.parseInputType(); ok {
+	if fn, ok, err := p.parseSourceType(); ok {
 		return &inputPart{sourceType: fn, raw: p.input[cp.pos:p.pos]}, true, nil
 	} else if err != nil {
 		return nil, false, err
@@ -530,7 +553,7 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 	return nil, false, nil
 }
 
-func (p *Parser) parseInputType() (fullName, bool, error) {
+func (p *Parser) parseSourceType() (fullName, bool, error) {
 	if p.skipByte('$') {
 		if fn, ok, err := p.parseGoFullName(); ok {
 			if fn.name == "*" {
@@ -549,7 +572,7 @@ func (p *Parser) parseInExpression() (*inPart, bool, error) {
 
 	if p.skipString("IN") {
 		p.skipBlanks()
-		if types, ok, err := p.parseList(true, (*Parser).parseInputType); err != nil {
+		if types, ok, err := p.parseList((*Parser).parseSourceType); err != nil {
 			return nil, false, err
 		} else if ok {
 			return &inPart{
