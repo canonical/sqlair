@@ -33,24 +33,30 @@ func Example() {
 	}
 
 	db := sqlair.NewDB(sqldb)
-	create := sqlair.MustPrepare(`
+	createLocations := sqlair.MustPrepare(`
 	CREATE TABLE locations (
 		room_id integer,
 		room_name text
-	);
+	);`)
+
+	createEmployees := sqlair.MustPrepare(`
 	CREATE TABLE employees (
 		id integer,
 		team_id integer,
 		name text
-	);
+	);`)
+	createTeams := sqlair.MustPrepare(`
 	CREATE TABLE teams (
 		id integer,
 		room_id integer,
 		team_name text
 	)`)
-	err = db.Query(nil, create).Run()
-	if err != nil {
-		panic(err)
+	createTables := []*sqlair.Statement{createLocations, createEmployees, createTeams}
+	for _, createTable := range createTables {
+		err = db.Query(nil, createTable).Run()
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	// Statement to populate the locations table.
@@ -145,7 +151,7 @@ func Example() {
 	// Example 2
 	// Find out who is in location l1 and what team they work for.
 	selectPeopleInRoom := sqlair.MustPrepare(`
-		SELECT e.* AS &Employee.*, (t.team_name, t.id) AS &Team.*
+		SELECT e.* AS &Employee.*, (t.team_name, t.id) AS (&Team.*)
 		FROM employees AS e, teams AS t
 		WHERE t.room_id = $Location.room_id AND t.id = e.team_id`,
 		Employee{}, Team{}, Location{},
