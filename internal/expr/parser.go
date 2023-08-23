@@ -236,7 +236,7 @@ loop:
 // the sub-part collectSubpart must be called.
 func (p *Parser) startSubpart() *checkpoint {
 	scp := p.save()
-	// Clear parser state.
+	// Clear parser state and set the input to the start of the sub-part.
 	p.init(p.input[p.pos:])
 	return scp
 }
