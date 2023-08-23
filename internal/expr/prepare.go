@@ -9,7 +9,8 @@ import (
 	"strings"
 )
 
-const inBucketSize = 8
+// maxSliceLen is the maximum size of an argument slice allowed in an IN statement
+const maxSliceLen = 8
 
 // PreparedExpr contains an SQL expression that is ready for execution.
 type PreparedExpr struct {
@@ -87,7 +88,8 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (*preparedInputPart, []typeMe
 	}
 }
 
-// prepareIn generates the values to fetch for sqlair input expressions following an IN statement.
+// prepareIn check input expressions following IN statements correspond to known
+// types and generates information about the query arguments.
 func prepareIn(ti typeNameToInfo, p *inPart) (*preparedInPart, []typeMember, error) {
 	var typeMembers = make([]typeMember, 0)
 	for _, t := range p.types {
@@ -114,7 +116,7 @@ func prepareIn(ti typeNameToInfo, p *inPart) (*preparedInPart, []typeMember, err
 			typeMembers = append(typeMembers, &mapKey{
 				name:        t.name,
 				mapType:     info.typ(),
-				listAllowed: &listInfo{length: inBucketSize},
+				listAllowed: &listInfo{length: maxSliceLen},
 			})
 		}
 	}
@@ -253,13 +255,13 @@ type preparedOutputPart struct {
 	outCols []fullName
 }
 
-func (oc *preparedOutputPart) sql(c *ioCounter) string {
+func (outp *preparedOutputPart) sql(c *ioCounter) string {
 	var sql bytes.Buffer
-	for i, col := range oc.outCols {
+	for i, col := range outp.outCols {
 		sql.WriteString(col.String())
 		sql.WriteString(" AS ")
 		sql.WriteString(markerName(c.outputCount))
-		if i != len(oc.outCols)-1 {
+		if i != len(outp.outCols)-1 {
 			sql.WriteString(", ")
 		}
 		c.outputCount++
@@ -269,7 +271,7 @@ func (oc *preparedOutputPart) sql(c *ioCounter) string {
 
 type preparedInputPart struct{}
 
-func (ic *preparedInputPart) sql(c *ioCounter) string {
+func (*preparedInputPart) sql(c *ioCounter) string {
 	c.inputCount++
 	return "@sqlair_" + strconv.Itoa(c.inputCount-1)
 }
@@ -278,10 +280,10 @@ type preparedInPart struct {
 	typeMembers []typeMember
 }
 
-func (ic *preparedInPart) sql(c *ioCounter) string {
+func (inp *preparedInPart) sql(c *ioCounter) string {
 	var sql bytes.Buffer
 	sql.WriteString("IN (")
-	for i, tm := range ic.typeMembers {
+	for i, tm := range inp.typeMembers {
 		switch tm := tm.(type) {
 		case *structField:
 			sql.WriteString("@sqlair_")
@@ -303,7 +305,7 @@ func (ic *preparedInPart) sql(c *ioCounter) string {
 		default:
 			panic(fmt.Sprintf("internal error: invalid type: %T", tm))
 		}
-		if i < len(ic.typeMembers)-1 {
+		if i < len(inp.typeMembers)-1 {
 			sql.WriteString(", ")
 		}
 	}
@@ -315,8 +317,8 @@ type preparedBypassPart struct {
 	str string
 }
 
-func (bc *preparedBypassPart) sql(*ioCounter) string {
-	return bc.str
+func (bp *preparedBypassPart) sql(*ioCounter) string {
+	return bp.str
 }
 
 // Prepare takes a parsed expression and struct instantiations of all the types
