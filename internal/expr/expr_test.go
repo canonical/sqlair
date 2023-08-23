@@ -263,13 +263,13 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	"SELECT name FROM person WHERE id IN ($M.slice)",
 	"[Bypass[SELECT name FROM person WHERE id ] In[[M.slice]]]",
 	[]any{sqlair.M{}},
-	"SELECT name FROM person WHERE id IN (@sqlair_0)",
+	"SELECT name FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7)",
 }, {
 	"complex in",
 	"SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $M.ids, $Manager.id, $CustomMap.ids, $M.ids2)",
 	"[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE id ] In[[Person.id M.ids Manager.id CustomMap.ids M.ids2]]]",
 	[]any{sqlair.M{}, Person{}, Manager{}, CustomMap{}},
-	"SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4)",
+	"SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7, @sqlair_8, @sqlair_9, @sqlair_10, @sqlair_11, @sqlair_12, @sqlair_13, @sqlair_14, @sqlair_15, @sqlair_16, @sqlair_17, @sqlair_18, @sqlair_19, @sqlair_20, @sqlair_21, @sqlair_22, @sqlair_23, @sqlair_24, @sqlair_25)",
 }, {
 	"insert",
 	"INSERT INTO person (name) VALUES $Person.name",
@@ -636,7 +636,7 @@ func (s *ExprSuite) TestValidQuery(c *C) {
 		"SELECT name FROM person WHERE id IN ($M.slice)",
 		[]any{sqlair.M{}},
 		[]any{sqlair.M{"slice": []int{1, 2, 3, 4, 5, 6}}},
-		[]any{sql.Named("sqlair_0", 1), sql.Named("sqlair_1", 2), sql.Named("sqlair_2", 3), sql.Named("sqlair_3", 4), sql.Named("sqlair_4", 5), sql.Named("sqlair_5", 6)},
+		[]any{sql.Named("sqlair_0", 1), sql.Named("sqlair_1", 2), sql.Named("sqlair_2", 3), sql.Named("sqlair_3", 4), sql.Named("sqlair_4", 5), sql.Named("sqlair_5", 6), sql.Named("sqlair_6", nil), sql.Named("sqlair_7", nil)},
 	}}
 	for _, t := range tests {
 		parser := expr.NewParser()

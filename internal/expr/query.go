@@ -17,7 +17,6 @@ func (qe *QueryExpr) HasOutputs() bool {
 }
 
 type QueryExpr struct {
-	sql     string
 	args    []any
 	outputs []typeMember
 }
@@ -98,15 +97,16 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 				val = val.Elem()
 				kind = val.Kind()
 			}
+			i := 0
 			if kind == reflect.Slice || kind == reflect.Array {
 				if tm.listAllowed == nil {
 					return nil, fmt.Errorf(`map value %q: slice can only be used with an IN clause`, tm.name)
 				}
-				if val.Len() != tm.listAllowed.length {
-					// This should change it in the same object that is used to generate the SQL.
-					tm.listAllowed.length = val.Len()
+				if sliceLen := val.Len(); sliceLen > tm.listAllowed.length {
+					panic("not allowed more then inBucketSize")
+					//tm.listAllowed.length = inBucketSize * ((sliceLen / inBucketSize) + 1)
 				}
-				for i := 0; i < val.Len(); i++ {
+				for i = 0; i < val.Len(); i++ {
 					sval := val.Index(i)
 					qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(argCount), sval.Interface()))
 					argCount++
@@ -114,10 +114,17 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 			} else {
 				qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(argCount), val.Interface()))
 				argCount++
+				i++
+			}
+			if tm.listAllowed != nil {
+				for i = i; i < tm.listAllowed.length; i++ {
+					qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(argCount), nil))
+					argCount++
+				}
 			}
 		}
 	}
-	return &QueryExpr{outputs: pe.outputs, sql: pe.sql(), args: qargs}, nil
+	return &QueryExpr{outputs: pe.outputs, args: qargs}, nil
 }
 
 var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()

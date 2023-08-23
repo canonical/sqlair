@@ -9,6 +9,8 @@ import (
 	"strings"
 )
 
+const inBucketSize = 8
+
 // PreparedExpr contains an SQL expression that is ready for execution.
 type PreparedExpr struct {
 	outputs       []typeMember
@@ -18,7 +20,7 @@ type PreparedExpr struct {
 
 // SQL returns the SQL ready for execution.
 func (pe *PreparedExpr) SQL() string {
-	return pe.sql
+	return pe.sql()
 }
 
 const markerPrefix = "_sqlair_"
@@ -112,7 +114,7 @@ func prepareIn(ti typeNameToInfo, p *inPart) (*preparedInPart, []typeMember, err
 			typeMembers = append(typeMembers, &mapKey{
 				name:        t.name,
 				mapType:     info.typ(),
-				listAllowed: &listInfo{length: 1},
+				listAllowed: &listInfo{length: inBucketSize},
 			})
 		}
 	}
@@ -299,7 +301,7 @@ func (ic *preparedInPart) sql(c *ioCounter) string {
 				c.inputCount++
 			}
 		default:
-			panic(fmt.Sprintf("invalid type: %T", tm))
+			panic(fmt.Sprintf("internal error: invalid type: %T", tm))
 		}
 		if i < len(ic.typeMembers)-1 {
 			sql.WriteString(", ")

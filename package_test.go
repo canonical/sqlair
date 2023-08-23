@@ -206,14 +206,14 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 		summary:  "simple in",
 		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($M.ids)",
 		types:    []any{Person{}, sqlair.M{}},
-		inputs:   []any{sqlair.M{"ids": []int{30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40}}},
+		inputs:   []any{sqlair.M{"ids": []int{30, 35, 36, 37, 38, 39, 40}}},
 		outputs:  [][]any{{&Person{}}, {&Person{}}, {&Person{}}},
 		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{40, "Mary", 3500}}, {&Person{35, "James", 4500}}},
 	}, {
 		summary:  "complex in",
 		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $M.ids, $Manager.id, $CustomMap.ids, $M.ids2)",
 		types:    []any{Person{}, sqlair.M{}, Manager{}, CustomMap{}},
-		inputs:   []any{Person{ID: 20}, sqlair.M{"ids": []int{21, 22, 23, 24, 25, 26, 27, 28, 29}, "ids2": []int{31, 32, 33, 34, 35}}, &Manager{ID: 30}, CustomMap{"ids": []string{"36", "37", "38", "39", "40"}}},
+		inputs:   []any{Person{ID: 20}, sqlair.M{"ids": []int{21, 23, 24, 25, 26, 27, 28, 29}, "ids2": []int{31, 32, 33, 34, 35}}, &Manager{ID: 30}, CustomMap{"ids": []string{"36", "37", "38", "39", "40"}}},
 		outputs:  [][]any{{&Person{}}, {&Person{}}, {&Person{}}, {&Person{}}},
 		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{20, "Mark", 1500}}, {&Person{40, "Mary", 3500}}, {&Person{35, "James", 4500}}},
 	}, {

@@ -555,12 +555,12 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: ErrTXDone}
 	}
 
-	sqlstmt, err := tx.db.prepareStmt(ctx, tx.sqlconn, s)
+	qe, err := s.pe.Query(inputArgs...)
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
 
-	qe, err := s.pe.Query(inputArgs...)
+	sqlstmt, err := tx.db.prepareStmt(ctx, tx.sqlconn, s)
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
