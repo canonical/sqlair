@@ -148,7 +148,7 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 		expected: [][]any{{&Address{Street: "Fred", ID: 1000}}},
 	}, {
 		summary:  "select into star struct",
-		query:    "SELECT (name, address_id) AS (&Person.*) FROM person WHERE address_id IN ( $Manager.address_id, $Address.district )",
+		query:    "SELECT (name, address_id) AS (&Person.*) FROM person WHERE address_id IN ($Manager.address_id, $Address.district)",
 		types:    []any{Person{}, Address{}, Manager{}},
 		inputs:   []any{Manager{PostalCode: 1000}, Address{ID: 2000}},
 		outputs:  [][]any{{&Person{}}},

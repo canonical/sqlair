@@ -19,11 +19,9 @@ type listInfo struct {
 }
 
 type mapKey struct {
-	name    string
-	mapType reflect.Type
-	// The listInfo pointer is nil if the map value is not allowed to be a
-	// slice or array.
-	listAllowed *listInfo
+	name        string
+	mapType     reflect.Type
+	listAllowed bool
 }
 
 func (mk *mapKey) outerType() reflect.Type {

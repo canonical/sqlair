@@ -99,12 +99,11 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 			}
 			i := 0
 			if kind == reflect.Slice || kind == reflect.Array {
-				if tm.listAllowed == nil {
+				if !tm.listAllowed {
 					return nil, fmt.Errorf(`map value %q: slice can only be used with an IN clause`, tm.name)
 				}
-				if sliceLen := val.Len(); sliceLen > tm.listAllowed.length {
-					panic("not allowed more then inBucketSize")
-					//tm.listAllowed.length = inBucketSize * ((sliceLen / inBucketSize) + 1)
+				if sliceLen := val.Len(); sliceLen > maxSliceLen {
+					return nil, fmt.Errorf("map value %q: slice longer than max length for IN clase (%d > %d)", tm.name, val.Len(), maxSliceLen)
 				}
 				for i = 0; i < val.Len(); i++ {
 					sval := val.Index(i)
@@ -116,8 +115,8 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 				argCount++
 				i++
 			}
-			if tm.listAllowed != nil {
-				for i = i; i < tm.listAllowed.length; i++ {
+			if tm.listAllowed {
+				for i = i; i < maxSliceLen; i++ {
 					qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(argCount), nil))
 					argCount++
 				}
