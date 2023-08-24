@@ -14,10 +14,6 @@ type typeMember interface {
 	memberName() string
 }
 
-type listInfo struct {
-	length int
-}
-
 type mapKey struct {
 	name        string
 	mapType     reflect.Type

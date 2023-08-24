@@ -297,8 +297,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	// Check and expand each query part.
 	for _, part := range pe.queryParts {
 		switch p := part.(type) {
-		case *inputPart: // maxSliceLen is the maximum size of an argument slice allowed in an IN statement
-			const maxSliceLen = 8
+		case *inputPart:
 			inLoc, err := prepareInput(ti, p)
 			if err != nil {
 				return nil, err
@@ -332,7 +331,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 						inCount++
 					}
 				default:
-					panic(fmt.Sprintf("internal error: invalid type: %T", tm))
+					return nil, fmt.Errorf("internal error: invalid type: %T", tm)
 				}
 				if i < len(typeMembers)-1 {
 					sql.WriteString(", ")
