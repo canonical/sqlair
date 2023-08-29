@@ -401,7 +401,7 @@ func (p *Parser) parseGoFullName() (fullName, bool, error) {
 
 	if id, ok := p.parseIdentifier(); ok {
 		if !p.skipByte('.') {
-			return fullName{}, false, fmt.Errorf("column %d: unqualified type, expected %s.* or %s.<db tag>", p.pos, id, id)
+			return fullName{prefix: id}, true, nil
 		}
 
 		idField, ok := p.parseIdentifierAsterisk()

@@ -286,7 +286,7 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{nil}},
-		err:     "cannot get result: need map or pointer to struct, got nil",
+		err:     "cannot get result: need map or pointer to struct/simple type, got nil",
 	}, {
 		summary: "nil pointer parameter",
 		query:   "SELECT * AS &Person.* FROM person",
@@ -300,7 +300,7 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{Person{}}},
-		err:     "cannot get result: need map or pointer to struct, got struct",
+		err:     "cannot get result: need map or pointer to struct/simple type, got struct",
 	}, {
 		summary: "wrong struct",
 		query:   "SELECT * AS &Person.* FROM person",
@@ -314,7 +314,7 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{&[]any{}}},
-		err:     "cannot get result: need map or pointer to struct, got pointer to slice",
+		err:     "cannot get result: need map or pointer to struct/simple type, got pointer to slice",
 	}, {
 		summary: "missing get value",
 		query:   "SELECT * AS &Person.* FROM person",
@@ -376,28 +376,24 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 	}
 }
 
-type ScannerInt struct {
-	SI int
-}
+type ScannerInt int
 
 func (si *ScannerInt) Scan(v any) error {
 	if _, ok := v.(int); ok {
-		si.SI = 42
+		*si = 42
 	} else {
-		si.SI = 666
+		*si = 666
 	}
 	return nil
 }
 
-type ScannerString struct {
-	SS string
-}
+type ScannerString string
 
 func (ss *ScannerString) Scan(v any) error {
 	if _, ok := v.(string); ok {
-		ss.SS = "ScannerString scanned well!"
+		*ss = "ScannerString scanned well!"
 	} else {
-		ss.SS = "ScannerString found a NULL"
+		*ss = "ScannerString found a NULL"
 	}
 	return nil
 }
@@ -421,6 +417,10 @@ func (s *PackageSuite) TestNulls(c *C) {
 		Fullname   ScannerString `db:"name"`
 		PostalCode ScannerInt    `db:"address_id"`
 	}
+	var scannerString ScannerString
+	var scannerInt ScannerInt
+	scannerIntExpected := (ScannerInt)(666)
+	scannerStringExpected := (ScannerString)("ScannerString scanned well!")
 
 	var tests = []struct {
 		summary  string
@@ -456,7 +456,14 @@ func (s *PackageSuite) TestNulls(c *C) {
 		types:    []any{ScannerDude{}},
 		inputs:   []any{},
 		outputs:  []any{&ScannerDude{}},
-		expected: []any{&ScannerDude{Fullname: ScannerString{SS: "ScannerString scanned well!"}, ID: ScannerInt{SI: 666}, PostalCode: ScannerInt{SI: 666}}},
+		expected: []any{&ScannerDude{Fullname: "ScannerString scanned well!", ID: 666, PostalCode: 666}},
+	}, {
+		summary:  "simple null types",
+		query:    `SELECT name AS &ScannerString, id AS &ScannerInt FROM person WHERE name = "Nully"`,
+		types:    []any{(ScannerString)(""), (ScannerInt)(0)},
+		inputs:   []any{},
+		outputs:  []any{&scannerInt, &scannerString},
+		expected: []any{&scannerIntExpected, &scannerStringExpected},
 	}}
 
 	tables, sqldb, err := personAndAddressDB()
@@ -492,6 +499,13 @@ func (s *PackageSuite) TestNulls(c *C) {
 }
 
 func (s *PackageSuite) TestValidGet(c *C) {
+	var s1 sqlair.S
+	var i1 sqlair.I
+	var i2 int
+	s1Expected := (sqlair.S)("Fred")
+	i1Expected := (sqlair.I)(30)
+	i2Expected := 1000
+
 	var tests = []struct {
 		summary  string
 		query    string
@@ -520,6 +534,13 @@ func (s *PackageSuite) TestValidGet(c *C) {
 		inputs:   []any{sqlair.M{"p1": 1000}},
 		outputs:  []any{sqlair.M{}},
 		expected: []any{sqlair.M{"name": "Fred"}},
+	}, {
+		summary:  "simple types",
+		query:    "SELECT name AS &S, id AS &I, address_id AS &int FROM person WHERE name = $S AND id = $I",
+		types:    []any{(sqlair.S)(""), (sqlair.I)(0), 0},
+		inputs:   []any{(sqlair.S)("Fred"), (sqlair.I)(30)},
+		outputs:  []any{&s1, &i1, &i2},
+		expected: []any{&s1Expected, &i1Expected, &i2Expected},
 	}}
 
 	tables, sqldb, err := personAndAddressDB()

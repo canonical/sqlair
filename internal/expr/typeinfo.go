@@ -14,12 +14,24 @@ type typeMember interface {
 	memberName() string
 }
 
+type simpleType struct {
+	simpleType reflect.Type
+}
+
+func (st simpleType) outerType() reflect.Type {
+	return st.simpleType
+}
+
+func (st simpleType) memberName() string {
+	return ""
+}
+
 type mapKey struct {
 	name    string
 	mapType reflect.Type
 }
 
-func (mk *mapKey) outerType() reflect.Type {
+func (mk mapKey) outerType() reflect.Type {
 	return mk.mapType
 }
 
@@ -45,7 +57,7 @@ type structField struct {
 	omitEmpty bool
 }
 
-func (f *structField) outerType() reflect.Type {
+func (f structField) outerType() reflect.Type {
 	return f.structType
 }
 
@@ -63,7 +75,7 @@ type structInfo struct {
 	// Ordered list of tags
 	tags []string
 
-	tagToField map[string]*structField
+	tagToField map[string]structField
 }
 
 func (si *structInfo) typ() reflect.Type {
@@ -76,6 +88,14 @@ type mapInfo struct {
 
 func (mi *mapInfo) typ() reflect.Type {
 	return mi.mapType
+}
+
+type simpleTypeInfo struct {
+	simpleType reflect.Type
+}
+
+func (sti *simpleTypeInfo) typ() reflect.Type {
+	return sti.simpleType
 }
 
 var cacheMutex sync.RWMutex
@@ -113,6 +133,8 @@ func getTypeInfo(value any) (typeInfo, error) {
 // reflect.Value that is specifically required for SQLair operation.
 func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 	switch t.Kind() {
+	case reflect.String, reflect.Int:
+		return &simpleTypeInfo{simpleType: t}, nil
 	case reflect.Map:
 		if t.Key().Kind() != reflect.String {
 			return nil, fmt.Errorf(`map type %s must have key type string, found type %s`, t.Name(), t.Key().Kind())
@@ -120,7 +142,7 @@ func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 		return &mapInfo{mapType: t}, nil
 	case reflect.Struct:
 		info := structInfo{
-			tagToField: make(map[string]*structField),
+			tagToField: make(map[string]structField),
 			structType: t,
 		}
 		tags := []string{}
@@ -141,7 +163,7 @@ func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 				return nil, fmt.Errorf("cannot parse tag for field %s.%s: %s", t.Name(), f.Name, err)
 			}
 			tags = append(tags, tag)
-			info.tagToField[tag] = &structField{
+			info.tagToField[tag] = structField{
 				name:       f.Name,
 				index:      i,
 				omitEmpty:  omitEmpty,
@@ -155,7 +177,7 @@ func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 
 		return &info, nil
 	default:
-		return nil, fmt.Errorf("internal error: cannot obtain type information for type that is not map or struct: %s.", t)
+		return nil, fmt.Errorf("internal error: cannot obtain type information for type that is not map or struct: %s", t)
 	}
 }
 

@@ -78,8 +78,8 @@ func (s *ExprInternalSuite) TestReflectSimpleConcurrent(c *C) {
 
 func (s *ExprInternalSuite) TestReflectNonStructType(c *C) {
 	var nonStructs = []any{
-		int(0),
-		string(""),
+		int64(0),
+		byte('c'),
 	}
 
 	for _, value := range nonStructs {

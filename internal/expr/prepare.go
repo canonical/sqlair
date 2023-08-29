@@ -72,9 +72,17 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
 		}
 	}
 	switch info := info.(type) {
+	case *simpleTypeInfo:
+		return simpleType{simpleType: info.typ()}, nil
 	case *mapInfo:
-		return &mapKey{name: p.sourceType.name, mapType: info.typ()}, nil
+		if p.sourceType.name == "" {
+			return nil, fmt.Errorf(`type %q missing map key`, info.typ().Name())
+		}
+		return mapKey{name: p.sourceType.name, mapType: info.typ()}, nil
 	case *structInfo:
+		if p.sourceType.name == "" {
+			return nil, fmt.Errorf(`type %q missing struct db tag`, info.typ().Name())
+		}
 		f, ok := info.tagToField[p.sourceType.name]
 		if !ok {
 			return nil, fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), p.sourceType.name)
@@ -114,16 +122,27 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 		return info, nil
 	}
 
-	addColumns := func(info typeInfo, tag string, column fullName) error {
+	addColumns := func(info typeInfo, member string, column fullName) error {
 		var tm typeMember
 		switch info := info.(type) {
+		case *simpleTypeInfo:
+			if member != "" {
+				return fmt.Errorf(`cannot qualify simple type %s`, info.typ().Name())
+			}
+			tm = simpleType{simpleType: info.typ()}
 		case *structInfo:
-			tm, ok = info.tagToField[tag]
+			if member == "" {
+				return fmt.Errorf(`type %q missing struct db tag`, info.typ().Name())
+			}
+			tm, ok = info.tagToField[member]
 			if !ok {
-				return fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), tag)
+				return fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), member)
 			}
 		case *mapInfo:
-			tm = &mapKey{name: tag, mapType: info.typ()}
+			if member == "" {
+				return fmt.Errorf(`type %q missing map key`, info.typ())
+			}
+			tm = mapKey{name: member, mapType: info.typ()}
 		}
 		typeMembers = append(typeMembers, tm)
 		outCols = append(outCols, column)
@@ -141,6 +160,9 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 		for _, t := range p.targetTypes {
 			if info, err = fetchInfo(t.prefix); err != nil {
 				return nil, nil, err
+			}
+			if _, ok := info.(*simpleTypeInfo); ok {
+				return nil, nil, fmt.Errorf(`explicit columns required for simple type e.g. "col AS &%s"`, info.typ().Name())
 			}
 			// Generate asterisk columns.
 			if t.name == "*" {
@@ -173,6 +195,9 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 		if info, err = fetchInfo(p.targetTypes[0].prefix); err != nil {
 			return nil, nil, err
 		}
+		if _, ok := info.(*simpleTypeInfo); ok {
+			return nil, nil, fmt.Errorf(`cannot use asterisk with simple type %s`, info.typ().Name())
+		}
 		for _, c := range p.sourceColumns {
 			if err = addColumns(info, c.name, c); err != nil {
 				return nil, nil, err
@@ -190,7 +215,6 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 			if info, err = fetchInfo(t.prefix); err != nil {
 				return nil, nil, err
 			}
-
 			if err = addColumns(info, t.name, c); err != nil {
 				return nil, nil, err
 			}
@@ -220,11 +244,11 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	// Generate and save reflection info.
 	for _, arg := range args {
 		if arg == nil {
-			return nil, fmt.Errorf("need struct or map, got nil")
+			return nil, fmt.Errorf("need struct, map, or simple type, got nil")
 		}
 		t := reflect.TypeOf(arg)
 		switch t.Kind() {
-		case reflect.Struct, reflect.Map:
+		case reflect.Struct, reflect.Map, reflect.String, reflect.Int:
 			if t.Name() == "" {
 				return nil, fmt.Errorf("cannot use anonymous %s", t.Kind())
 			}
@@ -240,9 +264,9 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			}
 			ti[t.Name()] = info
 		case reflect.Pointer:
-			return nil, fmt.Errorf("need struct or map, got pointer to %s", t.Elem().Kind())
+			return nil, fmt.Errorf("need struct, map, or simple type, got pointer to %s", t.Elem().Kind())
 		default:
-			return nil, fmt.Errorf("need struct or map, got %s", t.Kind())
+			return nil, fmt.Errorf("need struct, map, or simple type, got %s", t.Kind())
 		}
 	}
 
@@ -272,10 +296,18 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			if err != nil {
 				return nil, err
 			}
+			//fmt.Printf("typeMembers: %#v\npart: %#v\n", typeMembers, part)
 
 			for _, tm := range typeMembers {
 				if ok := typeMemberPresent[tm]; ok {
-					return nil, fmt.Errorf("member %q of type %q appears more than once", tm.memberName(), tm.outerType().Name())
+					switch tm.(type) {
+					case structField, mapKey:
+						return nil, fmt.Errorf("member %q of type %q appears more than once", tm.memberName(), tm.outerType().Name())
+					case simpleType:
+						return nil, fmt.Errorf("type %q appears more than once", tm.outerType().Name())
+					default:
+						return nil, fmt.Errorf(`internal error: unknown type: %T`, tm)
+					}
 				}
 				typeMemberPresent[tm] = true
 			}
