@@ -74,7 +74,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
 	switch info := info.(type) {
 	case *simpleTypeInfo:
 		if p.sourceType.name != "" {
-			return nil, fmt.Errorf(`cannot specify member of primative type %q`, info.typ().Name())
+			return nil, fmt.Errorf(`cannot specify member of primitive type %q`, info.typ().Name())
 		}
 		return simpleType{simpleType: info.typ()}, nil
 	case *mapInfo:
@@ -124,13 +124,12 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 		}
 		return info, nil
 	}
-
 	addColumns := func(info typeInfo, member string, column fullName) error {
 		var tm typeMember
 		switch info := info.(type) {
 		case *simpleTypeInfo:
 			if member != "" {
-				return fmt.Errorf(`cannot specify member of primative type %q`, info.typ().Name())
+				return fmt.Errorf(`cannot specify member of primitive type %q`, info.typ().Name())
 			}
 			tm = simpleType{simpleType: info.typ()}
 		case *structInfo:
@@ -165,7 +164,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 				return nil, nil, err
 			}
 			if _, ok := info.(*simpleTypeInfo); ok {
-				return nil, nil, fmt.Errorf(`explicit columns required for primative type e.g. "col AS &%s"`, info.typ().Name())
+				return nil, nil, fmt.Errorf(`explicit columns required for primitive type e.g. "col AS &%s"`, info.typ().Name())
 			}
 			// Generate asterisk columns.
 			if t.name == "*" {
@@ -201,7 +200,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 			return nil, nil, err
 		}
 		if _, ok := info.(*simpleTypeInfo); ok {
-			return nil, nil, fmt.Errorf(`cannot use asterisk with primative type %s`, info.typ().Name())
+			return nil, nil, fmt.Errorf(`cannot use asterisk with primitive type %s`, info.typ().Name())
 		}
 		for _, c := range p.sourceColumns {
 			if err = addColumns(info, c.name, c); err != nil {
@@ -249,11 +248,11 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	// Generate and save reflection info.
 	for _, arg := range args {
 		if arg == nil {
-			return nil, fmt.Errorf("need struct, map, or primative type, got nil")
+			return nil, fmt.Errorf("need struct, map, or primitive type, got nil")
 		}
 		t := reflect.TypeOf(arg)
-		switch t.Kind() {
-		case reflect.Struct, reflect.Map, reflect.String, reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
+		switch kind := t.Kind(); {
+		case kind == reflect.Struct || kind == reflect.Map || IsPrimitiveKind(kind):
 			if t.Name() == "" {
 				return nil, fmt.Errorf("cannot use anonymous %s", t.Kind())
 			}
@@ -268,10 +267,10 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 				return nil, fmt.Errorf("two types found with name %q: %q and %q", t.Name(), dupeInfo.typ().String(), t.String())
 			}
 			ti[t.Name()] = info
-		case reflect.Pointer:
-			return nil, fmt.Errorf("need struct, map, or primative type, got pointer to %s", t.Elem().Kind())
+		case kind == reflect.Pointer:
+			return nil, fmt.Errorf("need struct, map, or primitive type, got pointer to %s", t.Elem().Kind())
 		default:
-			return nil, fmt.Errorf("need struct, map, or primative type, got %s", t.Kind())
+			return nil, fmt.Errorf("need struct, map, or primitive type, got %s", t.Kind())
 		}
 	}
 
@@ -301,7 +300,6 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			if err != nil {
 				return nil, err
 			}
-			//fmt.Printf("typeMembers: %#v\npart: %#v\n", typeMembers, part)
 
 			for _, tm := range typeMembers {
 				if ok := typeMemberPresent[tm]; ok {

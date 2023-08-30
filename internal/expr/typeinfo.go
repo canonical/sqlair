@@ -23,7 +23,7 @@ func (st simpleType) outerType() reflect.Type {
 }
 
 func (st simpleType) memberName() string {
-	return ""
+	panic("internal error: memberName called on simpleType")
 }
 
 type mapKey struct {
@@ -98,7 +98,18 @@ func (sti *simpleTypeInfo) typ() reflect.Type {
 	return sti.simpleType
 }
 
-var primativeTypes = map[string]any{
+var primitiveKinds = []reflect.Kind{reflect.String, reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64}
+
+func IsPrimitiveKind(k reflect.Kind) bool {
+	for _, pk := range primitiveKinds {
+		if pk == k {
+			return true
+		}
+	}
+	return false
+}
+
+var primitiveTypes = map[string]any{
 	"string":  "",
 	"bool":    false,
 	"uint":    uint(0),
@@ -116,7 +127,7 @@ var primativeTypes = map[string]any{
 }
 
 func lookupType(ti typeNameToInfo, typeName string) (typeInfo, bool) {
-	if v, ok := primativeTypes[typeName]; ok {
+	if v, ok := primitiveTypes[typeName]; ok {
 		return &simpleTypeInfo{simpleType: reflect.TypeOf(v)}, true
 	}
 	v, ok := ti[typeName]

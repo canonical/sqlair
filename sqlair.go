@@ -427,20 +427,21 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 		for _, sliceVal := range sliceVals {
 			elemType := sliceVal.Type().Elem()
 			var outputArg reflect.Value
-			switch elemType.Kind() {
-			case reflect.Pointer:
-				if elemType.Elem().Kind() != reflect.Struct {
+			switch elemKind := elemType.Kind(); {
+			case elemKind == reflect.Pointer:
+				k := elemType.Elem().Kind()
+				if k != reflect.Struct && !expr.IsPrimitiveKind(k) {
 					iter.Close()
-					return fmt.Errorf("need slice of structs/maps, got slice of pointer to %s", elemType.Elem().Kind())
+					return fmt.Errorf("need slice of structs, maps, or primitive types, got slice of pointer to %s", elemType.Elem().Kind())
 				}
 				outputArg = reflect.New(elemType.Elem())
-			case reflect.Struct:
+			case elemKind == reflect.Struct || expr.IsPrimitiveKind(elemKind):
 				outputArg = reflect.New(elemType)
-			case reflect.Map:
+			case elemKind == reflect.Map:
 				outputArg = reflect.MakeMap(elemType)
 			default:
 				iter.Close()
-				return fmt.Errorf("need slice of structs/maps, got slice of %s", elemType.Kind())
+				return fmt.Errorf("need slice of structs, maps, or primitive types, got slice of %s", elemType.Kind())
 			}
 			outputArgs = append(outputArgs, outputArg.Interface())
 		}
@@ -449,10 +450,10 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 			return err
 		}
 		for i, outputArg := range outputArgs {
-			switch k := sliceVals[i].Type().Elem().Kind(); k {
-			case reflect.Pointer, reflect.Map:
+			switch k := sliceVals[i].Type().Elem().Kind(); {
+			case k == reflect.Pointer || k == reflect.Map:
 				sliceVals[i] = reflect.Append(sliceVals[i], reflect.ValueOf(outputArg))
-			case reflect.Struct:
+			case k == reflect.Struct || expr.IsPrimitiveKind(k):
 				sliceVals[i] = reflect.Append(sliceVals[i], reflect.ValueOf(outputArg).Elem())
 			default:
 				iter.Close()

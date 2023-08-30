@@ -286,7 +286,7 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{nil}},
-		err:     "cannot get result: need map or pointer to struct/primative type, got nil",
+		err:     "cannot get result: need map or pointer to struct/primitive type, got nil",
 	}, {
 		summary: "nil pointer parameter",
 		query:   "SELECT * AS &Person.* FROM person",
@@ -300,7 +300,7 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{Person{}}},
-		err:     "cannot get result: need map or pointer to struct/primative type, got struct",
+		err:     "cannot get result: need map or pointer to struct/primitive type, got struct",
 	}, {
 		summary: "wrong struct",
 		query:   "SELECT * AS &Person.* FROM person",
@@ -499,15 +499,10 @@ func (s *PackageSuite) TestNulls(c *C) {
 }
 
 func (s *PackageSuite) TestValidGet(c *C) {
-	type S string
-	var s1 S
-	type I int
-	var i1 I
-	var i2 int
-	s1Expected := (S)("Fred")
-	i1Expected := (I)(30)
-	i2Expected := 1000
-
+	stringVar := ""
+	intVar := 0
+	stringExpected := "Fred"
+	intExpected := 30
 	var tests = []struct {
 		summary  string
 		query    string
@@ -537,12 +532,12 @@ func (s *PackageSuite) TestValidGet(c *C) {
 		outputs:  []any{sqlair.M{}},
 		expected: []any{sqlair.M{"name": "Fred"}},
 	}, {
-		summary:  "primative types",
-		query:    "SELECT name AS &S, id AS &I, address_id AS &int FROM person WHERE name = $S AND id = $I",
-		types:    []any{(S)(""), (I)(0)},
-		inputs:   []any{(S)("Fred"), (I)(30)},
-		outputs:  []any{&s1, &i1, &i2},
-		expected: []any{&s1Expected, &i1Expected, &i2Expected},
+		summary:  "primitive types",
+		query:    "SELECT name AS &string, id AS &int FROM person WHERE name = $string AND id = $int",
+		types:    []any{},
+		inputs:   []any{"Fred", 30},
+		outputs:  []any{&stringVar, &intVar},
+		expected: []any{&stringExpected, &intExpected},
 	}}
 
 	tables, sqldb, err := personAndAddressDB()
@@ -645,6 +640,7 @@ func (s *PackageSuite) TestErrNoRows(c *C) {
 }
 
 func (s *PackageSuite) TestValidGetAll(c *C) {
+	var intExpected = 30
 	var tests = []struct {
 		summary  string
 		query    string
@@ -694,6 +690,13 @@ func (s *PackageSuite) TestValidGetAll(c *C) {
 		inputs:   []any{},
 		slices:   []any{&[]sqlair.M{}, &[]CustomMap{}},
 		expected: []any{&[]sqlair.M{{"name": "Mark"}}, &[]CustomMap{{"id": int64(20)}}},
+	}, {
+		summary:  "primitive types",
+		query:    "SELECT name AS &string, id AS &int FROM person WHERE name = $string AND id = $int",
+		types:    []any{},
+		inputs:   []any{"Fred", 30},
+		slices:   []any{&[]string{}, &[]*int{}},
+		expected: []any{&[]string{"Fred"}, &[]*int{&intExpected}},
 	}}
 
 	tables, sqldb, err := personAndAddressDB()
@@ -773,21 +776,21 @@ func (s *PackageSuite) TestGetAllErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		slices:  []any{&[]int{}},
-		err:     `cannot populate slice: need slice of structs/maps, got slice of int`,
+		err:     `cannot populate slice: cannot get result: output type "int" does not appear in query, have: Person`,
 	}, {
-		summary: "wrong slice type (pointer to int)",
+		summary: "wrong slice type (pointer to func)",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
-		slices:  []any{&[]*int{}},
-		err:     `cannot populate slice: need slice of structs/maps, got slice of pointer to int`,
+		slices:  []any{&[]*func(){}},
+		err:     `cannot populate slice: need slice of structs, maps, or primitive types, got slice of pointer to func`,
 	}, {
 		summary: "wrong slice type (pointer to map)",
 		query:   "SELECT &M.name FROM person",
 		types:   []any{sqlair.M{}},
 		inputs:  []any{},
 		slices:  []any{&[]*sqlair.M{}},
-		err:     `cannot populate slice: need slice of structs/maps, got slice of pointer to map`,
+		err:     `cannot populate slice: need slice of structs, maps, or primitive types, got slice of pointer to map`,
 	}, {
 		summary: "output not referenced in query",
 		query:   "SELECT name FROM person",
