@@ -73,7 +73,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
 	}
 	switch info := info.(type) {
 	case *mapInfo:
-		return &mapKey{name: p.sourceType.name, mapType: info.typ()}, nil
+		return mapKey{name: p.sourceType.name, mapType: info.typ()}, nil
 	case *structInfo:
 		f, ok := info.tagToField[p.sourceType.name]
 		if !ok {
@@ -123,7 +123,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 				return fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), tag)
 			}
 		case *mapInfo:
-			tm = &mapKey{name: tag, mapType: info.typ()}
+			tm = mapKey{name: tag, mapType: info.typ()}
 		}
 		typeMembers = append(typeMembers, tm)
 		outCols = append(outCols, column)
