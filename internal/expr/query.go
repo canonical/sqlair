@@ -94,7 +94,6 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 			}
 		default:
 			return nil, fmt.Errorf(`internal error: unknown type: %T`, tm)
-
 		}
 		qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(i), val.Interface()))
 	}
