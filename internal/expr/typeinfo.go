@@ -168,15 +168,15 @@ func getTypeInfo(value any) (typeInfo, error) {
 // generate produces and returns reflection information for the input
 // reflect.Value that is specifically required for SQLair operation.
 func generateTypeInfo(t reflect.Type) (typeInfo, error) {
-	switch t.Kind() {
-	case reflect.String, reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
+	switch k := t.Kind(); {
+	case IsPrimitiveKind(k):
 		return &simpleTypeInfo{simpleType: t}, nil
-	case reflect.Map:
+	case k == reflect.Map:
 		if t.Key().Kind() != reflect.String {
 			return nil, fmt.Errorf(`map type %s must have key type string, found type %s`, t.Name(), t.Key().Kind())
 		}
 		return &mapInfo{mapType: t}, nil
-	case reflect.Struct:
+	case k == reflect.Struct:
 		info := structInfo{
 			tagToField: make(map[string]structField),
 			structType: t,
