@@ -312,17 +312,17 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	[]any{HardMaths{}},
 	"INSERT INTO arr VALUES (ARRAY[[1,2],[@sqlair_0,4]], ARRAY[[5,6],[@sqlair_1,8]]);",
 }, {
-	"simple types 1",
+	"primative types 1",
 	"SELECT name AS &S, id AS &I FROM t WHERE name = $S AND othername = $S AND id = $I",
 	"[Bypass[SELECT ] Output[[name] [S]] Bypass[, ] Output[[id] [I]] Bypass[ FROM t WHERE name = ] Input[S] Bypass[ AND othername = ] Input[S] Bypass[ AND id = ] Input[I]]",
 	[]any{(S)(""), (I)(0)},
 	"SELECT name AS _sqlair_0, id AS _sqlair_1 FROM t WHERE name = @sqlair_0 AND othername = @sqlair_1 AND id = @sqlair_2",
 }, {
-	"simple types 2",
-	"SELECT name AS &string, id AS &int FROM t",
-	"[Bypass[SELECT ] Output[[name] [string]] Bypass[, ] Output[[id] [int]] Bypass[ FROM t]]",
+	"primative types 2 (passing some to prepare)",
+	"SELECT (col1, col2, col3, col4, col5, col6, col7, col8, col9, col10, col11, col12, col13, col14) AS (&string, &bool, &uint, &uint8, &uint16, &uint32, &uint64, &int, &int8, &int16, &int32, &int64, &float32, &float64) FROM t",
+	"[Bypass[SELECT ] Output[[col1 col2 col3 col4 col5 col6 col7 col8 col9 col10 col11 col12 col13 col14] [string bool uint uint8 uint16 uint32 uint64 int int8 int16 int32 int64 float32 float64]] Bypass[ FROM t]]",
 	[]any{"", 0},
-	"SELECT name AS _sqlair_0, id AS _sqlair_1 FROM t",
+	"SELECT col1 AS _sqlair_0, col2 AS _sqlair_1, col3 AS _sqlair_2, col4 AS _sqlair_3, col5 AS _sqlair_4, col6 AS _sqlair_5, col7 AS _sqlair_6, col8 AS _sqlair_7, col9 AS _sqlair_8, col10 AS _sqlair_9, col11 AS _sqlair_10, col12 AS _sqlair_11, col13 AS _sqlair_12, col14 AS _sqlair_13 FROM t",
 }}
 
 func (s *ExprSuite) TestExpr(c *C) {
@@ -397,6 +397,9 @@ func (s *ExprSuite) TestParseErrors(c *C) {
 	}, {
 		query: "SELECT (name, id) AS &Person.*",
 		err:   `cannot parse expression: column 30: missing parentheses around types after "AS"`,
+	}, {
+		query: "SELECT foo FROM t WHERE x = $string.*",
+		err:   `cannot parse expression: asterisk not allowed in input expression "$string.*"`,
 	}}
 
 	for _, t := range tests {
@@ -498,15 +501,15 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{[]any{Person{}}},
-		err:         `cannot prepare expression: need struct, map, or simple type, got slice`,
+		err:         `cannot prepare expression: need struct, map, or primative type, got slice`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{&Person{}},
-		err:         `cannot prepare expression: need struct, map, or simple type, got pointer to struct`,
+		err:         `cannot prepare expression: need struct, map, or primative type, got pointer to struct`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{(*Person)(nil)},
-		err:         `cannot prepare expression: need struct, map, or simple type, got pointer to struct`,
+		err:         `cannot prepare expression: need struct, map, or primative type, got pointer to struct`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{map[string]any{}},
@@ -514,7 +517,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{nil},
-		err:         `cannot prepare expression: need struct, map, or simple type, got nil`,
+		err:         `cannot prepare expression: need struct, map, or primative type, got nil`,
 	}, {
 		query:       "SELECT * AS &.* FROM t",
 		prepareArgs: []any{struct{ f int }{f: 1}},
@@ -536,33 +539,41 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 		prepareArgs: []any{Person{}},
 		err:         `cannot prepare expression: type "Person" missing struct db tag`,
 	}, {
-		query:       "SELECT &S FROM t",
-		prepareArgs: []any{(S)("")},
-		err:         `cannot prepare expression: explicit columns required for simple type e.g. "col AS &S"`,
+		query:       "SELECT &string FROM t",
+		prepareArgs: []any{},
+		err:         `cannot prepare expression: explicit columns required for primative type e.g. "col AS &string"`,
 	}, {
-		query:       "SELECT &I FROM t",
-		prepareArgs: []any{(I)(0)},
-		err:         `cannot prepare expression: explicit columns required for simple type e.g. "col AS &I"`,
+		query:       "SELECT &int FROM t",
+		prepareArgs: []any{},
+		err:         `cannot prepare expression: explicit columns required for primative type e.g. "col AS &int"`,
 	}, {
-		query:       "SELECT * AS &S FROM t",
-		prepareArgs: []any{(S)("")},
-		err:         `cannot prepare expression: explicit columns required for simple type e.g. "col AS &S"`,
+		query:       "SELECT * AS &string FROM t",
+		prepareArgs: []any{},
+		err:         `cannot prepare expression: explicit columns required for primative type e.g. "col AS &string"`,
 	}, {
-		query:       "SELECT * AS &S.* FROM t",
-		prepareArgs: []any{(S)("")},
-		err:         `cannot prepare expression: explicit columns required for simple type e.g. "col AS &S"`,
+		query:       "SELECT * AS &string.* FROM t",
+		prepareArgs: []any{},
+		err:         `cannot prepare expression: explicit columns required for primative type e.g. "col AS &string"`,
 	}, {
-		query:       "SELECT &S.* FROM t",
-		prepareArgs: []any{(S)("")},
-		err:         `cannot prepare expression: explicit columns required for simple type e.g. "col AS &S"`,
+		query:       "SELECT &string.* FROM t",
+		prepareArgs: []any{},
+		err:         `cannot prepare expression: explicit columns required for primative type e.g. "col AS &string"`,
 	}, {
-		query:       "SELECT &S.name FROM t",
-		prepareArgs: []any{(S)("")},
-		err:         `cannot prepare expression: explicit columns required for simple type e.g. "col AS &S"`,
+		query:       "SELECT &string.name FROM t",
+		prepareArgs: []any{},
+		err:         `cannot prepare expression: explicit columns required for primative type e.g. "col AS &string"`,
 	}, {
-		query:       "SELECT name AS &S, address AS &S FROM t",
-		prepareArgs: []any{(S)("")},
-		err:         `cannot prepare expression: type "S" appears more than once`,
+		query:       "SELECT name AS &string, address AS &string FROM t",
+		prepareArgs: []any{},
+		err:         `cannot prepare expression: type "string" appears more than once`,
+	}, {
+		query:       "SELECT foo FROM t WHERE x = $string.name",
+		prepareArgs: []any{},
+		err:         `cannot prepare expression: cannot specify member of primative type "string"`,
+	}, {
+		query:       "SELECT foo FROM t WHERE x = $S",
+		prepareArgs: []any{},
+		err:         `cannot prepare expression: type "S" not passed as a parameter`,
 	}}
 
 	for i, test := range tests {
@@ -671,6 +682,11 @@ func (s *ExprSuite) TestValidQuery(c *C) {
 		[]any{Person{}, StringMap{}},
 		[]any{Person{ID: 666}, StringMap{"street": "Highway to Hell"}},
 		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
+	}, {
+		"SELECT foo FROM t WHERE x = $string, y = $int",
+		[]any{0, ""},
+		[]any{"arg1", 2},
+		[]any{sql.Named("sqlair_0", "arg1"), sql.Named("sqlair_1", 2)},
 	}}
 	for _, t := range tests {
 		parser := expr.NewParser()
@@ -708,22 +724,22 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
 		queryArgs:   []any{nil, Person{Fullname: "Monty Bingles"}},
-		err:         "invalid input parameter: need struct, map, or simple type, got nil",
+		err:         "invalid input parameter: need struct, map, or primative type, got nil",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
 		queryArgs:   []any{(*Person)(nil)},
-		err:         "invalid input parameter: need struct, map, or simple type, got nil",
+		err:         "invalid input parameter: need struct, map, or primative type, got nil",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Address{}},
 		queryArgs:   []any{'c'},
-		err:         "invalid input parameter: need struct, map, or simple type, got int32",
+		err:         "invalid input parameter: int32 not referenced in query",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Address{}},
 		queryArgs:   []any{[]any{}},
-		err:         "invalid input parameter: need struct, map, or simple type, got slice",
+		err:         `invalid input parameter: invalid input type: "\[\]interface {}"`,
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Address{}},
@@ -749,6 +765,11 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		prepareArgs: []any{Person{}},
 		queryArgs:   []any{Person{}, Person{}},
 		err:         `invalid input parameter: type "Person" provided more than once`,
+	}, {
+		query:       "SELECT street FROM t WHERE x = $string",
+		prepareArgs: []any{},
+		queryArgs:   []any{byte('s')},
+		err:         `invalid input parameter: uint8 not referenced in query`,
 	}}
 
 	outerP := Person{}

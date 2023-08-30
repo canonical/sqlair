@@ -98,6 +98,31 @@ func (sti *simpleTypeInfo) typ() reflect.Type {
 	return sti.simpleType
 }
 
+var primativeTypes = map[string]any{
+	"string":  "",
+	"bool":    false,
+	"uint":    uint(0),
+	"uint8":   uint8(0),
+	"uint16":  uint16(0),
+	"uint32":  uint32(0),
+	"uint64":  uint64(0),
+	"int":     int(0),
+	"int8":    int8(0),
+	"int16":   int16(0),
+	"int32":   int32(0),
+	"int64":   int64(0),
+	"float32": float32(0),
+	"float64": float64(0),
+}
+
+func lookupType(ti typeNameToInfo, typeName string) (typeInfo, bool) {
+	if v, ok := primativeTypes[typeName]; ok {
+		return &simpleTypeInfo{simpleType: reflect.TypeOf(v)}, true
+	}
+	v, ok := ti[typeName]
+	return v, ok
+}
+
 var cacheMutex sync.RWMutex
 var cache = make(map[reflect.Type]typeInfo)
 
@@ -133,7 +158,7 @@ func getTypeInfo(value any) (typeInfo, error) {
 // reflect.Value that is specifically required for SQLair operation.
 func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 	switch t.Kind() {
-	case reflect.String, reflect.Int:
+	case reflect.String, reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
 		return &simpleTypeInfo{simpleType: t}, nil
 	case reflect.Map:
 		if t.Key().Kind() != reflect.String {

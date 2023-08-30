@@ -286,7 +286,7 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{nil}},
-		err:     "cannot get result: need map or pointer to struct/simple type, got nil",
+		err:     "cannot get result: need map or pointer to struct/primative type, got nil",
 	}, {
 		summary: "nil pointer parameter",
 		query:   "SELECT * AS &Person.* FROM person",
@@ -300,21 +300,21 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{Person{}}},
-		err:     "cannot get result: need map or pointer to struct/simple type, got struct",
+		err:     "cannot get result: need map or pointer to struct/primative type, got struct",
 	}, {
 		summary: "wrong struct",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{&Address{}}},
-		err:     `cannot get result: type "Address" does not appear in query, have: Person`,
+		err:     `cannot get result: output type "Address" does not appear in query, have: Person`,
 	}, {
 		summary: "not a struct",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: [][]any{{&[]any{}}},
-		err:     "cannot get result: need map or pointer to struct/simple type, got pointer to slice",
+		err:     `cannot get result: invalid output type: "\[\]interface {}", valid output types are: Person`,
 	}, {
 		summary: "missing get value",
 		query:   "SELECT * AS &Person.* FROM person",
@@ -499,11 +499,13 @@ func (s *PackageSuite) TestNulls(c *C) {
 }
 
 func (s *PackageSuite) TestValidGet(c *C) {
-	var s1 sqlair.S
-	var i1 sqlair.I
+	type S string
+	var s1 S
+	type I int
+	var i1 I
 	var i2 int
-	s1Expected := (sqlair.S)("Fred")
-	i1Expected := (sqlair.I)(30)
+	s1Expected := (S)("Fred")
+	i1Expected := (I)(30)
 	i2Expected := 1000
 
 	var tests = []struct {
@@ -535,10 +537,10 @@ func (s *PackageSuite) TestValidGet(c *C) {
 		outputs:  []any{sqlair.M{}},
 		expected: []any{sqlair.M{"name": "Fred"}},
 	}, {
-		summary:  "simple types",
+		summary:  "primative types",
 		query:    "SELECT name AS &S, id AS &I, address_id AS &int FROM person WHERE name = $S AND id = $I",
-		types:    []any{(sqlair.S)(""), (sqlair.I)(0), 0},
-		inputs:   []any{(sqlair.S)("Fred"), (sqlair.I)(30)},
+		types:    []any{(S)(""), (I)(0)},
+		inputs:   []any{(S)("Fred"), (I)(30)},
 		outputs:  []any{&s1, &i1, &i2},
 		expected: []any{&s1Expected, &i1Expected, &i2Expected},
 	}}
@@ -764,7 +766,7 @@ func (s *PackageSuite) TestGetAllErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		slices:  []any{&[]*Address{}},
-		err:     `cannot populate slice: cannot get result: type "Address" does not appear in query, have: Person`,
+		err:     `cannot populate slice: cannot get result: output type "Address" does not appear in query, have: Person`,
 	}, {
 		summary: "wrong slice type (int)",
 		query:   "SELECT * AS &Person.* FROM person",
@@ -1377,4 +1379,126 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 			c.Errorf("\ntest %q failed (Close):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
 		}
 	}
+}
+
+func (s *PackageSuite) TestPrimativeTypes(c *C) {
+	tables, sqldb, err := personAndAddressDB()
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	db := sqlair.NewDB(sqldb)
+	defer dropTables(c, db, tables...)
+
+	v1 := int(30)
+	o1 := int(0)
+	stmt, err := sqlair.Prepare("SELECT id AS &int FROM person WHERE id = $int")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v1).Get(&o1)
+	c.Assert(err, IsNil)
+	c.Assert(v1, Equals, o1)
+
+	v2 := int8(30)
+	o2 := int8(0)
+	stmt, err = sqlair.Prepare("SELECT id AS &int8 FROM person WHERE id = $int8")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v2).Get(&o2)
+	c.Assert(err, IsNil)
+	c.Assert(v2, Equals, o2)
+
+	v3 := int16(30)
+	o3 := int16(0)
+	stmt, err = sqlair.Prepare("SELECT id AS &int16 FROM person WHERE id = $int16")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v3).Get(&o3)
+	c.Assert(err, IsNil)
+	c.Assert(v3, Equals, o3)
+
+	v4 := int32(30)
+	o4 := int32(0)
+	stmt, err = sqlair.Prepare("SELECT id AS &int32 FROM person WHERE id = $int32")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v4).Get(&o4)
+	c.Assert(err, IsNil)
+	c.Assert(v4, Equals, o4)
+
+	v5 := int64(30)
+	o5 := int64(0)
+	stmt, err = sqlair.Prepare("SELECT id AS &int64 FROM person WHERE id = $int64")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v5).Get(&o5)
+	c.Assert(err, IsNil)
+	c.Assert(v5, Equals, o5)
+
+	v6 := uint(30)
+	o6 := uint(0)
+	stmt, err = sqlair.Prepare("SELECT id AS &uint FROM person WHERE id = $uint")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v6).Get(&o6)
+	c.Assert(err, IsNil)
+	c.Assert(v6, Equals, o6)
+
+	v7 := uint8(30)
+	o7 := uint8(0)
+	stmt, err = sqlair.Prepare("SELECT id AS &uint8 FROM person WHERE id = $uint8")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v7).Get(&o7)
+	c.Assert(err, IsNil)
+	c.Assert(v7, Equals, o7)
+
+	v8 := uint16(30)
+	o8 := uint16(0)
+	stmt, err = sqlair.Prepare("SELECT id AS &uint16 FROM person WHERE id = $uint16")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v8).Get(&o8)
+	c.Assert(err, IsNil)
+	c.Assert(v8, Equals, o8)
+
+	v9 := uint32(30)
+	o9 := uint32(0)
+	stmt, err = sqlair.Prepare("SELECT id AS &uint32 FROM person WHERE id = $uint32")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v9).Get(&o9)
+	c.Assert(err, IsNil)
+	c.Assert(v9, Equals, o9)
+
+	v10 := uint64(30)
+	o10 := uint64(0)
+	stmt, err = sqlair.Prepare("SELECT id AS &uint64 FROM person WHERE id = $uint64")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v10).Get(&o10)
+	c.Assert(err, IsNil)
+	c.Assert(v10, Equals, o10)
+
+	v11 := float32(30)
+	o11 := float32(0)
+	stmt, err = sqlair.Prepare("SELECT id AS &float32 FROM person WHERE id = $float32")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v11).Get(&o11)
+	c.Assert(err, IsNil)
+	c.Assert(v11, Equals, o11)
+
+	v12 := float64(30)
+	o12 := float64(0)
+	stmt, err = sqlair.Prepare("SELECT id AS &float64 FROM person WHERE id = $float64")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v12).Get(&o12)
+	c.Assert(err, IsNil)
+	c.Assert(v12, Equals, o12)
+
+	v13 := string("Fred")
+	o13 := string("")
+	stmt, err = sqlair.Prepare("SELECT name AS &string FROM person WHERE name = $string")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v13).Get(&o13)
+	c.Assert(err, IsNil)
+	c.Assert(v13, Equals, o13)
+
+	v14 := bool(true)
+	o14 := bool(false)
+	stmt, err = sqlair.Prepare("SELECT true AS &bool FROM person WHERE id > $bool")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v14).Get(&o14)
+	c.Assert(err, IsNil)
+	c.Assert(v14, Equals, o14)
 }

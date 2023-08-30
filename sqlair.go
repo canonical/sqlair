@@ -23,10 +23,6 @@ import (
 //	err := q.Get(resultMap) // => sqlair.M{"name": "Fred", "postcode": 10031}
 type M map[string]any
 
-type S string
-
-type I int
-
 var ErrNoRows = sql.ErrNoRows
 var ErrTXDone = sql.ErrTxDone
 

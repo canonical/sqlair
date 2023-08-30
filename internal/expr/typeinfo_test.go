@@ -76,19 +76,6 @@ func (s *ExprInternalSuite) TestReflectSimpleConcurrent(c *C) {
 	wg.Wait()
 }
 
-func (s *ExprInternalSuite) TestReflectNonStructType(c *C) {
-	var nonStructs = []any{
-		int64(0),
-		byte('c'),
-	}
-
-	for _, value := range nonStructs {
-		i, err := getTypeInfo(value)
-		c.Assert(err, ErrorMatches, "internal error: cannot obtain type information for type that is not map or struct: .*")
-		c.Assert(i, IsNil)
-	}
-}
-
 func (s *ExprInternalSuite) TestReflectBadTagError(c *C) {
 
 	var unsupportedFlag = []any{

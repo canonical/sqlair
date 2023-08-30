@@ -62,7 +62,7 @@ func starCount(fns []fullName) int {
 
 // prepareInput checks that the input expression corresponds to a known type.
 func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
-	info, ok := ti[p.sourceType.prefix]
+	info, ok := lookupType(ti, p.sourceType.prefix)
 	if !ok {
 		ts := getKeys(ti)
 		if len(ts) == 0 {
@@ -73,6 +73,9 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
 	}
 	switch info := info.(type) {
 	case *simpleTypeInfo:
+		if p.sourceType.name != "" {
+			return nil, fmt.Errorf(`cannot specify member of primative type %q`, info.typ().Name())
+		}
 		return simpleType{simpleType: info.typ()}, nil
 	case *mapInfo:
 		if p.sourceType.name == "" {
@@ -110,7 +113,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 	var err error
 
 	fetchInfo := func(typeName string) (typeInfo, error) {
-		info, ok := ti[typeName]
+		info, ok := lookupType(ti, typeName)
 		if !ok {
 			ts := getKeys(ti)
 			if len(ts) == 0 {
@@ -127,7 +130,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 		switch info := info.(type) {
 		case *simpleTypeInfo:
 			if member != "" {
-				return fmt.Errorf(`cannot qualify simple type %s`, info.typ().Name())
+				return fmt.Errorf(`cannot specify member of primative type %q`, info.typ().Name())
 			}
 			tm = simpleType{simpleType: info.typ()}
 		case *structInfo:
@@ -162,7 +165,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 				return nil, nil, err
 			}
 			if _, ok := info.(*simpleTypeInfo); ok {
-				return nil, nil, fmt.Errorf(`explicit columns required for simple type e.g. "col AS &%s"`, info.typ().Name())
+				return nil, nil, fmt.Errorf(`explicit columns required for primative type e.g. "col AS &%s"`, info.typ().Name())
 			}
 			// Generate asterisk columns.
 			if t.name == "*" {
@@ -177,6 +180,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 						outCols = append(outCols, fullName{pref, tag})
 						typeMembers = append(typeMembers, info.tagToField[tag])
 					}
+				default:
+					return nil, nil, fmt.Errorf(`internal error: unexpected type: %T`, info)
 				}
 			} else {
 				// Generate explicit columns.
@@ -196,7 +201,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 			return nil, nil, err
 		}
 		if _, ok := info.(*simpleTypeInfo); ok {
-			return nil, nil, fmt.Errorf(`cannot use asterisk with simple type %s`, info.typ().Name())
+			return nil, nil, fmt.Errorf(`cannot use asterisk with primative type %s`, info.typ().Name())
 		}
 		for _, c := range p.sourceColumns {
 			if err = addColumns(info, c.name, c); err != nil {
@@ -244,11 +249,11 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	// Generate and save reflection info.
 	for _, arg := range args {
 		if arg == nil {
-			return nil, fmt.Errorf("need struct, map, or simple type, got nil")
+			return nil, fmt.Errorf("need struct, map, or primative type, got nil")
 		}
 		t := reflect.TypeOf(arg)
 		switch t.Kind() {
-		case reflect.Struct, reflect.Map, reflect.String, reflect.Int:
+		case reflect.Struct, reflect.Map, reflect.String, reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
 			if t.Name() == "" {
 				return nil, fmt.Errorf("cannot use anonymous %s", t.Kind())
 			}
@@ -264,9 +269,9 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			}
 			ti[t.Name()] = info
 		case reflect.Pointer:
-			return nil, fmt.Errorf("need struct, map, or simple type, got pointer to %s", t.Elem().Kind())
+			return nil, fmt.Errorf("need struct, map, or primative type, got pointer to %s", t.Elem().Kind())
 		default:
-			return nil, fmt.Errorf("need struct, map, or simple type, got %s", t.Kind())
+			return nil, fmt.Errorf("need struct, map, or primative type, got %s", t.Kind())
 		}
 	}
 

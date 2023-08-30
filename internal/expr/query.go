@@ -46,21 +46,19 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	for _, arg := range args {
 		v := reflect.ValueOf(arg)
 		if v.Kind() == reflect.Invalid || (v.Kind() == reflect.Pointer && v.IsNil()) {
-			return nil, fmt.Errorf("need struct, map, or simple type, got nil")
+			return nil, fmt.Errorf("need struct, map, or primative type, got nil")
 		}
 		v = reflect.Indirect(v)
 		t := v.Type()
-		switch v.Kind() {
-		case reflect.Struct, reflect.Map, reflect.String, reflect.Int:
-		default:
-			return nil, fmt.Errorf("need struct, map, or simple type, got %s", t.Kind())
-		}
 		if _, ok := typeValue[t]; ok {
 			return nil, fmt.Errorf("type %q provided more than once", t.Name())
 		}
 		typeValue[t] = v
 		typeNames = append(typeNames, t.Name())
 		if !inQuery[t] {
+			if t.Name() == "" {
+				return nil, fmt.Errorf("invalid input type: %q", t.String())
+			}
 			// Check if we have a type with the same name from a different package.
 			for _, typeMember := range pe.inputs {
 				if t.Name() == typeMember.outerType().Name() {
@@ -129,26 +127,25 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 	outputVals := []reflect.Value{}
 	for _, outputArg := range outputArgs {
 		if outputArg == nil {
-			return nil, nil, fmt.Errorf("need map or pointer to struct/simple type, got nil")
+			return nil, nil, fmt.Errorf("need map or pointer to struct/primative type, got nil")
 		}
 		outputVal := reflect.ValueOf(outputArg)
 		k := outputVal.Kind()
 		if k != reflect.Map {
 			if k != reflect.Pointer {
-				return nil, nil, fmt.Errorf("need map or pointer to struct/simple type, got %s", k)
+				return nil, nil, fmt.Errorf("need map or pointer to struct/primative type, got %s", k)
 			}
 			if outputVal.IsNil() {
 				return nil, nil, fmt.Errorf("got nil pointer")
 			}
 			outputVal = outputVal.Elem()
-			switch outputVal.Kind() {
-			case reflect.Struct, reflect.Map, reflect.String, reflect.Int:
-			default:
-				return nil, nil, fmt.Errorf("need map or pointer to struct/simple type, got pointer to %s", outputVal.Kind())
-			}
 		}
 		if !inQuery[outputVal.Type()] {
-			return nil, nil, fmt.Errorf("type %q does not appear in query, have: %s", outputVal.Type().Name(), strings.Join(typesInQuery, ", "))
+			typeName := outputVal.Type().Name()
+			if typeName == "" {
+				return nil, nil, fmt.Errorf("invalid output type: %q, valid output types are: %s", outputVal.Type().String(), strings.Join(typesInQuery, ", "))
+			}
+			return nil, nil, fmt.Errorf("output type %q does not appear in query, have: %s", typeName, strings.Join(typesInQuery, ", "))
 		}
 		if _, ok := typeDest[outputVal.Type()]; ok {
 			return nil, nil, fmt.Errorf("type %q provided more than once, rename one of them", outputVal.Type().Name())
