@@ -43,9 +43,9 @@ type IntMap map[string]int
 
 type StringMap map[string]string
 
-type string1 string
-type string2 string
-type myint int
+type nameStr string
+type addressStr string
+type idInt int
 
 var tests = []struct {
 	summary          string
@@ -313,15 +313,15 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	"INSERT INTO arr VALUES (ARRAY[[1,2],[@sqlair_0,4]], ARRAY[[5,6],[@sqlair_1,8]]);",
 }, {
 	"all primitive types",
-	"SELECT (col1, col2, col3, col4, col5, col6, col7, col8, col9, col10, col11, col12, col13, col14) AS (&string, &bool, &uint, &uint8, &uint16, &uint32, &uint64, &int, &int8, &int16, &int32, &int64, &float32, &float64) FROM t",
-	"[Bypass[SELECT ] Output[[col1 col2 col3 col4 col5 col6 col7 col8 col9 col10 col11 col12 col13 col14] [string bool uint uint8 uint16 uint32 uint64 int int8 int16 int32 int64 float32 float64]] Bypass[ FROM t]]",
+	"SELECT (col1 AS &string), (col2 AS &bool), (col3 AS &uint), (col4 AS &uint8), (col5 AS &uint16), (col6 AS &uint32), (col7 AS &uint64), (col8 AS &int), (col9 AS &int8), (col10 AS &int16), (col11 AS &int32), (col12 AS &int64), (col13 AS &float32), (col14 AS &float64) FROM t",
+	"[Bypass[SELECT (] Output[[col1] [string]] Bypass[), (] Output[[col2] [bool]] Bypass[), (] Output[[col3] [uint]] Bypass[), (] Output[[col4] [uint8]] Bypass[), (] Output[[col5] [uint16]] Bypass[), (] Output[[col6] [uint32]] Bypass[), (] Output[[col7] [uint64]] Bypass[), (] Output[[col8] [int]] Bypass[), (] Output[[col9] [int8]] Bypass[), (] Output[[col10] [int16]] Bypass[), (] Output[[col11] [int32]] Bypass[), (] Output[[col12] [int64]] Bypass[), (] Output[[col13] [float32]] Bypass[), (] Output[[col14] [float64]] Bypass[) FROM t]]",
 	[]any{},
-	"SELECT col1 AS _sqlair_0, col2 AS _sqlair_1, col3 AS _sqlair_2, col4 AS _sqlair_3, col5 AS _sqlair_4, col6 AS _sqlair_5, col7 AS _sqlair_6, col8 AS _sqlair_7, col9 AS _sqlair_8, col10 AS _sqlair_9, col11 AS _sqlair_10, col12 AS _sqlair_11, col13 AS _sqlair_12, col14 AS _sqlair_13 FROM t",
+	"SELECT (col1 AS _sqlair_0), (col2 AS _sqlair_1), (col3 AS _sqlair_2), (col4 AS _sqlair_3), (col5 AS _sqlair_4), (col6 AS _sqlair_5), (col7 AS _sqlair_6), (col8 AS _sqlair_7), (col9 AS _sqlair_8), (col10 AS _sqlair_9), (col11 AS _sqlair_10), (col12 AS _sqlair_11), (col13 AS _sqlair_12), (col14 AS _sqlair_13) FROM t",
 }, {
 	"custom primitive types",
-	"SELECT name AS &string1, address AS &string2, id AS &myint FROM t WHERE name = $string1 AND address = $string2 AND id = $myint",
-	"[Bypass[SELECT ] Output[[name] [string1]] Bypass[, ] Output[[address] [string2]] Bypass[, ] Output[[id] [myint]] Bypass[ FROM t WHERE name = ] Input[string1] Bypass[ AND address = ] Input[string2] Bypass[ AND id = ] Input[myint]]",
-	[]any{(string1)(""), (string2)(""), (myint)(0)},
+	"SELECT name AS &nameStr, address AS &addressStr, id AS &idInt FROM t WHERE name = $nameStr AND address = $addressStr AND id = $idInt",
+	"[Bypass[SELECT ] Output[[name] [nameStr]] Bypass[, ] Output[[address] [addressStr]] Bypass[, ] Output[[id] [idInt]] Bypass[ FROM t WHERE name = ] Input[nameStr] Bypass[ AND address = ] Input[addressStr] Bypass[ AND id = ] Input[idInt]]",
+	[]any{(idInt)(0), (addressStr)(""), (nameStr)("")},
 	"SELECT name AS _sqlair_0, address AS _sqlair_1, id AS _sqlair_2 FROM t WHERE name = @sqlair_0 AND address = @sqlair_1 AND id = @sqlair_2",
 }, {
 	"primitive types passed to prepare unnecessarily",
@@ -572,6 +572,14 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 		query:       "SELECT &string.name FROM t",
 		prepareArgs: []any{},
 		err:         `cannot prepare expression: explicit columns required for primitive type e.g. "col AS &string"`,
+	}, {
+		query:       "SELECT name AS &string.* FROM t",
+		prepareArgs: []any{},
+		err:         `cannot prepare expression: cannot use asterisk with primitive type "string" in expression: name AS &string.*`,
+	}, {
+		query:       "SELECT name AS &string.name FROM t",
+		prepareArgs: []any{},
+		err:         `cannot prepare expression: cannot specify member of primitive type "string"`,
 	}, {
 		query:       "SELECT name AS &string, address AS &string FROM t",
 		prepareArgs: []any{},

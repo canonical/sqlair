@@ -16,16 +16,16 @@ type typeMember interface {
 	memberName() string
 }
 
-type simpleType struct {
-	simpleType reflect.Type
+type primitiveType struct {
+	primitiveType reflect.Type
 }
 
-func (st simpleType) outerType() reflect.Type {
-	return st.simpleType
+func (st primitiveType) outerType() reflect.Type {
+	return st.primitiveType
 }
 
-func (st simpleType) memberName() string {
-	panic("internal error: memberName called on simpleType")
+func (st primitiveType) memberName() string {
+	panic("internal error: memberName called on primitiveType")
 }
 
 type mapKey struct {
@@ -69,6 +69,7 @@ func (f structField) memberName() string {
 
 type typeInfo interface {
 	typ() reflect.Type
+	typeMember(string) (typeMember, error)
 }
 
 type structInfo struct {
@@ -84,6 +85,17 @@ func (si *structInfo) typ() reflect.Type {
 	return si.structType
 }
 
+func (si *structInfo) typeMember(member string) (typeMember, error) {
+	if member == "" {
+		return nil, fmt.Errorf(`type %q missing struct db tag`, si.structType.Name())
+	}
+	tm, ok := si.tagToField[member]
+	if !ok {
+		return nil, fmt.Errorf(`type %q has no %q db tag`, si.structType.Name(), member)
+	}
+	return tm, nil
+}
+
 type mapInfo struct {
 	mapType reflect.Type
 }
@@ -92,23 +104,47 @@ func (mi *mapInfo) typ() reflect.Type {
 	return mi.mapType
 }
 
-type simpleTypeInfo struct {
-	simpleType reflect.Type
+func (mi *mapInfo) typeMember(member string) (typeMember, error) {
+	if member == "" {
+		return nil, fmt.Errorf(`type %q missing map key`, mi.mapType.Name())
+	}
+	return mapKey{name: member, mapType: mi.mapType}, nil
 }
 
-func (sti *simpleTypeInfo) typ() reflect.Type {
-	return sti.simpleType
+type primitiveTypeInfo struct {
+	primitiveType reflect.Type
 }
 
-var primitiveKinds = []reflect.Kind{reflect.String, reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64}
+func (pti *primitiveTypeInfo) typ() reflect.Type {
+	return pti.primitiveType
+}
+
+func (pti *primitiveTypeInfo) typeMember(member string) (typeMember, error) {
+	if member != "" {
+		return nil, fmt.Errorf(`cannot specify member of primitive type %q`, pti.primitiveType.Name())
+	}
+	return primitiveType{primitiveType: pti.primitiveType}, nil
+}
+
+var primitiveKinds = map[reflect.Kind]bool{
+	reflect.String:  true,
+	reflect.Bool:    true,
+	reflect.Int:     true,
+	reflect.Int8:    true,
+	reflect.Int16:   true,
+	reflect.Int32:   true,
+	reflect.Int64:   true,
+	reflect.Uint:    true,
+	reflect.Uint8:   true,
+	reflect.Uint16:  true,
+	reflect.Uint32:  true,
+	reflect.Uint64:  true,
+	reflect.Float32: true,
+	reflect.Float64: true,
+}
 
 func IsPrimitiveKind(k reflect.Kind) bool {
-	for _, pk := range primitiveKinds {
-		if pk == k {
-			return true
-		}
-	}
-	return false
+	return primitiveKinds[k]
 }
 
 var primitiveTypes = map[string]any{
@@ -130,7 +166,7 @@ var primitiveTypes = map[string]any{
 
 func lookupType(ti typeNameToInfo, typeName string) (typeInfo, bool) {
 	if v, ok := primitiveTypes[typeName]; ok {
-		return &simpleTypeInfo{simpleType: reflect.TypeOf(v)}, true
+		return &primitiveTypeInfo{primitiveType: reflect.TypeOf(v)}, true
 	}
 	v, ok := ti[typeName]
 	return v, ok
@@ -172,7 +208,7 @@ func getTypeInfo(value any) (typeInfo, error) {
 func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 	switch k := t.Kind(); {
 	case IsPrimitiveKind(k):
-		return &simpleTypeInfo{simpleType: t}, nil
+		return &primitiveTypeInfo{primitiveType: t}, nil
 	case k == reflect.Map:
 		if t.Key().Kind() != reflect.String {
 			return nil, fmt.Errorf(`map type %s must have key type string, found type %s`, t.Name(), t.Key().Kind())

@@ -71,29 +71,11 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
 			return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, p.sourceType.prefix, strings.Join(ts, ", "))
 		}
 	}
-	switch info := info.(type) {
-	case *simpleTypeInfo:
-		if p.sourceType.name != "" {
-			return nil, fmt.Errorf(`cannot specify member of primitive type %q`, info.typ().Name())
-		}
-		return simpleType{simpleType: info.typ()}, nil
-	case *mapInfo:
-		if p.sourceType.name == "" {
-			return nil, fmt.Errorf(`type %q missing map key`, info.typ().Name())
-		}
-		return mapKey{name: p.sourceType.name, mapType: info.typ()}, nil
-	case *structInfo:
-		if p.sourceType.name == "" {
-			return nil, fmt.Errorf(`type %q missing struct db tag`, info.typ().Name())
-		}
-		f, ok := info.tagToField[p.sourceType.name]
-		if !ok {
-			return nil, fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), p.sourceType.name)
-		}
-		return f, nil
-	default:
-		return nil, fmt.Errorf(`internal error: unknown info type: %T`, info)
+	tm, err := info.typeMember(p.sourceType.name)
+	if err != nil {
+		return nil, err
 	}
+	return tm, nil
 }
 
 // prepareOutput checks that the output expressions correspond to known types.
@@ -109,7 +91,6 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 
 	// Check target struct type and its tags are valid.
 	var info typeInfo
-	var ok bool
 	var err error
 
 	fetchInfo := func(typeName string) (typeInfo, error) {
@@ -125,26 +106,9 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 		return info, nil
 	}
 	addColumns := func(info typeInfo, member string, column fullName) error {
-		var tm typeMember
-		switch info := info.(type) {
-		case *simpleTypeInfo:
-			if member != "" {
-				return fmt.Errorf(`cannot specify member of primitive type %q`, info.typ().Name())
-			}
-			tm = simpleType{simpleType: info.typ()}
-		case *structInfo:
-			if member == "" {
-				return fmt.Errorf(`type %q missing struct db tag`, info.typ().Name())
-			}
-			tm, ok = info.tagToField[member]
-			if !ok {
-				return fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), member)
-			}
-		case *mapInfo:
-			if member == "" {
-				return fmt.Errorf(`type %q missing map key`, info.typ())
-			}
-			tm = mapKey{name: member, mapType: info.typ()}
+		tm, err := info.typeMember(member)
+		if err != nil {
+			return err
 		}
 		typeMembers = append(typeMembers, tm)
 		outCols = append(outCols, column)
@@ -163,7 +127,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 			if info, err = fetchInfo(t.prefix); err != nil {
 				return nil, nil, err
 			}
-			if _, ok := info.(*simpleTypeInfo); ok {
+			if _, ok := info.(*primitiveTypeInfo); ok {
 				return nil, nil, fmt.Errorf(`explicit columns required for primitive type e.g. "col AS &%s"`, info.typ().Name())
 			}
 			// Generate asterisk columns.
@@ -199,8 +163,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 		if info, err = fetchInfo(p.targetTypes[0].prefix); err != nil {
 			return nil, nil, err
 		}
-		if _, ok := info.(*simpleTypeInfo); ok {
-			return nil, nil, fmt.Errorf(`cannot use asterisk with primitive type %s`, info.typ().Name())
+		if _, ok := info.(*primitiveTypeInfo); ok {
+			return nil, nil, fmt.Errorf(`cannot use asterisk with primitive type %q in expression: %s`, info.typ().Name(), p.raw)
 		}
 		for _, c := range p.sourceColumns {
 			if err = addColumns(info, c.name, c); err != nil {
@@ -306,7 +270,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 					switch tm.(type) {
 					case structField, mapKey:
 						return nil, fmt.Errorf("member %q of type %q appears more than once", tm.memberName(), tm.outerType().Name())
-					case simpleType:
+					case primitiveType:
 						return nil, fmt.Errorf("type %q appears more than once", tm.outerType().Name())
 					default:
 						return nil, fmt.Errorf(`internal error: unknown type: %T`, tm)

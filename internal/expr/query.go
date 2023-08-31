@@ -83,7 +83,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		}
 		var val reflect.Value
 		switch tm := typeMember.(type) {
-		case simpleType:
+		case primitiveType:
 			val = v
 		case structField:
 			val = v.Field(tm.index)
@@ -172,11 +172,11 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 			return nil, nil, fmt.Errorf("type %q found in query but not passed to get", typeMember.outerType().Name())
 		}
 		switch tm := typeMember.(type) {
-		case simpleType, structField:
+		case primitiveType, structField:
 			switch tm := tm.(type) {
-			case simpleType:
+			case primitiveType:
 				if !outputVal.CanSet() {
-					return nil, nil, fmt.Errorf("internal error: cannot set %s", tm.simpleType.Name())
+					return nil, nil, fmt.Errorf("internal error: cannot set %s", tm.primitiveType.Name())
 				}
 			case structField:
 				outputVal = outputVal.Field(tm.index)
