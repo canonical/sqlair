@@ -220,7 +220,7 @@ type typeNameToInfo map[string]typeInfo
 func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	defer func() {
 		if err != nil {
-			err = fmt.Errorf("cannot prepare query: %s", err)
+			err = fmt.Errorf("cannot prepare statement: %s", err)
 		}
 	}()
 
