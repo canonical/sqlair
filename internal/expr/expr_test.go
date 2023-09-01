@@ -421,95 +421,95 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}{{
 		query:       "SELECT (p.name, t.id) AS (&Address.id) FROM t",
 		prepareArgs: []any{Address{}},
-		err:         "cannot prepare expression: mismatched number of columns and targets in output expression: (p.name, t.id) AS (&Address.id)",
+		err:         `cannot prepare query: output expression: (p.name, t.id) AS (&Address.id): mismatched number of columns and target types`,
 	}, {
 		query:       "SELECT (p.name) AS (&Address.district, &Address.street) FROM t",
 		prepareArgs: []any{Address{}},
-		err:         "cannot prepare expression: mismatched number of columns and targets in output expression: (p.name) AS (&Address.district, &Address.street)",
+		err:         "cannot prepare query: output expression: (p.name) AS (&Address.district, &Address.street): mismatched number of columns and target types",
 	}, {
 		query:       "SELECT (&Address.*, &Address.id) FROM t",
 		prepareArgs: []any{Address{}, Person{}},
-		err:         `cannot prepare expression: member "id" of type "Address" appears more than once`,
+		err:         `cannot prepare query: member "id" of type "Address" appears more than once`,
 	}, {
 		query:       "SELECT (p.*, t.name) AS (&Address.*) FROM t",
 		prepareArgs: []any{Address{}},
-		err:         "cannot prepare expression: invalid asterisk in output expression columns: (p.*, t.name) AS (&Address.*)",
+		err:         "cannot prepare query: output expression: (p.*, t.name) AS (&Address.*): invalid asterisk in expression columns",
 	}, {
 		query:       "SELECT (name, p.*) AS (&Person.id, &Person.*) FROM t",
 		prepareArgs: []any{Address{}, Person{}},
-		err:         "cannot prepare expression: invalid asterisk in output expression columns: (name, p.*) AS (&Person.id, &Person.*)",
+		err:         "cannot prepare query: output expression: (name, p.*) AS (&Person.id, &Person.*): invalid asterisk in expression columns",
 	}, {
 		query:       "SELECT (&Person.*, &Person.*) FROM t",
 		prepareArgs: []any{Address{}, Person{}},
-		err:         `cannot prepare expression: member "address_id" of type "Person" appears more than once`,
+		err:         `cannot prepare query: member "address_id" of type "Person" appears more than once`,
 	}, {
 		query:       "SELECT (p.*, t.*) AS (&Address.*) FROM t",
 		prepareArgs: []any{Address{}},
-		err:         "cannot prepare expression: invalid asterisk in output expression columns: (p.*, t.*) AS (&Address.*)",
+		err:         "cannot prepare query: output expression: (p.*, t.*) AS (&Address.*): invalid asterisk in expression columns",
 	}, {
 		query:       "SELECT (id, name) AS (&Person.id, &Address.*) FROM t",
 		prepareArgs: []any{Address{}, Person{}},
-		err:         "cannot prepare expression: invalid asterisk in output expression types: (id, name) AS (&Person.id, &Address.*)",
+		err:         "cannot prepare query: output expression: (id, name) AS (&Person.id, &Address.*): invalid asterisk in expression types",
 	}, {
 		query:       "SELECT (name, id) AS (&Person.*, &Address.id) FROM t",
 		prepareArgs: []any{Address{}, Person{}},
-		err:         "cannot prepare expression: invalid asterisk in output expression types: (name, id) AS (&Person.*, &Address.id)",
+		err:         "cannot prepare query: output expression: (name, id) AS (&Person.*, &Address.id): invalid asterisk in expression types",
 	}, {
 		query:       "SELECT (name, id) AS (&Person.*, &Address.*) FROM t",
 		prepareArgs: []any{Address{}, Person{}},
-		err:         "cannot prepare expression: invalid asterisk in output expression types: (name, id) AS (&Person.*, &Address.*)",
+		err:         "cannot prepare query: output expression: (name, id) AS (&Person.*, &Address.*): invalid asterisk in expression types",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.number",
 		prepareArgs: []any{Address{}},
-		err:         `cannot prepare expression: type "Address" has no "number" db tag`,
+		err:         `cannot prepare query: input expression: $Address.number: type "Address" has no "number" db tag`,
 	}, {
 		query:       "SELECT (street, road) AS (&Address.*) FROM t",
 		prepareArgs: []any{Address{}},
-		err:         `cannot prepare expression: type "Address" has no "road" db tag`,
+		err:         `cannot prepare query: output expression: (street, road) AS (&Address.*): type "Address" has no "road" db tag`,
 	}, {
 		query:       "SELECT &Address.road FROM t",
 		prepareArgs: []any{Address{}},
-		err:         `cannot prepare expression: type "Address" has no "road" db tag`,
+		err:         `cannot prepare query: output expression: &Address.road: type "Address" has no "road" db tag`,
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Person{}},
-		err:         `cannot prepare expression: type "Address" not passed as a parameter, have: Person`,
+		err:         `cannot prepare query: input expression: $Address.street: type "Address" not passed as a parameter, have: Person`,
 	}, {
 		query:       "SELECT street AS &Address.street FROM t",
 		prepareArgs: []any{},
-		err:         `cannot prepare expression: type "Address" not passed as a parameter`,
+		err:         `cannot prepare query: output expression: street AS &Address.street: type "Address" not passed as a parameter`,
 	}, {
 		query:       "SELECT street AS &Address.id FROM t",
 		prepareArgs: []any{Person{}},
-		err:         `cannot prepare expression: type "Address" not passed as a parameter, have: Person`,
+		err:         `cannot prepare query: output expression: street AS &Address.id: type "Address" not passed as a parameter, have: Person`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{[]any{Person{}}},
-		err:         `cannot prepare expression: need struct or map, got slice`,
+		err:         `cannot prepare query: need struct or map, got slice`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{&Person{}},
-		err:         `cannot prepare expression: need struct or map, got pointer to struct`,
+		err:         `cannot prepare query: need struct or map, got pointer to struct`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{(*Person)(nil)},
-		err:         `cannot prepare expression: need struct or map, got pointer to struct`,
+		err:         `cannot prepare query: need struct or map, got pointer to struct`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{map[string]any{}},
-		err:         `cannot prepare expression: cannot use anonymous map`,
+		err:         `cannot prepare query: cannot use anonymous map`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{nil},
-		err:         `cannot prepare expression: need struct or map, got nil`,
+		err:         `cannot prepare query: need struct or map, got nil`,
 	}, {
 		query:       "SELECT * AS &.* FROM t",
 		prepareArgs: []any{struct{ f int }{f: 1}},
-		err:         `cannot prepare expression: cannot use anonymous struct`,
+		err:         `cannot prepare query: cannot use anonymous struct`,
 	}, {
 		query:       "SELECT &NoTags.* FROM t",
 		prepareArgs: []any{NoTags{}},
-		err:         `cannot prepare expression: type "NoTags" in "&NoTags.*" does not have any db tags`,
+		err:         `cannot prepare query: output expression: &NoTags.*: type "NoTags" does not have any db tags`,
 	}}
 
 	for i, test := range tests {
@@ -543,27 +543,27 @@ func (s *ExprSuite) TestPrepareMapError(c *C) {
 		"all output into map star",
 		"SELECT &M.* FROM person WHERE name = 'Fred'",
 		[]any{sqlair.M{}},
-		"cannot prepare expression: &M.* cannot be used for maps when no column names are specified",
+		"cannot prepare query: output expression: &M.*: asterisk cannot be used with maps when no column names are specified",
 	}, {
 		"all output into map star from table star",
 		"SELECT p.* AS &M.* FROM person WHERE name = 'Fred'",
 		[]any{sqlair.M{}},
-		"cannot prepare expression: &M.* cannot be used for maps when no column names are specified",
+		"cannot prepare query: output expression: p.* AS &M.*: asterisk cannot be used with maps when no column names are specified",
 	}, {
 		"all output into map star from lone star",
 		"SELECT * AS &CustomMap.* FROM person WHERE name = 'Fred'",
 		[]any{CustomMap{}},
-		"cannot prepare expression: &CustomMap.* cannot be used for maps when no column names are specified",
+		"cannot prepare query: output expression: * AS &CustomMap.*: asterisk cannot be used with maps when no column names are specified",
 	}, {
 		"invalid map",
 		"SELECT * AS &InvalidMap.* FROM person WHERE name = 'Fred'",
 		[]any{InvalidMap{}},
-		"cannot prepare expression: map type InvalidMap must have key type string, found type int",
+		"cannot prepare query: map type InvalidMap must have key type string, found type int",
 	}, {
 		"clashing map and struct names",
 		"SELECT * AS &M.* FROM person WHERE name = $M.id",
 		[]any{M{}, sqlair.M{}},
-		`cannot prepare expression: two types found with name "M": "expr_test.M" and "sqlair.M"`,
+		`cannot prepare query: two types found with name "M": "expr_test.M" and "sqlair.M"`,
 	},
 	}
 	for _, test := range tests {
