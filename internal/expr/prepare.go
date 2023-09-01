@@ -92,14 +92,12 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 
 // prepareOutput checks that the output expressions correspond to known types.
 // It then checks they are formatted correctly and finally generates the columns for the query.
-func prepareOutput(ti typeNameToInfo, p *outputPart) (fns []fullName, tms []typeMember, err error) {
+func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMembers []typeMember, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("output expression: %s: %s", p.raw, err)
 		}
 	}()
-	var outCols = make([]fullName, 0)
-	var typeMembers = make([]typeMember, 0)
 
 	numTypes := len(p.targetTypes)
 	numColumns := len(p.sourceColumns)
