@@ -153,7 +153,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 			if t.name == "*" {
 				switch info := info.(type) {
 				case *mapInfo:
-					return nil, nil, fmt.Errorf(`asterisk cannot be used with maps when no column names are specified`)
+					return nil, nil, fmt.Errorf(`asterisk cannot be used with map when no column names are specified`)
 				case *structInfo:
 					if len(info.tags) == 0 {
 						return nil, nil, fmt.Errorf("type %q does not have any db tags", info.typ().Name())

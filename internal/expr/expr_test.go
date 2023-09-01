@@ -543,17 +543,17 @@ func (s *ExprSuite) TestPrepareMapError(c *C) {
 		"all output into map star",
 		"SELECT &M.* FROM person WHERE name = 'Fred'",
 		[]any{sqlair.M{}},
-		"cannot prepare statement: output expression: &M.*: asterisk cannot be used with maps when no column names are specified",
+		"cannot prepare statement: output expression: &M.*: asterisk cannot be used with map when no column names are specified",
 	}, {
 		"all output into map star from table star",
 		"SELECT p.* AS &M.* FROM person WHERE name = 'Fred'",
 		[]any{sqlair.M{}},
-		"cannot prepare statement: output expression: p.* AS &M.*: asterisk cannot be used with maps when no column names are specified",
+		"cannot prepare statement: output expression: p.* AS &M.*: asterisk cannot be used with map when no column names are specified",
 	}, {
 		"all output into map star from lone star",
 		"SELECT * AS &CustomMap.* FROM person WHERE name = 'Fred'",
 		[]any{CustomMap{}},
-		"cannot prepare statement: output expression: * AS &CustomMap.*: asterisk cannot be used with maps when no column names are specified",
+		"cannot prepare statement: output expression: * AS &CustomMap.*: asterisk cannot be used with map when no column names are specified",
 	}, {
 		"invalid map",
 		"SELECT * AS &InvalidMap.* FROM person WHERE name = 'Fred'",
