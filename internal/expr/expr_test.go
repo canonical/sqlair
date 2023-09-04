@@ -43,7 +43,7 @@ type IntMap map[string]int
 
 type StringMap map[string]string
 
-type CustomMap map[string]any
+type M2 map[string]any
 
 var tests = []struct {
 	summary          string
@@ -266,9 +266,9 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	"SELECT name FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7)",
 }, {
 	"complex in",
-	"SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $M.ids, $Manager.id, $CustomMap.ids, $M.ids2)",
-	"[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE id ] In[[Person.id M.ids Manager.id CustomMap.ids M.ids2]]]",
-	[]any{sqlair.M{}, Person{}, Manager{}, CustomMap{}},
+	"SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $M.ids, $Manager.id, $M2.ids, $M.ids2)",
+	"[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE id ] In[[Person.id M.ids Manager.id M2.ids M.ids2]]]",
+	[]any{sqlair.M{}, Person{}, Manager{}, M2{}},
 	"SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7, @sqlair_8, @sqlair_9, @sqlair_10, @sqlair_11, @sqlair_12, @sqlair_13, @sqlair_14, @sqlair_15, @sqlair_16, @sqlair_17, @sqlair_18, @sqlair_19, @sqlair_20, @sqlair_21, @sqlair_22, @sqlair_23, @sqlair_24, @sqlair_25)",
 }, {
 	"insert",
@@ -720,6 +720,11 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		prepareArgs: []any{sqlair.M{}},
 		queryArgs:   []any{sqlair.M{"slice": []int{1, 2}}},
 		err:         `invalid input parameter: map value "slice": slice can only be used with an IN clause`,
+	}, {
+		query:       "SELECT street FROM t WHERE x IN ($M.slice)",
+		prepareArgs: []any{sqlair.M{}},
+		queryArgs:   []any{sqlair.M{"slice": []int{1, 2, 3, 4, 5, 6, 7, 8, 9}}},
+		err:         `invalid input parameter: map value "slice": slice longer than max length for IN clause \(9 > 8\)`,
 	}}
 
 	outerP := Person{}
