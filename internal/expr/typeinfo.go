@@ -55,6 +55,7 @@ func (f structField) memberName() string {
 
 type typeInfo interface {
 	typ() reflect.Type
+	typeMember(string) (typeMember, error)
 }
 
 type structInfo struct {
@@ -70,12 +71,28 @@ func (si *structInfo) typ() reflect.Type {
 	return si.structType
 }
 
+func (si *structInfo) typeMember(member string) (typeMember, error) {
+	tm, ok := si.tagToField[member]
+	if !ok {
+		return nil, fmt.Errorf(`type %q has no %q db tag`, si.typ().Name(), member)
+	}
+	return tm, nil
+}
+
+var _ typeInfo = &structInfo{}
+
 type mapInfo struct {
 	mapType reflect.Type
 }
 
 func (mi *mapInfo) typ() reflect.Type {
 	return mi.mapType
+}
+
+var _ typeInfo = &mapInfo{}
+
+func (mi *mapInfo) typeMember(member string) (typeMember, error) {
+	return &mapKey{name: member, mapType: mi.typ()}, nil
 }
 
 var cacheMutex sync.RWMutex

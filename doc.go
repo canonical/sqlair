@@ -46,8 +46,10 @@ SQLair input expressions can take the following formats:
  2. (*) VALUES ($Type1.*, $Type2.col_name2, ...)
  	- Follows an INSERT INTO ... clause.
 	- Types followed by an asterisk must be a struct.
-	- Types followed by an asterisk insert all tagged fields in the Type into the column specified in the field's the db tag.
-	- Types followed by a column name insert the field with the matching tag in structs and the value associated with that key in maps.
+	- Types followed by an asterisk insert all tagged fields in the Type into the columns specified
+          in the field's the db tag.
+	- Types followed by a column name insert the field with the matching tag in structs and the
+          value associated with that key in maps.
 
  3. (col_name1, col_name2, ...) VALUES ($Type.*)
  	- Follows an INSERT INTO ... clause.

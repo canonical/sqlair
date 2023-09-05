@@ -76,29 +76,20 @@ func findTypeInfo(ti typeNameToInfo, typeName string) (typeInfo, error) {
 // prepareInput checks that the input expression is correctly formatted,
 // corresponds to known types, and then generates input columns and values.
 func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembers []typeMember, err error) {
+	numTypes := len(p.sourceTypes)
+	numColumns := len(p.targetColumns)
+	starTypes := starCount(p.sourceTypes)
+	starColumns := starCount(p.targetColumns)
+
 	addColumns := func(info typeInfo, tag string, column fullName) error {
-		var tm typeMember
-		var ok bool
-		switch info := info.(type) {
-		case *structInfo:
-			tm, ok = info.tagToField[tag]
-			if !ok {
-				return fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), tag)
-			}
-		case *mapInfo:
-			tm = &mapKey{name: tag, mapType: info.typ()}
-		default:
-			return fmt.Errorf(`internal error: unknown info type: %T`, info)
+		tm, err := info.typeMember(tag)
+		if err != nil {
+			return err
 		}
 		typeMembers = append(typeMembers, tm)
 		inCols = append(inCols, column)
 		return nil
 	}
-
-	numTypes := len(p.sourceTypes)
-	numColumns := len(p.targetColumns)
-	starTypes := starCount(p.sourceTypes)
-	starColumns := starCount(p.targetColumns)
 
 	// Generate columns to inject into SQL query.
 	// Case 0: A simple standalone input expression e.g. "$P.name".
@@ -201,19 +192,12 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 
 	// Check target struct type and its tags are valid.
 	var info typeInfo
-	var ok bool
 	var err error
 
 	addColumns := func(info typeInfo, tag string, column fullName) error {
-		var tm typeMember
-		switch info := info.(type) {
-		case *structInfo:
-			tm, ok = info.tagToField[tag]
-			if !ok {
-				return fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), tag)
-			}
-		case *mapInfo:
-			tm = &mapKey{name: tag, mapType: info.typ()}
+		tm, err := info.typeMember(tag)
+		if err != nil {
+			return err
 		}
 		typeMembers = append(typeMembers, tm)
 		outCols = append(outCols, column)

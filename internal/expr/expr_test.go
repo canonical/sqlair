@@ -305,7 +305,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	[]any{Person{}},
 	`INSERT INTO person (address_id, id, name) VALUES (@sqlair_0, @sqlair_1, @sqlair_2)ON CONFLICT DO NOTHING`,
 }, {
-	"insert values old way",
+	"insert values with standalone input expressions",
 	"INSERT INTO person VALUES ($Person.name, $Person.id)",
 	"[Bypass[INSERT INTO person VALUES (] Input[[] [Person.name]] Bypass[, ] Input[[] [Person.id]] Bypass[)]]",
 	[]any{Person{}},

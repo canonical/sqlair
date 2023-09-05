@@ -204,7 +204,7 @@ loop:
 
 		p.pos++
 
-		// An opening parentheses might be that start of an expression.
+		// An opening parentheses might be the start of an expression.
 		if p.peekByte('(') {
 			break loop
 		}
@@ -457,8 +457,8 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 	return nil, false, fmt.Errorf("column %d: missing closing parentheses", parenPos)
 }
 
-// parseColumns parses a list of columns. For lists of more than one column the
-// columns must be enclosed in parentheses e.g. "(col1, col2) AS &Person.*".
+// parseColumns parses a list of columns. Lists of more than one column are
+// enclosed in parentheses e.g. "(col1, col2) AS &Person.*".
 func (p *Parser) parseColumns() (cols []fullName, parentheses bool, ok bool) {
 	// Case 1: A single column e.g. "p.name".
 	if col, ok, _ := p.parseColumn(); ok {
