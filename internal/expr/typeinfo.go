@@ -56,6 +56,7 @@ func (f structField) memberName() string {
 type typeInfo interface {
 	typ() reflect.Type
 	typeMember(string) (typeMember, error)
+	getAllMembers() ([]typeMember, error)
 }
 
 type structInfo struct {
@@ -79,6 +80,18 @@ func (si *structInfo) typeMember(member string) (typeMember, error) {
 	return tm, nil
 }
 
+func (si *structInfo) getAllMembers() ([]typeMember, error) {
+	if len(si.tags) == 0 {
+		return nil, fmt.Errorf("type %q does not have any db tags", si.typ().Name())
+	}
+
+	tms := []typeMember{}
+	for _, tag := range si.tags {
+		tms = append(tms, si.tagToField[tag])
+	}
+	return tms, nil
+}
+
 var _ typeInfo = &structInfo{}
 
 type mapInfo struct {
@@ -89,11 +102,15 @@ func (mi *mapInfo) typ() reflect.Type {
 	return mi.mapType
 }
 
-var _ typeInfo = &mapInfo{}
-
 func (mi *mapInfo) typeMember(member string) (typeMember, error) {
 	return &mapKey{name: member, mapType: mi.typ()}, nil
 }
+
+func (mi *mapInfo) getAllMembers() ([]typeMember, error) {
+	return nil, fmt.Errorf(`asterisk cannot be used with map when no column names are specified`)
+}
+
+var _ typeInfo = &mapInfo{}
 
 var cacheMutex sync.RWMutex
 var cache = make(map[reflect.Type]typeInfo)

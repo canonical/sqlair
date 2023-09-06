@@ -60,7 +60,9 @@ func starCount(fns []fullName) int {
 	return s
 }
 
-func findTypeInfo(ti typeNameToInfo, typeName string) (typeInfo, error) {
+type typeNameToInfo map[string]typeInfo
+
+func (ti typeNameToInfo) lookupInfo(typeName string) (typeInfo, error) {
 	info, ok := ti[typeName]
 	if !ok {
 		ts := getKeys(ti)
@@ -73,26 +75,119 @@ func findTypeInfo(ti typeNameToInfo, typeName string) (typeInfo, error) {
 	return info, nil
 }
 
+func prepareColumnsAndTypes(ti typeNameToInfo, columns []fullName, types []fullName) ([]fullName, []typeMember, error) {
+	numTypes := len(types)
+	numColumns := len(columns)
+	starTypes := starCount(types)
+	starColumns := starCount(columns)
+
+	typeMembers := []typeMember{}
+	genCols := []fullName{}
+
+	// Case 1: SQLair generated columns.
+	// For example the expressions:
+	//  "(*) VALUES ($P.*, $A.id)"
+	//  "(*) AS (&P.*, &A.id)"
+	//  "&P.*"
+	if numColumns == 0 || (numColumns == 1 && starColumns == 1) {
+		pref := ""
+		// Prepend table name. E.g. "t" in "t.* AS &P.*".
+		if numColumns > 0 {
+			pref = columns[0].prefix
+		}
+		for _, t := range types {
+			info, err := ti.lookupInfo(t.prefix)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			if t.name == "*" {
+				// Generate asterisk columns.
+				allMembers, err := info.getAllMembers()
+				if err != nil {
+					return nil, nil, err
+				}
+				typeMembers = append(typeMembers, allMembers...)
+				for _, tm := range allMembers {
+					genCols = append(genCols, fullName{pref, tm.memberName()})
+				}
+			} else {
+				// Generate explicit columns.
+				tm, err := info.typeMember(t.name)
+				if err != nil {
+					return nil, nil, err
+				}
+				typeMembers = append(typeMembers, tm)
+				genCols = append(genCols, fullName{pref, t.name})
+			}
+		}
+		return genCols, typeMembers, nil
+	} else if numColumns > 1 && starColumns > 0 {
+		return nil, nil, fmt.Errorf("invalid asterisk in expression columns")
+	}
+
+	// Case 2: Explicit columns, single asterisk type.
+	// For example the expressions:
+	//  "(col1, col2) VALUES ($P.*)"
+	//  "(col1, t.col2) AS (&P.*)"
+	if starTypes == 1 && numTypes == 1 {
+		info, err := ti.lookupInfo(types[0].prefix)
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, c := range columns {
+			tm, err := info.typeMember(c.name)
+			if err != nil {
+				return nil, nil, err
+			}
+			typeMembers = append(typeMembers, tm)
+			genCols = append(genCols, c)
+		}
+		return genCols, typeMembers, nil
+	} else if starTypes > 0 && numTypes > 1 {
+		return nil, nil, fmt.Errorf("invalid asterisk in expression types")
+	}
+
+	// Case 3: Explicit columns and types.
+	// For example the expressions:
+	//  "(col1, col2) VALUES ($P.name, $A.id)"
+	//  "(col1, col2) AS (&P.name, &P.id)"
+	if numColumns == numTypes {
+		for i, c := range columns {
+			t := types[i]
+			info, err := ti.lookupInfo(t.prefix)
+			if err != nil {
+				return nil, nil, err
+			}
+			tm, err := info.typeMember(t.name)
+			if err != nil {
+				return nil, nil, err
+			}
+			typeMembers = append(typeMembers, tm)
+			genCols = append(genCols, c)
+		}
+	} else {
+		return nil, nil, fmt.Errorf("mismatched number of columns and targets")
+	}
+	return genCols, typeMembers, nil
+}
+
+// prepareOutput checks that the output expressions correspond to known types.
+// It then checks they are formatted correctly and finally generates the columns for the query.
+func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMembers []typeMember, err error) {
+	return prepareColumnsAndTypes(ti, p.sourceColumns, p.targetTypes)
+}
+
 // prepareInput checks that the input expression is correctly formatted,
 // corresponds to known types, and then generates input columns and values.
 func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembers []typeMember, err error) {
 	numTypes := len(p.sourceTypes)
 	numColumns := len(p.targetColumns)
 	starTypes := starCount(p.sourceTypes)
-	starColumns := starCount(p.targetColumns)
 
-	addColumns := func(info typeInfo, tag string, column fullName) error {
-		tm, err := info.typeMember(tag)
-		if err != nil {
-			return err
-		}
-		typeMembers = append(typeMembers, tm)
-		inCols = append(inCols, column)
-		return nil
-	}
-
-	// Generate columns to inject into SQL query.
-	// Case 0: A simple standalone input expression e.g. "$P.name".
+	// Check for standalone input expression.
+	// For example:
+	//  "$P.name"
 	if numColumns == 0 {
 		if numTypes != 1 {
 			return nil, nil, fmt.Errorf("internal error: cannot group standalone input expressions")
@@ -100,183 +195,19 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembe
 		if starTypes > 0 {
 			return nil, nil, fmt.Errorf("invalid asterisk in input expression: %s", p.raw)
 		}
-		info, err := findTypeInfo(ti, p.sourceTypes[0].prefix)
+		info, err := ti.lookupInfo(p.sourceTypes[0].prefix)
 		if err != nil {
 			return nil, nil, err
 		}
-		if err := addColumns(info, p.sourceTypes[0].name, fullName{}); err != nil {
-			return nil, nil, err
-		}
-		return inCols, typeMembers, nil
-	}
-
-	// Case 1: Generate input columns e.g. "(*) VALUES ($P.*, $A.id)".
-	if numColumns == 1 && starColumns == 1 {
-		for _, t := range p.sourceTypes {
-			info, err := findTypeInfo(ti, t.prefix)
-			if err != nil {
-				return nil, nil, err
-			}
-
-			if t.name == "*" {
-				// Generate asterisk columns.
-				switch info := info.(type) {
-				case *mapInfo:
-					return nil, nil, fmt.Errorf(`map type %q cannot be used with asterisk in input expression: %s`, info.typ().Name(), p.raw)
-				case *structInfo:
-					for _, tag := range info.tags {
-						inCols = append(inCols, fullName{name: tag})
-						typeMembers = append(typeMembers, info.tagToField[tag])
-					}
-				default:
-					return nil, nil, fmt.Errorf(`internal error: unknown info type: %T`, info)
-				}
-			} else {
-				// Generate explicit columns.
-				if err = addColumns(info, t.name, fullName{name: t.name}); err != nil {
-					return nil, nil, err
-				}
-			}
-		}
-		return inCols, typeMembers, nil
-	} else if numColumns > 1 && starColumns > 0 {
-		return nil, nil, fmt.Errorf("invalid asterisk in input expression: %s", p.raw)
-	}
-
-	// Case 2: Explicit columns, single asterisk type e.g. "(col1, col2) VALUES ($P.*)".
-	if starTypes == 1 && numTypes == 1 {
-		info, err := findTypeInfo(ti, p.sourceTypes[0].prefix)
+		tm, err := info.typeMember(p.sourceTypes[0].name)
 		if err != nil {
 			return nil, nil, err
 		}
-		for _, c := range p.targetColumns {
-			if err = addColumns(info, c.name, c); err != nil {
-				return nil, nil, err
-			}
-		}
-		return inCols, typeMembers, nil
-	} else if starTypes > 0 && numTypes > 1 {
-		return nil, nil, fmt.Errorf("invalid asterisk in input expression types: %s", p.raw)
+		return []fullName{}, []typeMember{tm}, nil
 	}
 
-	// Case 3: Explicit columns and types e.g. "(col1, col2) VALUES ($P.name, $A.id)".
-	if numColumns == numTypes {
-		for i, c := range p.targetColumns {
-			t := p.sourceTypes[i]
-			info, err := findTypeInfo(ti, t.prefix)
-			if err != nil {
-				return nil, nil, err
-			}
-
-			if err = addColumns(info, t.name, c); err != nil {
-				return nil, nil, err
-			}
-		}
-	} else {
-		return nil, nil, fmt.Errorf("mismatched number of columns and targets in input expression: %s", p.raw)
-	}
-
-	return inCols, typeMembers, nil
+	return prepareColumnsAndTypes(ti, p.targetColumns, p.sourceTypes)
 }
-
-// prepareOutput checks that the output expressions correspond to known types.
-// It then checks they are formatted correctly and finally generates the columns for the query.
-func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, error) {
-	var outCols = make([]fullName, 0)
-	var typeMembers = make([]typeMember, 0)
-
-	numTypes := len(p.targetTypes)
-	numColumns := len(p.sourceColumns)
-	starTypes := starCount(p.targetTypes)
-	starColumns := starCount(p.sourceColumns)
-
-	// Check target struct type and its tags are valid.
-	var info typeInfo
-	var err error
-
-	addColumns := func(info typeInfo, tag string, column fullName) error {
-		tm, err := info.typeMember(tag)
-		if err != nil {
-			return err
-		}
-		typeMembers = append(typeMembers, tm)
-		outCols = append(outCols, column)
-		return nil
-	}
-
-	// Case 1: Generated columns e.g. "* AS (&P.*, &A.id)" or "&P.*".
-	if numColumns == 0 || (numColumns == 1 && starColumns == 1) {
-		pref := ""
-		// Prepend table name. E.g. "t" in "t.* AS &P.*".
-		if numColumns > 0 {
-			pref = p.sourceColumns[0].prefix
-		}
-
-		for _, t := range p.targetTypes {
-			if info, err = findTypeInfo(ti, t.prefix); err != nil {
-				return nil, nil, err
-			}
-			// Generate asterisk columns.
-			if t.name == "*" {
-				switch info := info.(type) {
-				case *mapInfo:
-					return nil, nil, fmt.Errorf(`&%s.* cannot be used for maps when no column names are specified`, info.typ().Name())
-				case *structInfo:
-					if len(info.tags) == 0 {
-						return nil, nil, fmt.Errorf("type %q in %q does not have any db tags", info.typ().Name(), p.raw)
-					}
-					for _, tag := range info.tags {
-						outCols = append(outCols, fullName{pref, tag})
-						typeMembers = append(typeMembers, info.tagToField[tag])
-					}
-				}
-			} else {
-				// Generate explicit columns.
-				if err = addColumns(info, t.name, fullName{pref, t.name}); err != nil {
-					return nil, nil, err
-				}
-			}
-		}
-		return outCols, typeMembers, nil
-	} else if numColumns > 1 && starColumns > 0 {
-		return nil, nil, fmt.Errorf("invalid asterisk in output expression columns: %s", p.raw)
-	}
-
-	// Case 2: Explicit columns, single asterisk type e.g. "(col1, t.col2) AS &P.*".
-	if starTypes == 1 && numTypes == 1 {
-		if info, err = findTypeInfo(ti, p.targetTypes[0].prefix); err != nil {
-			return nil, nil, err
-		}
-		for _, c := range p.sourceColumns {
-			if err = addColumns(info, c.name, c); err != nil {
-				return nil, nil, err
-			}
-		}
-		return outCols, typeMembers, nil
-	} else if starTypes > 0 && numTypes > 1 {
-		return nil, nil, fmt.Errorf("invalid asterisk in output expression types: %s", p.raw)
-	}
-
-	// Case 3: Explicit columns and types e.g. "(col1, col2) AS (&P.name, &P.id)".
-	if numColumns == numTypes {
-		for i, c := range p.sourceColumns {
-			t := p.targetTypes[i]
-			if info, err = findTypeInfo(ti, t.prefix); err != nil {
-				return nil, nil, err
-			}
-
-			if err = addColumns(info, t.name, c); err != nil {
-				return nil, nil, err
-			}
-		}
-	} else {
-		return nil, nil, fmt.Errorf("mismatched number of columns and targets in output expression: %s", p.raw)
-	}
-
-	return outCols, typeMembers, nil
-}
-
-type typeNameToInfo map[string]typeInfo
 
 // Prepare takes a parsed expression and struct instantiations of all the types
 // mentioned in it.
