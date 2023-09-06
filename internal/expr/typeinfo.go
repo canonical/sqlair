@@ -107,7 +107,7 @@ func (mi *mapInfo) typeMember(member string) (typeMember, error) {
 }
 
 func (mi *mapInfo) getAllMembers() ([]typeMember, error) {
-	return nil, fmt.Errorf(`asterisk cannot be used with map when no column names are specified`)
+	return nil, fmt.Errorf(`map type %q cannot be used with asterisk`, mi.typ().Name())
 }
 
 var _ typeInfo = &mapInfo{}

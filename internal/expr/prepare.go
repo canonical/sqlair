@@ -167,20 +167,30 @@ func prepareColumnsAndTypes(ti typeNameToInfo, columns []fullName, types []fullN
 			genCols = append(genCols, c)
 		}
 	} else {
-		return nil, nil, fmt.Errorf("mismatched number of columns and targets")
+		return nil, nil, fmt.Errorf("mismatched number of columns and target types")
 	}
 	return genCols, typeMembers, nil
 }
 
 // prepareOutput checks that the output expressions correspond to known types.
 // It then checks they are formatted correctly and finally generates the columns for the query.
-func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMembers []typeMember, err error) {
-	return prepareColumnsAndTypes(ti, p.sourceColumns, p.targetTypes)
+func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, error) {
+	outCols, typeMembers, err := prepareColumnsAndTypes(ti, p.sourceColumns, p.targetTypes)
+	if err != nil {
+		err = fmt.Errorf("output expression: %s: %s", p.raw, err)
+	}
+	return outCols, typeMembers, err
 }
 
 // prepareInput checks that the input expression is correctly formatted,
 // corresponds to known types, and then generates input columns and values.
 func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembers []typeMember, err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("input expression: %s: %s", p.raw, err)
+		}
+	}()
+
 	numTypes := len(p.sourceTypes)
 	numColumns := len(p.targetColumns)
 	starTypes := starCount(p.sourceTypes)
@@ -193,7 +203,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembe
 			return nil, nil, fmt.Errorf("internal error: cannot group standalone input expressions")
 		}
 		if starTypes > 0 {
-			return nil, nil, fmt.Errorf("invalid asterisk in input expression: %s", p.raw)
+			return nil, nil, fmt.Errorf("invalid asterisk")
 		}
 		info, err := ti.lookupInfo(p.sourceTypes[0].prefix)
 		if err != nil {
@@ -206,7 +216,19 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembe
 		return []fullName{}, []typeMember{tm}, nil
 	}
 
-	return prepareColumnsAndTypes(ti, p.targetColumns, p.sourceTypes)
+	inCols, typeMembers, err = prepareColumnsAndTypes(ti, p.targetColumns, p.sourceTypes)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	columnInInput := make(map[fullName]bool)
+	for _, c := range inCols {
+		if ok := columnInInput[c]; ok {
+			return nil, nil, fmt.Errorf("column %q is set more than once", c.name)
+		}
+		columnInInput[c] = true
+	}
+	return inCols, typeMembers, nil
 }
 
 // Prepare takes a parsed expression and struct instantiations of all the types
@@ -216,7 +238,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembe
 func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	defer func() {
 		if err != nil {
-			err = fmt.Errorf("cannot prepare expression: %s", err)
+			err = fmt.Errorf("cannot prepare statement: %s", err)
 		}
 	}()
 
@@ -265,27 +287,16 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	for _, part := range pe.queryParts {
 		switch p := part.(type) {
 		case *inputPart:
-			columnInInput := make(map[fullName]bool)
 			inCols, typeMembers, err := prepareInput(ti, p)
 			if err != nil {
 				return nil, err
-			}
-
-			for _, col := range inCols {
-				if ok := columnInInput[col]; ok {
-					return nil, fmt.Errorf("column %q is set more than once in input expression: %s", col.name, p.raw)
-				}
-				columnInInput[col] = true
 			}
 
 			if len(p.targetColumns) == 0 {
 				sql.WriteString("@sqlair_" + strconv.Itoa(inCount))
 				inCount += 1
 			} else {
-				sql.WriteString(formatColNames(inCols))
-				sql.WriteString(" VALUES ")
-				sql.WriteString(generateNamedParams(inCount, len(inCols)))
-				inCount += len(inCols)
+				sql.WriteString(insertStatementSQL(inCols, &inCount))
 			}
 			inputs = append(inputs, typeMembers...)
 		case *outputPart:
@@ -321,35 +332,34 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	return &PreparedExpr{inputs: inputs, outputs: outputs, sql: sql.String()}, nil
 }
 
-// formatColNames prints a parenthesised, comma separated list of columns including
-// the table name if present.
-func formatColNames(cs []fullName) string {
-	var s bytes.Buffer
-	s.WriteString("(")
-	for i, c := range cs {
-		s.WriteString(c.String())
-		if i < len(cs)-1 {
-			s.WriteString(", ")
-		}
-	}
-	s.WriteString(")")
-	return s.String()
-}
-
-// generateNamedParams returns n incrementing named parameters beginning at
-// n=start.
+// insertStatementSQL generates the SQL for input expressions in INSERT statements.
 // For example:
-// 	generateNamedParams(0, 2) == "(@sqlair_0, @sqlair_1)"
-func generateNamedParams(start int, n int) string {
-	var s bytes.Buffer
-	s.WriteString("(")
-	for i := start; i < start+n; i++ {
-		s.WriteString("@sqlair_")
-		s.WriteString(strconv.Itoa(i))
-		if i < start+n-1 {
-			s.WriteString(", ")
+//   "(col1, col2, col3) VALUES (@sqlair_1, @sqlair_2, @sqlair_3)"
+func insertStatementSQL(columns []fullName, inCount *int) string {
+	var sql bytes.Buffer
+
+	sql.WriteString("(")
+	for i, c := range columns {
+		sql.WriteString(c.String())
+		if i < len(columns)-1 {
+			sql.WriteString(", ")
 		}
 	}
-	s.WriteString(")")
-	return s.String()
+	sql.WriteString(")")
+
+	sql.WriteString(" VALUES ")
+
+	sql.WriteString("(")
+	end := *inCount + len(columns)
+	for *inCount < end {
+		sql.WriteString("@sqlair_")
+		sql.WriteString(strconv.Itoa(*inCount))
+		if *inCount < end-1 {
+			sql.WriteString(", ")
+		}
+		*inCount += 1
+	}
+	sql.WriteString(")")
+
+	return sql.String()
 }
