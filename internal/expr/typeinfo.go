@@ -75,14 +75,14 @@ func (si *structInfo) typ() reflect.Type {
 func (si *structInfo) typeMember(member string) (typeMember, error) {
 	tm, ok := si.tagToField[member]
 	if !ok {
-		return nil, fmt.Errorf(`type %q has no %q db tag`, si.typ().Name(), member)
+		return nil, fmt.Errorf(`type %q has no %q db tag`, si.structType.Name(), member)
 	}
 	return tm, nil
 }
 
 func (si *structInfo) getAllMembers() ([]typeMember, error) {
 	if len(si.tags) == 0 {
-		return nil, fmt.Errorf("type %q does not have any db tags", si.typ().Name())
+		return nil, fmt.Errorf("type %q does not have any db tags", si.structType.Name())
 	}
 
 	tms := []typeMember{}
@@ -103,11 +103,11 @@ func (mi *mapInfo) typ() reflect.Type {
 }
 
 func (mi *mapInfo) typeMember(member string) (typeMember, error) {
-	return &mapKey{name: member, mapType: mi.typ()}, nil
+	return &mapKey{name: member, mapType: mi.mapType}, nil
 }
 
 func (mi *mapInfo) getAllMembers() ([]typeMember, error) {
-	return nil, fmt.Errorf(`map type %q cannot be used with asterisk`, mi.typ().Name())
+	return nil, fmt.Errorf(`map type %q cannot be used with asterisk`, mi.mapType.Name())
 }
 
 var _ typeInfo = &mapInfo{}

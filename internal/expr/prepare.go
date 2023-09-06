@@ -195,7 +195,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembe
 	numColumns := len(p.targetColumns)
 	starTypes := starCount(p.sourceTypes)
 
-	// Check for standalone input expression.
+	// Check for standalone input expression and prepare if found.
 	// For example:
 	//  "$P.name"
 	if numColumns == 0 {
@@ -216,6 +216,11 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembe
 		return []fullName{}, []typeMember{tm}, nil
 	}
 
+	// Prepare input expressions in insert statements.
+	// For example.
+	//  "(*) VALUES ($P.*, $A.id)"
+	//  "(col1, col2) VALUES ($P.*)"
+	//  "(col1, col2) VALUES ($P.name, $A.id)"
 	inCols, typeMembers, err = prepareColumnsAndTypes(ti, p.targetColumns, p.sourceTypes)
 	if err != nil {
 		return nil, nil, err
@@ -281,7 +286,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	var outputs = make([]typeMember, 0)
 	var inputs = make([]typeMember, 0)
 
-	var typeMemberPresentInOuts = make(map[typeMember]bool)
+	var typeMemberInOutputs = make(map[typeMember]bool)
 
 	// Check and expand each query part.
 	for _, part := range pe.queryParts {
@@ -306,10 +311,10 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			}
 
 			for _, tm := range typeMembers {
-				if ok := typeMemberPresentInOuts[tm]; ok {
+				if ok := typeMemberInOutputs[tm]; ok {
 					return nil, fmt.Errorf("member %q of type %q appears more than once in outputs", tm.memberName(), tm.outerType().Name())
 				}
-				typeMemberPresentInOuts[tm] = true
+				typeMemberInOutputs[tm] = true
 			}
 
 			for i, c := range outCols {
@@ -333,7 +338,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 }
 
 // insertStatementSQL generates the SQL for input expressions in INSERT statements.
-// For example:
+// For example for three columns it would generat the string:
 //   "(col1, col2, col3) VALUES (@sqlair_1, @sqlair_2, @sqlair_3)"
 func insertStatementSQL(columns []fullName, inCount *int) string {
 	var sql bytes.Buffer
