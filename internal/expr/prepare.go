@@ -355,9 +355,7 @@ func insertStatementSQL(columns []fullName, inCount *int) string {
 		}
 	}
 	sql.WriteString(")")
-
 	sql.WriteString(" VALUES ")
-
 	sql.WriteString("(")
 	end := *inCount + len(columns)
 	for *inCount < end {
