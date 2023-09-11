@@ -305,7 +305,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 				sql.WriteString("@sqlair_" + strconv.Itoa(inCount))
 				inCount += 1
 			} else {
-				sql.WriteString(insertStatementSQL(inCols, &inCount))
+				sql.WriteString(genInsertSQL(inCols, &inCount))
 			}
 			inputs = append(inputs, typeMembers...)
 		case *outputPart:
@@ -341,10 +341,10 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	return &PreparedExpr{inputs: inputs, outputs: outputs, sql: sql.String()}, nil
 }
 
-// insertStatementSQL generates the SQL for input expressions in INSERT statements.
+// genInsertSQL generates the SQL for input expressions in INSERT statements.
 // For example, when inserting three columns, it would generate the string:
 //   "(col1, col2, col3) VALUES (@sqlair_1, @sqlair_2, @sqlair_3)"
-func insertStatementSQL(columns []fullName, inCount *int) string {
+func genInsertSQL(columns []fullName, inCount *int) string {
 	var sql bytes.Buffer
 
 	sql.WriteString("(")
