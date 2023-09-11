@@ -400,6 +400,13 @@ func (p *Parser) parseTargetType() (fullName, bool, error) {
 	return fullName{}, false, nil
 }
 
+func (p *Parser) parseSourceType() (fullName, bool, error) {
+	if p.skipByte('$') {
+		return p.parseGoFullName()
+	}
+	return fullName{}, false, nil
+}
+
 // parseGoFullName parses a Go type name qualified by a tag name (or asterisk)
 // of the form "TypeName.col_name".
 func (p *Parser) parseGoFullName() (fullName, bool, error) {
@@ -457,8 +464,8 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 	return nil, false, fmt.Errorf("column %d: missing closing parentheses", parenPos)
 }
 
-// parseColumns parses a list of columns. Lists of more than one column are
-// enclosed in parentheses e.g. "(col1, col2) AS &Person.*".
+// parseColumns parses a list of columns. Lists of more than one column must be
+// enclosed in parentheses.
 func (p *Parser) parseColumns() (cols []fullName, parentheses bool, ok bool) {
 	// Case 1: A single column e.g. "p.name".
 	if col, ok, _ := p.parseColumn(); ok {
@@ -536,13 +543,6 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 
 	cp.restore()
 	return nil, false, nil
-}
-
-func (p *Parser) parseSourceType() (fullName, bool, error) {
-	if p.skipByte('$') {
-		return p.parseGoFullName()
-	}
-	return fullName{}, false, nil
 }
 
 // parseInputExpression parses an input expression of the form "$Type.name".

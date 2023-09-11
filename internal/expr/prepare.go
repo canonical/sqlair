@@ -75,6 +75,10 @@ func (ti typeNameToInfo) lookupInfo(typeName string) (typeInfo, error) {
 	return info, nil
 }
 
+// prepareColumnsAndTypes takes a list of columns and types corresponding to an
+// input or output expression. It checks that the columns and types form a
+// valid IO expression. It returns a list of columns to be inserted into the
+// query and a list of typeMembers to extract from the query arguments.
 func prepareColumnsAndTypes(ti typeNameToInfo, columns []fullName, types []fullName) ([]fullName, []typeMember, error) {
 	numTypes := len(types)
 	numColumns := len(columns)
