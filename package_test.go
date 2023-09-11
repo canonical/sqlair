@@ -820,6 +820,7 @@ func (s *PackageSuite) TestOutcome(c *C) {
 	}
 
 	var outcome = sqlair.Outcome{}
+
 	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ($Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
 	q1 := db.Query(nil, insertStmt, &jim)
 	// Test INSERT with Get
@@ -1176,9 +1177,6 @@ func (s *PackageSuite) TestTransactionWithOneConn(c *C) {
 }
 
 func (s *PackageSuite) TestInsert(c *C) {
-	// The INSERT statements are prepared along with SELECT statements for
-	// checking that the insert has worked correctly, and DELETE statements to
-	// remove the inserted row.
 	insertPersonStmt, err := sqlair.Prepare("INSERT INTO person (*) VALUES ($Person.*)", Person{})
 	c.Assert(err, IsNil)
 
@@ -1196,12 +1194,14 @@ func (s *PackageSuite) TestInsert(c *C) {
 	returningStmt, err := sqlair.Prepare("INSERT INTO address(*) VALUES($Address.*) RETURNING &Address.*", Person{}, Address{})
 	c.Assert(err, IsNil)
 
+	// SELECT statements to check the inserts have worked correctly.
 	selectPerson, err := sqlair.Prepare("SELECT &Person.* FROM person WHERE id = $Person.id", Person{})
 	c.Assert(err, IsNil)
 
 	selectAddress, err := sqlair.Prepare("SELECT &Address.* FROM address WHERE id = $Address.id", Address{})
 	c.Assert(err, IsNil)
 
+	// DELETE statements to remove the inserted rows.
 	deletePersonStmt, err := sqlair.Prepare("DELETE FROM person WHERE id = $Person.id", Person{})
 	c.Assert(err, IsNil)
 
@@ -1215,11 +1215,11 @@ func (s *PackageSuite) TestInsert(c *C) {
 	c.Assert(err, IsNil)
 	defer dropTables(c, db, tables...)
 
-	var p = Person{}
-	var a = Address{}
-	var outcome = sqlair.Outcome{}
-	var eric = Person{Name: "Eric", ID: 60, Postcode: 7000}
-	var millLane = Address{Street: "Mill Lane", District: "Crazy County", ID: 7000}
+	p := Person{}
+	a := Address{}
+	outcome := sqlair.Outcome{}
+	eric := Person{Name: "Eric", ID: 60, Postcode: 7000}
+	millLane := Address{Street: "Mill Lane", District: "Crazy County", ID: 7000}
 
 	// Each block follows the sequence:
 	// - Insert value
