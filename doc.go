@@ -40,24 +40,21 @@ SQLair input expressions can take the following formats:
 
  1. $Type.col_name
  	- Can be used anywhere in the SQL statement.
-	- If Type is a struct the field tagged with col_name will be passed as a parameter here.
-	- If Type is a map the value with the key col_name will be passed as a parameter here.
+	- The col_name member of Type will be passed as a parameter.
 
  2. (*) VALUES ($Type1.*, $Type2.col_name2, ...)
  	- Follows an INSERT INTO ... clause.
 	- Types followed by an asterisk must be a struct.
-	- Types followed by an asterisk insert all tagged fields in the Type into the columns specified
-          in the field's the db tag.
-	- Types followed by a column name insert the field with the matching tag in structs and the
-          value associated with that key in maps.
+	- Types followed by an asterisk insert all tagged fields of Type.
+	- Types followed by a column name insert the matching member of Type.
 
  3. (col_name1, col_name2, ...) VALUES ($Type.*)
  	- Follows an INSERT INTO ... clause.
-	- Inserts the columns from Type.
+	- Inserts the specified columns from Type.
 
  4. (col_name1, col_name2, ...) VALUES ($Type.other_col1, $Type.other_col2)
  	- Follows an INSERT INTO ... clause.
-	- Inserts other_col1 and other_col2 from Type into the columns col_name1 and col_name2
+	- Inserts other_col1 and other_col2 from Type into the columns col_name1 and col_name2.
 
 SQLair output expressions can take the following formats:
 
