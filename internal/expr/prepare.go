@@ -342,7 +342,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 }
 
 // insertStatementSQL generates the SQL for input expressions in INSERT statements.
-// For example for three columns it would generat the string:
+// For example, when inserting three columns, it would generate the string:
 //   "(col1, col2, col3) VALUES (@sqlair_1, @sqlair_2, @sqlair_3)"
 func insertStatementSQL(columns []fullName, inCount *int) string {
 	var sql bytes.Buffer
