@@ -22,8 +22,8 @@ type PackageSuite struct{}
 
 var _ = Suite(&PackageSuite{})
 
-func testDB() (*sqlair.DB, error) {
-	sqldb, err := sql.Open("sqlite3", ":memory:")
+func openTestDB() (*sqlair.DB, error) {
+	sqldb, err := sql.Open("sqlite3", "file:test.db?cache=shared&mode=memory")
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +62,7 @@ type CustomMap map[string]any
 var fred = Person{Name: "Fred", ID: 30, Postcode: 1000}
 var mark = Person{Name: "Mark", ID: 20, Postcode: 1500}
 var mary = Person{Name: "Mary", ID: 40, Postcode: 3500}
-var dave = Person{Name: "Dave", ID: 35, Postcode: 4500}
+var dave = Person{Name: "Dave", ID: 35, Postcode: 3500}
 var allPeople = []Person{fred, mark, mary, dave}
 
 var mainStreet = Address{Street: "Main Street", District: "Happy Land", ID: 1000}
@@ -71,7 +71,7 @@ var stationLane = Address{Street: "Station Lane", District: "Ambivalent Commons"
 var allAddresses = []Address{mainStreet, churchRoad, stationLane}
 
 func personAndAddressDB() ([]string, *sqlair.DB, error) {
-	db, err := testDB()
+	db, err := openTestDB()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -145,70 +145,70 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 		types:    []any{Person{}, Address{}},
 		inputs:   []any{},
 		outputs:  [][]any{{&Person{}, &Address{}}, {&Person{}, &Address{}}, {&Person{}, &Address{}}, {&Person{}, &Address{}}, {&Person{}, &Address{}}, {&Person{}, &Address{}}, {&Person{}, &Address{}}, {&Person{}, &Address{}}, {&Person{}, &Address{}}, {&Person{}, &Address{}}, {&Person{}, &Address{}}, {&Person{}, &Address{}}},
-		expected: [][]any{{&Person{ID: 30}, &Address{ID: 1000}}, {&Person{ID: 30}, &Address{ID: 1500}}, {&Person{ID: 30}, &Address{ID: 3500}}, {&Person{ID: 20}, &Address{ID: 1000}}, {&Person{ID: 20}, &Address{ID: 1500}}, {&Person{ID: 20}, &Address{ID: 3500}}, {&Person{ID: 40}, &Address{ID: 1000}}, {&Person{ID: 40}, &Address{ID: 1500}}, {&Person{ID: 40}, &Address{ID: 3500}}, {&Person{ID: 35}, &Address{ID: 1000}}, {&Person{ID: 35}, &Address{ID: 1500}}, {&Person{ID: 35}, &Address{ID: 3500}}},
+		expected: [][]any{{&Person{ID: fred.ID}, &Address{ID: mainStreet.ID}}, {&Person{ID: fred.ID}, &Address{ID: churchRoad.ID}}, {&Person{ID: fred.ID}, &Address{ID: stationLane.ID}}, {&Person{ID: mark.ID}, &Address{ID: mainStreet.ID}}, {&Person{ID: mark.ID}, &Address{ID: churchRoad.ID}}, {&Person{ID: mark.ID}, &Address{ID: stationLane.ID}}, {&Person{ID: mary.ID}, &Address{ID: mainStreet.ID}}, {&Person{ID: mary.ID}, &Address{ID: churchRoad.ID}}, {&Person{ID: mary.ID}, &Address{ID: stationLane.ID}}, {&Person{ID: dave.ID}, &Address{ID: mainStreet.ID}}, {&Person{ID: dave.ID}, &Address{ID: churchRoad.ID}}, {&Person{ID: dave.ID}, &Address{ID: stationLane.ID}}},
 	}, {
 		summary:  "simple select person",
 		query:    "SELECT * AS &Person.* FROM person",
 		types:    []any{Person{}},
 		inputs:   []any{},
 		outputs:  [][]any{{&Person{}}, {&Person{}}, {&Person{}}, {&Person{}}},
-		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{20, "Mark", 1500}}, {&Person{40, "Mary", 3500}}, {&Person{35, "Dave", 4500}}},
+		expected: [][]any{{&fred}, {&mark}, {&mary}, {&dave}},
 	}, {
 		summary:  "select multiple with extras",
 		query:    "SELECT email, * AS &Person.*, address_id AS &Address.id, * AS &Manager.*, id FROM person WHERE id = $Address.id",
 		types:    []any{Person{}, Address{}, Manager{}},
-		inputs:   []any{Address{ID: 30}},
+		inputs:   []any{Address{ID: fred.ID}},
 		outputs:  [][]any{{&Person{}, &Address{}, &Manager{}}},
-		expected: [][]any{{&Person{30, "Fred", 1000}, &Address{ID: 1000}, &Manager{30, "Fred", 1000}}},
+		expected: [][]any{{&fred, &Address{ID: mainStreet.ID}, &Manager{fred.ID, fred.Name, fred.Postcode}}},
 	}, {
 		summary:  "select with renaming",
 		query:    "SELECT (name, address_id) AS (&Address.street, &Address.id) FROM person WHERE id = $Manager.id",
 		types:    []any{Address{}, Manager{}},
-		inputs:   []any{Manager{ID: 30}},
+		inputs:   []any{Manager{ID: fred.ID}},
 		outputs:  [][]any{{&Address{}}},
-		expected: [][]any{{&Address{Street: "Fred", ID: 1000}}},
+		expected: [][]any{{&Address{Street: fred.Name, ID: fred.Postcode}}},
 	}, {
 		summary:  "select into star struct",
 		query:    "SELECT (name, address_id) AS (&Person.*) FROM person WHERE address_id IN ( $Manager.address_id, $Address.district )",
 		types:    []any{Person{}, Address{}, Manager{}},
-		inputs:   []any{Manager{Postcode: 1000}, Address{ID: 2000}},
+		inputs:   []any{Manager{Postcode: fred.Postcode}, Address{}},
 		outputs:  [][]any{{&Person{}}},
-		expected: [][]any{{&Person{Name: "Fred", Postcode: 1000}}},
+		expected: [][]any{{&Person{Name: fred.Name, Postcode: fred.Postcode}}},
 	}, {
 		summary:  "select into map",
 		query:    "SELECT &M.name FROM person WHERE address_id = $M.p1 OR address_id = $M.p2",
 		types:    []any{sqlair.M{}},
-		inputs:   []any{sqlair.M{"p1": 1000, "p2": 1500}},
+		inputs:   []any{sqlair.M{"p1": fred.Postcode, "p2": mark.Postcode}},
 		outputs:  [][]any{{sqlair.M{}}, {sqlair.M{}}},
-		expected: [][]any{{sqlair.M{"name": "Fred"}}, {sqlair.M{"name": "Mark"}}},
+		expected: [][]any{{sqlair.M{"name": fred.Name}}, {sqlair.M{"name": mark.Name}}},
 	}, {
 		summary:  "select into star map",
 		query:    "SELECT (name, address_id) AS (&M.*) FROM person WHERE address_id = $M.p1",
 		types:    []any{sqlair.M{}},
-		inputs:   []any{sqlair.M{"p1": 1000}},
+		inputs:   []any{sqlair.M{"p1": fred.Postcode}},
 		outputs:  [][]any{{&sqlair.M{"address_id": 0}}},
-		expected: [][]any{{&sqlair.M{"name": "Fred", "address_id": int64(1000)}}},
+		expected: [][]any{{&sqlair.M{"name": fred.Name, "address_id": int64(fred.Postcode)}}},
 	}, {
 		summary:  "select into custom map",
 		query:    "SELECT (name, address_id) AS (&CustomMap.*) FROM person WHERE address_id IN ( $CustomMap.address_id, $CustomMap.district)",
 		types:    []any{CustomMap{}},
-		inputs:   []any{CustomMap{"address_id": 1000, "district": 2000}},
+		inputs:   []any{CustomMap{"address_id": fred.Postcode, "district": "Lala land"}},
 		outputs:  [][]any{{&CustomMap{"address_id": 0}}},
-		expected: [][]any{{&CustomMap{"name": "Fred", "address_id": int64(1000)}}},
+		expected: [][]any{{&CustomMap{"name": fred.Name, "address_id": int64(fred.Postcode)}}},
 	}, {
 		summary:  "multiple maps",
 		query:    "SELECT name AS &StringMap.*, id AS &CustomMap.* FROM person WHERE address_id = $M.address_id AND id = $StringMap.id",
 		types:    []any{StringMap{}, sqlair.M{}, CustomMap{}},
 		inputs:   []any{sqlair.M{"address_id": "1000"}, &StringMap{"id": "30"}},
 		outputs:  [][]any{{&StringMap{}, CustomMap{}}},
-		expected: [][]any{{&StringMap{"name": "Fred"}, CustomMap{"id": int64(30)}}},
+		expected: [][]any{{&StringMap{"name": fred.Name}, CustomMap{"id": int64(30)}}},
 	}, {
 		summary:  "lower case map",
 		query:    "SELECT name AS &lowerCaseMap.*, id AS &lowerCaseMap.* FROM person WHERE address_id = $lowerCaseMap.address_id",
 		types:    []any{lowerCaseMap{}},
 		inputs:   []any{lowerCaseMap{"address_id": "1000"}},
 		outputs:  [][]any{{&lowerCaseMap{}}},
-		expected: [][]any{{&lowerCaseMap{"name": "Fred", "id": int64(30)}}},
+		expected: [][]any{{&lowerCaseMap{"name": fred.Name, "id": int64(fred.ID)}}},
 	}, {
 		summary:  "insert",
 		query:    "INSERT INTO address VALUES ($Address.id, $Address.district, $Address.street);",
@@ -245,7 +245,7 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 		types:    []any{Person{}},
 		inputs:   []any{},
 		outputs:  [][]any{{&Person{}}, {&Person{}}, {&Person{}}, {&Person{}}},
-		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{20, "Mark", 1500}}, {&Person{40, "Mary", 3500}}, {&Person{35, "Dave", 4500}}},
+		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{20, "Mark", 1500}}, {&Person{40, "Mary", 3500}}, {&Person{35, "Dave", 3500}}},
 	}}
 
 	tests = append(tests, testsWithShadowPerson...)
@@ -514,21 +514,21 @@ func (s *PackageSuite) TestValidGet(c *C) {
 		types:    []any{Person{}, Address{}},
 		inputs:   []any{},
 		outputs:  []any{&Person{}, &Address{}},
-		expected: []any{&Person{ID: 30}, &Address{ID: 1000}},
+		expected: []any{&Person{ID: fred.ID}, &Address{ID: mainStreet.ID}},
 	}, {
 		summary:  "select into multiple structs, with input conditions",
 		query:    "SELECT p.* AS &Person.*, a.* AS &Address.*, p.* AS &Manager.* FROM person AS p, address AS a WHERE p.id = $Person.id AND a.id = $Address.id ",
 		types:    []any{Person{}, Address{}, Manager{}},
-		inputs:   []any{Address{ID: 1000}, Person{ID: 30}},
+		inputs:   []any{mainStreet, fred},
 		outputs:  []any{&Person{}, &Address{}, &Manager{}},
-		expected: []any{&Person{30, "Fred", 1000}, &Address{1000, "Happy Land", "Main Street"}, &Manager{30, "Fred", 1000}},
+		expected: []any{&fred, &mainStreet, &Manager{fred.ID, fred.Name, fred.Postcode}},
 	}, {
 		summary:  "select into map",
 		query:    "SELECT &M.name FROM person WHERE address_id = $M.p1",
 		types:    []any{sqlair.M{}},
-		inputs:   []any{sqlair.M{"p1": 1000}},
+		inputs:   []any{sqlair.M{"p1": fred.Postcode}},
 		outputs:  []any{sqlair.M{}},
-		expected: []any{sqlair.M{"name": "Fred"}},
+		expected: []any{sqlair.M{"name": fred.Name}},
 	}}
 
 	tables, db, err := personAndAddressDB()
@@ -632,28 +632,28 @@ func (s *PackageSuite) TestValidGetAll(c *C) {
 		types:    []any{Person{}, Address{}},
 		inputs:   []any{},
 		slices:   []any{&[]*Person{}, &[]*Address{}},
-		expected: []any{&[]*Person{&Person{ID: 30}, &Person{ID: 30}, &Person{ID: 30}, &Person{ID: 20}, &Person{ID: 20}, &Person{ID: 20}, &Person{ID: 40}, &Person{ID: 40}, &Person{ID: 40}, &Person{ID: 35}, &Person{ID: 35}, &Person{ID: 35}}, &[]*Address{&Address{ID: 1000}, &Address{ID: 1500}, &Address{ID: 3500}, &Address{ID: 1000}, &Address{ID: 1500}, &Address{ID: 3500}, &Address{ID: 1000}, &Address{ID: 1500}, &Address{ID: 3500}, &Address{ID: 1000}, &Address{ID: 1500}, &Address{ID: 3500}}},
+		expected: []any{&[]*Person{&Person{ID: fred.ID}, &Person{ID: fred.ID}, &Person{ID: fred.ID}, &Person{ID: mark.ID}, &Person{ID: mark.ID}, &Person{ID: mark.ID}, &Person{ID: mary.ID}, &Person{ID: mary.ID}, &Person{ID: mary.ID}, &Person{ID: dave.ID}, &Person{ID: dave.ID}, &Person{ID: dave.ID}}, &[]*Address{&Address{ID: mainStreet.ID}, &Address{ID: churchRoad.ID}, &Address{ID: stationLane.ID}, &Address{ID: mainStreet.ID}, &Address{ID: churchRoad.ID}, &Address{ID: stationLane.ID}, &Address{ID: mainStreet.ID}, &Address{ID: churchRoad.ID}, &Address{ID: stationLane.ID}, &Address{ID: mainStreet.ID}, &Address{ID: churchRoad.ID}, &Address{ID: stationLane.ID}}},
 	}, {
 		summary:  "select all columns into person",
 		query:    "SELECT * AS &Person.* FROM person",
 		types:    []any{Person{}},
 		inputs:   []any{},
 		slices:   []any{&[]*Person{}},
-		expected: []any{&[]*Person{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "Dave", 4500}}},
+		expected: []any{&[]*Person{&fred, &mark, &mary, &dave}},
 	}, {
 		summary:  "select all columns into person with no pointers",
 		query:    "SELECT * AS &Person.* FROM person",
 		types:    []any{Person{}},
 		inputs:   []any{},
 		slices:   []any{&[]Person{}},
-		expected: []any{&[]Person{Person{30, "Fred", 1000}, Person{20, "Mark", 1500}, Person{40, "Mary", 3500}, Person{35, "Dave", 4500}}},
+		expected: []any{&[]Person{fred, mark, mary, dave}},
 	}, {
 		summary:  "single line of query with inputs",
 		query:    "SELECT p.* AS &Person.*, a.* AS &Address.*, p.* AS &Manager.* FROM person AS p, address AS a WHERE p.id = $Person.id AND a.id = $Address.id ",
 		types:    []any{Person{}, Address{}, Manager{}},
-		inputs:   []any{Address{ID: 1000}, Person{ID: 30}},
+		inputs:   []any{Address{ID: mainStreet.ID}, Person{ID: fred.ID}},
 		slices:   []any{&[]*Manager{}, &[]*Person{}, &[]*Address{}},
-		expected: []any{&[]*Manager{{30, "Fred", 1000}}, &[]*Person{{30, "Fred", 1000}}, &[]*Address{{1000, "Happy Land", "Main Street"}}},
+		expected: []any{&[]*Manager{{fred.ID, fred.Name, fred.Postcode}}, &[]*Person{&fred}, &[]*Address{&mainStreet}},
 	}, {
 		summary:  "nothing returned",
 		query:    "SELECT &Person.* FROM person WHERE id = $Person.id",
@@ -663,11 +663,11 @@ func (s *PackageSuite) TestValidGetAll(c *C) {
 		expected: []any{&[]*Person{}},
 	}, {
 		summary:  "select into maps",
-		query:    "SELECT &M.name, &CustomMap.id FROM person WHERE name = 'Mark'",
-		types:    []any{sqlair.M{}, CustomMap{}},
-		inputs:   []any{},
+		query:    "SELECT &M.name, &CustomMap.id FROM person WHERE name = $Person.name",
+		types:    []any{sqlair.M{}, CustomMap{}, Person{}},
+		inputs:   []any{mark},
 		slices:   []any{&[]sqlair.M{}, &[]CustomMap{}},
-		expected: []any{&[]sqlair.M{{"name": "Mark"}}, &[]CustomMap{{"id": int64(20)}}},
+		expected: []any{&[]sqlair.M{{"name": mark.Name}}, &[]CustomMap{{"id": int64(mark.ID)}}},
 	}}
 
 	tables, db, err := personAndAddressDB()
@@ -865,13 +865,13 @@ func (s *PackageSuite) TestOutcome(c *C) {
 
 func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	allOutput := &[]*Person{}
-	allExpected := &[]*Person{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "Dave", 4500}}
+	allExpected := &[]*Person{&fred, &mark, &mary, &dave}
 
 	iterOutputs := []any{&Person{}, &Person{}, &Person{}, &Person{}}
-	iterExpected := []any{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "Dave", 4500}}
+	iterExpected := []any{&fred, &mark, &mary, &dave}
 
 	oneOutput := &Person{}
-	oneExpected := &Person{30, "Fred", 1000}
+	oneExpected := &fred
 
 	tables, db, err := personAndAddressDB()
 	c.Assert(err, IsNil)
