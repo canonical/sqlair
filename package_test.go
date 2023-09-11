@@ -22,8 +22,8 @@ type PackageSuite struct{}
 
 var _ = Suite(&PackageSuite{})
 
-func testDB() (*sqlair.DB, error) {
-	sqldb, err := sql.Open("sqlite3", ":memory:")
+func createTestDB() (*sqlair.DB, error) {
+	sqldb, err := sql.Open("sqlite3", "file:test.db?cache=shared&mode=memory")
 	if err != nil {
 		return nil, err
 	}
@@ -48,9 +48,9 @@ type Address struct {
 }
 
 type Person struct {
-	ID       int    `db:"id"`
-	Name     string `db:"name"`
-	Postcode int    `db:"address_id"`
+	ID         int    `db:"id"`
+	Fullname   string `db:"name"`
+	PostalCode int    `db:"address_id"`
 }
 
 type Manager Person
@@ -59,10 +59,10 @@ type District struct{}
 
 type CustomMap map[string]any
 
-var fred = Person{Name: "Fred", ID: 30, Postcode: 1000}
-var mark = Person{Name: "Mark", ID: 20, Postcode: 1500}
-var mary = Person{Name: "Mary", ID: 40, Postcode: 3500}
-var dave = Person{Name: "Dave", ID: 35, Postcode: 4500}
+var fred = Person{Fullname: "Fred", ID: 30, PostalCode: 1000}
+var mark = Person{Fullname: "Mark", ID: 20, PostalCode: 1500}
+var mary = Person{Fullname: "Mary", ID: 40, PostalCode: 3500}
+var dave = Person{Fullname: "James", ID: 35, PostalCode: 4500}
 var allPeople = []Person{fred, mark, mary, dave}
 
 var mainStreet = Address{Street: "Main Street", District: "Happy Land", ID: 1000}
@@ -71,7 +71,7 @@ var stationLane = Address{Street: "Station Lane", District: "Ambivalent Commons"
 var allAddresses = []Address{mainStreet, churchRoad, stationLane}
 
 func personAndAddressDB() ([]string, *sqlair.DB, error) {
-	db, err := testDB()
+	db, err := createTestDB()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -152,7 +152,7 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 		types:    []any{Person{}},
 		inputs:   []any{},
 		outputs:  [][]any{{&Person{}}, {&Person{}}, {&Person{}}, {&Person{}}},
-		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{20, "Mark", 1500}}, {&Person{40, "Mary", 3500}}, {&Person{35, "Dave", 4500}}},
+		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{20, "Mark", 1500}}, {&Person{40, "Mary", 3500}}, {&Person{35, "James", 4500}}},
 	}, {
 		summary:  "select multiple with extras",
 		query:    "SELECT email, * AS &Person.*, address_id AS &Address.id, * AS &Manager.*, id FROM person WHERE id = $Address.id",
@@ -171,9 +171,9 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 		summary:  "select into star struct",
 		query:    "SELECT (name, address_id) AS (&Person.*) FROM person WHERE address_id IN ( $Manager.address_id, $Address.district )",
 		types:    []any{Person{}, Address{}, Manager{}},
-		inputs:   []any{Manager{Postcode: 1000}, Address{ID: 2000}},
+		inputs:   []any{Manager{PostalCode: 1000}, Address{ID: 2000}},
 		outputs:  [][]any{{&Person{}}},
-		expected: [][]any{{&Person{Name: "Fred", Postcode: 1000}}},
+		expected: [][]any{{&Person{Fullname: "Fred", PostalCode: 1000}}},
 	}, {
 		summary:  "select into map",
 		query:    "SELECT &M.name FROM person WHERE address_id = $M.p1 OR address_id = $M.p2",
@@ -227,9 +227,9 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 
 	// A Person struct that shadows the one in tests above and has different int types.
 	type Person struct {
-		ID       int32  `db:"id"`
-		Name     string `db:"name"`
-		Postcode int32  `db:"address_id"`
+		ID         int32  `db:"id"`
+		Fullname   string `db:"name"`
+		PostalCode int32  `db:"address_id"`
 	}
 
 	var testsWithShadowPerson = []struct {
@@ -245,7 +245,7 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 		types:    []any{Person{}},
 		inputs:   []any{},
 		outputs:  [][]any{{&Person{}}, {&Person{}}, {&Person{}}, {&Person{}}},
-		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{20, "Mark", 1500}}, {&Person{40, "Mary", 3500}}, {&Person{35, "Dave", 4500}}},
+		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{20, "Mark", 1500}}, {&Person{40, "Mary", 3500}}, {&Person{35, "James", 4500}}},
 	}}
 
 	tests = append(tests, testsWithShadowPerson...)
@@ -420,19 +420,19 @@ func (s *PackageSuite) TestNulls(c *C) {
 	type J = int
 	type S = string
 	type PersonWithStrangeTypes struct {
-		ID       I `db:"id"`
-		Name     S `db:"name"`
-		Postcode J `db:"address_id"`
+		ID         I `db:"id"`
+		Fullname   S `db:"name"`
+		PostalCode J `db:"address_id"`
 	}
 	type NullGuy struct {
-		ID       sql.NullInt64  `db:"id"`
-		Name     sql.NullString `db:"name"`
-		Postcode sql.NullInt64  `db:"address_id"`
+		ID         sql.NullInt64  `db:"id"`
+		Fullname   sql.NullString `db:"name"`
+		PostalCode sql.NullInt64  `db:"address_id"`
 	}
 	type ScannerDude struct {
-		ID       ScannerInt    `db:"id"`
-		Name     ScannerString `db:"name"`
-		Postcode ScannerInt    `db:"address_id"`
+		ID         ScannerInt    `db:"id"`
+		Fullname   ScannerString `db:"name"`
+		PostalCode ScannerInt    `db:"address_id"`
 	}
 
 	var tests = []struct {
@@ -447,29 +447,29 @@ func (s *PackageSuite) TestNulls(c *C) {
 		query:    `SELECT &Person.* FROM person WHERE name = "Nully"`,
 		types:    []any{Person{}},
 		inputs:   []any{},
-		outputs:  []any{&Person{ID: 5, Postcode: 10}},
-		expected: []any{&Person{Name: "Nully", ID: 0, Postcode: 0}},
+		outputs:  []any{&Person{ID: 5, PostalCode: 10}},
+		expected: []any{&Person{Fullname: "Nully", ID: 0, PostalCode: 0}},
 	}, {
 		summary:  "reading nulls with custom types",
 		query:    `SELECT &PersonWithStrangeTypes.* FROM person WHERE name = "Nully"`,
 		types:    []any{PersonWithStrangeTypes{}},
 		inputs:   []any{},
-		outputs:  []any{&PersonWithStrangeTypes{ID: 5, Postcode: 10}},
-		expected: []any{&PersonWithStrangeTypes{Name: "Nully", ID: 0, Postcode: 0}},
+		outputs:  []any{&PersonWithStrangeTypes{ID: 5, PostalCode: 10}},
+		expected: []any{&PersonWithStrangeTypes{Fullname: "Nully", ID: 0, PostalCode: 0}},
 	}, {
 		summary:  "regular nulls",
 		query:    `SELECT &NullGuy.* FROM person WHERE name = "Nully"`,
 		types:    []any{NullGuy{}},
 		inputs:   []any{},
 		outputs:  []any{&NullGuy{}},
-		expected: []any{&NullGuy{Name: sql.NullString{Valid: true, String: "Nully"}, ID: sql.NullInt64{Valid: false}, Postcode: sql.NullInt64{Valid: false}}},
+		expected: []any{&NullGuy{Fullname: sql.NullString{Valid: true, String: "Nully"}, ID: sql.NullInt64{Valid: false}, PostalCode: sql.NullInt64{Valid: false}}},
 	}, {
 		summary:  "nulls with custom scan type",
 		query:    `SELECT &ScannerDude.* FROM person WHERE name = "Nully"`,
 		types:    []any{ScannerDude{}},
 		inputs:   []any{},
 		outputs:  []any{&ScannerDude{}},
-		expected: []any{&ScannerDude{Name: ScannerString{SS: "ScannerString scanned well!"}, ID: ScannerInt{SI: 666}, Postcode: ScannerInt{SI: 666}}},
+		expected: []any{&ScannerDude{Fullname: ScannerString{SS: "ScannerString scanned well!"}, ID: ScannerInt{SI: 666}, PostalCode: ScannerInt{SI: 666}}},
 	}}
 
 	tables, db, err := personAndAddressDB()
@@ -639,14 +639,14 @@ func (s *PackageSuite) TestValidGetAll(c *C) {
 		types:    []any{Person{}},
 		inputs:   []any{},
 		slices:   []any{&[]*Person{}},
-		expected: []any{&[]*Person{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "Dave", 4500}}},
+		expected: []any{&[]*Person{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "James", 4500}}},
 	}, {
 		summary:  "select all columns into person with no pointers",
 		query:    "SELECT * AS &Person.* FROM person",
 		types:    []any{Person{}},
 		inputs:   []any{},
 		slices:   []any{&[]Person{}},
-		expected: []any{&[]Person{Person{30, "Fred", 1000}, Person{20, "Mark", 1500}, Person{40, "Mary", 3500}, Person{35, "Dave", 4500}}},
+		expected: []any{&[]Person{Person{30, "Fred", 1000}, Person{20, "Mark", 1500}, Person{40, "Mary", 3500}, Person{35, "James", 4500}}},
 	}, {
 		summary:  "single line of query with inputs",
 		query:    "SELECT p.* AS &Person.*, a.* AS &Address.*, p.* AS &Manager.* FROM person AS p, address AS a WHERE p.id = $Person.id AND a.id = $Address.id ",
@@ -790,9 +790,9 @@ func (s *PackageSuite) TestRun(c *C) {
 	defer dropTables(c, db, tables...)
 
 	var jim = Person{
-		ID:       70,
-		Name:     "Jim",
-		Postcode: 500,
+		ID:         70,
+		Fullname:   "Jim",
+		PostalCode: 500,
 	}
 
 	// Insert Jim.
@@ -814,9 +814,9 @@ func (s *PackageSuite) TestOutcome(c *C) {
 	defer dropTables(c, db, tables...)
 
 	var jim = Person{
-		ID:       70,
-		Name:     "Jim",
-		Postcode: 500,
+		ID:         70,
+		Fullname:   "Jim",
+		PostalCode: 500,
 	}
 
 	var outcome = sqlair.Outcome{}
@@ -865,10 +865,10 @@ func (s *PackageSuite) TestOutcome(c *C) {
 
 func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	allOutput := &[]*Person{}
-	allExpected := &[]*Person{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "Dave", 4500}}
+	allExpected := &[]*Person{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "James", 4500}}
 
 	iterOutputs := []any{&Person{}, &Person{}, &Person{}, &Person{}}
-	iterExpected := []any{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "Dave", 4500}}
+	iterExpected := []any{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "James", 4500}}
 
 	oneOutput := &Person{}
 	oneExpected := &Person{30, "Fred", 1000}
@@ -943,7 +943,7 @@ func (s *PackageSuite) TestTransactions(c *C) {
 
 	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE address_id = $Person.address_id", Person{})
 	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'fred@email.com');", Person{})
-	var derek = Person{ID: 85, Name: "Derek", Postcode: 8000}
+	var derek = Person{ID: 85, Fullname: "Derek", PostalCode: 8000}
 	ctx := context.Background()
 
 	tx, err := db.Begin(ctx, nil)
@@ -988,7 +988,7 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 	defer dropTables(c, db, tables...)
 
 	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ($Person.name, $Person.id, $Person.address_id, 'fred@email.com');", Person{})
-	var derek = Person{ID: 85, Name: "Derek", Postcode: 8000}
+	var derek = Person{ID: 85, Fullname: "Derek", PostalCode: 8000}
 	ctx := context.Background()
 
 	// Test running query after commit.
@@ -1218,7 +1218,7 @@ func (s *PackageSuite) TestInsert(c *C) {
 	var p = Person{}
 	var a = Address{}
 	var outcome = sqlair.Outcome{}
-	var eric = Person{Name: "Eric", ID: 60, Postcode: 7000}
+	var eric = Person{Fullname: "Eric", ID: 60, PostalCode: 7000}
 	var millLane = Address{Street: "Mill Lane", District: "Crazy County", ID: 7000}
 
 	// Each block follows the sequence:
@@ -1246,7 +1246,7 @@ func (s *PackageSuite) TestInsert(c *C) {
 
 	c.Assert(db.Query(nil, insertAddressIDStmt, eric).Run(), IsNil)
 	c.Assert(db.Query(nil, selectAddress, millLane).Get(&a), IsNil)
-	c.Assert(eric.Postcode, Equals, a.ID)
+	c.Assert(eric.PostalCode, Equals, a.ID)
 	c.Assert(db.Query(nil, deleteAddressStmt, millLane).Get(&outcome), IsNil)
 	i, err = outcome.Result().RowsAffected()
 	c.Assert(err, IsNil)
