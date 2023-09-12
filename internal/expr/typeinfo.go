@@ -9,7 +9,7 @@ import (
 	"sync"
 )
 
-// typeMember should be implemented without pointer recivers as it is used as a
+// typeMember should be implemented without pointer receivers as it is used as a
 // key in maps in some places.
 type typeMember interface {
 	outerType() reflect.Type
