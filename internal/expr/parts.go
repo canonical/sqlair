@@ -43,8 +43,9 @@ func (p *inputPart) String() string {
 func (p *inputPart) part() {}
 
 type inPart struct {
-	types []fullName
-	raw   string
+	types       []fullName
+	typeIsSlice []bool
+	raw         string
 }
 
 func (p *inPart) String() string {
@@ -56,6 +57,7 @@ func (p *inPart) part() {}
 // outputPart represents a named target output variable in the SQL expression,
 // as well as the source table and column where it will be read from.
 type outputPart struct {
+	sqlColumns    []fullName
 	sourceColumns []fullName
 	targetTypes   []fullName
 	raw           string

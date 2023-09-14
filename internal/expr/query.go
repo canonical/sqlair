@@ -12,13 +12,24 @@ func (qe *QueryExpr) QueryArgs() []any {
 	return qe.args
 }
 
+func (qe *QueryExpr) TempSQL() string {
+	sql := ""
+	if qe.longSliceQuery {
+		sql = generateSQL(qe.queryParts, qe.sliceLens)
+	}
+	return sql
+}
+
 func (qe *QueryExpr) HasOutputs() bool {
 	return len(qe.outputs) > 0
 }
 
 type QueryExpr struct {
-	args    []any
-	outputs []typeMember
+	args           []any
+	outputs        []typeMember
+	queryParts     []queryPart
+	sliceLens      []int
+	longSliceQuery bool
 }
 
 // Query returns a query expression ready for execution, using the provided values to
@@ -45,12 +56,14 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	for _, arg := range args {
 		v := reflect.ValueOf(arg)
 		if v.Kind() == reflect.Invalid || (v.Kind() == reflect.Pointer && v.IsNil()) {
-			return nil, fmt.Errorf("need struct or map, got nil")
+			return nil, fmt.Errorf("need struct, map or slice, got nil")
 		}
 		v = reflect.Indirect(v)
 		t := v.Type()
-		if v.Kind() != reflect.Struct && v.Kind() != reflect.Map {
-			return nil, fmt.Errorf("need struct or map, got %s", t.Kind())
+		switch v.Kind() {
+		case reflect.Struct, reflect.Map, reflect.Slice, reflect.Array:
+		default:
+			return nil, fmt.Errorf("need struct, map or slice, got %s", t.Kind())
 		}
 		if _, ok := typeValue[t]; ok {
 			return nil, fmt.Errorf("type %q provided more than once", t.Name())
@@ -71,6 +84,8 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	// Query parameteres.
 	qargs := []any{}
 	argCount := 0
+	longSliceQuery := false
+	sliceLens := []int{}
 	for _, typeMember := range pe.inputs {
 		outerType := typeMember.outerType()
 		v, ok := typeValue[outerType]
@@ -89,41 +104,40 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 			argCount++
 		case *mapKey:
 			val = v.MapIndex(reflect.ValueOf(tm.name))
-			kind := val.Kind()
-			if kind == reflect.Invalid {
+			if val.Kind() == reflect.Invalid {
 				return nil, fmt.Errorf(`map %q does not contain key %q`, outerType.Name(), tm.name)
 			}
-			if kind == reflect.Interface {
-				val = val.Elem()
-				kind = val.Kind()
+			qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(argCount), val.Interface()))
+			argCount++
+		case *sliceType:
+			sliceLen := v.Len()
+			sliceLens = append(sliceLens, sliceLen)
+			if sliceLen > maxSliceLen {
+				longSliceQuery = true
 			}
 			i := 0
-			if kind == reflect.Slice || kind == reflect.Array {
-				if !tm.listAllowed {
-					return nil, fmt.Errorf(`map value %q: slice can only be used with an IN clause`, tm.name)
-				}
-				if sliceLen := val.Len(); sliceLen > maxSliceLen {
-					return nil, fmt.Errorf("map value %q: slice longer than max length for IN clause (%d > %d)", tm.name, val.Len(), maxSliceLen)
-				}
-				for i = 0; i < val.Len(); i++ {
-					sval := val.Index(i)
-					qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(argCount), sval.Interface()))
-					argCount++
-				}
-			} else {
-				qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(argCount), val.Interface()))
+			for i = 0; i < v.Len(); i++ {
+				sv := v.Index(i)
+				qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(argCount), sv.Interface()))
 				argCount++
-				i++
 			}
-			if tm.listAllowed {
-				for i = i; i < maxSliceLen; i++ {
-					qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(argCount), nil))
-					argCount++
-				}
+			// Add NULL for extra slice arguments.
+			for i = i; i < maxSliceLen; i++ {
+				qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(argCount), nil))
+				argCount++
 			}
+		default:
+			return nil, fmt.Errorf(`internal error: unknown type: %T`, tm)
 		}
+
 	}
-	return &QueryExpr{outputs: pe.outputs, args: qargs}, nil
+	return &QueryExpr{
+		outputs:        pe.outputs,
+		args:           qargs,
+		queryParts:     pe.queryParts,
+		sliceLens:      sliceLens,
+		longSliceQuery: longSliceQuery,
+	}, nil
 }
 
 var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()

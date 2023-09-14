@@ -54,6 +54,18 @@ func (f structField) memberName() string {
 	return f.tag
 }
 
+type sliceType struct {
+	sliceType reflect.Type
+}
+
+func (st *sliceType) outerType() reflect.Type {
+	return st.sliceType
+}
+
+func (st *sliceType) memberName() string {
+	panic("internal error: memberName called on sliceType")
+}
+
 type typeInfo interface {
 	typ() reflect.Type
 }
@@ -77,6 +89,14 @@ type mapInfo struct {
 
 func (mi *mapInfo) typ() reflect.Type {
 	return mi.mapType
+}
+
+type sliceInfo struct {
+	sliceType reflect.Type
+}
+
+func (si *sliceInfo) typ() reflect.Type {
+	return si.sliceType
 }
 
 var cacheMutex sync.RWMutex
@@ -155,6 +175,8 @@ func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 		info.tags = tags
 
 		return &info, nil
+	case reflect.Slice, reflect.Array:
+		return &sliceInfo{sliceType: t}, nil
 	default:
 		return nil, fmt.Errorf("internal error: cannot obtain type information for type that is not map or struct: %s.", t)
 	}

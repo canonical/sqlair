@@ -43,7 +43,9 @@ type IntMap map[string]int
 
 type StringMap map[string]string
 
-type M2 map[string]any
+type S []any
+type T []int
+type U []string
 
 var tests = []struct {
 	summary          string
@@ -260,15 +262,15 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	"SELECT person.*, address.district FROM person JOIN address ON person.address_id = address.id WHERE person.name = 'Fred'",
 }, {
 	"simple in",
-	"SELECT name FROM person WHERE id IN ($M.slice)",
-	"[Bypass[SELECT name FROM person WHERE id ] In[[M.slice]]]",
-	[]any{sqlair.M{}},
+	"SELECT name FROM person WHERE id IN ($S)",
+	"[Bypass[SELECT name FROM person WHERE id ] In[[S]]]",
+	[]any{sqlair.S{}},
 	"SELECT name FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7)",
 }, {
 	"complex in",
-	"SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $M.ids, $Manager.id, $M2.ids, $M.ids2)",
-	"[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE id ] In[[Person.id M.ids Manager.id M2.ids M.ids2]]]",
-	[]any{sqlair.M{}, Person{}, Manager{}, M2{}},
+	"SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $S, $Manager.id, $T, $U)",
+	"[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE id ] In[[Person.id S Manager.id T U]]]",
+	[]any{sqlair.S{}, Person{}, Manager{}, T{}, U{}},
 	"SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7, @sqlair_8, @sqlair_9, @sqlair_10, @sqlair_11, @sqlair_12, @sqlair_13, @sqlair_14, @sqlair_15, @sqlair_16, @sqlair_17, @sqlair_18, @sqlair_19, @sqlair_20, @sqlair_21, @sqlair_22, @sqlair_23, @sqlair_24, @sqlair_25)",
 }, {
 	"insert",
@@ -384,9 +386,6 @@ func (s *ExprSuite) TestParseErrors(c *C) {
 		query: "SELECT foo FROM t WHERE x = $Address.-",
 		err:   `cannot parse expression: column 37: invalid identifier suffix following "Address"`,
 	}, {
-		query: "SELECT foo FROM t WHERE x = $Address",
-		err:   `cannot parse expression: column 36: unqualified type, expected Address.* or Address.<db tag>`,
-	}, {
 		query: "SELECT name AS (&Person.*)",
 		err:   `cannot parse expression: column 26: unexpected parentheses around types after "AS"`,
 	}, {
@@ -498,16 +497,16 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 		err:         `cannot prepare expression: type "Address" not passed as a parameter, have: Person`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
-		prepareArgs: []any{[]any{Person{}}},
-		err:         `cannot prepare expression: need struct or map, got slice`,
+		prepareArgs: []any{func() {}},
+		err:         `cannot prepare expression: need struct, map or slice, got func`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{&Person{}},
-		err:         `cannot prepare expression: need struct or map, got pointer to struct`,
+		err:         `cannot prepare expression: need struct, map or slice, got pointer to struct`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{(*Person)(nil)},
-		err:         `cannot prepare expression: need struct or map, got pointer to struct`,
+		err:         `cannot prepare expression: need struct, map or slice, got pointer to struct`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{map[string]any{}},
@@ -515,7 +514,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{nil},
-		err:         `cannot prepare expression: need struct or map, got nil`,
+		err:         `cannot prepare expression: need struct, map or slice, got nil`,
 	}, {
 		query:       "SELECT * AS &.* FROM t",
 		prepareArgs: []any{struct{ f int }{f: 1}},
@@ -633,9 +632,9 @@ func (s *ExprSuite) TestValidQuery(c *C) {
 		[]any{Person{ID: 666}, StringMap{"street": "Highway to Hell"}},
 		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
 	}, {
-		"SELECT name FROM person WHERE id IN ($M.slice)",
-		[]any{sqlair.M{}},
-		[]any{sqlair.M{"slice": []int{1, 2, 3, 4, 5, 6}}},
+		"SELECT name FROM person WHERE id IN ($S)",
+		[]any{sqlair.S{}},
+		[]any{sqlair.S{1, 2, 3, 4, 5, 6}},
 		[]any{sql.Named("sqlair_0", 1), sql.Named("sqlair_1", 2), sql.Named("sqlair_2", 3), sql.Named("sqlair_3", 4), sql.Named("sqlair_4", 5), sql.Named("sqlair_5", 6), sql.Named("sqlair_6", nil), sql.Named("sqlair_7", nil)},
 	}}
 	for _, t := range tests {
@@ -674,22 +673,22 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
 		queryArgs:   []any{nil, Person{Fullname: "Monty Bingles"}},
-		err:         "invalid input parameter: need struct or map, got nil",
+		err:         "invalid input parameter: need struct, map or slice, got nil",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
 		queryArgs:   []any{(*Person)(nil)},
-		err:         "invalid input parameter: need struct or map, got nil",
+		err:         "invalid input parameter: need struct, map or slice, got nil",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Address{}},
 		queryArgs:   []any{8},
-		err:         "invalid input parameter: need struct or map, got int",
+		err:         "invalid input parameter: need struct, map or slice, got int",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Address{}},
-		queryArgs:   []any{[]any{}},
-		err:         "invalid input parameter: need struct or map, got slice",
+		queryArgs:   []any{func() {}},
+		err:         "invalid input parameter: need struct, map or slice, got func",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Address{}},
@@ -715,16 +714,6 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		prepareArgs: []any{Person{}},
 		queryArgs:   []any{Person{}, Person{}},
 		err:         `invalid input parameter: type "Person" provided more than once`,
-	}, {
-		query:       "SELECT street FROM t WHERE x = $M.slice",
-		prepareArgs: []any{sqlair.M{}},
-		queryArgs:   []any{sqlair.M{"slice": []int{1, 2}}},
-		err:         `invalid input parameter: map value "slice": slice can only be used with an IN clause`,
-	}, {
-		query:       "SELECT street FROM t WHERE x IN ($M.slice)",
-		prepareArgs: []any{sqlair.M{}},
-		queryArgs:   []any{sqlair.M{"slice": []int{1, 2, 3, 4, 5, 6, 7, 8, 9}}},
-		err:         `invalid input parameter: map value "slice": slice longer than max length for IN clause \(9 > 8\)`,
 	}}
 
 	outerP := Person{}
