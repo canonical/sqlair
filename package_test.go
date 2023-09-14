@@ -111,6 +111,10 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 	type M struct {
 		F string `db:"id"`
 	}
+	type S []int
+	type T []int
+	type U []string
+	type V [7]int
 	var tests = []struct {
 		summary  string
 		query    string
@@ -204,23 +208,23 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 		expected: [][]any{},
 	}, {
 		summary:  "simple in",
-		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($M.ids)",
-		types:    []any{Person{}, sqlair.M{}},
-		inputs:   []any{sqlair.M{"ids": []int{30, 35, 36, 37, 38, 39, 40}}},
+		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($S)",
+		types:    []any{Person{}, S{}},
+		inputs:   []any{S{30, 35, 36, 37, 38, 39, 40}},
 		outputs:  [][]any{{&Person{}}, {&Person{}}, {&Person{}}},
 		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{40, "Mary", 3500}}, {&Person{35, "James", 4500}}},
 	}, {
 		summary:  "complex in",
-		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $M.ids, $Manager.id, $CustomMap.ids, $M.ids2)",
-		types:    []any{Person{}, sqlair.M{}, Manager{}, CustomMap{}},
-		inputs:   []any{Person{ID: 20}, sqlair.M{"ids": []int{21, 23, 24, 25, 26, 27, 28, 29}, "ids2": []int{31, 32, 33, 34, 35}}, &Manager{ID: 30}, CustomMap{"ids": []string{"36", "37", "38", "39", "40"}}},
+		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $S, $Manager.id, $T, $U)",
+		types:    []any{Person{}, S{}, Manager{}, T{}, U{}},
+		inputs:   []any{Person{ID: 20}, S{21, 23, 24, 25, 26, 27, 28, 29}, T{31, 32, 33, 34, 35}, &Manager{ID: 30}, U{"36", "37", "38", "39", "40"}},
 		outputs:  [][]any{{&Person{}}, {&Person{}}, {&Person{}}, {&Person{}}},
 		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{20, "Mark", 1500}}, {&Person{40, "Mary", 3500}}, {&Person{35, "James", 4500}}},
 	}, {
 		summary:  "array in",
-		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($M.array) ",
-		types:    []any{Person{}, sqlair.M{}},
-		inputs:   []any{sqlair.M{"array": [3]int{30, 35, 40}}},
+		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($V)",
+		types:    []any{Person{}, V{}},
+		inputs:   []any{V{30, 35, 40}},
 		outputs:  [][]any{{&Person{}}, {&Person{}}, {&Person{}}},
 		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{40, "Mary", 3500}}, {&Person{35, "James", 4500}}},
 	}}

@@ -83,6 +83,8 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
 			return nil, fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), p.sourceType.name)
 		}
 		return f, nil
+	case *sliceInfo:
+		return nil, fmt.Errorf(`cannot use slice type %q outside of IN clause`, info.typ().Name())
 	default:
 		return nil, fmt.Errorf(`internal error: unknown info type: %T`, info)
 	}
@@ -105,20 +107,21 @@ func prepareIn(ti typeNameToInfo, p *inPart) ([]typeMember, error) {
 		if t.name == "*" {
 			return nil, fmt.Errorf("invalid asterisk in input expression: %s", p.raw)
 		}
+		var tm typeMember
 		switch info := info.(type) {
 		case *structInfo:
-			field, ok := info.tagToField[t.name]
+			tm, ok = info.tagToField[t.name]
 			if !ok {
 				return nil, fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), t.name)
 			}
-			typeMembers = append(typeMembers, field)
 		case *mapInfo:
-			typeMembers = append(typeMembers, &mapKey{
-				name:        t.name,
-				mapType:     info.typ(),
-				listAllowed: true,
-			})
+			tm = &mapKey{name: t.name, mapType: info.typ()}
+		case *sliceInfo:
+			tm = &sliceType{sliceType: info.typ()}
+		default:
+			return nil, fmt.Errorf(`internal error: unknown type: %T`, info)
 		}
+		typeMembers = append(typeMembers, tm)
 	}
 	return typeMembers, nil
 }
@@ -162,6 +165,10 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 			}
 		case *mapInfo:
 			tm = &mapKey{name: tag, mapType: info.typ()}
+		case *sliceInfo:
+			return fmt.Errorf(`cannot use slice type %q in output expression`, info.typ().Name())
+		default:
+			return fmt.Errorf(`internal error: unknown info type: %T`, info)
 		}
 		typeMembers = append(typeMembers, tm)
 		outCols = append(outCols, column)
@@ -193,6 +200,10 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 						outCols = append(outCols, fullName{pref, tag})
 						typeMembers = append(typeMembers, info.tagToField[tag])
 					}
+				case *sliceInfo:
+					return nil, nil, fmt.Errorf(`cannot use slice type %q in output expression`, info.typ().Name())
+				default:
+					return nil, nil, fmt.Errorf(`internal error: unknown info type: %T`, info)
 				}
 			} else {
 				// Generate explicit columns.
@@ -258,11 +269,11 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	// Generate and save reflection info.
 	for _, arg := range args {
 		if arg == nil {
-			return nil, fmt.Errorf("need struct or map, got nil")
+			return nil, fmt.Errorf("need struct, map or slice, got nil")
 		}
 		t := reflect.TypeOf(arg)
 		switch t.Kind() {
-		case reflect.Struct, reflect.Map:
+		case reflect.Struct, reflect.Map, reflect.Slice, reflect.Array:
 			if t.Name() == "" {
 				return nil, fmt.Errorf("cannot use anonymous %s", t.Kind())
 			}
@@ -278,9 +289,9 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			}
 			ti[t.Name()] = info
 		case reflect.Pointer:
-			return nil, fmt.Errorf("need struct or map, got pointer to %s", t.Elem().Kind())
+			return nil, fmt.Errorf("need struct, map or slice, got pointer to %s", t.Elem().Kind())
 		default:
-			return nil, fmt.Errorf("need struct or map, got %s", t.Kind())
+			return nil, fmt.Errorf("need struct, map or slice, got %s", t.Kind())
 		}
 	}
 
@@ -313,19 +324,15 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			sql.WriteString("IN (")
 			for i, tm := range typeMembers {
 				switch tm := tm.(type) {
-				case *structField:
+				case *structField, *mapKey:
 					sql.WriteString("@sqlair_")
 					sql.WriteString(strconv.Itoa(inCount))
 					inCount++
-				case *mapKey:
-					length := 1
-					if tm.listAllowed {
-						length = maxSliceLen
-					}
-					for j := 0; j < length; j++ {
+				case *sliceType:
+					for j := 0; j < maxSliceLen; j++ {
 						sql.WriteString("@sqlair_")
 						sql.WriteString(strconv.Itoa(inCount))
-						if j < length-1 {
+						if j < maxSliceLen-1 {
 							sql.WriteString(", ")
 						}
 						inCount++

@@ -401,14 +401,14 @@ func (p *Parser) parseTargetType() (fullName, bool, error) {
 	return fullName{}, false, nil
 }
 
-// parseGoFullName parses a Go type name qualified by a tag name (or asterisk)
-// of the form "&TypeName.col_name".
+// parseGoFullName parses a Go type name optionally qualified by a tag name (or
+// asterisk). For example "Type" or "Type.col_name".
 func (p *Parser) parseGoFullName() (fullName, bool, error) {
 	cp := p.save()
 
 	if id, ok := p.parseIdentifier(); ok {
 		if !p.skipByte('.') {
-			return fullName{}, false, fmt.Errorf("column %d: unqualified type, expected %s.* or %s.<db tag>", p.pos, id, id)
+			return fullName{prefix: id}, true, nil
 		}
 
 		idField, ok := p.parseIdentifierAsterisk()
