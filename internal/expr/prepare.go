@@ -71,18 +71,11 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
 			return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, p.sourceType.prefix, strings.Join(ts, ", "))
 		}
 	}
-	switch info := info.(type) {
-	case *mapInfo:
-		return &mapKey{name: p.sourceType.name, mapType: info.typ()}, nil
-	case *structInfo:
-		f, ok := info.tagToField[p.sourceType.name]
-		if !ok {
-			return nil, fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), p.sourceType.name)
-		}
-		return f, nil
-	default:
-		return nil, fmt.Errorf(`internal error: unknown info type: %T`, info)
+	tm, err := info.typeMember(p.sourceType.name)
+	if err != nil {
+		return nil, err
 	}
+	return tm, nil
 }
 
 // prepareOutput checks that the output expressions correspond to known types.
@@ -98,7 +91,6 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 
 	// Check target struct type and its tags are valid.
 	var info typeInfo
-	var ok bool
 	var err error
 
 	fetchInfo := func(typeName string) (typeInfo, error) {
@@ -115,15 +107,9 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 	}
 
 	addColumns := func(info typeInfo, tag string, column fullName) error {
-		var tm typeMember
-		switch info := info.(type) {
-		case *structInfo:
-			tm, ok = info.tagToField[tag]
-			if !ok {
-				return fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), tag)
-			}
-		case *mapInfo:
-			tm = &mapKey{name: tag, mapType: info.typ()}
+		tm, err := info.typeMember(tag)
+		if err != nil {
+			return err
 		}
 		typeMembers = append(typeMembers, tm)
 		outCols = append(outCols, column)
@@ -142,19 +128,15 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 			if info, err = fetchInfo(t.prefix); err != nil {
 				return nil, nil, err
 			}
-			// Generate asterisk columns.
 			if t.name == "*" {
-				switch info := info.(type) {
-				case *mapInfo:
-					return nil, nil, fmt.Errorf(`&%s.* cannot be used for maps when no column names are specified`, info.typ().Name())
-				case *structInfo:
-					if len(info.tags) == 0 {
-						return nil, nil, fmt.Errorf("type %q in %q does not have any db tags", info.typ().Name(), p.raw)
-					}
-					for _, tag := range info.tags {
-						outCols = append(outCols, fullName{pref, tag})
-						typeMembers = append(typeMembers, info.tagToField[tag])
-					}
+				// Generate asterisk columns.
+				allMembers, err := info.getAllMembers()
+				if err != nil {
+					return nil, nil, err
+				}
+				typeMembers = append(typeMembers, allMembers...)
+				for _, tm := range allMembers {
+					outCols = append(outCols, fullName{pref, tm.memberName()})
 				}
 			} else {
 				// Generate explicit columns.
