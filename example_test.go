@@ -66,12 +66,12 @@ func Example() {
 		Location{},
 	)
 
-	var l1 = Location{ID: 1, Name: "The Basement"}
-	var l2 = Location{ID: 2, Name: "Court"}
-	var l3 = Location{ID: 3, Name: "The Market"}
-	var l4 = Location{ID: 4, Name: "The Bar"}
-	var l5 = Location{ID: 5, Name: "The Penthouse"}
-	var locations = []Location{l1, l2, l3, l4, l5}
+	l1 := Location{ID: 1, Name: "The Basement"}
+	l2 := Location{ID: 2, Name: "Court"}
+	l3 := Location{ID: 3, Name: "The Market"}
+	l4 := Location{ID: 4, Name: "The Bar"}
+	l5 := Location{ID: 5, Name: "The Penthouse"}
+	locations := []Location{l1, l2, l3, l4, l5}
 	for _, l := range locations {
 		err := db.Query(nil, insertLocation, l).Run()
 		if err != nil {
@@ -86,20 +86,20 @@ func Example() {
 		Employee{},
 	)
 
-	var e1 = Employee{ID: 1, TeamID: 1, Name: "Alastair"}
-	var e2 = Employee{ID: 2, TeamID: 1, Name: "Ed"}
-	var e3 = Employee{ID: 3, TeamID: 1, Name: "Marco"}
-	var e4 = Employee{ID: 4, TeamID: 2, Name: "Pedro"}
-	var e5 = Employee{ID: 5, TeamID: 3, Name: "Serdar"}
-	var e6 = Employee{ID: 6, TeamID: 3, Name: "Lina"}
-	var e7 = Employee{ID: 7, TeamID: 4, Name: "Joe"}
-	var e8 = Employee{ID: 8, TeamID: 5, Name: "Ben"}
-	var e9 = Employee{ID: 9, TeamID: 5, Name: "Jenny"}
-	var e10 = Employee{ID: 10, TeamID: 6, Name: "Sam"}
-	var e11 = Employee{ID: 11, TeamID: 7, Name: "Melody"}
-	var e12 = Employee{ID: 12, TeamID: 8, Name: "Mark"}
-	var e13 = Employee{ID: 13, TeamID: 8, Name: "Gustavo"}
-	var employees = []Employee{e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13}
+	e1 := Employee{ID: 1, TeamID: 1, Name: "Alastair"}
+	e2 := Employee{ID: 2, TeamID: 1, Name: "Ed"}
+	e3 := Employee{ID: 3, TeamID: 1, Name: "Marco"}
+	e4 := Employee{ID: 4, TeamID: 2, Name: "Pedro"}
+	e5 := Employee{ID: 5, TeamID: 3, Name: "Serdar"}
+	e6 := Employee{ID: 6, TeamID: 3, Name: "Lina"}
+	e7 := Employee{ID: 7, TeamID: 4, Name: "Joe"}
+	e8 := Employee{ID: 8, TeamID: 5, Name: "Ben"}
+	e9 := Employee{ID: 9, TeamID: 5, Name: "Jenny"}
+	e10 := Employee{ID: 10, TeamID: 6, Name: "Sam"}
+	e11 := Employee{ID: 11, TeamID: 7, Name: "Melody"}
+	e12 := Employee{ID: 12, TeamID: 8, Name: "Mark"}
+	e13 := Employee{ID: 13, TeamID: 8, Name: "Gustavo"}
+	employees := []Employee{e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13}
 	for _, e := range employees {
 		err := db.Query(nil, insertEmployee, e).Run()
 		if err != nil {
@@ -114,15 +114,15 @@ func Example() {
 		Team{},
 	)
 
-	var t1 = Team{ID: 1, RoomID: 1, Name: "Engineering"}
-	var t2 = Team{ID: 2, RoomID: 1, Name: "Management"}
-	var t3 = Team{ID: 3, RoomID: 1, Name: "Presentation Engineering"}
-	var t4 = Team{ID: 4, RoomID: 2, Name: "Marketing"}
-	var t5 = Team{ID: 5, RoomID: 3, Name: "Legal"}
-	var t6 = Team{ID: 6, RoomID: 3, Name: "HR"}
-	var t7 = Team{ID: 7, RoomID: 4, Name: "Sales"}
-	var t8 = Team{ID: 8, RoomID: 5, Name: "Leadership"}
-	var teams = []Team{t1, t2, t3, t4, t5, t6, t7, t8}
+	t1 := Team{ID: 1, RoomID: 1, Name: "Engineering"}
+	t2 := Team{ID: 2, RoomID: 1, Name: "Management"}
+	t3 := Team{ID: 3, RoomID: 1, Name: "Presentation Engineering"}
+	t4 := Team{ID: 4, RoomID: 2, Name: "Marketing"}
+	t5 := Team{ID: 5, RoomID: 3, Name: "Legal"}
+	t6 := Team{ID: 6, RoomID: 3, Name: "HR"}
+	t7 := Team{ID: 7, RoomID: 4, Name: "Sales"}
+	t8 := Team{ID: 8, RoomID: 5, Name: "Leadership"}
+	teams := []Team{t1, t2, t3, t4, t5, t6, t7, t8}
 	for _, t := range teams {
 		err := db.Query(nil, insertTeam, t).Run()
 		if err != nil {
@@ -140,7 +140,7 @@ func Example() {
 	)
 
 	// Get returns a single result.
-	var team = Team{}
+	team := Team{}
 	err = db.Query(nil, selectSomeoneInTeam, e1).Get(&team)
 	if err != nil {
 		panic(err)
@@ -158,8 +158,8 @@ func Example() {
 	)
 
 	// GetAll returns all the results.
-	var roomDwellers = []Employee{}
-	var dwellersTeams = []Team{}
+	roomDwellers := []Employee{}
+	dwellersTeams := []Team{}
 	err = db.Query(nil, selectPeopleInRoom, l1).GetAll(&roomDwellers, &dwellersTeams)
 	if err != nil {
 		panic(err)
@@ -194,7 +194,7 @@ func Example() {
 	iter := db.Query(nil, selectPeopleAndRoom).Iter()
 	defer iter.Close()
 	for iter.Next() {
-		var m = sqlair.M{}
+		m := sqlair.M{}
 		err := iter.Get(&m)
 		if err != nil {
 			panic(err)
@@ -238,7 +238,7 @@ func ExampleOutcome_get() {
 	);
 	`)
 
-	var outcome = sqlair.Outcome{}
+	outcome := sqlair.Outcome{}
 
 	err = db.Query(nil, stmt).Get(&outcome)
 
@@ -263,7 +263,7 @@ func ExampleOutcome_iter() {
 	);
 	`)
 
-	var outcome = sqlair.Outcome{}
+	outcome := sqlair.Outcome{}
 
 	// If Iter is used on a statement with no output arguments, then Outcome
 	// can be passed to Iter.Get before Iter.Next is called.
