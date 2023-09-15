@@ -312,7 +312,8 @@ func ExampleM() {
 		panic(err)
 	}
 
-	// Any named map with a key type of string can be used with SQLair.
+	// Maps can be used in queries, the only requisite is that they have a
+	// name, and a key type of string.
 	type MyIntMap map[string]int
 	mm := MyIntMap{}
 
