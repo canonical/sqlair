@@ -173,10 +173,9 @@ func Example() {
 	// Example 3
 	// Cycle through employees until we find one in the Penthouse.
 
-	// A map with a key type of string is used to
-	// pass arguments that are not fields of structs.
-	// sqlair.M is of type map[string]any but if
-	// the map has a key type of string it can be used.
+	// A map with a key type of string is used to pass arguments that are not
+	// fields of structs. Any named map type with a key type of string can be
+	// used. SQLair provides the sqlair.M type which is of type map[string]any.
 	selectPeopleAndRoom := sqlair.MustPrepare(`
 		SELECT (e.name, t.team_name, l.room_name) AS (&M.employee_name, &M.team, &M.location)
 		FROM locations AS l
@@ -220,9 +219,9 @@ func Example() {
 	}
 
 	// Output:
-	//Alastair is on the Engineering team.
-	//Alastair (Engineering), Ed (Engineering), Marco (Engineering), Pedro (Management), Serdar (Presentation Engineering), Lina (Presentation Engineering), are in The Basement.
-	//Gustavo from team Leadership is in The Penthouse.
+	// Alastair is on the Engineering team.
+	// Alastair (Engineering), Ed (Engineering), Marco (Engineering), Pedro (Management), Serdar (Presentation Engineering), Lina (Presentation Engineering), are in The Basement.
+	// Gustavo from team Leadership is in The Penthouse.
 }
 
 func ExampleOutcome_get() {
@@ -247,7 +246,7 @@ func ExampleOutcome_get() {
 	fmt.Println(s)
 
 	// Output:
-	//0
+	// 0
 }
 
 func ExampleOutcome_iter() {
@@ -276,7 +275,7 @@ func ExampleOutcome_iter() {
 	fmt.Println(s)
 
 	// Output:
-	//0
+	// 0
 }
 
 func ExampleM() {
@@ -333,6 +332,5 @@ func ExampleM() {
 	fmt.Printf("Fred's id is %d", mm["id"])
 
 	// Output:
-	//Fred's id is 30
-
+	// Fred's id is 30
 }
