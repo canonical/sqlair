@@ -111,7 +111,6 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 	type M struct {
 		F string `db:"id"`
 	}
-	type S []int
 	type T []int
 	type U []string
 	type V [7]int
@@ -209,15 +208,15 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 	}, {
 		summary:  "simple in",
 		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($S)",
-		types:    []any{Person{}, S{}},
-		inputs:   []any{S{30, 35, 36, 37, 38, 39, 40}},
+		types:    []any{Person{}, sqlair.S{}},
+		inputs:   []any{sqlair.S{30, 35, 36, 37, 38, 39, 40}},
 		outputs:  [][]any{{&Person{}}, {&Person{}}, {&Person{}}},
 		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{40, "Mary", 3500}}, {&Person{35, "James", 4500}}},
 	}, {
 		summary:  "complex in",
 		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $S, $Manager.id, $T, $U)",
-		types:    []any{Person{}, S{}, Manager{}, T{}, U{}},
-		inputs:   []any{Person{ID: 20}, S{21, 23, 24, 25, 26, 27, 28, 29}, T{31, 32, 33, 34, 35}, &Manager{ID: 30}, U{"36", "37", "38", "39", "40"}},
+		types:    []any{Person{}, sqlair.S{}, Manager{}, T{}, U{}},
+		inputs:   []any{Person{ID: 20}, sqlair.S{21, 23, 24, 25, 26, 27, 28, 29}, T{31, 32, 33, 34, 35}, &Manager{ID: 30}, U{"36", "37", "38", "39", "40"}},
 		outputs:  [][]any{{&Person{}}, {&Person{}}, {&Person{}}, {&Person{}}},
 		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{20, "Mark", 1500}}, {&Person{40, "Mary", 3500}}, {&Person{35, "James", 4500}}},
 	}, {
@@ -696,6 +695,13 @@ func (s *PackageSuite) TestValidGetAll(c *C) {
 		inputs:   []any{},
 		slices:   []any{&[]sqlair.M{}, &[]CustomMap{}},
 		expected: []any{&[]sqlair.M{{"name": "Mark"}}, &[]CustomMap{{"id": int64(20)}}},
+	}, {
+		summary:  "simple in",
+		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($S)",
+		types:    []any{Person{}, sqlair.S{}},
+		inputs:   []any{sqlair.S{20, 35, 36, 37, 38, 39, 40}},
+		slices:   []any{&[]*Person{}},
+		expected: []any{&[]*Person{&Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "James", 4500}}},
 	}}
 
 	tables, sqldb, err := personAndAddressDB()

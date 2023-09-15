@@ -17,6 +17,7 @@ func (qe *QueryExpr) HasOutputs() bool {
 }
 
 type QueryExpr struct {
+	sql     string
 	args    []any
 	outputs []typeMember
 }
@@ -97,7 +98,11 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 			qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(argCount), val.Interface()))
 			argCount++
 		case *sliceType:
-			if sliceLen := v.Len(); sliceLen > maxSliceLen {
+			sliceLen := v.Len()
+			if sliceLen == 0 {
+				return nil, fmt.Errorf(`slice arg with type %q has length 0`, tm.sliceType.Name())
+			}
+			if sliceLen > maxSliceLen {
 				return nil, fmt.Errorf(
 					"slice %q longer than max length for IN clause (%d > %d)",
 					tm.sliceType.Name(), v.Len(), maxSliceLen)
@@ -117,7 +122,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 			return nil, fmt.Errorf(`internal error: unknown type: %T`, tm)
 		}
 	}
-	return &QueryExpr{outputs: pe.outputs, args: qargs}, nil
+	return &QueryExpr{outputs: pe.outputs, sql: pe.sql, args: qargs}, nil
 }
 
 var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()

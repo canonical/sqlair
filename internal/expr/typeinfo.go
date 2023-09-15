@@ -11,6 +11,8 @@ import (
 
 type typeMember interface {
 	outerType() reflect.Type
+
+	// string representation for error messages.
 	string() string
 }
 

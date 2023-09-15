@@ -589,7 +589,8 @@ func (s *ExprSuite) TestPrepareMapError(c *C) {
 		"SELECT * AS &M.* FROM person WHERE name = $M.id",
 		[]any{M{}, sqlair.M{}},
 		`cannot prepare expression: two types found with name "M": "expr_test.M" and "sqlair.M"`,
-	}}
+	},
+	}
 	for _, test := range tests {
 		parser := expr.NewParser()
 		parsedExpr, err := parser.Parse(test.input)
@@ -725,6 +726,11 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		prepareArgs: []any{Person{}},
 		queryArgs:   []any{Person{}, Person{}},
 		err:         `invalid input parameter: type "Person" provided more than once`,
+	}, {
+		query:       "SELECT street FROM t WHERE x IN ($S)",
+		prepareArgs: []any{S{}},
+		queryArgs:   []any{S{}},
+		err:         `invalid input parameter: slice arg with type "S" has length 0`,
 	}}
 
 	outerP := Person{}
