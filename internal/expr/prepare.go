@@ -354,7 +354,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 
 			for _, tm := range typeMembers {
 				if ok := typeMemberPresent[tm]; ok {
-					return nil, fmt.Errorf("member %q of type %q appears more than once", tm.memberName(), tm.outerType().Name())
+					return nil, fmt.Errorf("%q appears more than once in outputs", tm.string())
 				}
 				typeMemberPresent[tm] = true
 			}

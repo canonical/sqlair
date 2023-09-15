@@ -11,21 +11,20 @@ import (
 
 type typeMember interface {
 	outerType() reflect.Type
-	memberName() string
+	string() string
 }
 
 type mapKey struct {
-	name        string
-	mapType     reflect.Type
-	listAllowed bool
+	name    string
+	mapType reflect.Type
 }
 
 func (mk *mapKey) outerType() reflect.Type {
 	return mk.mapType
 }
 
-func (mk mapKey) memberName() string {
-	return mk.name
+func (mk mapKey) string() string {
+	return mk.mapType.Name() + "." + mk.name
 }
 
 // structField represents reflection information about a field from some struct type.
@@ -50,8 +49,8 @@ func (f *structField) outerType() reflect.Type {
 	return f.structType
 }
 
-func (f structField) memberName() string {
-	return f.tag
+func (f structField) string() string {
+	return f.structType.Name() + "." + f.tag
 }
 
 type sliceType struct {
@@ -62,8 +61,8 @@ func (st *sliceType) outerType() reflect.Type {
 	return st.sliceType
 }
 
-func (st *sliceType) memberName() string {
-	panic("internal error: memberName called on sliceType")
+func (st *sliceType) string() string {
+	return st.sliceType.Name()
 }
 
 type typeInfo interface {
