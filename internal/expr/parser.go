@@ -37,7 +37,6 @@ func (p *Parser) init(input string) {
 // since we don't keep track of the parts in the checkpoint.
 type checkpoint struct {
 	parser       *Parser
-	input        string
 	pos          int
 	prevPart     int
 	partStart    int
@@ -50,7 +49,6 @@ type checkpoint struct {
 func (p *Parser) save() *checkpoint {
 	return &checkpoint{
 		parser:       p,
-		input:        p.input,
 		pos:          p.pos,
 		prevPart:     p.prevPart,
 		partStart:    p.partStart,
@@ -62,7 +60,6 @@ func (p *Parser) save() *checkpoint {
 // restore sets the internal state of the parser to the values stored in the
 // checkpoint.
 func (cp *checkpoint) restore() {
-	cp.parser.input = cp.input
 	cp.parser.pos = cp.pos
 	cp.parser.prevPart = cp.prevPart
 	cp.parser.partStart = cp.partStart
@@ -169,13 +166,28 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 	}()
 
 	p.init(input)
+	queryParts, err := p.parse(optionalBracketLevel{on: false})
+	if err != nil {
+		return nil, err
+	}
+	return &ParsedExpr{queryParts}, nil
+}
+
+type optionalBracketLevel struct {
+	bracketLevel int
+	on           bool
+}
+
+// parse parses the input until p.bracketLevel==minBracketLevel at a position
+// outside of an expression.
+func (p *Parser) parse(bl optionalBracketLevel) ([]queryPart, error) {
 	for {
 		// Advance the parser to the start of the next expression.
 		if err := p.advance(); err != nil {
 			return nil, err
 		}
 
-		if p.pos == len(p.input) {
+		if p.pos == len(p.input) || (bl.on && bl.bracketLevel == p.bracketLevel) {
 			break
 		}
 
@@ -194,7 +206,7 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 		}
 	}
 	p.addRemainder()
-	return &ParsedExpr{p.parts}, nil
+	return p.parts, nil
 }
 
 // advance increments p.pos until it reaches content that might preceed a token
@@ -403,14 +415,8 @@ func (p *Parser) parseIdentifier() (string, bool) {
 // parseColumn parses a column made up of name bytes, optionally dot-prefixed by
 // its table name.
 // parseColumn returns an error so that it can be used with parseList.
-func (p *Parser) parseColumn() (columnExpr, bool, error) {
+func (p *Parser) parseColumn() (fullName, bool, error) {
 	cp := p.save()
-
-	if ce, ok, err := p.parseFunc(); err != nil {
-		return funcExpr{}, false, err
-	} else if ok {
-		return ce, true, nil
-	}
 
 	if id, ok := p.parseIdentifierAsterisk(); ok {
 		if id != "*" && p.skipByte('.') {
@@ -427,34 +433,24 @@ func (p *Parser) parseColumn() (columnExpr, bool, error) {
 	return fullName{}, false, nil
 }
 
-func (p *Parser) parseFunc() (columnExpr, bool, error) {
-	// Start parsing a nested expression.
-	scp := p.startSubpart()
+// parseFunc returns true if a SQL function is detected. It recurses into the
+// parser to do this taking advantage of the bracketLevels. It does not return
+// a parsed version of the function because the parsed function is added
+// implicitly to p.parts by the p.parse function.
+func (p *Parser) parseFunc() (bool, error) {
+	cp := p.save()
+	bracketLevel := p.bracketLevel
 	if p.skipName() && p.peekByte('(') {
-		for {
-			if err := p.advance(); err != nil {
-				scp.restore()
-				return funcExpr{}, false, err
-			}
-
-			if p.bracketLevel == 0 || p.pos == len(p.input) {
-				break
-			}
-
-			if in, ok, err := p.parseInputExpression(); err != nil {
-				scp.restore()
-				return funcExpr{}, false, err
-			} else if ok {
-				p.add(in)
-				continue
-			}
+		// The queryParts are added to p.parts.
+		_, err := p.parse(optionalBracketLevel{on: true, bracketLevel: bracketLevel})
+		if err != nil {
+			cp.restore()
+			return false, err
 		}
-		p.addRemainder()
-		pe := p.collectSubpart(scp)
-		return funcExpr{raw: p.input[scp.pos:p.pos], pe: pe}, true, nil
+		return true, nil
 	}
-	scp.restore()
-	return funcExpr{}, false, nil
+	cp.restore()
+	return false, nil
 }
 
 func (p *Parser) parseTargetType() (fullName, bool, error) {
@@ -524,10 +520,10 @@ func parseList[T any](p *Parser, parseFn func(p *Parser) (T, bool, error)) ([]T,
 
 // parseColumns parses a list of columns. For lists of more than one column the
 // columns must be enclosed in brackets e.g. "(col1, col2) AS &Person.*".
-func (p *Parser) parseColumns() (cols []columnExpr, parentheses bool, ok bool) {
+func (p *Parser) parseColumns() (cols []fullName, parentheses bool, ok bool) {
 	// Case 1: A single column e.g. "p.name".
 	if col, ok, _ := p.parseColumn(); ok {
-		return []columnExpr{col}, false, true
+		return []fullName{col}, false, true
 	}
 
 	// Case 2: Multiple columns e.g. "(p.name, p.id)".
@@ -568,7 +564,7 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 		return nil, false, err
 	} else if ok {
 		return &outputPart{
-			sourceColumns: []columnExpr{},
+			sourceColumns: []fullName{},
 			targetTypes:   []fullName{targetType},
 			raw:           p.input[start:p.pos],
 		}, true, nil
@@ -576,7 +572,28 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 
 	cp := p.save()
 
-	// Case 2: There are columns e.g. "p.col1 AS &Person.*".
+	// Case 2: Function column e.g. "max(20, $Person.name) AS &Person.id".
+	if ok, err := p.parseFunc(); err != nil {
+		return nil, false, err
+	} else if ok {
+		p.skipBlanks()
+		if p.skipString("AS") {
+			p.skipBlanks()
+			if targetType, ok, err := p.parseTargetType(); err != nil {
+				return nil, false, err
+			} else if ok {
+				return &outputPart{
+					funcCol:       true,
+					sourceColumns: []fullName{},
+					targetTypes:   []fullName{targetType},
+					raw:           p.input[start:p.pos],
+				}, true, nil
+			}
+		}
+	}
+	cp.restore()
+
+	// Case 3: There are columns e.g. "p.col1 AS &Person.*".
 	if cols, parenCols, ok := p.parseColumns(); ok {
 		p.skipBlanks()
 		if p.skipString("AS") {

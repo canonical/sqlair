@@ -309,20 +309,20 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	"INSERT INTO arr VALUES (ARRAY[[1,2],[@sqlair_0,4]], ARRAY[[5,6],[@sqlair_1,8]]);",
 }, {
 	"functions",
-	`SELECT (max(AVG(id), AVG(address_id), length("((((''""((")), IFNULL(name, "Mr &Person.id of $M.name")) AS (&M.avg, &M.name), random() AS &M.random FROM person`,
-	`[Bypass[SELECT ] Output[[[Bypass[max(AVG(id), AVG(address_id), length("((((''""(("))]] [Bypass[IFNULL(name, "Mr &Person.id of $M.name")]]] [M.avg M.name]] Bypass[, ] Output[[[Bypass[random()]]] [M.random]] Bypass[ FROM person]]`,
+	`SELECT max(AVG(id), AVG(address_id), length("((((''""((")) AS &M.avg, IFNULL(name, "Mr &Person.id of $M.name") AS &M.name, random() AS &M.random FROM person`,
+	`[Bypass[SELECT max(AVG(id), AVG(address_id), length("((((''""(("))] Output[[] [M.avg]] Bypass[, IFNULL(name, "Mr &Person.id of $M.name")] Output[[] [M.name]] Bypass[, random()] Output[[] [M.random]] Bypass[ FROM person]]`,
 	[]any{sqlair.M{}},
 	`SELECT max(AVG(id), AVG(address_id), length("((((''""((")) AS _sqlair_0, IFNULL(name, "Mr &Person.id of $M.name") AS _sqlair_1, random() AS _sqlair_2 FROM person`,
 }, {
 	"function with nested input",
 	`SELECT max($Person.id, 20) AS &Manager.id FROM person`,
-	`[Bypass[SELECT ] Output[[[Bypass[max(] Input[Person.id] Bypass[, 20)]]] [Manager.id]] Bypass[ FROM person]]`,
+	`[Bypass[SELECT max(] Input[Person.id] Bypass[, 20)] Output[[] [Manager.id]] Bypass[ FROM person]]`,
 	[]any{Person{}, Manager{}},
 	`SELECT max(@sqlair_0, 20) AS _sqlair_0 FROM person`,
 }, {
 	"function with multiple nested input",
-	`SELECT (manager_id, avg(30, length($Person.name), max($Person.id, 20))) AS (&Manager.id, &Person.id) FROM person`,
-	`[Bypass[SELECT ] Output[[manager_id [Bypass[avg(30, length(] Input[Person.name] Bypass[), max(] Input[Person.id] Bypass[, 20))]]] [Manager.id Person.id]] Bypass[ FROM person]]`,
+	`SELECT manager_id AS &Manager.id, avg(30, length($Person.name), max($Person.id, 20)) AS &Person.id FROM person`,
+	`[Bypass[SELECT ] Output[[manager_id] [Manager.id]] Bypass[, avg(30, length(] Input[Person.name] Bypass[), max(] Input[Person.id] Bypass[, 20))] Output[[] [Person.id]] Bypass[ FROM person]]`,
 	[]any{Person{}, Manager{}},
 	`SELECT manager_id AS _sqlair_0, avg(30, length(@sqlair_0), max(@sqlair_1, 20)) AS _sqlair_1 FROM person`,
 }}
@@ -527,11 +527,11 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT avg(num) AS &Person.* FROM t",
 		prepareArgs: []any{Person{}},
-		err:         `cannot prepare expression: cannot use function "avg(num)" with asterisk output expression: "avg(num) AS &Person.*"`,
+		err:         `cannot prepare expression: cannot use sql function with asterisk in output expression: "avg(num) AS &Person.*"`,
 	}, {
 		query:       "SELECT avg(id) AS &M.* FROM t",
 		prepareArgs: []any{sqlair.M{}},
-		err:         `cannot prepare expression: cannot use function "avg(id)" with asterisk output expression: "avg(id) AS &M.*"`,
+		err:         `cannot prepare expression: cannot use sql function with asterisk in output expression: "avg(id) AS &M.*"`,
 	}, {
 		query:       "SELECT &NoTags.* FROM t",
 		prepareArgs: []any{NoTags{}},

@@ -18,30 +18,11 @@ type queryPart interface {
 // A columnExpr represents the columns at the start of an output expression.
 // For example the qualified column name "t.col1" in "t.col1 AS &MyStruct.*"
 // or the function "func(2 + $Person.id)" in "func(2 + $Person.id) AS &Manager.id".
-type columnExpr interface {
-	colExpr()
-}
-
-type funcExpr struct {
-	raw string
-	pe  *ParsedExpr
-}
-
-// columnExpr marker method.
-func (fe funcExpr) colExpr() {}
-
-func (fe funcExpr) String() string {
-	return fe.pe.String()
-
-}
 
 // FullName represents a table column or a Go type identifier.
 type fullName struct {
 	prefix, name string
 }
-
-// columnExpr marker method.
-func (fn fullName) colExpr() {}
 
 func (fn fullName) String() string {
 	if fn.prefix == "" {
@@ -68,7 +49,8 @@ func (p *inputPart) part() {}
 // outputPart represents a named target output variable in the SQL expression,
 // as well as the source table and column where it will be read from.
 type outputPart struct {
-	sourceColumns []columnExpr
+	funcCol       bool
+	sourceColumns []fullName
 	targetTypes   []fullName
 	raw           string
 }
