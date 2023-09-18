@@ -72,17 +72,9 @@ func (pe *PreparedExpr) prepareInput(ti typeNameToInfo, p *inputPart) error {
 			return fmt.Errorf(`type %q not passed as a parameter, have: %s`, p.sourceType.prefix, strings.Join(ts, ", "))
 		}
 	}
-	var tm typeMember
-	switch info := info.(type) {
-	case *mapInfo:
-		tm = &mapKey{name: p.sourceType.name, mapType: info.typ()}
-	case *structInfo:
-		tm, ok = info.tagToField[p.sourceType.name]
-		if !ok {
-			return fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), p.sourceType.name)
-		}
-	default:
-		return fmt.Errorf(`internal error: unknown info type: %T`, info)
+	tm, err := info.typeMember(p.sourceType.name)
+	if err != nil {
+		return err
 	}
 	pe.sql += "@sqlair_" + strconv.Itoa(len(pe.inputs))
 	pe.inputs = append(pe.inputs, tm)
@@ -104,7 +96,6 @@ func (pe *PreparedExpr) prepareOutput(ti typeNameToInfo, p *outputPart) (err err
 
 	// Check target struct type and its tags are valid.
 	var info typeInfo
-	var ok bool
 
 	fetchInfo := func(typeName string) (typeInfo, error) {
 		info, ok := ti[typeName]
@@ -119,7 +110,7 @@ func (pe *PreparedExpr) prepareOutput(ti typeNameToInfo, p *outputPart) (err err
 		return info, nil
 	}
 
-	addSQL := func(column string, tm typeMember) error {
+	addColumn := func(column string, tm typeMember) error {
 		for _, output := range pe.outputs {
 			if tm == output {
 				return fmt.Errorf("member %q of type %q appears more than once", tm.memberName(), tm.outerType().Name())
@@ -128,20 +119,6 @@ func (pe *PreparedExpr) prepareOutput(ti typeNameToInfo, p *outputPart) (err err
 		pe.sql += column + " AS " + markerName(len(pe.outputs)) + ", "
 		pe.outputs = append(pe.outputs, tm)
 		return nil
-	}
-
-	addColumn := func(info typeInfo, tag string, column fullName) error {
-		var tm typeMember
-		switch info := info.(type) {
-		case *structInfo:
-			tm, ok = info.tagToField[tag]
-			if !ok {
-				return fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), tag)
-			}
-		case *mapInfo:
-			tm = &mapKey{name: tag, mapType: info.typ()}
-		}
-		return addSQL(column.String(), tm)
 	}
 
 	// Case 1: Generated columns e.g. "* AS (&P.*, &A.id)" or "&P.*".
@@ -160,25 +137,25 @@ func (pe *PreparedExpr) prepareOutput(ti typeNameToInfo, p *outputPart) (err err
 			if info, err = fetchInfo(t.prefix); err != nil {
 				return err
 			}
-			// Generate asterisk columns.
 			if t.name == "*" {
-				switch info := info.(type) {
-				case *mapInfo:
-					return fmt.Errorf(`&%s.* cannot be used for maps when no column names are specified`, info.typ().Name())
-				case *structInfo:
-					if len(info.tags) == 0 {
-						return fmt.Errorf("type %q in %q does not have any db tags", info.typ().Name(), p.raw)
-					}
-					for _, tag := range info.tags {
-						err := addSQL(fullName{prefix: pref, name: tag}.String(), info.tagToField[tag])
-						if err != nil {
-							return err
-						}
+				// Generate asterisk columns.
+				allMembers, err := info.getAllMembers()
+				if err != nil {
+					return err
+				}
+				for _, tm := range allMembers {
+					err := addColumn(fullName{pref, tm.memberName()}.String(), tm)
+					if err != nil {
+						return err
 					}
 				}
 			} else {
 				// Generate explicit columns.
-				if err = addColumn(info, t.name, fullName{prefix: pref, name: t.name}); err != nil {
+				tm, err := info.typeMember(t.name)
+				if err == nil {
+					err = addColumn(fullName{prefix: pref, name: t.name}.String(), tm)
+				}
+				if err != nil {
 					return err
 				}
 			}
@@ -198,7 +175,11 @@ func (pe *PreparedExpr) prepareOutput(ti typeNameToInfo, p *outputPart) (err err
 			case funcExpr:
 				return fmt.Errorf(`cannot use function %q with asterisk output expression: %q`, c.raw, p.raw)
 			case fullName:
-				if err = addColumn(info, c.name, c); err != nil {
+				tm, err := info.typeMember(c.name)
+				if err == nil {
+					err = addColumn(c.String(), tm)
+				}
+				if err != nil {
 					return err
 				}
 			}
@@ -216,14 +197,21 @@ func (pe *PreparedExpr) prepareOutput(ti typeNameToInfo, p *outputPart) (err err
 				return err
 			}
 
+			var column string
 			switch c := c.(type) {
 			case funcExpr:
 				if err = pe.prepareParts(ti, c.pe.queryParts); err != nil {
 					return err
 				}
-				err = addColumn(info, t.name, fullName{})
+				// We leave the column black since it has already been written
+				// by prepareParts.
+				column = ""
 			case fullName:
-				err = addColumn(info, t.name, c)
+				column = c.String()
+			}
+			tm, err := info.typeMember(t.name)
+			if err == nil {
+				err = addColumn(column, tm)
 			}
 			if err != nil {
 				return err

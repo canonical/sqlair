@@ -535,7 +535,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT &NoTags.* FROM t",
 		prepareArgs: []any{NoTags{}},
-		err:         `cannot prepare expression: type "NoTags" in "&NoTags.*" does not have any db tags`,
+		err:         `cannot prepare expression: type "NoTags" does not have any db tags`,
 	}}
 
 	for i, test := range tests {
@@ -569,17 +569,17 @@ func (s *ExprSuite) TestPrepareMapError(c *C) {
 		"all output into map star",
 		"SELECT &M.* FROM person WHERE name = 'Fred'",
 		[]any{sqlair.M{}},
-		"cannot prepare expression: &M.* cannot be used for maps when no column names are specified",
+		`cannot prepare expression: map type "M" cannot be used with asterisk`,
 	}, {
 		"all output into map star from table star",
 		"SELECT p.* AS &M.* FROM person WHERE name = 'Fred'",
 		[]any{sqlair.M{}},
-		"cannot prepare expression: &M.* cannot be used for maps when no column names are specified",
+		`cannot prepare expression: map type "M" cannot be used with asterisk`,
 	}, {
 		"all output into map star from lone star",
 		"SELECT * AS &CustomMap.* FROM person WHERE name = 'Fred'",
 		[]any{CustomMap{}},
-		"cannot prepare expression: &CustomMap.* cannot be used for maps when no column names are specified",
+		`cannot prepare expression: map type "CustomMap" cannot be used with asterisk`,
 	}, {
 		"invalid map",
 		"SELECT * AS &InvalidMap.* FROM person WHERE name = 'Fred'",
