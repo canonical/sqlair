@@ -102,13 +102,9 @@ func (pe *ParsedExpr) String() string {
 // part.
 func (p *Parser) add(part queryPart) {
 	// Add the string between the previous I/O part and the current part.
-	if p.prevPart != p.partStart {
-		p.parts = append(p.parts,
-			&bypassPart{p.input[p.prevPart:p.partStart]})
-	}
+	p.addRemainder()
 
 	p.parts = append(p.parts, part)
-
 	// Save this position at the end of the part.
 	p.prevPart = p.pos
 	// Ensure that partStart >= prevPart.
