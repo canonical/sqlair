@@ -186,6 +186,27 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 	return outCols, typeMembers, err
 }
 
+// isStandaloneInput returns true if the input expression occurs on its own,
+// not inside an INSERT statement.
+// For example:
+//   "... WHERE x = $P.name"
+func isStandaloneInput(p *inputPart) bool {
+	return len(p.targetColumns) == 0
+}
+
+// hasMultipleTypes checks if there is more than one type to take the input
+// parameter from in the input part.
+func hasMultipleTypes(p *inputPart) bool {
+	return len(p.sourceTypes) > 1
+}
+
+// hasStarTypes returns true if the input expression has an asterisk.
+// For example:
+//   "$P.*"
+func hasStarTypes(p *inputPart) bool {
+	return starCount(p.sourceTypes) > 0
+}
+
 // prepareInput checks that the input expression is correctly formatted,
 // corresponds to known types, and then generates input columns and values.
 func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembers []typeMember, err error) {
@@ -195,18 +216,14 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembe
 		}
 	}()
 
-	numTypes := len(p.sourceTypes)
-	numColumns := len(p.targetColumns)
-	starTypes := starCount(p.sourceTypes)
-
 	// Check for standalone input expression and prepare if found.
 	// For example:
 	//  "$P.name"
-	if numColumns == 0 {
-		if numTypes != 1 {
+	if isStandaloneInput(p) {
+		if hasMultipleTypes(p) {
 			return nil, nil, fmt.Errorf("internal error: cannot group standalone input expressions")
 		}
-		if starTypes > 0 {
+		if hasStarTypes(p) {
 			return nil, nil, fmt.Errorf("invalid asterisk")
 		}
 		info, err := ti.lookupInfo(p.sourceTypes[0].prefix)
