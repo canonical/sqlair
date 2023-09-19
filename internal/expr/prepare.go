@@ -104,17 +104,20 @@ func prepareIn(ti typeNameToInfo, p *inPart) ([]typeMember, error) {
 				return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, t.prefix, strings.Join(ts, ", "))
 			}
 		}
-		if t.name == "*" {
-			return nil, fmt.Errorf("invalid asterisk in input expression: %s", p.raw)
-		}
 		var tm typeMember
 		switch info := info.(type) {
 		case *structInfo:
+			if t.name == "*" {
+				return nil, fmt.Errorf(`cannot use struct %q with asterisk in input expression: %s`, t.prefix, p.raw)
+			}
 			tm, ok = info.tagToField[t.name]
 			if !ok {
 				return nil, fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), t.name)
 			}
 		case *mapInfo:
+			if t.name == "*" {
+				return nil, fmt.Errorf(`cannot use map %q with asterisk in input expression: %s`, t.prefix, p.raw)
+			}
 			tm = &mapKey{name: t.name, mapType: info.typ()}
 		case *sliceInfo:
 			tm = &sliceType{sliceType: info.typ()}

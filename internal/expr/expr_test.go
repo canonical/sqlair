@@ -262,14 +262,14 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	"SELECT person.*, address.district FROM person JOIN address ON person.address_id = address.id WHERE person.name = 'Fred'",
 }, {
 	"simple in",
-	"SELECT name FROM person WHERE id IN ($S)",
-	"[Bypass[SELECT name FROM person WHERE id ] In[[S]]]",
+	"SELECT name FROM person WHERE id IN ($S.*)",
+	"[Bypass[SELECT name FROM person WHERE id ] In[[S.*]]]",
 	[]any{sqlair.S{}},
 	"SELECT name FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7)",
 }, {
 	"complex in",
-	"SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $S, $Manager.id, $T, $U)",
-	"[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE id ] In[[Person.id S Manager.id T U]]]",
+	"SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $S.*, $Manager.id, $T.*, $U.*)",
+	"[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE id ] In[[Person.id S.* Manager.id T.* U.*]]]",
 	[]any{sqlair.S{}, Person{}, Manager{}, T{}, U{}},
 	"SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7, @sqlair_8, @sqlair_9, @sqlair_10, @sqlair_11, @sqlair_12, @sqlair_13, @sqlair_14, @sqlair_15, @sqlair_16, @sqlair_17, @sqlair_18, @sqlair_19, @sqlair_20, @sqlair_21, @sqlair_22, @sqlair_23, @sqlair_24, @sqlair_25)",
 }, {
@@ -397,6 +397,12 @@ func (s *ExprSuite) TestParseErrors(c *C) {
 	}, {
 		query: "SELECT (name, id) AS &Person.*",
 		err:   `cannot parse expression: column 30: missing parentheses around types after "AS"`,
+	}, {
+		query: "SELECT col1 AS &S FROM t",
+		err:   `cannot parse expression: column 17: unqualified type, expected S.* or S.<db tag>`,
+	}, {
+		query: "SELECT * AS &S FROM t",
+		err:   `cannot parse expression: column 14: unqualified type, expected S.* or S.<db tag>`,
 	}}
 
 	for _, t := range tests {
@@ -524,15 +530,19 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 		prepareArgs: []any{NoTags{}},
 		err:         `cannot prepare expression: type "NoTags" in "&NoTags.*" does not have any db tags`,
 	}, {
-		query:       "SELECT foo FROM t WHERE x = $S",
+		query:       "SELECT foo FROM t WHERE x = $S.*",
 		prepareArgs: []any{S{}},
 		err:         `cannot prepare expression: cannot use slice type "S" outside of IN clause`,
 	}, {
-		query:       "SELECT col1 AS &S FROM t",
-		prepareArgs: []any{S{}},
-		err:         `cannot prepare expression: cannot use slice type "S" in output expression`,
+		query:       "SELECT name FROM person WHERE id IN ($M.*)",
+		prepareArgs: []any{M{}},
+		err:         `cannot prepare expression: cannot use map "M" with asterisk in input expression: IN ($M.*)`,
 	}, {
-		query:       "SELECT * AS &S FROM t",
+		query:       "SELECT name FROM person WHERE id IN ($Person.*)",
+		prepareArgs: []any{Person{}},
+		err:         `cannot prepare expression: cannot use struct "Person" with asterisk in input expression: IN ($Person.*)`,
+	}, {
+		query:       "SELECT &S.* FROM t",
 		prepareArgs: []any{S{}},
 		err:         `cannot prepare expression: cannot use slice type "S" in output expression`,
 	}}
@@ -644,7 +654,7 @@ func (s *ExprSuite) TestValidQuery(c *C) {
 		[]any{Person{ID: 666}, StringMap{"street": "Highway to Hell"}},
 		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
 	}, {
-		"SELECT name FROM person WHERE id IN ($S)",
+		"SELECT name FROM person WHERE id IN ($S.*)",
 		[]any{sqlair.S{}},
 		[]any{sqlair.S{1, 2, 3, 4, 5, 6}},
 		[]any{sql.Named("sqlair_0", 1), sql.Named("sqlair_1", 2), sql.Named("sqlair_2", 3), sql.Named("sqlair_3", 4), sql.Named("sqlair_4", 5), sql.Named("sqlair_5", 6), sql.Named("sqlair_6", nil), sql.Named("sqlair_7", nil)},
@@ -727,7 +737,7 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		queryArgs:   []any{Person{}, Person{}},
 		err:         `invalid input parameter: type "Person" provided more than once`,
 	}, {
-		query:       "SELECT street FROM t WHERE x IN ($S)",
+		query:       "SELECT street FROM t WHERE x IN ($S.*)",
 		prepareArgs: []any{S{}},
 		queryArgs:   []any{S{}},
 		err:         `invalid input parameter: slice arg with type "S" has length 0`,

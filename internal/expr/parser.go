@@ -401,14 +401,14 @@ func (p *Parser) parseTargetType() (fullName, bool, error) {
 	return fullName{}, false, nil
 }
 
-// parseGoFullName parses a Go type name optionally qualified by a tag name (or
-// asterisk). For example "Type" or "Type.col_name".
+// parseGoFullName parses a Go type name qualified by a tag name (or asterisk)
+// of the form "TypeName.col_name".
 func (p *Parser) parseGoFullName() (fullName, bool, error) {
 	cp := p.save()
 
 	if id, ok := p.parseIdentifier(); ok {
 		if !p.skipByte('.') {
-			return fullName{prefix: id}, true, nil
+			return fullName{}, false, fmt.Errorf("column %d: unqualified type, expected %s.* or %s.<db tag>", p.pos, id, id)
 		}
 
 		idField, ok := p.parseIdentifierAsterisk()
@@ -539,7 +539,7 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 	return nil, false, nil
 }
 
-// parseInputExpression parses an input expression of the form "$Type.name".
+// parseInputExpression parses an input expression of the form "Type.name".
 func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 	cp := p.save()
 
@@ -556,9 +556,6 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 func (p *Parser) parseSourceType() (fullName, bool, error) {
 	if p.skipByte('$') {
 		if fn, ok, err := p.parseGoFullName(); ok {
-			if fn.name == "*" {
-				return fullName{}, false, fmt.Errorf(`asterisk not allowed in input expression "$%s"`, fn)
-			}
 			return fn, true, nil
 		} else if err != nil {
 			return fullName{}, false, err
