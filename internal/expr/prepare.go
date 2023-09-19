@@ -64,16 +64,16 @@ func starCount(fns []fullName) int {
 func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 	defer func() {
 		if err != nil {
-			err = fmt.Errorf("%s in input expression: %s", err, p.raw)
+			err = fmt.Errorf("input expression: %s: %s", err, p.raw)
 		}
 	}()
 	info, ok := ti[p.sourceType.prefix]
 	if !ok {
 		ts := getKeys(ti)
 		if len(ts) == 0 {
-			return nil, fmt.Errorf(`type %q not passed as a parameter. Type mentioned`, p.sourceType.prefix)
+			return nil, fmt.Errorf(`type %q not passed as a parameter`, p.sourceType.prefix)
 		} else {
-			return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s. Type mentioned`, p.sourceType.prefix, strings.Join(ts, ", "))
+			return nil, fmt.Errorf(`type %q not passed as a parameter, have %s`, p.sourceType.prefix, strings.Join(ts, ", "))
 		}
 	}
 	switch info := info.(type) {
@@ -95,7 +95,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMembers []typeMember, err error) {
 	defer func() {
 		if err != nil {
-			err = fmt.Errorf("%s in output expression: %s", err, p.raw)
+			err = fmt.Errorf("output expression: %s: %s", err, p.raw)
 		}
 	}()
 
@@ -113,9 +113,9 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 		if !ok {
 			ts := getKeys(ti)
 			if len(ts) == 0 {
-				return nil, fmt.Errorf(`type %q not passed as a parameter. Type mentioned`, typeName)
+				return nil, fmt.Errorf(`type %q not passed as a parameter`, typeName)
 			} else {
-				return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s. Type mentioned`, typeName, strings.Join(ts, ", "))
+				return nil, fmt.Errorf(`type %q not passed as a parameter, have %s`, typeName, strings.Join(ts, ", "))
 			}
 		}
 		return info, nil
