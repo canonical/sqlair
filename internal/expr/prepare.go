@@ -318,7 +318,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 				return nil, err
 			}
 
-			if len(p.targetColumns) == 0 {
+			if isStandaloneInput(p) {
 				sql.WriteString("@sqlair_" + strconv.Itoa(inCount))
 				inCount += 1
 			} else {
