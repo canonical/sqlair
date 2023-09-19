@@ -106,16 +106,6 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 		return info, nil
 	}
 
-	addColumns := func(info typeInfo, tag string, column fullName) error {
-		tm, err := info.typeMember(tag)
-		if err != nil {
-			return err
-		}
-		typeMembers = append(typeMembers, tm)
-		outCols = append(outCols, column)
-		return nil
-	}
-
 	// Case 1: Generated columns e.g. "* AS (&P.*, &A.id)" or "&P.*".
 	if numColumns == 0 || (numColumns == 1 && starColumns == 1) {
 		pref := ""
@@ -140,9 +130,12 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 				}
 			} else {
 				// Generate explicit columns.
-				if err = addColumns(info, t.name, fullName{pref, t.name}); err != nil {
+				tm, err := info.typeMember(t.name)
+				if err != nil {
 					return nil, nil, err
 				}
+				typeMembers = append(typeMembers, tm)
+				outCols = append(outCols, fullName{pref, t.name})
 			}
 		}
 		return outCols, typeMembers, nil
@@ -156,9 +149,12 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 			return nil, nil, err
 		}
 		for _, c := range p.sourceColumns {
-			if err = addColumns(info, c.name, c); err != nil {
+			tm, err := info.typeMember(c.name)
+			if err != nil {
 				return nil, nil, err
 			}
+			typeMembers = append(typeMembers, tm)
+			outCols = append(outCols, c)
 		}
 		return outCols, typeMembers, nil
 	} else if starTypes > 0 && numTypes > 1 {
@@ -172,10 +168,12 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 			if info, err = fetchInfo(t.prefix); err != nil {
 				return nil, nil, err
 			}
-
-			if err = addColumns(info, t.name, c); err != nil {
+			tm, err := info.typeMember(t.name)
+			if err != nil {
 				return nil, nil, err
 			}
+			typeMembers = append(typeMembers, tm)
+			outCols = append(outCols, c)
 		}
 	} else {
 		return nil, nil, fmt.Errorf("mismatched number of columns and targets in output expression: %s", p.raw)
