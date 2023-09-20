@@ -156,7 +156,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 					return nil, nil, fmt.Errorf(`columns must be specified for asterisk map`)
 				case *structInfo:
 					if len(info.tags) == 0 {
-						return nil, nil, fmt.Errorf("no db tags found for type %q", info.typ().Name())
+						return nil, nil, fmt.Errorf(`no "db" tags found in struct %q`, info.typ().Name())
 					}
 					for _, tag := range info.tags {
 						outCols = append(outCols, fullName{pref, tag})

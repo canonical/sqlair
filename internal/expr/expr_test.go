@@ -509,7 +509,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT &NoTags.* FROM t",
 		prepareArgs: []any{NoTags{}},
-		err:         `cannot prepare statement: output expression: no db tags found for type "NoTags": &NoTags.*`,
+		err:         `cannot prepare statement: output expression: no "db" tags found in struct "NoTags": &NoTags.*`,
 	}}
 
 	for i, test := range tests {
