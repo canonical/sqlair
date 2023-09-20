@@ -73,7 +73,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 		if len(ts) == 0 {
 			return nil, fmt.Errorf(`type %q not passed as a parameter`, p.sourceType.prefix)
 		} else {
-			return nil, fmt.Errorf(`type %q not passed as a parameter, have %s`, p.sourceType.prefix, strings.Join(ts, ", "))
+			return nil, fmt.Errorf(`type %q not passed as a parameter, have "%s"`, p.sourceType.prefix, strings.Join(ts, `", "`))
 		}
 	}
 	switch info := info.(type) {
