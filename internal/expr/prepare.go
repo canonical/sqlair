@@ -60,16 +60,26 @@ func starCount(fns []fullName) int {
 	return s
 }
 
-// prepareInput checks that the input expression corresponds to a known type.
-func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
-	info, ok := ti[p.sourceType.prefix]
+type typeNameToInfo map[string]typeInfo
+
+func (ti typeNameToInfo) lookupInfo(typeName string) (typeInfo, error) {
+	info, ok := ti[typeName]
 	if !ok {
 		ts := getKeys(ti)
 		if len(ts) == 0 {
-			return nil, fmt.Errorf(`type %q not passed as a parameter`, p.sourceType.prefix)
+			return nil, fmt.Errorf(`type %q not passed as a parameter`, typeName)
 		} else {
-			return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, p.sourceType.prefix, strings.Join(ts, ", "))
+			return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, typeName, strings.Join(ts, ", "))
 		}
+	}
+	return info, nil
+}
+
+// prepareInput checks that the input expression corresponds to a known type.
+func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
+	info, err := ti.lookupInfo(p.sourceType.prefix)
+	if err != nil {
+		return nil, err
 	}
 	switch info := info.(type) {
 	case *mapInfo:
@@ -96,26 +106,9 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 	starTypes := starCount(p.targetTypes)
 	starColumns := starCount(p.sourceColumns)
 
-	// Check target struct type and its tags are valid.
-	var info typeInfo
-	var ok bool
-	var err error
-
-	fetchInfo := func(typeName string) (typeInfo, error) {
-		info, ok := ti[typeName]
-		if !ok {
-			ts := getKeys(ti)
-			if len(ts) == 0 {
-				return nil, fmt.Errorf(`type %q not passed as a parameter`, typeName)
-			} else {
-				return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, typeName, strings.Join(ts, ", "))
-			}
-		}
-		return info, nil
-	}
-
 	addColumns := func(info typeInfo, tag string, column fullName) error {
 		var tm typeMember
+		var ok bool
 		switch info := info.(type) {
 		case *structInfo:
 			tm, ok = info.tagToField[tag]
@@ -139,7 +132,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 		}
 
 		for _, t := range p.targetTypes {
-			if info, err = fetchInfo(t.prefix); err != nil {
+			info, err := ti.lookupInfo(t.prefix)
+			if err != nil {
 				return nil, nil, err
 			}
 			// Generate asterisk columns.
@@ -170,7 +164,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 
 	// Case 2: Explicit columns, single asterisk type e.g. "(col1, t.col2) AS &P.*".
 	if starTypes == 1 && numTypes == 1 {
-		if info, err = fetchInfo(p.targetTypes[0].prefix); err != nil {
+		info, err := ti.lookupInfo(p.targetTypes[0].prefix)
+		if err != nil {
 			return nil, nil, err
 		}
 		for _, c := range p.sourceColumns {
@@ -187,10 +182,10 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 	if numColumns == numTypes {
 		for i, c := range p.sourceColumns {
 			t := p.targetTypes[i]
-			if info, err = fetchInfo(t.prefix); err != nil {
+			info, err := ti.lookupInfo(t.prefix)
+			if err != nil {
 				return nil, nil, err
 			}
-
 			if err = addColumns(info, t.name, c); err != nil {
 				return nil, nil, err
 			}
@@ -201,8 +196,6 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 
 	return outCols, typeMembers, nil
 }
-
-type typeNameToInfo map[string]typeInfo
 
 // Prepare takes a parsed expression and struct instantiations of all the types
 // mentioned in it.
