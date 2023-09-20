@@ -187,12 +187,9 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 	return outCols, typeMembers, err
 }
 
-// isStandaloneInput returns true if the input expression occurs on its own,
-// not inside an INSERT statement.
-// For example:
-//   "... WHERE x = $P.name"
-func isStandaloneInput(p *inputPart) bool {
-	return len(p.targetColumns) == 0
+// isInsert returns true if the input expression inside an INSERT statement.
+func isInsert(p *inputPart) bool {
+	return len(p.targetColumns) > 0
 }
 
 // hasMultipleTypes checks if there is more than one type to take the input
@@ -220,7 +217,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembe
 	// Check for standalone input expression and prepare if found.
 	// For example:
 	//  "$P.name"
-	if isStandaloneInput(p) {
+	if !isInsert(p) {
 		if hasMultipleTypes(p) {
 			return nil, nil, fmt.Errorf("internal error: cannot group standalone input expressions")
 		}
@@ -319,11 +316,11 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 				return nil, err
 			}
 
-			if isStandaloneInput(p) {
+			if isInsert(p) {
+				sql.WriteString(genInsertSQL(inCols, &inCount))
+			} else {
 				sql.WriteString("@sqlair_" + strconv.Itoa(inCount))
 				inCount += 1
-			} else {
-				sql.WriteString(genInsertSQL(inCols, &inCount))
 			}
 			inputs = append(inputs, typeMembers...)
 		case *outputPart:
