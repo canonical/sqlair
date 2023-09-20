@@ -69,7 +69,8 @@ func (ti typeNameToInfo) lookupInfo(typeName string) (typeInfo, error) {
 		if len(ts) == 0 {
 			return nil, fmt.Errorf(`type %q not passed as a parameter`, typeName)
 		} else {
-			return nil, fmt.Errorf(`type %q not passed as a parameter, have "%s"`, typeName, strings.Join(ts, `", "`))
+			// "%s" is used instead of %q to correctly print double quotes within the joined string.
+			return nil, fmt.Errorf(`type %q not passed as a parameter (have "%s")`, typeName, strings.Join(ts, `", "`))
 		}
 	}
 	return info, nil

@@ -520,16 +520,16 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 		err:         `cannot prepare statement: output expression: type "Address" has no "road" db tag: &Address.road`,
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
-		prepareArgs: []any{Person{}},
-		err:         `cannot prepare statement: input expression: type "Address" not passed as a parameter, have "Person": $Address.street`,
+		prepareArgs: []any{Person{}, Manager{}},
+		err:         `cannot prepare statement: input expression: type "Address" not passed as a parameter (have "Manager", "Person"): $Address.street`,
 	}, {
 		query:       "SELECT street AS &Address.street FROM t",
 		prepareArgs: []any{},
 		err:         `cannot prepare statement: output expression: type "Address" not passed as a parameter: street AS &Address.street`,
 	}, {
 		query:       "SELECT street AS &Address.id FROM t",
-		prepareArgs: []any{Person{}, Manager{}},
-		err:         `cannot prepare statement: output expression: type "Address" not passed as a parameter, have "Manager", "Person": street AS &Address.id`,
+		prepareArgs: []any{Person{}},
+		err:         `cannot prepare statement: output expression: type "Address" not passed as a parameter (have "Person"): street AS &Address.id`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{[]any{Person{}}},
