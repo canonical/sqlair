@@ -245,6 +245,8 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembe
 		return nil, nil, err
 	}
 
+	// Check each column is only set once by input expressions in INSERT
+	// statements.
 	columnInInput := make(map[fullName]bool)
 	for _, c := range inCols {
 		if ok := columnInInput[c]; ok {
