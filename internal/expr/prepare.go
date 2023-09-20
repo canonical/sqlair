@@ -73,8 +73,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 		if len(ts) == 0 {
 			return nil, fmt.Errorf(`type %q not passed as a parameter`, p.sourceType.prefix)
 		} else {
-			// "%s" is used instead of %q to print double quotes within the
-			// joined string correctly.
+			// "%s" is used instead of %q to correctly print double quotes within the joined string.
 			return nil, fmt.Errorf(`type %q not passed as a parameter (have "%s")`, p.sourceType.prefix, strings.Join(ts, `", "`))
 		}
 	}
@@ -117,8 +116,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 			if len(ts) == 0 {
 				return nil, fmt.Errorf(`type %q not passed as a parameter`, typeName)
 			} else {
-				// "%s" is used instead of %q to print double quotes within the
-				// joined string correctly.
+				// "%s" is used instead of %q to correctly print double quotes within the joined string.
 				return nil, fmt.Errorf(`type %q not passed as a parameter (have "%s")`, typeName, strings.Join(ts, `", "`))
 			}
 		}
