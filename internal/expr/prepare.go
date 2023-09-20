@@ -153,7 +153,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 			if t.name == "*" {
 				switch info := info.(type) {
 				case *mapInfo:
-					return nil, nil, fmt.Errorf(`columns must be specified for asterisk map`)
+					return nil, nil, fmt.Errorf(`columns must be specified for map with star`)
 				case *structInfo:
 					if len(info.tags) == 0 {
 						return nil, nil, fmt.Errorf(`no "db" tags found in struct %q`, info.typ().Name())

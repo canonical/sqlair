@@ -421,7 +421,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}{{
 		query:       "SELECT (p.name, t.id) AS (&Address.id) FROM t",
 		prepareArgs: []any{Address{}},
-		err:         `cannot prepare statement: output expression: mismatched number of columns and target types: (p.name, t.id) AS (&Address.id)`,
+		err:         "cannot prepare statement: output expression: mismatched number of columns and target types: (p.name, t.id) AS (&Address.id)",
 	}, {
 		query:       "SELECT (p.name) AS (&Address.district, &Address.street) FROM t",
 		prepareArgs: []any{Address{}},
@@ -543,17 +543,17 @@ func (s *ExprSuite) TestPrepareMapError(c *C) {
 		"all output into map star",
 		"SELECT &M.* FROM person WHERE name = 'Fred'",
 		[]any{sqlair.M{}},
-		"cannot prepare statement: output expression: columns must be specified for asterisk map: &M.*",
+		"cannot prepare statement: output expression: columns must be specified for map with star: &M.*",
 	}, {
 		"all output into map star from table star",
 		"SELECT p.* AS &M.* FROM person WHERE name = 'Fred'",
 		[]any{sqlair.M{}},
-		"cannot prepare statement: output expression: columns must be specified for asterisk map: p.* AS &M.*",
+		"cannot prepare statement: output expression: columns must be specified for map with star: p.* AS &M.*",
 	}, {
 		"all output into map star from lone star",
 		"SELECT * AS &CustomMap.* FROM person WHERE name = 'Fred'",
 		[]any{CustomMap{}},
-		"cannot prepare statement: output expression: columns must be specified for asterisk map: * AS &CustomMap.*",
+		"cannot prepare statement: output expression: columns must be specified for map with star: * AS &CustomMap.*",
 	}, {
 		"invalid map",
 		"SELECT * AS &InvalidMap.* FROM person WHERE name = 'Fred'",
