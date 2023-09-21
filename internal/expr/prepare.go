@@ -98,7 +98,7 @@ func prepareColumnsAndTypes(ti typeNameToInfo, columns []fullName, types []fullN
 	if numColumns == 0 || (numColumns == 1 && starColumns == 1) {
 		pref := ""
 		// Prepend table name. E.g. "t" in "t.* AS &P.*".
-		if numColumns > 0 {
+		if numColumns == 1 {
 			pref = columns[0].prefix
 		}
 		for _, t := range types {
@@ -106,7 +106,6 @@ func prepareColumnsAndTypes(ti typeNameToInfo, columns []fullName, types []fullN
 			if err != nil {
 				return nil, nil, err
 			}
-
 			if t.name == "*" {
 				// Generate asterisk columns.
 				allMembers, err := info.getAllMembers()
@@ -193,19 +192,6 @@ func isInsert(p *inputPart) bool {
 	return len(p.targetColumns) > 0
 }
 
-// hasMultipleTypes checks if there is more than one type to take the input
-// parameter from in the input part.
-func hasMultipleTypes(p *inputPart) bool {
-	return len(p.sourceTypes) > 1
-}
-
-// hasStarTypes returns true if the input expression has an asterisk.
-// For example:
-//   "$P.*"
-func hasStarTypes(p *inputPart) bool {
-	return starCount(p.sourceTypes) > 0
-}
-
 // prepareInput checks that the input expression is correctly formatted,
 // corresponds to known types, and then generates input columns and values.
 func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembers []typeMember, err error) {
@@ -219,12 +205,13 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembe
 	// For example:
 	//  "$P.name"
 	if !isInsert(p) {
-		if hasMultipleTypes(p) {
+		if len(p.sourceTypes) > 1 {
 			return nil, nil, fmt.Errorf("internal error: cannot group standalone input expressions")
 		}
-		if hasStarTypes(p) {
+		if starCount(p.sourceTypes) > 0 {
 			return nil, nil, fmt.Errorf("invalid asterisk")
 		}
+
 		info, err := ti.lookupInfo(p.sourceTypes[0].prefix)
 		if err != nil {
 			return nil, nil, err
