@@ -87,7 +87,7 @@ func (si *structInfo) typeMember(member string) (typeMember, error) {
 
 func (si *structInfo) getAllMembers() ([]typeMember, error) {
 	if len(si.tags) == 0 {
-		return nil, fmt.Errorf("type %q does not have any db tags", si.structType.Name())
+		return nil, fmt.Errorf(`no "db" tags found in struct %q`, si.structType.Name())
 	}
 
 	tms := []typeMember{}
@@ -112,7 +112,7 @@ func (mi *mapInfo) typeMember(member string) (typeMember, error) {
 }
 
 func (mi *mapInfo) getAllMembers() ([]typeMember, error) {
-	return nil, fmt.Errorf(`map type %q cannot be used with asterisk`, mi.mapType.Name())
+	return nil, fmt.Errorf(`columns must be specified for map with star`)
 }
 
 var _ typeInfo = &mapInfo{}

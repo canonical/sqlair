@@ -62,14 +62,20 @@ func starCount[T any](ts []T) int {
 }
 
 // prepareInput checks that the input expression corresponds to a known type.
-func (pe *PreparedExpr) prepareInput(ti typeNameToInfo, p *inputPart) error {
+func (pe *PreparedExpr) prepareInput(ti typeNameToInfo, p *inputPart) (err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("input expression: %s: %s", err, p.raw)
+		}
+	}()
 	info, ok := ti[p.sourceType.prefix]
 	if !ok {
 		ts := getKeys(ti)
 		if len(ts) == 0 {
 			return fmt.Errorf(`type %q not passed as a parameter`, p.sourceType.prefix)
 		} else {
-			return fmt.Errorf(`type %q not passed as a parameter, have: %s`, p.sourceType.prefix, strings.Join(ts, ", "))
+			// "%s" is used instead of %q to correctly print double quotes within the joined string.
+			return fmt.Errorf(`type %q not passed as a parameter (have "%s")`, p.sourceType.prefix, strings.Join(ts, `", "`))
 		}
 	}
 	tm, err := info.typeMember(p.sourceType.name)
@@ -88,7 +94,11 @@ func (pe *PreparedExpr) prepareOutput(ti typeNameToInfo, p *outputPart) (err err
 		if err == nil && len(pe.sql) > 1 {
 			pe.sql = pe.sql[:len(pe.sql)-2]
 		}
+		if err != nil {
+			err = fmt.Errorf("output expression: %s: %s", err, p.raw)
+		}
 	}()
+
 	numTypes := len(p.targetTypes)
 	numColumns := len(p.sourceColumns)
 	starTypes := starCount(p.targetTypes)
@@ -104,7 +114,8 @@ func (pe *PreparedExpr) prepareOutput(ti typeNameToInfo, p *outputPart) (err err
 			if len(ts) == 0 {
 				return nil, fmt.Errorf(`type %q not passed as a parameter`, typeName)
 			} else {
-				return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, typeName, strings.Join(ts, ", "))
+				// "%s" is used instead of %q to correctly print double quotes within the joined string.
+				return nil, fmt.Errorf(`type %q not passed as a parameter (have "%s")`, typeName, strings.Join(ts, `", "`))
 			}
 		}
 		return info, nil
@@ -113,7 +124,7 @@ func (pe *PreparedExpr) prepareOutput(ti typeNameToInfo, p *outputPart) (err err
 	addColumn := func(column string, tm typeMember) error {
 		for _, output := range pe.outputs {
 			if tm == output {
-				return fmt.Errorf("member %q of type %q appears more than once", tm.memberName(), tm.outerType().Name())
+				return fmt.Errorf("member %q of type %q appears more than once in statement", tm.memberName(), tm.outerType().Name())
 			}
 		}
 		pe.sql += column + " AS " + markerName(len(pe.outputs)) + ", "
@@ -162,7 +173,7 @@ func (pe *PreparedExpr) prepareOutput(ti typeNameToInfo, p *outputPart) (err err
 		}
 		return nil
 	} else if numColumns > 1 && starColumns > 0 {
-		return fmt.Errorf("invalid asterisk in output expression columns: %s", p.raw)
+		return fmt.Errorf("invalid asterisk in columns")
 	}
 
 	// Case 2: Explicit columns, single asterisk type e.g. "(col1, t.col2) AS &P.*".
@@ -173,7 +184,7 @@ func (pe *PreparedExpr) prepareOutput(ti typeNameToInfo, p *outputPart) (err err
 		for _, c := range p.sourceColumns {
 			switch c := c.(type) {
 			case funcExpr:
-				return fmt.Errorf(`cannot use function %q with asterisk output expression: %q`, c.raw, p.raw)
+				return fmt.Errorf(`cannot use function with star type`)
 			case fullName:
 				tm, err := info.typeMember(c.name)
 				if err == nil {
@@ -186,7 +197,7 @@ func (pe *PreparedExpr) prepareOutput(ti typeNameToInfo, p *outputPart) (err err
 		}
 		return nil
 	} else if starTypes > 0 && numTypes > 1 {
-		return fmt.Errorf("invalid asterisk in output expression types: %s", p.raw)
+		return fmt.Errorf("invalid asterisk in types")
 	}
 
 	// Case 3: Explicit columns and types e.g. "(col1, col2) AS (&P.name, &P.id)".
@@ -218,7 +229,7 @@ func (pe *PreparedExpr) prepareOutput(ti typeNameToInfo, p *outputPart) (err err
 			}
 		}
 	} else {
-		return fmt.Errorf("mismatched number of columns and targets in output expression: %s", p.raw)
+		return fmt.Errorf("mismatched number of columns and target types")
 	}
 
 	return nil
@@ -233,7 +244,7 @@ type typeNameToInfo map[string]typeInfo
 func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	defer func() {
 		if err != nil {
-			err = fmt.Errorf("cannot prepare expression: %s", err)
+			err = fmt.Errorf("cannot prepare statement: %s", err)
 		}
 	}()
 
