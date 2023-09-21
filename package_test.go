@@ -316,13 +316,6 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		outputs: [][]any{{&[]any{}}},
 		err:     "cannot get result: need map or pointer to struct, got pointer to slice",
 	}, {
-		summary: "missing get value",
-		query:   "SELECT * AS &Person.* FROM person",
-		types:   []any{Person{}},
-		inputs:  []any{},
-		outputs: [][]any{{}},
-		err:     `cannot get result: type "Person" found in query but not passed to get`,
-	}, {
 		summary: "multiple of the same type",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
@@ -520,6 +513,27 @@ func (s *PackageSuite) TestValidGet(c *C) {
 		inputs:   []any{sqlair.M{"p1": 1000}},
 		outputs:  []any{sqlair.M{}},
 		expected: []any{sqlair.M{"name": "Fred"}},
+	}, {
+		summary:  "select into multiple structs, but provide get with only two",
+		query:    "SELECT p.* AS &Person.*, a.* AS &Address.*, p.* AS &Manager.* FROM person AS p, address AS a WHERE p.id = $Person.id AND a.id = $Address.id ",
+		types:    []any{Person{}, Address{}, Manager{}},
+		inputs:   []any{Address{ID: 1000}, Person{ID: 30}},
+		outputs:  []any{&Person{}, &Manager{}},
+		expected: []any{&Person{30, "Fred", 1000}, &Manager{30, "Fred", 1000}},
+	}, {
+		summary:  "select into multiple structs, but provide get with only one",
+		query:    "SELECT p.* AS &Person.*, a.* AS &Address.*, p.* AS &Manager.* FROM person AS p, address AS a WHERE p.id = $Person.id AND a.id = $Address.id ",
+		types:    []any{Person{}, Address{}, Manager{}},
+		inputs:   []any{Address{ID: 1000}, Person{ID: 30}},
+		outputs:  []any{&Address{}},
+		expected: []any{&Address{1000, "Happy Land", "Main Street"}},
+	}, {
+		summary:  "get with no value",
+		query:    "SELECT * AS &Person.* FROM person",
+		types:    []any{Person{}},
+		inputs:   []any{},
+		outputs:  []any{},
+		expected: []any{},
 	}}
 
 	tables, sqldb, err := personAndAddressDB()
@@ -671,6 +685,27 @@ func (s *PackageSuite) TestValidGetAll(c *C) {
 		inputs:   []any{},
 		slices:   []any{&[]sqlair.M{}, &[]CustomMap{}},
 		expected: []any{&[]sqlair.M{{"name": "Mark"}}, &[]CustomMap{{"id": int64(20)}}},
+	}, {
+		summary:  "select into multiple structs, but provide get with only two",
+		query:    "SELECT p.* AS &Person.*, a.* AS &Address.*, p.* AS &Manager.* FROM person AS p, address AS a WHERE p.id = $Person.id AND a.id = $Address.id",
+		types:    []any{Person{}, Address{}, Manager{}},
+		inputs:   []any{Address{ID: 1000}, Person{ID: 30}},
+		slices:   []any{&[]*Person{}, &[]*Manager{}},
+		expected: []any{&[]*Person{{30, "Fred", 1000}}, &[]*Manager{{30, "Fred", 1000}}},
+	}, {
+		summary:  "select into multiple structs, but provide get with only one",
+		query:    "SELECT p.* AS &Person.*, a.* AS &Address.* FROM person AS p, address AS a WHERE p.id <= 30 AND a.id = $Address.id ",
+		types:    []any{Person{}, Address{}},
+		inputs:   []any{Address{ID: 1000}},
+		slices:   []any{&[]*Person{}},
+		expected: []any{&[]*Person{{30, "Fred", 1000}, {20, "Mark", 1500}}},
+	}, {
+		summary:  "get with no value",
+		query:    "SELECT * AS &Person.* FROM person",
+		types:    []any{Person{}},
+		inputs:   []any{},
+		slices:   []any{},
+		expected: []any{},
 	}}
 
 	tables, sqldb, err := personAndAddressDB()

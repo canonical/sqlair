@@ -164,8 +164,13 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 		}
 		typeMember := qe.outputs[idx]
 		outputVal, ok := typeDest[typeMember.outerType()]
+		// If the user does not supply a type, create a pointer that we will
+		// later throw out. It is needed because the sql.Scan needs pointers
+		// for all columns. We use RawBytes to avoid unnecesary allocations.
 		if !ok {
-			return nil, nil, fmt.Errorf("type %q found in query but not passed to get", typeMember.outerType().Name())
+			var dummyOuput sql.RawBytes
+			ptrs = append(ptrs, &dummyOuput)
+			continue
 		}
 		switch tm := typeMember.(type) {
 		case *structField:
