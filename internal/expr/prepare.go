@@ -82,17 +82,10 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tl *typeLocation, err error)
 			return nil, fmt.Errorf(`type %q not passed as a parameter (have "%s")`, p.sourceType.prefix, strings.Join(ts, `", "`))
 		}
 	}
-	var tm typeMember
-	switch info := info.(type) {
-	case *mapInfo:
-		tm = &mapKey{name: p.sourceType.name, mapType: info.typ()}
-	case *structInfo:
-		tm, ok = info.tagToField[p.sourceType.name]
-		if !ok {
-			return nil, fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), p.sourceType.name)
-		}
-	default:
-		return nil, fmt.Errorf(`internal error: unknown info type: %T`, info)
+
+	tm, err := info.typeMember(p.sourceType.name)
+	if err != nil {
+		return nil, err
 	}
 	return &typeLocation{raw: p.raw, typeMember: tm}, nil
 }
@@ -113,7 +106,6 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeLo
 
 	// Check target struct type and its tags are valid.
 	var info typeInfo
-	var ok bool
 
 	fetchInfo := func(typeName string) (typeInfo, error) {
 		info, ok := ti[typeName]
@@ -129,22 +121,6 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeLo
 		return info, nil
 	}
 
-	addColumns := func(info typeInfo, tag string, column fullName) error {
-		var tm typeMember
-		switch info := info.(type) {
-		case *structInfo:
-			tm, ok = info.tagToField[tag]
-			if !ok {
-				return fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), tag)
-			}
-		case *mapInfo:
-			tm = &mapKey{name: tag, mapType: info.typ()}
-		}
-		typeLocations = append(typeLocations, &typeLocation{raw: p.raw, typeMember: tm})
-		outCols = append(outCols, column)
-		return nil
-	}
-
 	// Case 1: Generated columns e.g. "* AS (&P.*, &A.id)" or "&P.*".
 	if numColumns == 0 || (numColumns == 1 && starColumns == 1) {
 		pref := ""
@@ -157,25 +133,24 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeLo
 			if info, err = fetchInfo(t.prefix); err != nil {
 				return nil, nil, err
 			}
-			// Generate asterisk columns.
 			if t.name == "*" {
-				switch info := info.(type) {
-				case *mapInfo:
-					return nil, nil, fmt.Errorf(`columns must be specified for map with star`)
-				case *structInfo:
-					if len(info.tags) == 0 {
-						return nil, nil, fmt.Errorf(`no "db" tags found in struct %q`, info.typ().Name())
-					}
-					for _, tag := range info.tags {
-						outCols = append(outCols, fullName{pref, tag})
-						typeLocations = append(typeLocations, &typeLocation{raw: p.raw, typeMember: info.tagToField[tag]})
-					}
+				// Generate asterisk columns.
+				allMembers, err := info.getAllMembers()
+				if err != nil {
+					return nil, nil, err
+				}
+				for _, tm := range allMembers {
+					typeLocations = append(typeLocations, &typeLocation{raw: p.raw, typeMember: tm})
+					outCols = append(outCols, fullName{pref, tm.memberName()})
 				}
 			} else {
 				// Generate explicit columns.
-				if err = addColumns(info, t.name, fullName{pref, t.name}); err != nil {
+				tm, err := info.typeMember(t.name)
+				if err != nil {
 					return nil, nil, err
 				}
+				typeLocations = append(typeLocations, &typeLocation{raw: p.raw, typeMember: tm})
+				outCols = append(outCols, fullName{pref, t.name})
 			}
 		}
 		return outCols, typeLocations, nil
@@ -189,9 +164,12 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeLo
 			return nil, nil, err
 		}
 		for _, c := range p.sourceColumns {
-			if err = addColumns(info, c.name, c); err != nil {
+			tm, err := info.typeMember(c.name)
+			if err != nil {
 				return nil, nil, err
 			}
+			typeLocations = append(typeLocations, &typeLocation{raw: p.raw, typeMember: tm})
+			outCols = append(outCols, c)
 		}
 		return outCols, typeLocations, nil
 	} else if starTypes > 0 && numTypes > 1 {
@@ -205,10 +183,12 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeLo
 			if info, err = fetchInfo(t.prefix); err != nil {
 				return nil, nil, err
 			}
-
-			if err = addColumns(info, t.name, c); err != nil {
+			tm, err := info.typeMember(t.name)
+			if err != nil {
 				return nil, nil, err
 			}
+			typeLocations = append(typeLocations, &typeLocation{raw: p.raw, typeMember: tm})
+			outCols = append(outCols, c)
 		}
 	} else {
 		return nil, nil, fmt.Errorf("mismatched number of columns and target types")
