@@ -73,14 +73,20 @@ func starCountTypes(types []typeName) int {
 }
 
 // prepareInput checks that the input expression corresponds to a known type.
-func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
+func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("input expression: %s: %s", err, p.raw)
+		}
+	}()
 	info, ok := ti[p.sourceType.name]
 	if !ok {
 		ts := getKeys(ti)
 		if len(ts) == 0 {
 			return nil, fmt.Errorf(`type %q not passed as a parameter`, p.sourceType.name)
 		} else {
-			return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, p.sourceType.name, strings.Join(ts, ", "))
+			// "%s" is used instead of %q to correctly print double quotes within the joined string.
+			return nil, fmt.Errorf(`type %q not passed as a parameter (have "%s")`, p.sourceType.name, strings.Join(ts, `", "`))
 		}
 	}
 	switch info := info.(type) {
@@ -99,9 +105,12 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (typeMember, error) {
 
 // prepareOutput checks that the output expressions correspond to known types.
 // It then checks they are formatted correctly and finally generates the columns for the query.
-func prepareOutput(ti typeNameToInfo, p *outputPart) ([]columnName, []typeMember, error) {
-	var outCols = make([]columnName, 0)
-	var typeMembers = make([]typeMember, 0)
+func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnName, typeMembers []typeMember, err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("output expression: %s: %s", err, p.raw)
+		}
+	}()
 
 	numTypes := len(p.targetTypes)
 	numColumns := len(p.sourceColumns)
@@ -111,7 +120,6 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]columnName, []typeMember
 	// Check target struct type and its tags are valid.
 	var info typeInfo
 	var ok bool
-	var err error
 
 	fetchInfo := func(typeName string) (typeInfo, error) {
 		info, ok := ti[typeName]
@@ -120,7 +128,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]columnName, []typeMember
 			if len(ts) == 0 {
 				return nil, fmt.Errorf(`type %q not passed as a parameter`, typeName)
 			} else {
-				return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, typeName, strings.Join(ts, ", "))
+				// "%s" is used instead of %q to correctly print double quotes within the joined string.
+				return nil, fmt.Errorf(`type %q not passed as a parameter (have "%s")`, typeName, strings.Join(ts, `", "`))
 			}
 		}
 		return info, nil
@@ -158,10 +167,10 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]columnName, []typeMember
 			if t.member == "*" {
 				switch info := info.(type) {
 				case *mapInfo:
-					return nil, nil, fmt.Errorf(`&%s.* cannot be used for maps when no column names are specified`, info.typ().Name())
+					return nil, nil, fmt.Errorf(`columns must be specified for map with star`)
 				case *structInfo:
 					if len(info.tags) == 0 {
-						return nil, nil, fmt.Errorf("type %q in %q does not have any db tags", info.typ().Name(), p.raw)
+						return nil, nil, fmt.Errorf(`no "db" tags found in struct %q`, info.typ().Name())
 					}
 					for _, tag := range info.tags {
 						outCols = append(outCols, columnName{pref, tag})
@@ -177,7 +186,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]columnName, []typeMember
 		}
 		return outCols, typeMembers, nil
 	} else if numColumns > 1 && starColumns > 0 {
-		return nil, nil, fmt.Errorf("invalid asterisk in output expression columns: %s", p.raw)
+		return nil, nil, fmt.Errorf("invalid asterisk in columns")
 	}
 
 	// Case 2: Explicit columns, single asterisk type e.g. "(col1, t.col2) AS &P.*".
@@ -192,7 +201,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]columnName, []typeMember
 		}
 		return outCols, typeMembers, nil
 	} else if starTypes > 0 && numTypes > 1 {
-		return nil, nil, fmt.Errorf("invalid asterisk in output expression types: %s", p.raw)
+		return nil, nil, fmt.Errorf("invalid asterisk in types")
 	}
 
 	// Case 3: Explicit columns and types e.g. "(col1, col2) AS (&P.name, &P.id)".
@@ -208,7 +217,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]columnName, []typeMember
 			}
 		}
 	} else {
-		return nil, nil, fmt.Errorf("mismatched number of columns and targets in output expression: %s", p.raw)
+		return nil, nil, fmt.Errorf("mismatched number of columns and target types")
 	}
 
 	return outCols, typeMembers, nil
@@ -223,7 +232,7 @@ type typeNameToInfo map[string]typeInfo
 func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	defer func() {
 		if err != nil {
-			err = fmt.Errorf("cannot prepare expression: %s", err)
+			err = fmt.Errorf("cannot prepare statement: %s", err)
 		}
 	}()
 
@@ -287,7 +296,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 
 			for _, tm := range typeMembers {
 				if ok := typeMemberPresent[tm]; ok {
-					return nil, fmt.Errorf("member %q of type %q appears more than once", tm.memberName(), tm.outerType().Name())
+					return nil, fmt.Errorf("member %q of type %q appears more than once in output expressions", tm.memberName(), tm.outerType().Name())
 				}
 				typeMemberPresent[tm] = true
 			}
