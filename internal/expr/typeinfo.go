@@ -58,7 +58,7 @@ type typeInfo interface {
 	typ() reflect.Type
 
 	// typeMember returns the type member associated with a given column name.
-	typeMember(string) (typeMember, error)
+	typeMember(member string) (typeMember, error)
 
 	// getAllMembers returns all members a type associated with column names.
 	getAllMembers() ([]typeMember, error)
