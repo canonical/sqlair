@@ -9,10 +9,15 @@ import (
 	"strings"
 )
 
+type typeLocation struct {
+	raw string
+	typeMember
+}
+
 // PreparedExpr contains an SQL expression that is ready for execution.
 type PreparedExpr struct {
-	outputs []typeMember
-	inputs  []typeMember
+	outputs []*typeLocation
+	inputs  []*typeLocation
 	sql     string
 }
 
@@ -61,7 +66,7 @@ func starCount(fns []fullName) int {
 }
 
 // prepareInput checks that the input expression corresponds to a known type.
-func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
+func prepareInput(ti typeNameToInfo, p *inputPart) (tl *typeLocation, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("input expression: %s: %s", err, p.raw)
@@ -77,23 +82,24 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 			return nil, fmt.Errorf(`type %q not passed as a parameter (have "%s")`, p.sourceType.prefix, strings.Join(ts, `", "`))
 		}
 	}
+	var tm typeMember
 	switch info := info.(type) {
 	case *mapInfo:
-		return &mapKey{name: p.sourceType.name, mapType: info.typ()}, nil
+		tm = &mapKey{name: p.sourceType.name, mapType: info.typ()}
 	case *structInfo:
-		f, ok := info.tagToField[p.sourceType.name]
+		tm, ok = info.tagToField[p.sourceType.name]
 		if !ok {
 			return nil, fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), p.sourceType.name)
 		}
-		return f, nil
 	default:
 		return nil, fmt.Errorf(`internal error: unknown info type: %T`, info)
 	}
+	return &typeLocation{raw: p.raw, typeMember: tm}, nil
 }
 
 // prepareOutput checks that the output expressions correspond to known types.
 // It then checks they are formatted correctly and finally generates the columns for the query.
-func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMembers []typeMember, err error) {
+func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeLocations []*typeLocation, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("output expression: %s: %s", err, p.raw)
@@ -134,7 +140,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 		case *mapInfo:
 			tm = &mapKey{name: tag, mapType: info.typ()}
 		}
-		typeMembers = append(typeMembers, tm)
+		typeLocations = append(typeLocations, &typeLocation{raw: p.raw, typeMember: tm})
 		outCols = append(outCols, column)
 		return nil
 	}
@@ -162,7 +168,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 					}
 					for _, tag := range info.tags {
 						outCols = append(outCols, fullName{pref, tag})
-						typeMembers = append(typeMembers, info.tagToField[tag])
+						typeLocations = append(typeLocations, &typeLocation{raw: p.raw, typeMember: info.tagToField[tag]})
 					}
 				}
 			} else {
@@ -172,7 +178,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 				}
 			}
 		}
-		return outCols, typeMembers, nil
+		return outCols, typeLocations, nil
 	} else if numColumns > 1 && starColumns > 0 {
 		return nil, nil, fmt.Errorf("invalid asterisk in columns")
 	}
@@ -187,7 +193,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 				return nil, nil, err
 			}
 		}
-		return outCols, typeMembers, nil
+		return outCols, typeLocations, nil
 	} else if starTypes > 0 && numTypes > 1 {
 		return nil, nil, fmt.Errorf("invalid asterisk in types")
 	}
@@ -208,7 +214,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 		return nil, nil, fmt.Errorf("mismatched number of columns and target types")
 	}
 
-	return outCols, typeMembers, nil
+	return outCols, typeLocations, nil
 }
 
 type typeNameToInfo map[string]typeInfo
@@ -260,10 +266,10 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	var inCount int
 	var outCount int
 
-	var outputs = make([]typeMember, 0)
-	var inputs = make([]typeMember, 0)
+	var outputs = make([]*typeLocation, 0)
+	var inputs = make([]*typeLocation, 0)
 
-	var typeMemberPresent = make(map[typeMember]bool)
+	var typeMemberPresent = make(map[typeMember]*typeLocation)
 
 	// Check and expand each query part.
 	for _, part := range pe.queryParts {
@@ -277,16 +283,21 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			inCount++
 			inputs = append(inputs, inLoc)
 		case *outputPart:
-			outCols, typeMembers, err := prepareOutput(ti, p)
+			outCols, typeLocations, err := prepareOutput(ti, p)
 			if err != nil {
 				return nil, err
 			}
 
-			for _, tm := range typeMembers {
-				if ok := typeMemberPresent[tm]; ok {
-					return nil, fmt.Errorf("member %q of type %q appears more than once in output expressions", tm.memberName(), tm.outerType().Name())
+			for _, tl := range typeLocations {
+				tm := tl.typeMember
+				if tlDupe, ok := typeMemberPresent[tm]; ok {
+					return nil, fmt.Errorf(
+						"member %q of type %q appears in: %s and in: %s",
+						tm.memberName(), tm.outerType().Name(),
+						tlDupe.raw, tl.raw,
+					)
 				}
-				typeMemberPresent[tm] = true
+				typeMemberPresent[tm] = tl
 			}
 
 			for i, c := range outCols {
@@ -298,7 +309,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 				}
 				outCount++
 			}
-			outputs = append(outputs, typeMembers...)
+			outputs = append(outputs, typeLocations...)
 		case *bypassPart:
 			sql.WriteString(p.chunk)
 		default:

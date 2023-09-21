@@ -578,7 +578,7 @@ func (s *PackageSuite) TestGetErrors(c *C) {
 		types:   []any{sqlair.M{}},
 		inputs:  []any{sqlair.M{}},
 		outputs: []any{sqlair.M{}},
-		err:     `invalid input parameter: map "M" does not contain key "p1"`,
+		err:     `invalid input parameter: map "M" does not contain key "p1": $M.p1`,
 	}}
 
 	tables, sqldb, err := personAndAddressDB()
@@ -597,8 +597,12 @@ func (s *PackageSuite) TestGetErrors(c *C) {
 		}
 
 		err = db.Query(nil, stmt, t.inputs...).Get(t.outputs...)
-		c.Assert(err, ErrorMatches, t.err,
-			Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
+		if err != nil {
+			c.Assert(err.Error(), Equals, t.err,
+				Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
+		} else {
+			c.Errorf("\ntest %q failed:\nexpected err: %q but got nil\ninput: %s\noutputs: %s", t.summary, t.err, t.query, t.outputs)
+		}
 	}
 }
 

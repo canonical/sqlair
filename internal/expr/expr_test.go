@@ -429,7 +429,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT (&Address.*, &Address.id) FROM t",
 		prepareArgs: []any{Address{}, Person{}},
-		err:         `cannot prepare statement: member "id" of type "Address" appears more than once in output expressions`,
+		err:         `cannot prepare statement: member "id" of type "Address" appears in: &Address.* and in: &Address.id`,
 	}, {
 		query:       "SELECT (p.*, t.name) AS (&Address.*) FROM t",
 		prepareArgs: []any{Address{}},
@@ -441,7 +441,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT (&Person.*, &Person.*) FROM t",
 		prepareArgs: []any{Address{}, Person{}},
-		err:         `cannot prepare statement: member "address_id" of type "Person" appears more than once in output expressions`,
+		err:         `cannot prepare statement: member "address_id" of type "Person" appears in: &Person.* and in: &Person.*`,
 	}, {
 		query:       "SELECT (p.*, t.*) AS (&Address.*) FROM t",
 		prepareArgs: []any{Address{}},
@@ -650,7 +650,7 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
 		queryArgs:   []any{Address{Street: "Dead end road"}},
-		err:         `invalid input parameter: type "Person" not passed as a parameter, have: Address`,
+		err:         `invalid input parameter: type "Person" not passed as a parameter (have "Address"): $Person.name`,
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
@@ -680,17 +680,17 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT * AS &Address.* FROM t WHERE x = $M.Fullname",
 		prepareArgs: []any{Address{}, sqlair.M{}},
 		queryArgs:   []any{sqlair.M{"fullname": "Jimany Johnson"}},
-		err:         `invalid input parameter: map "M" does not contain key "Fullname"`,
+		err:         `invalid input parameter: map "M" does not contain key "Fullname": $M.Fullname`,
 	}, {
 		query:       "SELECT foo FROM t WHERE x = $M.street, y = $Person.id",
 		prepareArgs: []any{Person{}, sqlair.M{}},
 		queryArgs:   []any{Person{ID: 666}, sqlair.M{"Street": "Highway to Hell"}},
-		err:         `invalid input parameter: map "M" does not contain key "street"`,
+		err:         `invalid input parameter: map "M" does not contain key "street": $M.street`,
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
 		queryArgs:   []any{},
-		err:         `invalid input parameter: type "Address" not passed as a parameter`,
+		err:         `invalid input parameter: type "Address" not passed as a parameter: $Address.street`,
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Person.id, y = $Person.name",
 		prepareArgs: []any{Person{}},
@@ -734,7 +734,11 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		}
 
 		_, err = preparedExpr.Query(t.queryArgs...)
-		c.Assert(err, ErrorMatches, t.err,
-			Commentf("test %d failed:\ninput: %s", i, t.query))
+		if err != nil {
+			c.Assert(err.Error(), Equals, t.err,
+				Commentf("test %d failed:\nquery: %q'", i, t.query))
+		} else {
+			c.Errorf("test %d failed:\nexpected err: %q but got nil\nquery: %q", i, t.err, t.query)
+		}
 	}
 }
