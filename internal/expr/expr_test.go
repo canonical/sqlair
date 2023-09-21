@@ -445,7 +445,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT (&M.id, &M.id) FROM t",
 		prepareArgs: []any{sqlair.M{}},
-		err:         `cannot prepare expression: member "id" of type "M" appears more than once`,
+		err:         `cannot prepare statement: member "id" of type "M" appears more than once in output expressions`,
 	}, {
 		query:       "SELECT (p.*, t.*) AS (&Address.*) FROM t",
 		prepareArgs: []any{Address{}},
