@@ -8,10 +8,15 @@ import (
 	"strings"
 )
 
+type typeLocation struct {
+	raw string
+	typeMember
+}
+
 // PreparedExpr contains an SQL expression that is ready for execution.
 type PreparedExpr struct {
-	outputs []typeMember
-	inputs  []typeMember
+	outputs []*typeLocation
+	inputs  []*typeLocation
 	sql     string
 }
 
@@ -83,7 +88,7 @@ func (pe *PreparedExpr) prepareInput(ti typeNameToInfo, p *inputPart) (err error
 		return err
 	}
 	pe.sql += "@sqlair_" + strconv.Itoa(len(pe.inputs))
-	pe.inputs = append(pe.inputs, tm)
+	pe.inputs = append(pe.inputs, &typeLocation{raw: p.raw, typeMember: tm})
 	return nil
 }
 
@@ -121,17 +126,6 @@ func (pe *PreparedExpr) prepareOutput(ti typeNameToInfo, p *outputPart) (err err
 		return info, nil
 	}
 
-	addColumn := func(column string, tm typeMember) error {
-		for _, output := range pe.outputs {
-			if tm == output {
-				return fmt.Errorf("member %q of type %q appears more than once in statement", tm.memberName(), tm.outerType().Name())
-			}
-		}
-		pe.sql += column + " AS " + markerName(len(pe.outputs)) + ", "
-		pe.outputs = append(pe.outputs, tm)
-		return nil
-	}
-
 	// Case 1: Generated columns e.g. "* AS (&P.*, &A.id)" or "&P.*".
 	if numColumns == 0 || (numColumns == 1 && starColumns == 1) {
 		pref := ""
@@ -155,20 +149,17 @@ func (pe *PreparedExpr) prepareOutput(ti typeNameToInfo, p *outputPart) (err err
 					return err
 				}
 				for _, tm := range allMembers {
-					err := addColumn(fullName{pref, tm.memberName()}.String(), tm)
-					if err != nil {
-						return err
-					}
+					pe.sql += fullName{pref, tm.memberName()}.String() + " AS " + markerName(len(pe.outputs)) + ", "
+					pe.outputs = append(pe.outputs, &typeLocation{raw: p.raw, typeMember: tm})
 				}
 			} else {
 				// Generate explicit columns.
 				tm, err := info.typeMember(t.name)
-				if err == nil {
-					err = addColumn(fullName{prefix: pref, name: t.name}.String(), tm)
-				}
 				if err != nil {
 					return err
 				}
+				pe.sql += fullName{pref, t.name}.String() + " AS " + markerName(len(pe.outputs)) + ", "
+				pe.outputs = append(pe.outputs, &typeLocation{raw: p.raw, typeMember: tm})
 			}
 		}
 		return nil
@@ -187,12 +178,11 @@ func (pe *PreparedExpr) prepareOutput(ti typeNameToInfo, p *outputPart) (err err
 				return fmt.Errorf(`cannot use function with star type`)
 			case fullName:
 				tm, err := info.typeMember(c.name)
-				if err == nil {
-					err = addColumn(c.String(), tm)
-				}
 				if err != nil {
 					return err
 				}
+				pe.sql += c.String() + " AS " + markerName(len(pe.outputs)) + ", "
+				pe.outputs = append(pe.outputs, &typeLocation{raw: p.raw, typeMember: tm})
 			}
 		}
 		return nil
@@ -221,12 +211,11 @@ func (pe *PreparedExpr) prepareOutput(ti typeNameToInfo, p *outputPart) (err err
 				column = c.String()
 			}
 			tm, err := info.typeMember(t.name)
-			if err == nil {
-				err = addColumn(column, tm)
-			}
 			if err != nil {
 				return err
 			}
+			pe.sql += column + " AS " + markerName(len(pe.outputs)) + ", "
+			pe.outputs = append(pe.outputs, &typeLocation{raw: p.raw, typeMember: tm})
 		}
 	} else {
 		return fmt.Errorf("mismatched number of columns and target types")
@@ -303,5 +292,19 @@ func (pe *PreparedExpr) prepareParts(ti typeNameToInfo, qp []queryPart) error {
 			return fmt.Errorf("internal error: unknown query part type %T", part)
 		}
 	}
+
+	var typeMemberPresent = make(map[typeMember]*typeLocation)
+	for _, tl := range pe.outputs {
+		tm := tl.typeMember
+		if tlDupe, ok := typeMemberPresent[tm]; ok {
+			return fmt.Errorf(
+				"member %q of type %q appears in %q and in %q",
+				tm.memberName(), tm.outerType().Name(),
+				tlDupe.raw, tl.raw,
+			)
+		}
+		typeMemberPresent[tm] = tl
+	}
+
 	return nil
 }
