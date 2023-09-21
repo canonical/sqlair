@@ -96,9 +96,11 @@ func (pe *PreparedExpr) prepareInput(ti typeNameToInfo, p *inputPart) (err error
 // It then checks they are formatted correctly and finally generates the columns for the query.
 func (pe *PreparedExpr) prepareOutput(ti typeNameToInfo, p *outputPart) (err error) {
 	defer func() {
+		// Remove trailing comma and space from list of columns.
 		if err == nil && len(pe.sql) > 1 {
 			pe.sql = pe.sql[:len(pe.sql)-2]
 		}
+
 		if err != nil {
 			err = fmt.Errorf("output expression: %s: %s", err, p.raw)
 		}
