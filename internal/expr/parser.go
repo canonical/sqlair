@@ -39,15 +39,14 @@ func (p *Parser) init(input string) {
 	p.nextChar()
 }
 
-// nextChar reads the next character from the
-// input and increments the position.
+// nextChar reads the next character from the input and increments the
+// position.
 func (p *Parser) nextChar() {
 	if p.nextPos >= len(p.input) {
 		p.char = 0
 		p.pos = p.nextPos
 		return
 	}
-
 	var size int
 	p.char, size = utf8.DecodeRuneInString(p.input[p.nextPos:])
 	p.pos = p.nextPos
