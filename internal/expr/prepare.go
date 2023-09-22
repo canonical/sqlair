@@ -62,7 +62,7 @@ func starCount(fns []fullName) int {
 
 type typeNameToInfo map[string]typeInfo
 
-func (ti typeNameToInfo) lookupInfo(typeName string) (typeInfo, error) {
+func (ti typeNameToInfo) lookup(typeName string) (typeInfo, error) {
 	info, ok := ti[typeName]
 	if !ok {
 		ts := getKeys(ti)
@@ -84,7 +84,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 		}
 	}()
 
-	info, err := ti.lookupInfo(p.sourceType.prefix)
+	info, err := ti.lookup(p.sourceType.prefix)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +143,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 		}
 
 		for _, t := range p.targetTypes {
-			info, err := ti.lookupInfo(t.prefix)
+			info, err := ti.lookup(t.prefix)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -175,7 +175,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 
 	// Case 2: Explicit columns, single asterisk type e.g. "(col1, t.col2) AS &P.*".
 	if starTypes == 1 && numTypes == 1 {
-		info, err := ti.lookupInfo(p.targetTypes[0].prefix)
+		info, err := ti.lookup(p.targetTypes[0].prefix)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -193,7 +193,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 	if numColumns == numTypes {
 		for i, c := range p.sourceColumns {
 			t := p.targetTypes[i]
-			info, err := ti.lookupInfo(t.prefix)
+			info, err := ti.lookup(t.prefix)
 			if err != nil {
 				return nil, nil, err
 			}
