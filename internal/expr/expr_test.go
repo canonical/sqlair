@@ -378,7 +378,7 @@ comment */ WHERE x = $Address.&d`,
 		err:   `cannot parse expression: line 1, column 38: invalid identifier suffix following "Address"`,
 	}, {
 		query: "SELECT foo FROM t WHERE x = $Address",
-		err:   `cannot parse expression: line 1, column 37: unqualified type, expected Address.* or Address.<db tag>`,
+		err:   `cannot parse expression: line 1, column 29: unqualified type, expected Address.* or Address.<db tag>`,
 	}, {
 		query: "SELECT name AS (&Person.*)",
 		err:   `cannot parse expression: line 1, column 16: unexpected parentheses around types after "AS"`,
@@ -397,6 +397,9 @@ comment */ WHERE x = $Address.&d`,
 	}, {
 		query: "SELECT (name, id) AS (&Person.name, &Person.id",
 		err:   `cannot parse expression: line 1, column 22: missing closing parentheses`,
+	}, {
+		query: "SELECT (name, id) WHERE id = $Person.*",
+		err:   `cannot parse expression: line 1, column 30: asterisk not allowed in input expression "$Person.*"`,
 	}}
 
 	for _, t := range tests {

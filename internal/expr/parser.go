@@ -424,9 +424,11 @@ func (p *Parser) parseTargetType() (fullName, bool, error) {
 func (p *Parser) parseGoFullName() (fullName, bool, error) {
 	cp := p.save()
 
+	// Error points to the skipped & or $.
+	identifierCol := p.colNum() - 1
 	if id, ok := p.parseIdentifier(); ok {
 		if !p.skipByte('.') {
-			return fullName{}, false, fmt.Errorf("line %d, column %d: unqualified type, expected %s.* or %s.<db tag>", p.lineNum, p.colNum(), id, id)
+			return fullName{}, false, fmt.Errorf("line %d, column %d: unqualified type, expected %s.* or %s.<db tag>", p.lineNum, identifierCol, id, id)
 		}
 
 		idField, ok := p.parseIdentifierAsterisk()
@@ -564,9 +566,11 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 	cp := p.save()
 
 	if p.skipByte('$') {
+		// Error points to the $ sign skipped above.
+		nameCol := p.colNum() - 1
 		if fn, ok, err := p.parseGoFullName(); ok {
 			if fn.name == "*" {
-				return nil, false, fmt.Errorf(`asterisk not allowed in input expression "$%s"`, fn)
+				return nil, false, fmt.Errorf(`line %d, column %d: asterisk not allowed in input expression "$%s"`, p.lineNum, nameCol, fn)
 			}
 			return &inputPart{sourceType: fn, raw: p.input[cp.pos:p.pos]}, true, nil
 		} else if err != nil {
