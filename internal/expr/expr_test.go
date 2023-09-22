@@ -400,6 +400,12 @@ comment */ WHERE x = $Address.&d`,
 	}, {
 		query: "SELECT (name, id) WHERE id = $Person.*",
 		err:   `cannot parse expression: line 1, column 30: asterisk not allowed in input expression "$Person.*"`,
+	}, {
+		query: `SELECT (name, id) AS (&Person.name, /* multiline
+comment */
+
+&Person.id`,
+		err: `cannot parse expression: line 1, column 22: missing closing parentheses`,
 	}}
 
 	for _, t := range tests {

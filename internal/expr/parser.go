@@ -23,9 +23,7 @@ type Parser struct {
 }
 
 func NewParser() *Parser {
-	return &Parser{
-		lineNum: 1,
-	}
+	return &Parser{}
 }
 
 // init resets the state of the parser and sets the input string.
@@ -36,6 +34,24 @@ func (p *Parser) init(input string) {
 	p.partStart = 0
 	p.parts = []queryPart{}
 	p.lineNum = 1
+}
+
+// colNum calculates the current column number taking into account line breaks.
+func (p *Parser) colNum() int {
+	return p.pos - p.firstByteOfLine + 1
+}
+
+// advanceByte moves the parser to the next byte in the input. It also takes
+// care of updating the line and column numbers if it encounters line breaks.
+func (p *Parser) advanceByte() {
+	if p.pos >= len(p.input) {
+		return
+	}
+	if p.input[p.pos] == '\n' {
+		p.firstByteOfLine = p.pos + 1
+		p.lineNum++
+	}
+	p.pos++
 }
 
 // A checkpoint struct for saving parser state to restore later. We only use
@@ -140,17 +156,14 @@ func (p *Parser) skipComment() bool {
 				if p.input[p.pos] == end {
 					// if end == '\n' (i.e. its a -- comment) dont p.pos++ to keep the newline.
 					if end == '*' {
-						p.pos++
+						p.advanceByte()
 						if !p.skipByte('/') {
 							continue
 						}
 					}
 					return true
-				} else if p.input[p.pos] == '\n' {
-					p.firstByteOfLine = p.pos + 1
-					p.lineNum++
 				}
-				p.pos++
+				p.advanceByte()
 			}
 			// Reached end of input (valid comment end).
 			return true
@@ -219,17 +232,14 @@ loop:
 			continue
 		}
 
-		p.pos++
-		switch p.input[p.pos-1] {
+		switch p.input[p.pos] {
 		// If the preceding byte is one of these then we might be at the start
 		// of an expression.
-		case '\n':
-			p.firstByteOfLine = p.pos
-			p.lineNum++
-			break loop
-		case ' ', '\t', '\r', '=', ',', '(', '[', '>', '<', '+', '-', '*', '/', '|', '%':
+		case ' ', '\t', '\n', '\r', '=', ',', '(', '[', '>', '<', '+', '-', '*', '/', '|', '%':
+			p.advanceByte()
 			break loop
 		}
+		p.advanceByte()
 	}
 
 	p.skipBlanks()
@@ -274,7 +284,7 @@ func (p *Parser) peekByte(b byte) bool {
 // parameter. Returns true in that case, false otherwise.
 func (p *Parser) skipByte(b byte) bool {
 	if p.pos < len(p.input) && p.input[p.pos] == b {
-		p.pos++
+		p.advanceByte()
 		return true
 	}
 	return false
@@ -303,12 +313,8 @@ func (p *Parser) skipBlanks() bool {
 			continue
 		}
 		switch p.input[p.pos] {
-		case '\n':
-			p.firstByteOfLine = p.pos + 1
-			p.lineNum++
-			p.pos++
-		case ' ', '\t', '\r':
-			p.pos++
+		case ' ', '\t', '\r', '\n':
+			p.advanceByte()
 		default:
 			return p.pos != mark
 		}
@@ -349,9 +355,9 @@ func (p *Parser) skipName() bool {
 	}
 	mark := p.pos
 	if isInitialNameByte(p.input[p.pos]) {
-		p.pos++
+		p.advanceByte()
 		for p.pos < len(p.input) && isNameByte(p.input[p.pos]) {
-			p.pos++
+			p.advanceByte()
 		}
 	}
 	return p.pos > mark
@@ -424,7 +430,7 @@ func (p *Parser) parseTargetType() (fullName, bool, error) {
 func (p *Parser) parseGoFullName() (fullName, bool, error) {
 	cp := p.save()
 
-	// Error points to the skipped & or $.
+	// The error points to the skipped & or $.
 	identifierCol := p.colNum() - 1
 	if id, ok := p.parseIdentifier(); ok {
 		if !p.skipByte('.') {
@@ -451,7 +457,8 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 	}
 
 	// Error points to first parentheses skipped above.
-	parenCol := p.colNum() - 1
+	openingParenCol := p.colNum() - 1
+	openingParenLine := p.lineNum
 	nextItem := true
 	var objs []fullName
 	for i := 0; nextItem; i++ {
@@ -476,7 +483,7 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 
 		nextItem = p.skipByte(',')
 	}
-	return nil, false, fmt.Errorf("line %d, column %d: missing closing parentheses", p.lineNum, parenCol)
+	return nil, false, fmt.Errorf("line %d, column %d: missing closing parentheses", openingParenLine, openingParenCol)
 }
 
 // parseColumns parses a single column or a list of columns. Lists must be
@@ -580,9 +587,4 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 
 	cp.restore()
 	return nil, false, nil
-}
-
-// colNum calculates the current column number taking into account line breaks.
-func (p *Parser) colNum() int {
-	return p.pos - p.firstByteOfLine + 1
 }
