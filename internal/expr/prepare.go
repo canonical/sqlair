@@ -81,10 +81,10 @@ func (ti typeNameToInfo) lookupInfo(typeName string) (typeInfo, error) {
 // expression and generates a list of columns and corresponding type members.
 // The type members specify where to find the query arguments/put the query
 // results.
-func prepareColumnsAndTypes(ti typeNameToInfo, columns []fullName, types []fullName) ([]fullName, []typeMember, error) {
-	numTypes := len(types)
+func prepareColumnsAndTypes(ti typeNameToInfo, columns []fullName, typeNames []fullName) ([]fullName, []typeMember, error) {
+	numTypes := len(typeNames)
 	numColumns := len(columns)
-	starTypes := starCount(types)
+	starTypes := starCount(typeNames)
 	starColumns := starCount(columns)
 
 	typeMembers := []typeMember{}
@@ -101,12 +101,12 @@ func prepareColumnsAndTypes(ti typeNameToInfo, columns []fullName, types []fullN
 		if numColumns == 1 {
 			pref = columns[0].prefix
 		}
-		for _, t := range types {
-			info, err := ti.lookupInfo(t.prefix)
+		for _, tn := range typeNames {
+			info, err := ti.lookupInfo(tn.prefix)
 			if err != nil {
 				return nil, nil, err
 			}
-			if t.name == "*" {
+			if tn.name == "*" {
 				// Generate asterisk columns.
 				allMembers, err := info.getAllMembers()
 				if err != nil {
@@ -118,12 +118,12 @@ func prepareColumnsAndTypes(ti typeNameToInfo, columns []fullName, types []fullN
 				}
 			} else {
 				// Generate explicit columns.
-				tm, err := info.typeMember(t.name)
+				tm, err := info.typeMember(tn.name)
 				if err != nil {
 					return nil, nil, err
 				}
 				typeMembers = append(typeMembers, tm)
-				genCols = append(genCols, fullName{pref, t.name})
+				genCols = append(genCols, fullName{pref, tn.name})
 			}
 		}
 		return genCols, typeMembers, nil
@@ -136,7 +136,7 @@ func prepareColumnsAndTypes(ti typeNameToInfo, columns []fullName, types []fullN
 	//  "(col1, col2) VALUES ($P.*)"
 	//  "(col1, t.col2) AS (&P.*)"
 	if starTypes == 1 && numTypes == 1 {
-		info, err := ti.lookupInfo(types[0].prefix)
+		info, err := ti.lookupInfo(typeNames[0].prefix)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -159,12 +159,12 @@ func prepareColumnsAndTypes(ti typeNameToInfo, columns []fullName, types []fullN
 	//  "(col1, col2) AS (&P.name, &P.id)"
 	if numColumns == numTypes {
 		for i, c := range columns {
-			t := types[i]
-			info, err := ti.lookupInfo(t.prefix)
+			tn := typeNames[i]
+			info, err := ti.lookupInfo(tn.prefix)
 			if err != nil {
 				return nil, nil, err
 			}
-			tm, err := info.typeMember(t.name)
+			tm, err := info.typeMember(tn.name)
 			if err != nil {
 				return nil, nil, err
 			}
