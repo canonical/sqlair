@@ -62,7 +62,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 			// Check if we have a type with the same name from a different package.
 			for _, typeMember := range pe.inputs {
 				if t.Name() == typeMember.outerType().Name() {
-					return nil, fmt.Errorf("type %s not passed as a parameter, have %s", typeMember.outerType().String(), t.String())
+					return nil, typeNotPassedError(typeMember.outerType().String(), []string{t.String()})
 				}
 			}
 			return nil, fmt.Errorf("%s not referenced in query", t.Name())
@@ -75,11 +75,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		outerType := typeMember.outerType()
 		v, ok := typeValue[outerType]
 		if !ok {
-			if len(typeNames) == 0 {
-				return nil, fmt.Errorf(`type %q not passed as a parameter`, outerType.Name())
-			} else {
-				return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, outerType.Name(), strings.Join(typeNames, ", "))
-			}
+			return nil, typeNotPassedError(outerType.Name(), typeNames)
 		}
 		var val reflect.Value
 		switch tm := typeMember.(type) {

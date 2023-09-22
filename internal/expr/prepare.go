@@ -65,15 +65,17 @@ type typeNameToInfo map[string]typeInfo
 func (ti typeNameToInfo) lookup(typeName string) (typeInfo, error) {
 	info, ok := ti[typeName]
 	if !ok {
-		ts := getKeys(ti)
-		if len(ts) == 0 {
-			return nil, fmt.Errorf(`type %q not passed as a parameter`, typeName)
-		} else {
-			// "%s" is used instead of %q to correctly print double quotes within the joined string.
-			return nil, fmt.Errorf(`type %q not passed as a parameter (have "%s")`, typeName, strings.Join(ts, `", "`))
-		}
+		return nil, typeNotPassedError(typeName, getKeys(ti))
 	}
 	return info, nil
+}
+
+func typeNotPassedError(typeName string, allTypeNames []string) error {
+	if len(allTypeNames) == 0 {
+		return fmt.Errorf(`type %q not passed as a parameter`, typeName)
+	}
+	// "%s" is used instead of %q to correctly print double quotes within the joined string.
+	return fmt.Errorf(`type %q not passed as a parameter (have "%s")`, typeName, strings.Join(allTypeNames, `", "`))
 }
 
 // prepareInput checks that the input expression corresponds to a known type.
