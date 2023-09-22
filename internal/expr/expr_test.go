@@ -650,7 +650,7 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
 		queryArgs:   []any{Address{Street: "Dead end road"}},
-		err:         `invalid input parameter: type "Person" not passed as a parameter, have: Address`,
+		err:         `invalid input parameter: type "Person" not passed as a parameter (have "Address")`,
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
@@ -716,7 +716,7 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT street FROM t WHERE y = $Person.name",
 		prepareArgs: []any{outerP},
 		queryArgs:   []any{shadowedP},
-		err:         "invalid input parameter: type expr_test.Person not passed as a parameter, have expr_test.Person",
+		err:         `invalid input parameter: type "expr_test.Person" not passed as a parameter (have "expr_test.Person")`,
 	}}
 
 	tests = append(tests, testsShadowed...)
@@ -734,7 +734,11 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		}
 
 		_, err = preparedExpr.Query(t.queryArgs...)
-		c.Assert(err, ErrorMatches, t.err,
-			Commentf("test %d failed:\ninput: %s", i, t.query))
+		if err != nil {
+			c.Assert(err.Error(), Equals, t.err,
+				Commentf("test %d failed:\nquery: %s", i, t.query))
+		} else {
+			c.Errorf("test %d failed:\nexpected err: %q but got nil\nquery: %q", i, t.err, t.query)
+		}
 	}
 }
