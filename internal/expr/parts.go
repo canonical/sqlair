@@ -43,6 +43,11 @@ func (p *inputPart) String() string {
 
 func (p *inputPart) part() {}
 
+// isInsert returns true if the input expression inside an INSERT statement.
+func (p *inputPart) isInsert() bool {
+	return len(p.targetColumns) > 0
+}
+
 // outputPart represents a named target output variable in the SQL expression,
 // as well as the source table and column where it will be read from.
 type outputPart struct {

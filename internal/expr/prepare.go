@@ -187,11 +187,6 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 	return outCols, typeMembers, err
 }
 
-// isInsert returns true if the input expression inside an INSERT statement.
-func isInsert(p *inputPart) bool {
-	return len(p.targetColumns) > 0
-}
-
 // prepareInput checks that the input expression is correctly formatted,
 // corresponds to known types, and then generates input columns and values.
 func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembers []typeMember, err error) {
@@ -204,7 +199,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembe
 	// Check for standalone input expression and prepare if found.
 	// For example:
 	//  "$P.name"
-	if !isInsert(p) {
+	if !p.isInsert() {
 		if len(p.sourceTypes) > 1 {
 			return nil, nil, fmt.Errorf("internal error: cannot group standalone input expressions")
 		}
@@ -306,7 +301,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 				return nil, err
 			}
 
-			if isInsert(p) {
+			if p.isInsert() {
 				sql.WriteString(genInsertSQL(inCols, &inCount))
 			} else {
 				sql.WriteString("@sqlair_" + strconv.Itoa(inCount))
