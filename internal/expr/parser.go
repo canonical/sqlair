@@ -15,10 +15,17 @@ type Parser struct {
 	// under pos. We maintain partStart >= prevPart.
 	partStart int
 	parts     []queryPart
+	// lineNum is the number of the current line of the input.
+	lineNum int
+	// firstByteOfLine is the position of the first byte of the current line in
+	// the input.
+	firstByteOfLine int
 }
 
 func NewParser() *Parser {
-	return &Parser{}
+	return &Parser{
+		lineNum: 1,
+	}
 }
 
 // init resets the state of the parser and sets the input string.
@@ -28,28 +35,33 @@ func (p *Parser) init(input string) {
 	p.prevPart = 0
 	p.partStart = 0
 	p.parts = []queryPart{}
+	p.lineNum = 1
 }
 
 // A checkpoint struct for saving parser state to restore later. We only use
 // a checkpoint within an attempted parsing of an part, not at a higher level
 // since we don't keep track of the parts in the checkpoint.
 type checkpoint struct {
-	parser    *Parser
-	pos       int
-	prevPart  int
-	partStart int
-	parts     []queryPart
+	parser          *Parser
+	pos             int
+	prevPart        int
+	partStart       int
+	parts           []queryPart
+	lineNum         int
+	firstByteOfLine int
 }
 
 // save takes a snapshot of the state of the parser and returns a pointer to a
 // checkpoint that represents it.
 func (p *Parser) save() *checkpoint {
 	return &checkpoint{
-		parser:    p,
-		pos:       p.pos,
-		prevPart:  p.prevPart,
-		partStart: p.partStart,
-		parts:     p.parts,
+		parser:          p,
+		pos:             p.pos,
+		prevPart:        p.prevPart,
+		partStart:       p.partStart,
+		parts:           p.parts,
+		lineNum:         p.lineNum,
+		firstByteOfLine: p.firstByteOfLine,
 	}
 }
 
@@ -60,6 +72,8 @@ func (cp *checkpoint) restore() {
 	cp.parser.prevPart = cp.prevPart
 	cp.parser.partStart = cp.partStart
 	cp.parser.parts = cp.parts
+	cp.parser.lineNum = cp.lineNum
+	cp.parser.firstByteOfLine = cp.firstByteOfLine
 }
 
 // ParsedExpr is the AST representation of an SQL expression. The AST is made up
@@ -132,6 +146,9 @@ func (p *Parser) skipComment() bool {
 						}
 					}
 					return true
+				} else if p.input[p.pos] == '\n' {
+					p.firstByteOfLine = p.pos + 1
+					p.lineNum++
 				}
 				p.pos++
 			}
@@ -206,7 +223,11 @@ loop:
 		switch p.input[p.pos-1] {
 		// If the preceding byte is one of these then we might be at the start
 		// of an expression.
-		case ' ', '\t', '\n', '\r', '=', ',', '(', '[', '>', '<', '+', '-', '*', '/', '|', '%':
+		case '\n':
+			p.firstByteOfLine = p.pos
+			p.lineNum++
+			break loop
+		case ' ', '\t', '\r', '=', ',', '(', '[', '>', '<', '+', '-', '*', '/', '|', '%':
 			break loop
 		}
 	}
@@ -239,7 +260,7 @@ func (p *Parser) skipStringLiteral() (bool, error) {
 
 		// Reached end of string and didn't find the closing quote
 		cp.restore()
-		return false, fmt.Errorf("column %d: missing closing quote in string literal", cp.pos)
+		return false, fmt.Errorf("line %d, column %d: missing closing quote in string literal", p.lineNum, p.colNum())
 	}
 	return false, nil
 }
@@ -282,7 +303,11 @@ func (p *Parser) skipBlanks() bool {
 			continue
 		}
 		switch p.input[p.pos] {
-		case ' ', '\t', '\r', '\n':
+		case '\n':
+			p.firstByteOfLine = p.pos + 1
+			p.lineNum++
+			p.pos++
+		case ' ', '\t', '\r':
 			p.pos++
 		default:
 			return p.pos != mark
@@ -401,12 +426,12 @@ func (p *Parser) parseGoFullName() (fullName, bool, error) {
 
 	if id, ok := p.parseIdentifier(); ok {
 		if !p.skipByte('.') {
-			return fullName{}, false, fmt.Errorf("column %d: unqualified type, expected %s.* or %s.<db tag>", p.pos, id, id)
+			return fullName{}, false, fmt.Errorf("line %d, column %d: unqualified type, expected %s.* or %s.<db tag>", p.lineNum, p.colNum(), id, id)
 		}
 
 		idField, ok := p.parseIdentifierAsterisk()
 		if !ok {
-			return fullName{}, false, fmt.Errorf("column %d: invalid identifier suffix following %q", p.pos, id)
+			return fullName{}, false, fmt.Errorf("line %d, column %d: invalid identifier suffix following %q", p.lineNum, p.colNum(), id)
 		}
 		return fullName{id, idField}, true, nil
 	}
@@ -423,7 +448,7 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 		return nil, false, nil
 	}
 
-	parenPos := p.pos
+	parenCol := p.colNum()
 	nextItem := true
 	var objs []fullName
 	for i := 0; nextItem; i++ {
@@ -438,7 +463,7 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 			return nil, false, nil
 		} else {
 			// On subsequent items we return an error.
-			return nil, false, fmt.Errorf("column %d: invalid expression in list", p.pos)
+			return nil, false, fmt.Errorf("line %d, column %d: invalid expression in list", p.lineNum, p.colNum())
 		}
 
 		p.skipBlanks()
@@ -448,7 +473,7 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 
 		nextItem = p.skipByte(',')
 	}
-	return nil, false, fmt.Errorf("column %d: missing closing parentheses", parenPos)
+	return nil, false, fmt.Errorf("line %d, column %d: missing closing parentheses", p.lineNum, parenCol)
 }
 
 // parseColumns parses a single column or a list of columns. Lists must be
@@ -514,10 +539,10 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 				return nil, false, err
 			} else if ok {
 				if parenCols && !parenTypes {
-					return nil, false, fmt.Errorf(`column %d: missing parentheses around types after "AS"`, p.pos)
+					return nil, false, fmt.Errorf(`line %d, column %d: missing parentheses around types after "AS"`, p.lineNum, p.colNum())
 				}
 				if !parenCols && parenTypes {
-					return nil, false, fmt.Errorf(`column %d: unexpected parentheses around types after "AS"`, p.pos)
+					return nil, false, fmt.Errorf(`line %d, column %d: unexpected parentheses around types after "AS"`, p.lineNum, p.colNum())
 				}
 				return &outputPart{
 					sourceColumns: cols,
@@ -549,4 +574,9 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 
 	cp.restore()
 	return nil, false, nil
+}
+
+// colNum calculates the current column number taking into account line breaks.
+func (p *Parser) colNum() int {
+	return p.pos - p.firstByteOfLine + 1
 }
