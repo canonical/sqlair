@@ -19,7 +19,7 @@ func (qe *QueryExpr) HasOutputs() bool {
 type QueryExpr struct {
 	sql     string
 	args    []any
-	outputs []*typeLocation
+	outputs []typeMember
 }
 
 // Query returns a query expression ready for execution, using the provided values to
@@ -71,27 +71,24 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 
 	// Query parameteres.
 	qargs := []any{}
-	for i, tl := range pe.inputs {
-		outerType := tl.typeMember.outerType()
+	for i, typeMember := range pe.inputs {
+		outerType := typeMember.outerType()
 		v, ok := typeValue[outerType]
 		if !ok {
 			if len(typeNames) == 0 {
-				return nil, fmt.Errorf(`type %q not passed as a parameter: %s`, outerType.Name(), tl.raw)
+				return nil, fmt.Errorf(`type %q not passed as a parameter`, outerType.Name())
 			} else {
-				// "%s" is used instead of %q to correctly print double quotes within the joined string.
-				return nil, fmt.Errorf(`type %q not passed as a parameter (have "%s"): %s`,
-					outerType.Name(), strings.Join(typeNames, `", "`), tl.raw,
-				)
+				return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, outerType.Name(), strings.Join(typeNames, ", "))
 			}
 		}
 		var val reflect.Value
-		switch tm := tl.typeMember.(type) {
+		switch tm := typeMember.(type) {
 		case *structField:
 			val = v.Field(tm.index)
 		case *mapKey:
 			val = v.MapIndex(reflect.ValueOf(tm.name))
 			if val.Kind() == reflect.Invalid {
-				return nil, fmt.Errorf(`map %q does not contain key %q: %s`, outerType.Name(), tm.name, tl.raw)
+				return nil, fmt.Errorf(`map %q does not contain key %q`, outerType.Name(), tm.name)
 			}
 		}
 		qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(i), val.Interface()))
@@ -165,12 +162,12 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 		if idx >= len(qe.outputs) {
 			return nil, nil, fmt.Errorf("internal error: sqlair column not in outputs (%d>=%d)", idx, len(qe.outputs))
 		}
-		typeLocation := qe.outputs[idx]
-		outputVal, ok := typeDest[typeLocation.outerType()]
+		typeMember := qe.outputs[idx]
+		outputVal, ok := typeDest[typeMember.outerType()]
 		if !ok {
-			return nil, nil, fmt.Errorf("type %q found in query but not passed to get", typeLocation.outerType().Name())
+			return nil, nil, fmt.Errorf("type %q found in query but not passed to get", typeMember.outerType().Name())
 		}
-		switch tm := typeLocation.typeMember.(type) {
+		switch tm := typeMember.(type) {
 		case *structField:
 			val := outputVal.Field(tm.index)
 			if !val.CanSet() {

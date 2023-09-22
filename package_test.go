@@ -606,7 +606,7 @@ func (s *PackageSuite) TestGetErrors(c *C) {
 		types:   []any{sqlair.M{}},
 		inputs:  []any{sqlair.M{}},
 		outputs: []any{sqlair.M{}},
-		err:     `invalid input parameter: map "M" does not contain key "p1": $M.p1`,
+		err:     `invalid input parameter: map "M" does not contain key "p1"`,
 	}}
 
 	tables, sqldb, err := personAndAddressDB()
