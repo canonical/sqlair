@@ -668,11 +668,6 @@ func (s *ExprSuite) TestValidQuery(c *C) {
 		[]any{Person{ID: 666}, StringMap{"street": "Highway to Hell"}},
 		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
 	}, {
-		"SELECT foo FROM t WHERE x = $StringMap.street, y = $Person.id",
-		[]any{Person{}, StringMap{}},
-		[]any{Person{ID: 666}, StringMap{"street": "Highway to Hell"}},
-		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
-	}, {
 		"SELECT FROM person WHERE id = $Unicode我Struct.საფოსტო",
 		[]any{Unicode我Struct{}},
 		[]any{Unicode我Struct{X人: 30}},
