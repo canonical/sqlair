@@ -54,6 +54,11 @@ func (p *Parser) advanceByte() {
 	p.pos++
 }
 
+// errorAt wraps an error with line and column information.
+func errorAt(err error, line int, column int) error {
+	return fmt.Errorf("line %d, column %d: %w", line, column, err)
+}
+
 // A checkpoint struct for saving parser state to restore later. We only use
 // a checkpoint within an attempted parsing of an part, not at a higher level
 // since we don't keep track of the parts in the checkpoint.
@@ -154,7 +159,7 @@ func (p *Parser) skipComment() bool {
 			}
 			for p.pos < len(p.input) {
 				if p.input[p.pos] == end {
-					// if end == '\n' (i.e. its a -- comment) dont p.pos++ to keep the newline.
+					// if end == '\n' (i.e. its a -- comment) dont consume the newline.
 					if end == '*' {
 						p.advanceByte()
 						if !p.skipByte('/') {
@@ -270,7 +275,7 @@ func (p *Parser) skipStringLiteral() (bool, error) {
 
 		// Reached end of string and didn't find the closing quote
 		cp.restore()
-		return false, fmt.Errorf("line %d, column %d: missing closing quote in string literal", p.lineNum, p.colNum())
+		return false, errorAt(fmt.Errorf("missing closing quote in string literal"), p.lineNum, p.colNum())
 	}
 	return false, nil
 }
@@ -434,12 +439,12 @@ func (p *Parser) parseGoFullName() (fullName, bool, error) {
 	identifierCol := p.colNum() - 1
 	if id, ok := p.parseIdentifier(); ok {
 		if !p.skipByte('.') {
-			return fullName{}, false, fmt.Errorf("line %d, column %d: unqualified type, expected %s.* or %s.<db tag>", p.lineNum, identifierCol, id, id)
+			return fullName{}, false, errorAt(fmt.Errorf("unqualified type, expected %s.* or %s.<db tag>", id, id), p.lineNum, identifierCol)
 		}
 
 		idField, ok := p.parseIdentifierAsterisk()
 		if !ok {
-			return fullName{}, false, fmt.Errorf("line %d, column %d: invalid identifier suffix following %q", p.lineNum, p.colNum(), id)
+			return fullName{}, false, errorAt(fmt.Errorf("invalid identifier suffix following %q", id), p.lineNum, p.colNum())
 		}
 		return fullName{id, idField}, true, nil
 	}
@@ -473,7 +478,7 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 			return nil, false, nil
 		} else {
 			// On subsequent items we return an error.
-			return nil, false, fmt.Errorf("line %d, column %d: invalid expression in list", p.lineNum, p.colNum())
+			return nil, false, errorAt(fmt.Errorf("invalid expression in list"), p.lineNum, p.colNum())
 		}
 
 		p.skipBlanks()
@@ -483,7 +488,7 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 
 		nextItem = p.skipByte(',')
 	}
-	return nil, false, fmt.Errorf("line %d, column %d: missing closing parentheses", openingParenLine, openingParenCol)
+	return nil, false, errorAt(fmt.Errorf("missing closing parentheses"), openingParenLine, openingParenCol)
 }
 
 // parseColumns parses a single column or a list of columns. Lists must be
@@ -550,10 +555,10 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 				return nil, false, err
 			} else if ok {
 				if parenCols && !parenTypes {
-					return nil, false, fmt.Errorf(`line %d, column %d: missing parentheses around types after "AS"`, p.lineNum, parenCol)
+					return nil, false, errorAt(fmt.Errorf(`missing parentheses around types after "AS"`), p.lineNum, parenCol)
 				}
 				if !parenCols && parenTypes {
-					return nil, false, fmt.Errorf(`line %d, column %d: unexpected parentheses around types after "AS"`, p.lineNum, parenCol)
+					return nil, false, errorAt(fmt.Errorf(`unexpected parentheses around types after "AS"`), p.lineNum, parenCol)
 				}
 				return &outputPart{
 					sourceColumns: cols,
@@ -577,7 +582,7 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 		nameCol := p.colNum() - 1
 		if fn, ok, err := p.parseGoFullName(); ok {
 			if fn.name == "*" {
-				return nil, false, fmt.Errorf(`line %d, column %d: asterisk not allowed in input expression "$%s"`, p.lineNum, nameCol, fn)
+				return nil, false, errorAt(fmt.Errorf(`asterisk not allowed in input expression "$%s"`, fn), p.lineNum, nameCol)
 			}
 			return &inputPart{sourceType: fn, raw: p.input[cp.pos:p.pos]}, true, nil
 		} else if err != nil {
