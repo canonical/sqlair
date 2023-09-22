@@ -448,7 +448,8 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 		return nil, false, nil
 	}
 
-	parenCol := p.colNum()
+	// Error points to first parentheses skipped above.
+	parenCol := p.colNum() - 1
 	nextItem := true
 	var objs []fullName
 	for i := 0; nextItem; i++ {
@@ -535,14 +536,15 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 		p.skipBlanks()
 		if p.skipString("AS") {
 			p.skipBlanks()
+			parenCol := p.colNum()
 			if targetTypes, parenTypes, ok, err := p.parseTargetTypes(); err != nil {
 				return nil, false, err
 			} else if ok {
 				if parenCols && !parenTypes {
-					return nil, false, fmt.Errorf(`line %d, column %d: missing parentheses around types after "AS"`, p.lineNum, p.colNum())
+					return nil, false, fmt.Errorf(`line %d, column %d: missing parentheses around types after "AS"`, p.lineNum, parenCol)
 				}
 				if !parenCols && parenTypes {
-					return nil, false, fmt.Errorf(`line %d, column %d: unexpected parentheses around types after "AS"`, p.lineNum, p.colNum())
+					return nil, false, fmt.Errorf(`line %d, column %d: unexpected parentheses around types after "AS"`, p.lineNum, parenCol)
 				}
 				return &outputPart{
 					sourceColumns: cols,

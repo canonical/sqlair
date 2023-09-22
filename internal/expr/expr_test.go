@@ -381,16 +381,22 @@ comment */ WHERE x = $Address.&d`,
 		err:   `cannot parse expression: line 1, column 37: unqualified type, expected Address.* or Address.<db tag>`,
 	}, {
 		query: "SELECT name AS (&Person.*)",
-		err:   `cannot parse expression: line 1, column 27: unexpected parentheses around types after "AS"`,
+		err:   `cannot parse expression: line 1, column 16: unexpected parentheses around types after "AS"`,
 	}, {
 		query: "SELECT name AS (&Person.name, &Person.id)",
-		err:   `cannot parse expression: line 1, column 42: unexpected parentheses around types after "AS"`,
+		err:   `cannot parse expression: line 1, column 16: unexpected parentheses around types after "AS"`,
 	}, {
 		query: "SELECT (name) AS &Person.*",
-		err:   `cannot parse expression: line 1, column 27: missing parentheses around types after "AS"`,
+		err:   `cannot parse expression: line 1, column 18: missing parentheses around types after "AS"`,
 	}, {
 		query: "SELECT (name, id) AS &Person.*",
-		err:   `cannot parse expression: line 1, column 31: missing parentheses around types after "AS"`,
+		err:   `cannot parse expression: line 1, column 22: missing parentheses around types after "AS"`,
+	}, {
+		query: "SELECT (name, id) AS (&Person.name, Person.id)",
+		err:   `cannot parse expression: line 1, column 37: invalid expression in list`,
+	}, {
+		query: "SELECT (name, id) AS (&Person.name, &Person.id",
+		err:   `cannot parse expression: line 1, column 22: missing closing parentheses`,
 	}}
 
 	for _, t := range tests {
