@@ -17,9 +17,9 @@ type Parser struct {
 	parts     []queryPart
 	// lineNum is the number of the current line of the input.
 	lineNum int
-	// firstByteOfLine is the position of the first byte of the current line in
+	// lineStart is the position of the first byte of the current line in
 	// the input.
-	firstByteOfLine int
+	lineStart int
 }
 
 func NewParser() *Parser {
@@ -38,7 +38,7 @@ func (p *Parser) init(input string) {
 
 // colNum calculates the current column number taking into account line breaks.
 func (p *Parser) colNum() int {
-	return p.pos - p.firstByteOfLine + 1
+	return p.pos - p.lineStart + 1
 }
 
 // advanceByte moves the parser to the next byte in the input. It also takes
@@ -48,7 +48,7 @@ func (p *Parser) advanceByte() {
 		return
 	}
 	if p.input[p.pos] == '\n' {
-		p.firstByteOfLine = p.pos + 1
+		p.lineStart = p.pos + 1
 		p.lineNum++
 	}
 	p.pos++
@@ -63,26 +63,26 @@ func errorAt(err error, line int, column int) error {
 // a checkpoint within an attempted parsing of an part, not at a higher level
 // since we don't keep track of the parts in the checkpoint.
 type checkpoint struct {
-	parser          *Parser
-	pos             int
-	prevPart        int
-	partStart       int
-	parts           []queryPart
-	lineNum         int
-	firstByteOfLine int
+	parser    *Parser
+	pos       int
+	prevPart  int
+	partStart int
+	parts     []queryPart
+	lineNum   int
+	lineStart int
 }
 
 // save takes a snapshot of the state of the parser and returns a pointer to a
 // checkpoint that represents it.
 func (p *Parser) save() *checkpoint {
 	return &checkpoint{
-		parser:          p,
-		pos:             p.pos,
-		prevPart:        p.prevPart,
-		partStart:       p.partStart,
-		parts:           p.parts,
-		lineNum:         p.lineNum,
-		firstByteOfLine: p.firstByteOfLine,
+		parser:    p,
+		pos:       p.pos,
+		prevPart:  p.prevPart,
+		partStart: p.partStart,
+		parts:     p.parts,
+		lineNum:   p.lineNum,
+		lineStart: p.lineStart,
 	}
 }
 
@@ -94,7 +94,7 @@ func (cp *checkpoint) restore() {
 	cp.parser.partStart = cp.partStart
 	cp.parser.parts = cp.parts
 	cp.parser.lineNum = cp.lineNum
-	cp.parser.firstByteOfLine = cp.firstByteOfLine
+	cp.parser.lineStart = cp.lineStart
 }
 
 // ParsedExpr is the AST representation of an SQL expression. The AST is made up
