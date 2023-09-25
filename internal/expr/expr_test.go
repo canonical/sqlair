@@ -716,7 +716,7 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT street FROM t WHERE y = $Person.name",
 		prepareArgs: []any{outerP},
 		queryArgs:   []any{shadowedP},
-		err:         `invalid input parameter: type "expr_test.Person" not passed as a parameter (have "expr_test.Person")`,
+		err:         `invalid input parameter: type "expr_test.Person" not found, have type with same name: "expr_test.Person"`,
 	}}
 
 	tests = append(tests, testsShadowed...)

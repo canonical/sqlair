@@ -62,7 +62,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 			// Check if we have a type with the same name from a different package.
 			for _, typeMember := range pe.inputs {
 				if t.Name() == typeMember.outerType().Name() {
-					return nil, typeNotPassedError(typeMember.outerType().String(), []string{t.String()})
+					return nil, fmt.Errorf("type %q not found, have type with same name: %q", typeMember.outerType().String(), t.String())
 				}
 			}
 			return nil, fmt.Errorf("%s not referenced in query", t.Name())
