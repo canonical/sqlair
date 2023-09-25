@@ -34,6 +34,7 @@ func (p *Parser) init(input string) {
 	p.partStart = 0
 	p.parts = []queryPart{}
 	p.lineNum = 1
+	p.lineStart = 0
 }
 
 // colNum calculates the current column number taking into account line breaks.
@@ -295,17 +296,20 @@ func (p *Parser) skipByte(b byte) bool {
 	return false
 }
 
-// skipByteFind advances the parser until it finds a byte that matches the one
-// passed as parameter and then jumps over it. In that case returns true. If the
+// skipByteFind looks for a byte that matches the one passed as parameter and
+// then advances the parser to jump over it. In that case returns true. If the
 // end of the string is reached and no matching byte was found, it returns
-// false.
+// false and it does not change the parser.
 func (p *Parser) skipByteFind(b byte) bool {
-	for i := p.pos; i < len(p.input); i++ {
-		if p.input[i] == b {
-			p.pos = i + 1
+	cp := p.save()
+	for p.pos < len(p.input) {
+		if p.input[p.pos] == b {
+			p.advanceByte()
 			return true
 		}
+		p.advanceByte()
 	}
+	cp.restore()
 	return false
 }
 

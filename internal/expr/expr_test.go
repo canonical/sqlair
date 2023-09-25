@@ -406,6 +406,11 @@ comment */
 
 &Person.id`,
 		err: `cannot parse expression: line 1, column 22: missing closing parentheses`,
+	}, {
+		query: `SELECT (name, id) WHERE name = 'multiline
+string
+of three lines' AND id = $Person.*`,
+		err: `cannot parse expression: line 3, column 26: asterisk not allowed in input expression "$Person.*"`,
 	}}
 
 	for _, t := range tests {
