@@ -62,14 +62,6 @@ func starCount(fns []fullName) int {
 
 type typeNameToInfo map[string]typeInfo
 
-func (ti typeNameToInfo) lookup(typeName string) (typeInfo, error) {
-	info, ok := ti[typeName]
-	if !ok {
-		return nil, typeNotPassedError(typeName, getKeys(ti))
-	}
-	return info, nil
-}
-
 func typeNotPassedError(typeName string, allTypeNames []string) error {
 	if len(allTypeNames) == 0 {
 		return fmt.Errorf(`type %q not passed as a parameter`, typeName)
@@ -86,9 +78,9 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 		}
 	}()
 
-	info, err := ti.lookup(p.sourceType.prefix)
-	if err != nil {
-		return nil, err
+	info, ok := ti[p.sourceType.prefix]
+	if !ok {
+		return nil, typeNotPassedError(p.sourceType.prefix, getKeys(ti))
 	}
 
 	tm, err = info.typeMember(p.sourceType.name)
@@ -121,9 +113,9 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 		}
 
 		for _, t := range p.targetTypes {
-			info, err := ti.lookup(t.prefix)
-			if err != nil {
-				return nil, nil, err
+			info, ok := ti[t.prefix]
+			if !ok {
+				return nil, nil, typeNotPassedError(t.prefix, getKeys(ti))
 			}
 			if t.name == "*" {
 				// Generate asterisk columns.
@@ -152,9 +144,9 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 
 	// Case 2: Explicit columns, single asterisk type e.g. "(col1, t.col2) AS &P.*".
 	if starTypes == 1 && numTypes == 1 {
-		info, err := ti.lookup(p.targetTypes[0].prefix)
-		if err != nil {
-			return nil, nil, err
+		info, ok := ti[p.targetTypes[0].prefix]
+		if !ok {
+			return nil, nil, typeNotPassedError(p.targetTypes[0].prefix, getKeys(ti))
 		}
 		for _, c := range p.sourceColumns {
 			tm, err := info.typeMember(c.name)
@@ -173,9 +165,9 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 	if numColumns == numTypes {
 		for i, c := range p.sourceColumns {
 			t := p.targetTypes[i]
-			info, err := ti.lookup(t.prefix)
-			if err != nil {
-				return nil, nil, err
+			info, ok := ti[t.prefix]
+			if !ok {
+				return nil, nil, typeNotPassedError(t.prefix, getKeys(ti))
 			}
 			tm, err := info.typeMember(t.name)
 			if err != nil {
