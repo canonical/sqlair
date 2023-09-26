@@ -151,7 +151,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 
 	// Generate the pointers.
 	var ptrs = []any{}
-	var columnInResult = make(map[int]bool)
+	var columnInResult = make([]bool, len(columns))
 	for _, column := range columns {
 		idx, ok := markerIndex(column)
 		if !ok {
