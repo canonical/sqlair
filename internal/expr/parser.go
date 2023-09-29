@@ -572,10 +572,7 @@ func (p *Parser) parseInExpression() (*inPart, bool, error) {
 		if types, ok, err := p.parseList((*Parser).parseSourceType); err != nil {
 			return nil, false, err
 		} else if ok {
-			return &inPart{
-				types: types,
-				raw:   p.input[cp.pos:p.pos],
-			}, true, nil
+			return &inPart{types: types, raw: p.input[cp.pos:p.pos]}, true, nil
 		}
 	}
 
