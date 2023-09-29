@@ -504,15 +504,15 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{func() {}},
-		err:         `cannot prepare statement: need struct, map or slice, got func`,
+		err:         `cannot prepare statement: unsupported type: func`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{&Person{}},
-		err:         `cannot prepare statement: need struct, map or slice, got pointer to struct`,
+		err:         `cannot prepare statement: unsupported type: pointer to struct`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{(*Person)(nil)},
-		err:         `cannot prepare statement: need struct, map or slice, got pointer to struct`,
+		err:         `cannot prepare statement: unsupported type: pointer to struct`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{map[string]any{}},
@@ -520,7 +520,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{nil},
-		err:         `cannot prepare statement: need struct, map or slice, got nil`,
+		err:         `cannot prepare statement: need valid value, got nil`,
 	}, {
 		query:       "SELECT * AS &.* FROM t",
 		prepareArgs: []any{struct{ f int }{f: 1}},
@@ -532,7 +532,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.*",
 		prepareArgs: []any{Person{}, Manager{}, Address{}},
-		err:         `cannot prepare statement: input expression: star type not allowed in standalone input: $Address.*`,
+		err:         `cannot prepare statement: input expression: invalid context for: $Address.*`,
 	}, {
 		query:       "SELECT foo FROM t WHERE x = $S.*",
 		prepareArgs: []any{S{}},
@@ -699,22 +699,22 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
 		queryArgs:   []any{nil, Person{Fullname: "Monty Bingles"}},
-		err:         "invalid input parameter: need struct, map or slice, got nil",
+		err:         "invalid input parameter: need valid value, got nil",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
 		queryArgs:   []any{(*Person)(nil)},
-		err:         "invalid input parameter: need struct, map or slice, got nil",
+		err:         "invalid input parameter: need valid value, got nil",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Address{}},
 		queryArgs:   []any{8},
-		err:         "invalid input parameter: need struct, map or slice, got int",
+		err:         "invalid input parameter: unsupported type: int",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Address{}},
 		queryArgs:   []any{func() {}},
-		err:         "invalid input parameter: need struct, map or slice, got func",
+		err:         "invalid input parameter: unsupported type: func",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Address{}},

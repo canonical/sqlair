@@ -265,7 +265,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	// Generate and save reflection info.
 	for _, arg := range args {
 		if arg == nil {
-			return nil, fmt.Errorf("need struct, map or slice, got nil")
+			return nil, fmt.Errorf("need valid value, got nil")
 		}
 		t := reflect.TypeOf(arg)
 		switch t.Kind() {
@@ -285,9 +285,9 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			}
 			ti[t.Name()] = info
 		case reflect.Pointer:
-			return nil, fmt.Errorf("need struct, map or slice, got pointer to %s", t.Elem().Kind())
+			return nil, fmt.Errorf("unsupported type: pointer to %s", t.Elem().Kind())
 		default:
-			return nil, fmt.Errorf("need struct, map or slice, got %s", t.Kind())
+			return nil, fmt.Errorf("unsupported type: %s", t.Kind())
 		}
 	}
 

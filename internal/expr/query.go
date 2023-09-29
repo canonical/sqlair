@@ -46,14 +46,14 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	for _, arg := range args {
 		v := reflect.ValueOf(arg)
 		if v.Kind() == reflect.Invalid || (v.Kind() == reflect.Pointer && v.IsNil()) {
-			return nil, fmt.Errorf("need struct, map or slice, got nil")
+			return nil, fmt.Errorf("need valid value, got nil")
 		}
 		v = reflect.Indirect(v)
 		t := v.Type()
 		switch v.Kind() {
 		case reflect.Struct, reflect.Map, reflect.Slice, reflect.Array:
 		default:
-			return nil, fmt.Errorf("need struct, map or slice, got %s", t.Kind())
+			return nil, fmt.Errorf("unsupported type: %s", t.Kind())
 		}
 		if _, ok := typeValue[t]; ok {
 			return nil, fmt.Errorf("type %q provided more than once", t.Name())
