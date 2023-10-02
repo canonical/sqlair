@@ -66,6 +66,8 @@ func (cp *checkpoint) restore() {
 // ParsedExpr represents a parsed SQL string containg SQLair input and output
 // expressions.
 type ParsedExpr struct {
+	// queryParts stores the input, output and bypass parts in the order they
+	// occur in the input string.
 	queryParts []queryPart
 }
 
