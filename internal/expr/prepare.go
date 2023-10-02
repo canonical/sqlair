@@ -9,7 +9,8 @@ import (
 	"strings"
 )
 
-// PreparedExpr represents a SQL statement for use in a query.
+// PreparedExpr is a ParsedExpr that has been validated and prepared for
+// use in a query.
 type PreparedExpr struct {
 	outputs []typeMember
 	inputs  []typeMember
@@ -51,9 +52,7 @@ func getKeys[T any](m map[string]T) []string {
 	return keys
 }
 
-// starCount counts the number of fullNames in the list with asterisks in the
-// name field. It is used to check if there are any asterisk expressions in a
-// list of types or columns.
+// starCount counts the number of fullName values that have "*" as a name.
 func starCount(fns []fullName) int {
 	s := 0
 	for _, fn := range fns {
@@ -316,10 +315,5 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			return nil, fmt.Errorf("internal error: unknown query part type %T", part)
 		}
 	}
-
-	return &PreparedExpr{
-		inputs:  inputs,
-		outputs: outputs,
-		sql:     sql.String(),
-	}, nil
+	return &PreparedExpr{inputs: inputs, outputs: outputs, sql: sql.String()}, nil
 }
