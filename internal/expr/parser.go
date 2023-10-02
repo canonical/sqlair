@@ -6,8 +6,6 @@ import (
 	"strings"
 )
 
-// Parser is an object for parsing SQL queries containing SQLair expressions.
-// It is used for generating a ParsedExpr with the Parse method.
 type Parser struct {
 	input string
 	pos   int
