@@ -344,20 +344,17 @@ func (p *Parser) skipName() bool {
 //  - bool == false, err == nil
 //		The construct was not the one we are looking for
 
-// parseIdentifierAsterisk parses a name made up of only nameBytes or of a
-// single asterisk. On success it returns the parsed string and true. Otherwise,
-// it returns the empty string and false.
-func (p *Parser) parseIdentifierAsterisk() (string, bool) {
+// parseNameOrAsterisk parses a name made up of only name bytes or of a
+// single asterisk.
+func (p *Parser) parseNameOrAsterisk() (string, bool) {
 	if p.skipByte('*') {
 		return "*", true
 	}
-	return p.parseIdentifier()
+	return p.parseName()
 }
 
-// parseIdentifier parses a name made up of only nameBytes. On success it
-// returns the parsed string and true. Otherwise, it returns the empty string
-// and false.
-func (p *Parser) parseIdentifier() (string, bool) {
+// parseName parses a contiguous sequence of name bytes.
+func (p *Parser) parseName() (string, bool) {
 	mark := p.pos
 	if p.skipName() {
 		return p.input[mark:p.pos], true
@@ -371,9 +368,9 @@ func (p *Parser) parseIdentifier() (string, bool) {
 func (p *Parser) parseColumn() (fullName, bool, error) {
 	cp := p.save()
 
-	if id, ok := p.parseIdentifierAsterisk(); ok {
+	if id, ok := p.parseNameOrAsterisk(); ok {
 		if id != "*" && p.skipByte('.') {
-			if idCol, ok := p.parseIdentifierAsterisk(); ok {
+			if idCol, ok := p.parseNameOrAsterisk(); ok {
 				return fullName{prefix: id, name: idCol}, true, nil
 			}
 		} else {
@@ -399,14 +396,14 @@ func (p *Parser) parseTargetType() (fullName, bool, error) {
 func (p *Parser) parseGoFullName() (fullName, bool, error) {
 	cp := p.save()
 
-	if id, ok := p.parseIdentifier(); ok {
+	if id, ok := p.parseName(); ok {
 		if !p.skipByte('.') {
 			return fullName{}, false, fmt.Errorf("column %d: unqualified type, expected %s.* or %s.<db tag>", p.pos, id, id)
 		}
 
-		idField, ok := p.parseIdentifierAsterisk()
+		idField, ok := p.parseNameOrAsterisk()
 		if !ok {
-			return fullName{}, false, fmt.Errorf("column %d: invalid identifier suffix following %q", p.pos, id)
+			return fullName{}, false, fmt.Errorf("column %d: invalid suffix following %q", p.pos, id)
 		}
 		return fullName{id, idField}, true, nil
 	}
