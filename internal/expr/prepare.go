@@ -77,6 +77,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 			return nil, fmt.Errorf(`type %q not passed as a parameter (have "%s")`, p.sourceType.prefix, strings.Join(ts, `", "`))
 		}
 	}
+
 	tm, err = info.typeMember(p.sourceType.name)
 	if err != nil {
 		return nil, err
@@ -114,15 +115,6 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 		}
 		return info, nil
 	}
-	addColumns := func(info typeInfo, member string, column fullName) error {
-		tm, err := info.typeMember(member)
-		if err != nil {
-			return err
-		}
-		typeMembers = append(typeMembers, tm)
-		outCols = append(outCols, column)
-		return nil
-	}
 
 	// Case 1: Generated columns e.g. "* AS (&P.*, &A.id)" or "&P.*".
 	if numColumns == 0 || (numColumns == 1 && starColumns == 1) {
@@ -137,29 +129,26 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 				return nil, nil, err
 			}
 			if _, ok := info.(*primitiveTypeInfo); ok {
-				return nil, nil, fmt.Errorf(`explicit columns required for primitive type`)
+				return nil, nil, fmt.Errorf(`column not specified for primitive type`)
 			}
-			// Generate asterisk columns.
 			if t.name == "*" {
-				switch info := info.(type) {
-				case *mapInfo:
-					return nil, nil, fmt.Errorf(`columns must be specified for map with star`)
-				case *structInfo:
-					if len(info.tags) == 0 {
-						return nil, nil, fmt.Errorf(`no "db" tags found in struct %q`, info.typ().Name())
-					}
-					for _, tag := range info.tags {
-						outCols = append(outCols, fullName{pref, tag})
-						typeMembers = append(typeMembers, info.tagToField[tag])
-					}
-				default:
-					return nil, nil, fmt.Errorf(`internal error: unexpected type: %T`, info)
+				// Generate asterisk columns.
+				allMembers, err := info.getAllMembers()
+				if err != nil {
+					return nil, nil, err
+				}
+				typeMembers = append(typeMembers, allMembers...)
+				for _, tm := range allMembers {
+					outCols = append(outCols, fullName{pref, tm.memberName()})
 				}
 			} else {
 				// Generate explicit columns.
-				if err = addColumns(info, t.name, fullName{pref, t.name}); err != nil {
+				tm, err := info.typeMember(t.name)
+				if err != nil {
 					return nil, nil, err
 				}
+				typeMembers = append(typeMembers, tm)
+				outCols = append(outCols, fullName{pref, t.name})
 			}
 		}
 		return outCols, typeMembers, nil
@@ -176,9 +165,12 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 			return nil, nil, fmt.Errorf(`cannot use star with primitive type %q in expression`, info.typ().Name())
 		}
 		for _, c := range p.sourceColumns {
-			if err = addColumns(info, c.name, c); err != nil {
+			tm, err := info.typeMember(c.name)
+			if err != nil {
 				return nil, nil, err
 			}
+			typeMembers = append(typeMembers, tm)
+			outCols = append(outCols, c)
 		}
 		return outCols, typeMembers, nil
 	} else if starTypes > 0 && numTypes > 1 {
@@ -192,9 +184,12 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 			if info, err = fetchInfo(t.prefix); err != nil {
 				return nil, nil, err
 			}
-			if err = addColumns(info, t.name, c); err != nil {
+			tm, err := info.typeMember(t.name)
+			if err != nil {
 				return nil, nil, err
 			}
+			typeMembers = append(typeMembers, tm)
+			outCols = append(outCols, c)
 		}
 	} else {
 		return nil, nil, fmt.Errorf("mismatched number of columns and target types")

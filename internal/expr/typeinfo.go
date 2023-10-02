@@ -67,9 +67,15 @@ func (f structField) memberName() string {
 	return f.tag
 }
 
+// typeInfo exposes useful information about types used in SQLair queries.
 type typeInfo interface {
 	typ() reflect.Type
-	typeMember(string) (typeMember, error)
+
+	// typeMember returns the type member associated with a given column name.
+	typeMember(member string) (typeMember, error)
+
+	// getAllMembers returns all members a type associated with column names.
+	getAllMembers() ([]typeMember, error)
 }
 
 type structInfo struct {
@@ -96,6 +102,20 @@ func (si *structInfo) typeMember(member string) (typeMember, error) {
 	return tm, nil
 }
 
+func (si *structInfo) getAllMembers() ([]typeMember, error) {
+	if len(si.tags) == 0 {
+		return nil, fmt.Errorf(`no "db" tags found in struct %q`, si.structType.Name())
+	}
+
+	tms := []typeMember{}
+	for _, tag := range si.tags {
+		tms = append(tms, si.tagToField[tag])
+	}
+	return tms, nil
+}
+
+var _ typeInfo = &structInfo{}
+
 type mapInfo struct {
 	mapType reflect.Type
 }
@@ -111,6 +131,12 @@ func (mi *mapInfo) typeMember(member string) (typeMember, error) {
 	return mapKey{name: member, mapType: mi.mapType}, nil
 }
 
+func (mi *mapInfo) getAllMembers() ([]typeMember, error) {
+	return nil, fmt.Errorf(`columns must be specified for map with star`)
+}
+
+var _ typeInfo = &mapInfo{}
+
 type primitiveTypeInfo struct {
 	primitiveType reflect.Type
 }
@@ -125,6 +151,12 @@ func (pti *primitiveTypeInfo) typeMember(member string) (typeMember, error) {
 	}
 	return primitiveType{primitiveType: pti.primitiveType}, nil
 }
+
+func (pti *primitiveTypeInfo) getAllMembers() ([]typeMember, error) {
+	return nil, fmt.Errorf(`primitive type used in invalid context`)
+}
+
+var _ typeInfo = &primitiveTypeInfo{}
 
 var primitiveKinds = map[reflect.Kind]bool{
 	reflect.String:  true,

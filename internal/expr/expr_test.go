@@ -551,19 +551,19 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT &string FROM t",
 		prepareArgs: []any{},
-		err:         `cannot prepare statement: output expression: explicit columns required for primitive type: &string`,
+		err:         `cannot prepare statement: output expression: column not specified for primitive type: &string`,
 	}, {
 		query:       "SELECT &int FROM t",
 		prepareArgs: []any{},
-		err:         `cannot prepare statement: output expression: explicit columns required for primitive type: &int`,
+		err:         `cannot prepare statement: output expression: column not specified for primitive type: &int`,
 	}, {
 		query:       "SELECT * AS &string FROM t",
 		prepareArgs: []any{},
-		err:         `cannot prepare statement: output expression: explicit columns required for primitive type: * AS &string`,
+		err:         `cannot prepare statement: output expression: column not specified for primitive type: * AS &string`,
 	}, {
 		query:       "SELECT * AS &string.* FROM t",
 		prepareArgs: []any{},
-		err:         `cannot prepare statement: output expression: explicit columns required for primitive type: * AS &string.*`,
+		err:         `cannot prepare statement: output expression: column not specified for primitive type: * AS &string.*`,
 	}, {
 		query:       "SELECT name AS &string.* FROM t",
 		prepareArgs: []any{},
