@@ -43,9 +43,8 @@ type IntMap map[string]int
 
 type StringMap map[string]string
 
-type S []any
-type T []int
-type U []string
+type IntSlice []int
+type StringSlice []string
 
 var tests = []struct {
 	summary          string
@@ -268,9 +267,9 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	"SELECT name FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7)",
 }, {
 	"complex in",
-	"SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $S.*, $Manager.id, $T.*, $U.*)",
-	"[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE id ] In[[Person.id S.* Manager.id T.* U.*]]]",
-	[]any{sqlair.S{}, Person{}, Manager{}, T{}, U{}},
+	"SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $S.*, $Manager.id, $IntSlice.*, $StringSlice.*)",
+	"[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE id ] In[[Person.id S.* Manager.id IntSlice.* StringSlice.*]]]",
+	[]any{sqlair.S{}, Person{}, Manager{}, IntSlice{}, StringSlice{}},
 	"SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7, @sqlair_8, @sqlair_9, @sqlair_10, @sqlair_11, @sqlair_12, @sqlair_13, @sqlair_14, @sqlair_15, @sqlair_16, @sqlair_17, @sqlair_18, @sqlair_19, @sqlair_20, @sqlair_21, @sqlair_22, @sqlair_23, @sqlair_24, @sqlair_25)",
 }, {
 	"insert",
@@ -535,7 +534,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 		err:         `cannot prepare statement: input expression: asterisk used in invalid context: $Address.*`,
 	}, {
 		query:       "SELECT foo FROM t WHERE x = $S.*",
-		prepareArgs: []any{S{}},
+		prepareArgs: []any{sqlair.S{}},
 		err:         `cannot prepare statement: input expression: cannot use slice type "S" outside of IN clause: $S.*`,
 	}, {
 		query:       "SELECT name FROM person WHERE id IN ($M.*)",
@@ -547,7 +546,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 		err:         `cannot prepare statement: input expression: cannot use struct "Person" with asterisk in input expression: IN ($Person.*)`,
 	}, {
 		query:       "SELECT &S.* FROM t",
-		prepareArgs: []any{S{}},
+		prepareArgs: []any{sqlair.S{}},
 		err:         `cannot prepare statement: output expression: cannot use slice type "S" in output expression: &S.*`,
 	}}
 
@@ -742,8 +741,8 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		err:         `invalid input parameter: type "Person" provided more than once`,
 	}, {
 		query:       "SELECT street FROM t WHERE x IN ($S.*)",
-		prepareArgs: []any{S{}},
-		queryArgs:   []any{S{}},
+		prepareArgs: []any{sqlair.S{}},
+		queryArgs:   []any{sqlair.S{}},
 		err:         `invalid input parameter: slice arg with type "S" has length 0`,
 	}}
 
