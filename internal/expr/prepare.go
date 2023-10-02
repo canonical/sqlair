@@ -84,7 +84,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 		return nil, fmt.Errorf(`cannot use slice type %q outside of IN clause`, info.typ().Name())
 	}
 	if p.sourceType.name == "*" {
-		return nil, fmt.Errorf(`star type not allowed in standalone input`)
+		return nil, fmt.Errorf(`asterisk used in invalid context`)
 	}
 	tm, err = info.typeMember(p.sourceType.name)
 	if err != nil {

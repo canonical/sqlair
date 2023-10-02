@@ -532,7 +532,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.*",
 		prepareArgs: []any{Person{}, Manager{}, Address{}},
-		err:         `cannot prepare statement: input expression: invalid context for: $Address.*`,
+		err:         `cannot prepare statement: input expression: asterisk used in invalid context: $Address.*`,
 	}, {
 		query:       "SELECT foo FROM t WHERE x = $S.*",
 		prepareArgs: []any{S{}},
