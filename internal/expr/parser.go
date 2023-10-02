@@ -17,7 +17,6 @@ type Parser struct {
 	parts     []queryPart
 }
 
-// NewParser returns an uninitiated Parser.
 func NewParser() *Parser {
 	return &Parser{}
 }
