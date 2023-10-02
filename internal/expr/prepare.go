@@ -9,8 +9,8 @@ import (
 	"strings"
 )
 
-// PreparedExpr is a ParsedExpr that has been validated and prepared for
-// use in a query.
+// PreparedExpr is a ParsedExpr that has been validated and processed into SQL
+// ready for use in a query.
 type PreparedExpr struct {
 	outputs []typeMember
 	inputs  []typeMember
