@@ -63,14 +63,8 @@ func (cp *checkpoint) restore() {
 	cp.parser.parts = cp.parts
 }
 
-// ParsedExpr stores the parsed SQL query as a slice of queryParts.
-// For example, the SQL statement:
-//
-//	SELECT p.* AS &Person.* FROM person AS p WHERE p.name = $Manager.name
-//
-// Would be represented as:
-//
-//	[bypassPart{...} outputPart{...} bypassPart{...} inputPart{...}]
+// ParsedExpr represents a parsed SQL string containg SQLair input and output
+// expressions.
 type ParsedExpr struct {
 	queryParts []queryPart
 }
