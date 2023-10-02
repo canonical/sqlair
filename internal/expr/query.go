@@ -19,7 +19,7 @@ func (qe *QueryExpr) HasOutputs() bool {
 	return len(qe.outputs) > 0
 }
 
-// QueryExpr represents a SQL statement and its arguements. It is is ready for
+// QueryExpr represents a SQL statement and its arguments. It is is ready for
 // execution on a database and then the scanning of the query results.
 type QueryExpr struct {
 	sql     string
