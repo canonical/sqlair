@@ -89,18 +89,12 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 			return nil, fmt.Errorf(`type %q not passed as a parameter (have "%s")`, p.sourceType.name, strings.Join(ts, `", "`))
 		}
 	}
-	switch info := info.(type) {
-	case *mapInfo:
-		return &mapKey{name: p.sourceType.member, mapType: info.typ()}, nil
-	case *structInfo:
-		f, ok := info.tagToField[p.sourceType.member]
-		if !ok {
-			return nil, fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), p.sourceType.member)
-		}
-		return f, nil
-	default:
-		return nil, fmt.Errorf(`internal error: unknown info type: %T`, info)
+
+	tm, err = info.typeMember(p.sourceType.member)
+	if err != nil {
+		return nil, err
 	}
+	return tm, nil
 }
 
 // prepareOutput checks that the output expressions correspond to known types.
@@ -119,7 +113,6 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnName, type
 
 	// Check target struct type and its tags are valid.
 	var info typeInfo
-	var ok bool
 
 	fetchInfo := func(typeName string) (typeInfo, error) {
 		info, ok := ti[typeName]
@@ -135,22 +128,6 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnName, type
 		return info, nil
 	}
 
-	addColumns := func(info typeInfo, tag string, column columnName) error {
-		var tm typeMember
-		switch info := info.(type) {
-		case *structInfo:
-			tm, ok = info.tagToField[tag]
-			if !ok {
-				return fmt.Errorf(`type %q has no %q db tag`, info.typ().Name(), tag)
-			}
-		case *mapInfo:
-			tm = &mapKey{name: tag, mapType: info.typ()}
-		}
-		typeMembers = append(typeMembers, tm)
-		outCols = append(outCols, column)
-		return nil
-	}
-
 	// Case 1: Generated columns e.g. "* AS (&P.*, &A.id)" or "&P.*".
 	if numColumns == 0 || (numColumns == 1 && starColumns == 1) {
 		pref := ""
@@ -163,25 +140,24 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnName, type
 			if info, err = fetchInfo(t.name); err != nil {
 				return nil, nil, err
 			}
-			// Generate asterisk columns.
 			if t.member == "*" {
-				switch info := info.(type) {
-				case *mapInfo:
-					return nil, nil, fmt.Errorf(`columns must be specified for map with star`)
-				case *structInfo:
-					if len(info.tags) == 0 {
-						return nil, nil, fmt.Errorf(`no "db" tags found in struct %q`, info.typ().Name())
-					}
-					for _, tag := range info.tags {
-						outCols = append(outCols, columnName{pref, tag})
-						typeMembers = append(typeMembers, info.tagToField[tag])
-					}
+				// Generate asterisk columns.
+				allMembers, err := info.getAllMembers()
+				if err != nil {
+					return nil, nil, err
+				}
+				typeMembers = append(typeMembers, allMembers...)
+				for _, tm := range allMembers {
+					outCols = append(outCols, columnName{pref, tm.memberName()})
 				}
 			} else {
 				// Generate explicit columns.
-				if err = addColumns(info, t.member, columnName{pref, t.member}); err != nil {
+				tm, err := info.typeMember(t.member)
+				if err != nil {
 					return nil, nil, err
 				}
+				typeMembers = append(typeMembers, tm)
+				outCols = append(outCols, columnName{pref, t.member})
 			}
 		}
 		return outCols, typeMembers, nil
@@ -195,9 +171,12 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnName, type
 			return nil, nil, err
 		}
 		for _, c := range p.sourceColumns {
-			if err = addColumns(info, c.name, c); err != nil {
+			tm, err := info.typeMember(c.name)
+			if err != nil {
 				return nil, nil, err
 			}
+			typeMembers = append(typeMembers, tm)
+			outCols = append(outCols, c)
 		}
 		return outCols, typeMembers, nil
 	} else if starTypes > 0 && numTypes > 1 {
@@ -211,10 +190,12 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnName, type
 			if info, err = fetchInfo(t.name); err != nil {
 				return nil, nil, err
 			}
-
-			if err = addColumns(info, t.member, c); err != nil {
+			tm, err := info.typeMember(t.member)
+			if err != nil {
 				return nil, nil, err
 			}
+			typeMembers = append(typeMembers, tm)
+			outCols = append(outCols, c)
 		}
 	} else {
 		return nil, nil, fmt.Errorf("mismatched number of columns and target types")
