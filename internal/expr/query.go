@@ -19,8 +19,8 @@ func (qe *QueryExpr) HasOutputs() bool {
 	return len(qe.outputs) > 0
 }
 
-// QueryExpr represents a SQLair query that is ready for execution and then
-// scanning of query results.
+// QueryExpr represents a SQL statement and its arguements. It is is ready for
+// execution on a database and then the scanning of the query results.
 type QueryExpr struct {
 	sql     string
 	args    []any
