@@ -480,8 +480,6 @@ func (p *Parser) parseTargetTypes() (types []fullName, parentheses bool, ok bool
 	return nil, false, false, nil
 }
 
-// parseOutputExpression parsers a SQLair output expression. See the package
-// documentation for all forms of output expression.
 func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 	start := p.pos
 
@@ -534,10 +532,7 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 			if fn.name == "*" {
 				return nil, false, fmt.Errorf(`asterisk not allowed in input expression "$%s"`, fn)
 			}
-			return &inputPart{
-				sourceType: fn,
-				raw:        p.input[cp.pos:p.pos],
-			}, true, nil
+			return &inputPart{sourceType: fn, raw: p.input[cp.pos:p.pos]}, true, nil
 		} else if err != nil {
 			return nil, false, err
 		}
