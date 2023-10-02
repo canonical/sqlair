@@ -63,7 +63,7 @@ func (cp *checkpoint) restore() {
 	cp.parser.parts = cp.parts
 }
 
-// ParsedExpr represents a parsed SQL string containg SQLair input and output
+// ParsedExpr represents a parsed SQL string containing SQLair input and output
 // expressions.
 type ParsedExpr struct {
 	// queryParts stores the input, output and bypass parts in the order they
