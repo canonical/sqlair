@@ -362,13 +362,13 @@ func (s *ExprSuite) TestParseErrors(c *C) {
 		err:   "cannot parse expression: column 38: missing closing quote in string literal",
 	}, {
 		query: "SELECT foo FROM t WHERE x = $Address.",
-		err:   `cannot parse expression: column 37: invalid identifier suffix following "Address"`,
+		err:   `cannot parse expression: column 37: invalid suffix following "Address"`,
 	}, {
 		query: "SELECT foo FROM t WHERE x = $Address.&d",
-		err:   `cannot parse expression: column 37: invalid identifier suffix following "Address"`,
+		err:   `cannot parse expression: column 37: invalid suffix following "Address"`,
 	}, {
 		query: "SELECT foo FROM t WHERE x = $Address.-",
-		err:   `cannot parse expression: column 37: invalid identifier suffix following "Address"`,
+		err:   `cannot parse expression: column 37: invalid suffix following "Address"`,
 	}, {
 		query: "SELECT foo FROM t WHERE x = $Address",
 		err:   `cannot parse expression: column 36: unqualified type, expected Address.* or Address.<db tag>`,
