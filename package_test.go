@@ -111,9 +111,9 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 	type M struct {
 		F string `db:"id"`
 	}
-	type T []int
-	type U []string
-	type V [10]int
+	type IntSlice []int
+	type StringSlice []string
+	type LongSlice [10]int
 	var tests = []struct {
 		summary  string
 		query    string
@@ -214,16 +214,16 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{40, "Mary", 3500}}, {&Person{35, "James", 4500}}},
 	}, {
 		summary:  "complex in",
-		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $S.*, $Manager.id, $T.*, $U.*)",
-		types:    []any{Person{}, sqlair.S{}, Manager{}, T{}, U{}},
-		inputs:   []any{Person{ID: 20}, sqlair.S{21, 23, 24, 25, 26, 27, 28, 29}, T{31, 32, 33, 34, 35}, &Manager{ID: 30}, U{"36", "37", "38", "39", "40"}},
+		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $S.*, $Manager.id, $IntSlice.*, $StringSlice.*)",
+		types:    []any{Person{}, sqlair.S{}, Manager{}, IntSlice{}, StringSlice{}},
+		inputs:   []any{Person{ID: 20}, sqlair.S{21, 23, 24, 25, 26, 27, 28, 29}, IntSlice{31, 32, 33, 34, 35}, &Manager{ID: 30}, StringSlice{"36", "37", "38", "39", "40"}},
 		outputs:  [][]any{{&Person{}}, {&Person{}}, {&Person{}}, {&Person{}}},
 		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{20, "Mark", 1500}}, {&Person{40, "Mary", 3500}}, {&Person{35, "James", 4500}}},
 	}, {
 		summary:  "array in",
-		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($V.*)",
-		types:    []any{Person{}, V{}},
-		inputs:   []any{V{30, 35, 40}},
+		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($LongSlice.*)",
+		types:    []any{Person{}, LongSlice{}},
+		inputs:   []any{LongSlice{30, 35, 40}},
 		outputs:  [][]any{{&Person{}}, {&Person{}}, {&Person{}}},
 		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{40, "Mary", 3500}}, {&Person{35, "James", 4500}}},
 	}}
