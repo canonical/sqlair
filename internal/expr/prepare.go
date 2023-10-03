@@ -60,8 +60,6 @@ func starCount(fns []fullName) int {
 	return s
 }
 
-type typeNameToInfo map[string]typeInfo
-
 func typeNotPassedError(typeName string, allTypeNames []string) error {
 	if len(allTypeNames) == 0 {
 		return fmt.Errorf(`type %q not passed as a parameter`, typeName)
@@ -182,6 +180,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 
 	return outCols, typeMembers, nil
 }
+
+type typeNameToInfo map[string]typeInfo
 
 // Prepare takes a parsed expression and struct instantiations of all the types
 // mentioned in it.
