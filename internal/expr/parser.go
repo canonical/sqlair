@@ -13,9 +13,9 @@ type Parser struct {
 	prevPart int
 	// partStart is the value of pos just before we started parsing the part
 	// under pos. We maintain partStart >= prevPart.
-	partStart    int
-	parts        []queryPart
-	bracketLevel int
+	partStart  int
+	parts      []queryPart
+	parenLevel int
 }
 
 func NewParser() *Parser {
@@ -29,33 +29,33 @@ func (p *Parser) init(input string) {
 	p.prevPart = 0
 	p.partStart = 0
 	p.parts = []queryPart{}
-	p.bracketLevel = 0
+	p.parenLevel = 0
 }
 
 // A checkpoint struct for saving parser state to restore later. We only use
 // a checkpoint within an attempted parsing of an part, not at a higher level
 // since we don't keep track of the parts in the checkpoint.
 type checkpoint struct {
-	parser       *Parser
-	input        string
-	pos          int
-	prevPart     int
-	partStart    int
-	parts        []queryPart
-	bracketLevel int
+	parser     *Parser
+	input      string
+	pos        int
+	prevPart   int
+	partStart  int
+	parts      []queryPart
+	parenLevel int
 }
 
 // save takes a snapshot of the state of the parser and returns a pointer to a
 // checkpoint that represents it.
 func (p *Parser) save() *checkpoint {
 	return &checkpoint{
-		parser:       p,
-		input:        p.input,
-		pos:          p.pos,
-		prevPart:     p.prevPart,
-		partStart:    p.partStart,
-		parts:        p.parts,
-		bracketLevel: p.bracketLevel,
+		parser:     p,
+		input:      p.input,
+		pos:        p.pos,
+		prevPart:   p.prevPart,
+		partStart:  p.partStart,
+		parts:      p.parts,
+		parenLevel: p.parenLevel,
 	}
 }
 
@@ -67,7 +67,6 @@ func (cp *checkpoint) restore() {
 	cp.parser.prevPart = cp.prevPart
 	cp.parser.partStart = cp.partStart
 	cp.parser.parts = cp.parts
-	cp.parser.bracketLevel = cp.bracketLevel
 }
 
 // ParsedExpr is the AST representation of an SQL expression. The AST is made up
@@ -165,13 +164,37 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 	}()
 
 	p.init(input)
+	queryParts, err := p.parse(minParenLevel{set: false})
+	if err != nil {
+		return nil, err
+	}
+	return &ParsedExpr{queryParts}, nil
+}
+
+// minParenLevel represents a parentheses level for the parse to stop
+// parsing at. If set is false then there is no minimum level.
+type minParenLevel struct {
+	parenLevel int
+	set        bool
+}
+
+// isMinLevel indicates if the parser should stop parsing at parserLevel.
+func (pl *minParenLevel) isMinLevel(parserLevel int) bool {
+	if pl.set {
+		return pl.parenLevel == parserLevel
+	}
+	return false
+}
+
+// parse parses the input until p.parenLevel is equal to minParenLevel.
+func (p *Parser) parse(pl minParenLevel) ([]queryPart, error) {
 	for {
 		// Advance the parser to the start of the next expression.
 		if err := p.advance(); err != nil {
 			return nil, err
 		}
 
-		if p.pos == len(p.input) {
+		if p.pos == len(p.input) || pl.isMinLevel(p.parenLevel) {
 			break
 		}
 
@@ -190,7 +213,7 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 		}
 	}
 	p.addRemainder()
-	return &ParsedExpr{p.parts}, nil
+	return p.parts, nil
 }
 
 // advance increments p.pos until it reaches content that might preceed a token
@@ -215,37 +238,16 @@ loop:
 		case ' ', '\t', '\n', '\r', '=', ',', '[', '>', '<', '+', '-', '*', '/', '|', '%':
 			break loop
 		case '(':
-			p.bracketLevel++
+			p.parenLevel++
 			break loop
 		case ')':
-			p.bracketLevel--
+			p.parenLevel--
 			break loop
 		}
 	}
 
 	p.partStart = p.pos
 	return nil
-}
-
-// startSubpart creates a checkpoint and prepares to parse a nested part.
-// The checkpoint can be used to revert the state of the parser, but to parse
-// the sub-part collectSubpart must be called.
-func (p *Parser) startSubpart() *checkpoint {
-	scp := p.save()
-	// Clear parser state and set the input to the start of the sub-part.
-	p.init(p.input[p.pos:])
-	return scp
-}
-
-// collectSubpart returns the nested expression parsed since the corresponding
-// sub-part checkpoint, at startSubpart, and restores the parser to its new
-// position.
-func (p *Parser) collectSubpart(scp *checkpoint) *ParsedExpr {
-	pos := p.pos
-	pe := &ParsedExpr{p.parts}
-	scp.restore()
-	p.pos += pos
-	return pe
 }
 
 // skipStringLiteral jumps over single and double quoted sections of input.
@@ -423,33 +425,22 @@ func (p *Parser) parseColumn() (columnExpr, bool, error) {
 	return fullName{}, false, nil
 }
 
-func (p *Parser) parseFunc() (columnExpr, bool, error) {
-	// Start parsing a nested expression.
-	scp := p.startSubpart()
-	if p.skipName() && p.peekByte('(') {
-		for {
-			if err := p.advance(); err != nil {
-				scp.restore()
-				return funcExpr{}, false, err
-			}
-
-			if p.bracketLevel == 0 || p.pos == len(p.input) {
-				break
-			}
-
-			if in, ok, err := p.parseInputExpression(); err != nil {
-				scp.restore()
-				return funcExpr{}, false, err
-			} else if ok {
-				p.add(in)
-				continue
-			}
+func (p *Parser) parseFunc() (funcExpr, bool, error) {
+	// Parse recursively inside the function arguments with a new parser.
+	rp := NewParser()
+	rp.init(p.input[p.pos:])
+	if rp.skipName() && rp.peekByte('(') {
+		parts, err := rp.parse(minParenLevel{set: true, parenLevel: p.parenLevel})
+		if err != nil {
+			return funcExpr{}, false, err
 		}
+		// Add Bypass part until before function.
 		p.addRemainder()
-		pe := p.collectSubpart(scp)
-		return funcExpr{raw: p.input[scp.pos:p.pos], pe: pe}, true, nil
+		// Advance the p parser to start where rp ended.
+		start := p.pos
+		p.pos += rp.pos
+		return funcExpr{raw: p.input[start : start+rp.pos], pe: &ParsedExpr{parts}}, true, nil
 	}
-	scp.restore()
 	return funcExpr{}, false, nil
 }
 
@@ -526,7 +517,7 @@ func (p *Parser) parseColumns() (cols []columnExpr, parentheses bool, ok bool) {
 		return []columnExpr{col}, false, true
 	}
 
-	// Case 2: Multiple columns e.g. "(p.name, p.id)".
+	// Case 2: Multiple columns e.g. "(p.name, p.id, fun(p.address, p.id))"
 	if cols, ok, _ := parseList(p, (*Parser).parseColumn); ok {
 		return cols, true, true
 	}
