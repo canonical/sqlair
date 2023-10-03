@@ -260,17 +260,23 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	[]any{},
 	"SELECT person.*, address.district FROM person JOIN address ON person.address_id = address.id WHERE person.name = 'Fred'",
 }, {
-	"simple in",
+	"single slice",
 	"SELECT name FROM person WHERE id IN ($S.*)",
 	"[Bypass[SELECT name FROM person WHERE id IN (] Input[S.*] Bypass[)]]",
 	[]any{sqlair.S{}},
 	"SELECT name FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7)",
 }, {
-	"complex in",
+	"many slices",
 	"SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $S.*, $Manager.id, $IntSlice.*, $StringSlice.*)",
 	"[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE id IN (] Input[Person.id] Bypass[, ] Input[S.*] Bypass[, ] Input[Manager.id] Bypass[, ] Input[IntSlice.*] Bypass[, ] Input[StringSlice.*] Bypass[)]]",
 	[]any{sqlair.S{}, Person{}, Manager{}, IntSlice{}, StringSlice{}},
 	"SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7, @sqlair_8, @sqlair_9, @sqlair_10, @sqlair_11, @sqlair_12, @sqlair_13, @sqlair_14, @sqlair_15, @sqlair_16, @sqlair_17, @sqlair_18, @sqlair_19, @sqlair_20, @sqlair_21, @sqlair_22, @sqlair_23, @sqlair_24, @sqlair_25)",
+}, {
+	"slices and other expressions in IN statement",
+	`SELECT name FROM person WHERE id IN ($S.*, func(1,2), "one", $IntSlice.*)`,
+	`[Bypass[SELECT name FROM person WHERE id IN (] Input[S.*] Bypass[, func(1,2), "one", ] Input[IntSlice.*] Bypass[)]]`,
+	[]any{sqlair.S{}, IntSlice{}},
+	`SELECT name FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7, func(1,2), "one", @sqlair_8, @sqlair_9, @sqlair_10, @sqlair_11, @sqlair_12, @sqlair_13, @sqlair_14, @sqlair_15)`,
 }, {
 	"insert",
 	"INSERT INTO person (name) VALUES $Person.name",
