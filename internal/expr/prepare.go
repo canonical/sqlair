@@ -60,12 +60,12 @@ func starCount(fns []fullName) int {
 	return s
 }
 
-func typeNotPassedError(typeName string, allTypeNames []string) error {
-	if len(allTypeNames) == 0 {
-		return fmt.Errorf(`type %q not passed as a parameter`, typeName)
+func typeMissingError(missingType string, existingTypes []string) error {
+	if len(existingTypes) == 0 {
+		return fmt.Errorf(`parameter with type %q missing`, missingType)
 	}
 	// "%s" is used instead of %q to correctly print double quotes within the joined string.
-	return fmt.Errorf(`type %q not passed as a parameter (have "%s")`, typeName, strings.Join(allTypeNames, `", "`))
+	return fmt.Errorf(`parameter with type %q missing (have "%s")`, missingType, strings.Join(existingTypes, `", "`))
 }
 
 // prepareInput checks that the input expression corresponds to a known type.
@@ -78,7 +78,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 
 	info, ok := ti[p.sourceType.prefix]
 	if !ok {
-		return nil, typeNotPassedError(p.sourceType.prefix, getKeys(ti))
+		return nil, typeMissingError(p.sourceType.prefix, getKeys(ti))
 	}
 
 	tm, err = info.typeMember(p.sourceType.name)
@@ -113,7 +113,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 		for _, t := range p.targetTypes {
 			info, ok := ti[t.prefix]
 			if !ok {
-				return nil, nil, typeNotPassedError(t.prefix, getKeys(ti))
+				return nil, nil, typeMissingError(t.prefix, getKeys(ti))
 			}
 			if t.name == "*" {
 				// Generate asterisk columns.
@@ -144,7 +144,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 	if starTypes == 1 && numTypes == 1 {
 		info, ok := ti[p.targetTypes[0].prefix]
 		if !ok {
-			return nil, nil, typeNotPassedError(p.targetTypes[0].prefix, getKeys(ti))
+			return nil, nil, typeMissingError(p.targetTypes[0].prefix, getKeys(ti))
 		}
 		for _, c := range p.sourceColumns {
 			tm, err := info.typeMember(c.name)
@@ -165,7 +165,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 			t := p.targetTypes[i]
 			info, ok := ti[t.prefix]
 			if !ok {
-				return nil, nil, typeNotPassedError(t.prefix, getKeys(ti))
+				return nil, nil, typeMissingError(t.prefix, getKeys(ti))
 			}
 			tm, err := info.typeMember(t.name)
 			if err != nil {
