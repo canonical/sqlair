@@ -80,61 +80,26 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 			return nil, fmt.Errorf(`type %q not passed as a parameter (have "%s")`, p.sourceType.prefix, strings.Join(ts, `", "`))
 		}
 	}
-	if _, ok = info.(*sliceInfo); ok {
-		return nil, fmt.Errorf(`cannot use slice type %q outside of IN clause`, info.typ().Name())
-	}
 	if p.sourceType.name == "*" {
-		return nil, fmt.Errorf(`asterisk used in invalid context`)
-	}
-	tm, err = info.typeMember(p.sourceType.name)
-	if err != nil {
-		return nil, err
-	}
-	return tm, nil
-}
-
-// prepareIn check input expressions following IN statements correspond to known
-// types and generates information about the query arguments.
-func prepareIn(ti typeNameToInfo, p *inPart) (typeMembers []typeMember, err error) {
-	defer func() {
-		if err != nil {
-			err = fmt.Errorf("input expression: %s: %s", err, p.raw)
-		}
-	}()
-	for _, t := range p.types {
-		info, ok := ti[t.prefix]
-		if !ok {
-			ts := getKeys(ti)
-			if len(ts) == 0 {
-				return nil, fmt.Errorf(`type %q not passed as a parameter`, t.prefix)
-			} else {
-				// "%s" is used instead of %q to correctly print double quotes within the joined string.
-				return nil, fmt.Errorf(`type %q not passed as a parameter (have "%s")`, t.prefix, strings.Join(ts, `", "`))
-			}
-		}
-		var tm typeMember
-		if t.name == "*" {
-			switch info := info.(type) {
-			case *structInfo, *mapInfo:
-				return nil, fmt.Errorf(`cannot use %s %q with asterisk in input expression`, info.typ().Kind(), t.prefix)
-			case *sliceInfo:
-				tms, err := info.getAllMembers()
-				if err != nil {
-					return nil, err
-				}
-				tm = tms[0]
-			default:
-				return nil, fmt.Errorf(`internal error: unknown type: %T`, info)
-			}
-		} else {
-			tm, err = info.typeMember(t.name)
+		switch info := info.(type) {
+		case *structInfo, *mapInfo:
+			return nil, fmt.Errorf(`cannot use %s %q with asterisk in input expression`, info.typ().Kind(), p.sourceType.prefix)
+		case *sliceInfo:
+			tms, err := info.getAllMembers()
 			if err != nil {
 				return nil, err
 			}
+			tm = tms[0]
+		default:
+			return nil, fmt.Errorf(`internal error: unknown type: %T`, info)
 		}
-		typeMembers = append(typeMembers, tm)
+	} else {
+		tm, err = info.typeMember(p.sourceType.name)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return typeMembers, nil
+	return tm, nil
 }
 
 // prepareOutput checks that the output expressions correspond to known types.
@@ -305,43 +270,28 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	for _, part := range pe.queryParts {
 		switch p := part.(type) {
 		case *inputPart:
-			inLoc, err := prepareInput(ti, p)
+			tm, err := prepareInput(ti, p)
 			if err != nil {
 				return nil, err
 			}
-			sql.WriteString("@sqlair_" + strconv.Itoa(inCount))
-			inCount++
-			inputs = append(inputs, inLoc)
-		case *inPart:
-			typeMembers, err := prepareIn(ti, p)
-			if err != nil {
-				return nil, err
-			}
-			sql.WriteString("IN (")
-			for i, tm := range typeMembers {
-				switch tm := tm.(type) {
-				case *structField, *mapKey:
+			switch tm := tm.(type) {
+			case *structField, *mapKey:
+				sql.WriteString("@sqlair_")
+				sql.WriteString(strconv.Itoa(inCount))
+				inCount++
+			case *sliceType:
+				for j := 0; j < maxSliceLen; j++ {
 					sql.WriteString("@sqlair_")
 					sql.WriteString(strconv.Itoa(inCount))
-					inCount++
-				case *sliceType:
-					for j := 0; j < maxSliceLen; j++ {
-						sql.WriteString("@sqlair_")
-						sql.WriteString(strconv.Itoa(inCount))
-						if j < maxSliceLen-1 {
-							sql.WriteString(", ")
-						}
-						inCount++
+					if j < maxSliceLen-1 {
+						sql.WriteString(", ")
 					}
-				default:
-					return nil, fmt.Errorf("internal error: invalid type: %T", tm)
+					inCount++
 				}
-				if i < len(typeMembers)-1 {
-					sql.WriteString(", ")
-				}
+			default:
+				return nil, fmt.Errorf("internal error: invalid type: %T", tm)
 			}
-			sql.WriteString(")")
-			inputs = append(inputs, typeMembers...)
+			inputs = append(inputs, tm)
 		case *outputPart:
 			outCols, typeMembers, err := prepareOutput(ti, p)
 			if err != nil {

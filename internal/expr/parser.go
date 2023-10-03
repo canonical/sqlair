@@ -180,13 +180,6 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 			p.add(in)
 			continue
 		}
-
-		if in, ok, err := p.parseInExpression(); err != nil {
-			return nil, err
-		} else if ok {
-			p.add(in)
-			continue
-		}
 	}
 
 	// Add any remaining unparsed string input to the parser.
@@ -562,20 +555,4 @@ func (p *Parser) parseSourceType() (fullName, bool, error) {
 		}
 	}
 	return fullName{}, false, nil
-}
-
-func (p *Parser) parseInExpression() (*inPart, bool, error) {
-	cp := p.save()
-
-	if p.skipString("IN") {
-		p.skipBlanks()
-		if types, ok, err := p.parseList((*Parser).parseSourceType); err != nil {
-			return nil, false, err
-		} else if ok {
-			return &inPart{types: types, raw: p.input[cp.pos:p.pos]}, true, nil
-		}
-	}
-
-	cp.restore()
-	return nil, false, nil
 }

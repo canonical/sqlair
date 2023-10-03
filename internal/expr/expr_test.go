@@ -262,13 +262,13 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 }, {
 	"simple in",
 	"SELECT name FROM person WHERE id IN ($S.*)",
-	"[Bypass[SELECT name FROM person WHERE id ] In[[S.*]]]",
+	"[Bypass[SELECT name FROM person WHERE id IN (] Input[S.*] Bypass[)]]",
 	[]any{sqlair.S{}},
 	"SELECT name FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7)",
 }, {
 	"complex in",
 	"SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $S.*, $Manager.id, $IntSlice.*, $StringSlice.*)",
-	"[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE id ] In[[Person.id S.* Manager.id IntSlice.* StringSlice.*]]]",
+	"[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE id IN (] Input[Person.id] Bypass[, ] Input[S.*] Bypass[, ] Input[Manager.id] Bypass[, ] Input[IntSlice.*] Bypass[, ] Input[StringSlice.*] Bypass[)]]",
 	[]any{sqlair.S{}, Person{}, Manager{}, IntSlice{}, StringSlice{}},
 	"SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7, @sqlair_8, @sqlair_9, @sqlair_10, @sqlair_11, @sqlair_12, @sqlair_13, @sqlair_14, @sqlair_15, @sqlair_16, @sqlair_17, @sqlair_18, @sqlair_19, @sqlair_20, @sqlair_21, @sqlair_22, @sqlair_23, @sqlair_24, @sqlair_25)",
 }, {
@@ -531,19 +531,15 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.*",
 		prepareArgs: []any{Person{}, Manager{}, Address{}},
-		err:         `cannot prepare statement: input expression: asterisk used in invalid context: $Address.*`,
-	}, {
-		query:       "SELECT foo FROM t WHERE x = $S.*",
-		prepareArgs: []any{sqlair.S{}},
-		err:         `cannot prepare statement: input expression: cannot use slice type "S" outside of IN clause: $S.*`,
+		err:         `cannot prepare statement: input expression: cannot use struct "Address" with asterisk in input expression: $Address.*`,
 	}, {
 		query:       "SELECT name FROM person WHERE id IN ($M.*)",
 		prepareArgs: []any{M{}},
-		err:         `cannot prepare statement: input expression: cannot use map "M" with asterisk in input expression: IN ($M.*)`,
+		err:         `cannot prepare statement: input expression: cannot use map "M" with asterisk in input expression: $M.*`,
 	}, {
 		query:       "SELECT name FROM person WHERE id IN ($Person.*)",
 		prepareArgs: []any{Person{}},
-		err:         `cannot prepare statement: input expression: cannot use struct "Person" with asterisk in input expression: IN ($Person.*)`,
+		err:         `cannot prepare statement: input expression: cannot use struct "Person" with asterisk in input expression: $Person.*`,
 	}, {
 		query:       "SELECT &S.* FROM t",
 		prepareArgs: []any{sqlair.S{}},
