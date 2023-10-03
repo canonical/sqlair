@@ -168,7 +168,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (typeMembers []typeMember, 
 				}
 				typeMembers = append(typeMembers, allMembers...)
 				for _, tm := range allMembers {
-					p.sqlColumns = append(p.sqlColumns, columnName{pref, tm.memberName()})
+					p.preparedColumns = append(p.preparedColumns, columnName{pref, tm.memberName()})
 				}
 			} else {
 				// Generate explicit columns.
@@ -177,7 +177,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (typeMembers []typeMember, 
 					return nil, err
 				}
 				typeMembers = append(typeMembers, tm)
-				p.sqlColumns = append(p.sqlColumns, columnName{pref, t.member})
+				p.preparedColumns = append(p.preparedColumns, columnName{pref, t.member})
 			}
 		}
 		return typeMembers, nil
@@ -196,7 +196,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (typeMembers []typeMember, 
 				return nil, err
 			}
 			typeMembers = append(typeMembers, tm)
-			p.sqlColumns = append(p.sqlColumns, c)
+			p.preparedColumns = append(p.preparedColumns, c)
 		}
 		return typeMembers, nil
 	} else if starTypes > 0 && numTypes > 1 {
@@ -215,7 +215,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (typeMembers []typeMember, 
 				return nil, err
 			}
 			typeMembers = append(typeMembers, tm)
-			p.sqlColumns = append(p.sqlColumns, c)
+			p.preparedColumns = append(p.preparedColumns, c)
 		}
 	} else {
 		return nil, fmt.Errorf("mismatched number of columns and target types")
@@ -331,11 +331,11 @@ func generateSQL(queryParts []queryPart, sliceLens []int) string {
 				inCount++
 			}
 		case *outputPart:
-			for i, c := range p.sqlColumns {
+			for i, c := range p.preparedColumns {
 				sql.WriteString(c.String())
 				sql.WriteString(" AS ")
 				sql.WriteString(markerName(outCount))
-				if i != len(p.sqlColumns)-1 {
+				if i != len(p.preparedColumns)-1 {
 					sql.WriteString(", ")
 				}
 				outCount++

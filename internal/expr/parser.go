@@ -55,9 +55,10 @@ func (p *inputPart) part() {}
 // outputPart represents a named target output variable in the SQL expression,
 // as well as the source table and column where it will be read from.
 type outputPart struct {
-	sourceColumns []columnName
-	targetTypes   []typeName
-	raw           string
+	preparedColumns []columnName
+	sourceColumns   []columnName
+	targetTypes     []typeName
+	raw             string
 }
 
 func (p *outputPart) String() string {
@@ -608,23 +609,14 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 	cp := p.save()
 
-	if fn, ok, err := p.parseSourceType(); ok {
-		return &inputPart{sourceType: fn, raw: p.input[cp.pos:p.pos]}, true, nil
-	} else if err != nil {
-		return nil, false, err
+	if p.skipByte('$') {
+		if fn, ok, err := p.parseTypeName(); ok {
+			return &inputPart{sourceType: fn, raw: p.input[cp.pos:p.pos]}, true, nil
+		} else if err != nil {
+			return nil, false, err
+		}
 	}
 
 	cp.restore()
 	return nil, false, nil
-}
-
-func (p *Parser) parseSourceType() (typeName, bool, error) {
-	if p.skipByte('$') {
-		if fn, ok, err := p.parseTypeName(); ok {
-			return fn, true, nil
-		} else if err != nil {
-			return typeName{}, false, err
-		}
-	}
-	return typeName{}, false, nil
 }
