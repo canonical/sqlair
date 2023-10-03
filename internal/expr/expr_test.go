@@ -391,6 +391,9 @@ func (s *ExprSuite) TestParseErrors(c *C) {
 		query: "SELECT foo FROM t WHERE x = $Address.-",
 		err:   `cannot parse expression: column 37: invalid identifier suffix following "Address"`,
 	}, {
+		query: "SELECT foo FROM t WHERE x = $Address",
+		err:   `cannot parse expression: column 36: unqualified type, expected Address.* or Address.<db tag>`,
+	}, {
 		query: "SELECT name AS (&Person.*)",
 		err:   `cannot parse expression: column 26: unexpected parentheses around types after "AS"`,
 	}, {
