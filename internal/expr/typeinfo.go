@@ -62,12 +62,19 @@ func (st *sliceType) outerType() reflect.Type {
 	return st.sliceType
 }
 
-func (st *sliceType) memberName() string {
-	panic("internal error: memberName called on sliceType")
+func (f *sliceType) memberName() string {
+	return ""
 }
 
+// typeInfo exposes useful information about types used in SQLair queries.
 type typeInfo interface {
 	typ() reflect.Type
+
+	// typeMember returns the type member associated with a given column name.
+	typeMember(member string) (typeMember, error)
+
+	// getAllMembers returns all members a type associated with column names.
+	getAllMembers() ([]typeMember, error)
 }
 
 type structInfo struct {
@@ -83,6 +90,28 @@ func (si *structInfo) typ() reflect.Type {
 	return si.structType
 }
 
+func (si *structInfo) typeMember(member string) (typeMember, error) {
+	tm, ok := si.tagToField[member]
+	if !ok {
+		return nil, fmt.Errorf(`type %q has no %q db tag`, si.structType.Name(), member)
+	}
+	return tm, nil
+}
+
+func (si *structInfo) getAllMembers() ([]typeMember, error) {
+	if len(si.tags) == 0 {
+		return nil, fmt.Errorf(`no "db" tags found in struct %q`, si.structType.Name())
+	}
+
+	tms := []typeMember{}
+	for _, tag := range si.tags {
+		tms = append(tms, si.tagToField[tag])
+	}
+	return tms, nil
+}
+
+var _ typeInfo = &structInfo{}
+
 type mapInfo struct {
 	mapType reflect.Type
 }
@@ -91,6 +120,16 @@ func (mi *mapInfo) typ() reflect.Type {
 	return mi.mapType
 }
 
+func (mi *mapInfo) typeMember(member string) (typeMember, error) {
+	return &mapKey{name: member, mapType: mi.mapType}, nil
+}
+
+func (mi *mapInfo) getAllMembers() ([]typeMember, error) {
+	return nil, fmt.Errorf(`columns must be specified for map with star`)
+}
+
+var _ typeInfo = &mapInfo{}
+
 type sliceInfo struct {
 	sliceType reflect.Type
 }
@@ -98,6 +137,16 @@ type sliceInfo struct {
 func (si *sliceInfo) typ() reflect.Type {
 	return si.sliceType
 }
+
+func (si *sliceInfo) typeMember(member string) (typeMember, error) {
+	return nil, fmt.Errorf(`slice has no named member`)
+}
+
+func (si *sliceInfo) getAllMembers() ([]typeMember, error) {
+	return []typeMember{&sliceType{sliceType: si.sliceType}}, nil
+}
+
+var _ typeInfo = &sliceInfo{}
 
 var cacheMutex sync.RWMutex
 var cache = make(map[reflect.Type]typeInfo)
