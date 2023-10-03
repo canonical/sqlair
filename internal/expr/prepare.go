@@ -94,7 +94,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 	if p.sourceType.member == "*" {
 		switch info := info.(type) {
 		case *structInfo, *mapInfo:
-			return nil, fmt.Errorf(`cannot use %s %q with asterisk in input expression`, info.typ().Kind(), p.sourceType.name)
+			return nil, fmt.Errorf(`asterisk used with %s in invalid context`, info.typ().Kind())
 		case *sliceInfo:
 			tms, err := info.getAllMembers()
 			if err != nil {

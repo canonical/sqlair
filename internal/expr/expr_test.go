@@ -531,15 +531,15 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.*",
 		prepareArgs: []any{Person{}, Manager{}, Address{}},
-		err:         `cannot prepare statement: input expression: cannot use struct "Address" with asterisk in input expression: $Address.*`,
+		err:         `cannot prepare statement: input expression: asterisk used with struct in invalid context: $Address.*`,
 	}, {
 		query:       "SELECT name FROM person WHERE id IN ($M.*)",
 		prepareArgs: []any{M{}},
-		err:         `cannot prepare statement: input expression: cannot use map "M" with asterisk in input expression: $M.*`,
+		err:         `cannot prepare statement: input expression: asterisk used with map in invalid context: $M.*`,
 	}, {
 		query:       "SELECT name FROM person WHERE id IN ($Person.*)",
 		prepareArgs: []any{Person{}},
-		err:         `cannot prepare statement: input expression: cannot use struct "Person" with asterisk in input expression: $Person.*`,
+		err:         `cannot prepare statement: input expression: asterisk used with struct in invalid context: $Person.*`,
 	}, {
 		query:       "SELECT &S.* FROM t",
 		prepareArgs: []any{sqlair.S{}},
