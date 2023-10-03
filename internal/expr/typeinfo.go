@@ -161,6 +161,8 @@ func (si *sliceInfo) getAllMembers() ([]typeMember, error) {
 	return []typeMember{&sliceType{sliceType: si.sliceType}}, nil
 }
 
+var _ typeInfo = &sliceInfo{}
+
 var cacheMutex sync.RWMutex
 var cache = make(map[reflect.Type]typeInfo)
 

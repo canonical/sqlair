@@ -14,14 +14,13 @@ const maxSliceLen = 8
 
 // PreparedExpr contains an SQL expression that is ready for execution.
 type PreparedExpr struct {
-	outputs []typeMember
-	inputs  []typeMember
-	sql     string
+	outputs    []typeMember
+	inputs     []typeMember
+	queryParts []queryPart
 }
 
-// SQL returns the SQL ready for execution.
 func (pe *PreparedExpr) SQL() string {
-	return pe.sql
+	return generateSQL(pe.queryParts, nil)
 }
 
 const markerPrefix = "_sqlair_"
@@ -101,6 +100,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 			if err != nil {
 				return nil, err
 			}
+			p.isSlice = true
 			tm = tms[0]
 		default:
 			return nil, fmt.Errorf(`internal error: unknown type: %T`, info)
@@ -116,7 +116,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 
 // prepareOutput checks that the output expressions correspond to known types.
 // It then checks they are formatted correctly and finally generates the columns for the query.
-func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnName, typeMembers []typeMember, err error) {
+func prepareOutput(ti typeNameToInfo, p *outputPart) (typeMembers []typeMember, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("output expression: %s: %s", err, p.raw)
@@ -158,49 +158,49 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnName, type
 
 		for _, t := range p.targetTypes {
 			if info, err = fetchInfo(t.name); err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			if t.member == "*" {
 				// Generate asterisk columns.
 				allMembers, err := info.getAllMembers()
 				if err != nil {
-					return nil, nil, err
+					return nil, err
 				}
 				typeMembers = append(typeMembers, allMembers...)
 				for _, tm := range allMembers {
-					outCols = append(outCols, columnName{pref, tm.memberName()})
+					p.sqlColumns = append(p.sqlColumns, columnName{pref, tm.memberName()})
 				}
 			} else {
 				// Generate explicit columns.
 				tm, err := info.typeMember(t.member)
 				if err != nil {
-					return nil, nil, err
+					return nil, err
 				}
 				typeMembers = append(typeMembers, tm)
-				outCols = append(outCols, columnName{pref, t.member})
+				p.sqlColumns = append(p.sqlColumns, columnName{pref, t.member})
 			}
 		}
-		return outCols, typeMembers, nil
+		return typeMembers, nil
 	} else if numColumns > 1 && starColumns > 0 {
-		return nil, nil, fmt.Errorf("invalid asterisk in columns")
+		return nil, fmt.Errorf("invalid asterisk in columns")
 	}
 
 	// Case 2: Explicit columns, single asterisk type e.g. "(col1, t.col2) AS &P.*".
 	if starTypes == 1 && numTypes == 1 {
 		if info, err = fetchInfo(p.targetTypes[0].name); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		for _, c := range p.sourceColumns {
 			tm, err := info.typeMember(c.name)
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			typeMembers = append(typeMembers, tm)
-			outCols = append(outCols, c)
+			p.sqlColumns = append(p.sqlColumns, c)
 		}
-		return outCols, typeMembers, nil
+		return typeMembers, nil
 	} else if starTypes > 0 && numTypes > 1 {
-		return nil, nil, fmt.Errorf("invalid asterisk in types")
+		return nil, fmt.Errorf("invalid asterisk in types")
 	}
 
 	// Case 3: Explicit columns and types e.g. "(col1, col2) AS (&P.name, &P.id)".
@@ -208,20 +208,20 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnName, type
 		for i, c := range p.sourceColumns {
 			t := p.targetTypes[i]
 			if info, err = fetchInfo(t.name); err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			tm, err := info.typeMember(t.member)
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			typeMembers = append(typeMembers, tm)
-			outCols = append(outCols, c)
+			p.sqlColumns = append(p.sqlColumns, c)
 		}
 	} else {
-		return nil, nil, fmt.Errorf("mismatched number of columns and target types")
+		return nil, fmt.Errorf("mismatched number of columns and target types")
 	}
 
-	return outCols, typeMembers, nil
+	return typeMembers, nil
 }
 
 type typeNameToInfo map[string]typeInfo
@@ -268,14 +268,8 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 		}
 	}
 
-	var sql bytes.Buffer
-
-	var inCount int
-	var outCount int
-
 	var outputs = make([]typeMember, 0)
 	var inputs = make([]typeMember, 0)
-
 	var typeMemberPresent = make(map[typeMember]bool)
 
 	// Check and expand each query part.
@@ -286,26 +280,9 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			if err != nil {
 				return nil, err
 			}
-			switch tm := tm.(type) {
-			case *structField, *mapKey:
-				sql.WriteString("@sqlair_")
-				sql.WriteString(strconv.Itoa(inCount))
-				inCount++
-			case *sliceType:
-				for j := 0; j < maxSliceLen; j++ {
-					sql.WriteString("@sqlair_")
-					sql.WriteString(strconv.Itoa(inCount))
-					if j < maxSliceLen-1 {
-						sql.WriteString(", ")
-					}
-					inCount++
-				}
-			default:
-				return nil, fmt.Errorf("internal error: invalid type: %T", tm)
-			}
 			inputs = append(inputs, tm)
 		case *outputPart:
-			outCols, typeMembers, err := prepareOutput(ti, p)
+			typeMembers, err := prepareOutput(ti, p)
 			if err != nil {
 				return nil, err
 			}
@@ -316,23 +293,58 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 				}
 				typeMemberPresent[tm] = true
 			}
-
-			for i, c := range outCols {
-				sql.WriteString(c.String())
-				sql.WriteString(" AS ")
-				sql.WriteString(markerName(outCount))
-				if i != len(outCols)-1 {
-					sql.WriteString(", ")
-				}
-				outCount++
-			}
 			outputs = append(outputs, typeMembers...)
 		case *bypassPart:
-			sql.WriteString(p.chunk)
 		default:
 			return nil, fmt.Errorf("internal error: unknown query part type %T", part)
 		}
 	}
+	return &PreparedExpr{inputs: inputs, outputs: outputs, queryParts: pe.queryParts}, nil
+}
 
-	return &PreparedExpr{inputs: inputs, outputs: outputs, sql: sql.String()}, nil
+func generateSQL(queryParts []queryPart, sliceLens []int) string {
+	var sql bytes.Buffer
+	var inCount int
+	var outCount int
+	var sliceCount int
+
+	for _, part := range queryParts {
+		switch p := part.(type) {
+		case *inputPart:
+			if p.isSlice {
+				length := maxSliceLen
+				if sliceLens != nil && sliceLens[sliceCount] > maxSliceLen {
+					length = sliceLens[sliceCount]
+				}
+				for i := 0; i < length; i++ {
+					sql.WriteString("@sqlair_")
+					sql.WriteString(strconv.Itoa(inCount))
+					if i < length-1 {
+						sql.WriteString(", ")
+					}
+					inCount++
+					sliceCount++
+				}
+			} else {
+				sql.WriteString("@sqlair_")
+				sql.WriteString(strconv.Itoa(inCount))
+				inCount++
+			}
+		case *outputPart:
+			for i, c := range p.sqlColumns {
+				sql.WriteString(c.String())
+				sql.WriteString(" AS ")
+				sql.WriteString(markerName(outCount))
+				if i != len(p.sqlColumns)-1 {
+					sql.WriteString(", ")
+				}
+				outCount++
+			}
+		case *bypassPart:
+			sql.WriteString(p.chunk)
+		default:
+			panic(fmt.Sprintf("internal error: unknown query part type %T", part))
+		}
+	}
+	return sql.String()
 }

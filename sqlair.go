@@ -142,6 +142,7 @@ func (db *DB) PlainDB() *sql.DB {
 type Query struct {
 	qe      *expr.QueryExpr
 	sqlstmt *sql.Stmt
+	isTemp  bool
 	ctx     context.Context
 	err     error
 	tx      *TX // tx is only set for queries in transactions.
@@ -165,17 +166,24 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		ctx = context.Background()
 	}
 
-	sqlstmt, err := db.prepareStmt(ctx, db.sqldb, s)
-	if err != nil {
-		return &Query{ctx: ctx, err: err}
-	}
-
 	qe, err := s.pe.Query(inputArgs...)
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
 
-	return &Query{sqlstmt: sqlstmt, qe: qe, ctx: ctx, err: nil}
+	var sqlstmt *sql.Stmt
+	isTemp := false
+	if tq := qe.TempSQL(); tq != "" {
+		sqlstmt, err = db.sqldb.PrepareContext(ctx, tq)
+		isTemp = true
+	} else {
+		sqlstmt, err = db.prepareStmt(ctx, db.sqldb, s)
+	}
+	if err != nil {
+		return &Query{ctx: ctx, err: err}
+	}
+
+	return &Query{sqlstmt: sqlstmt, isTemp: isTemp, qe: qe, ctx: ctx, err: nil}
 }
 
 // prepareSubstrate is an object that queries can be prepared on, e.g. a sql.DB
@@ -277,6 +285,9 @@ func (q *Query) Iter() *Iterator {
 	sqlstmt := q.sqlstmt
 	if q.tx != nil {
 		sqlstmt = q.tx.sqltx.Stmt(q.sqlstmt)
+		close = sqlstmt.Close
+	}
+	if q.isTemp {
 		close = sqlstmt.Close
 	}
 	if q.qe.HasOutputs() {
@@ -559,15 +570,22 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: ErrTXDone}
 	}
 
-	sqlstmt, err := tx.db.prepareStmt(ctx, tx.sqlconn, s)
-	if err != nil {
-		return &Query{ctx: ctx, err: err}
-	}
-
 	qe, err := s.pe.Query(inputArgs...)
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
 
-	return &Query{sqlstmt: sqlstmt, qe: qe, tx: tx, ctx: ctx, err: nil}
+	var sqlstmt *sql.Stmt
+	isTemp := false
+	if tq := qe.TempSQL(); tq != "" {
+		sqlstmt, err = tx.sqlconn.PrepareContext(ctx, tq)
+		isTemp = true
+	} else {
+		sqlstmt, err = tx.db.prepareStmt(ctx, tx.sqlconn, s)
+	}
+	if err != nil {
+		return &Query{ctx: ctx, err: err}
+	}
+
+	return &Query{sqlstmt: sqlstmt, isTemp: isTemp, qe: qe, tx: tx, ctx: ctx, err: nil}
 }

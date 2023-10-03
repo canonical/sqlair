@@ -113,7 +113,7 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 	}
 	type T []int
 	type U []string
-	type V [7]int
+	type V [10]int
 	var tests = []struct {
 		summary  string
 		query    string

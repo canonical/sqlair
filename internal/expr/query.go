@@ -12,14 +12,24 @@ func (qe *QueryExpr) QueryArgs() []any {
 	return qe.args
 }
 
+func (qe *QueryExpr) TempSQL() string {
+	sql := ""
+	if qe.longSliceQuery {
+		sql = generateSQL(qe.queryParts, qe.sliceLens)
+	}
+	return sql
+}
+
 func (qe *QueryExpr) HasOutputs() bool {
 	return len(qe.outputs) > 0
 }
 
 type QueryExpr struct {
-	sql     string
-	args    []any
-	outputs []typeMember
+	args           []any
+	outputs        []typeMember
+	queryParts     []queryPart
+	sliceLens      []int
+	longSliceQuery bool
 }
 
 // Query returns a query expression ready for execution, using the provided values to
@@ -74,6 +84,8 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	// Query parameteres.
 	qargs := []any{}
 	argCount := 0
+	longSliceQuery := false
+	sliceLens := []int{}
 	for _, typeMember := range pe.inputs {
 		outerType := typeMember.outerType()
 		v, ok := typeValue[outerType]
@@ -103,10 +115,9 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 				return nil, fmt.Errorf(`slice arg with type %q has length 0`, tm.sliceType.Name())
 			}
 			if sliceLen > maxSliceLen {
-				return nil, fmt.Errorf(
-					"slice %q longer than max length for IN clause (%d > %d)",
-					tm.sliceType.Name(), v.Len(), maxSliceLen)
+				longSliceQuery = true
 			}
+			sliceLens = append(sliceLens, sliceLen)
 			i := 0
 			for i = 0; i < v.Len(); i++ {
 				sv := v.Index(i)
@@ -121,8 +132,10 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		default:
 			return nil, fmt.Errorf(`internal error: unknown type: %T`, tm)
 		}
+
 	}
-	return &QueryExpr{outputs: pe.outputs, sql: pe.sql, args: qargs}, nil
+	qe := &QueryExpr{outputs: pe.outputs, args: qargs, queryParts: pe.queryParts, sliceLens: sliceLens, longSliceQuery: longSliceQuery}
+	return qe, nil
 }
 
 var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()

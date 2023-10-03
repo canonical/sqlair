@@ -42,6 +42,7 @@ func (cn columnName) String() string {
 // while performing the query.
 type inputPart struct {
 	sourceType typeName
+	isSlice    bool
 	raw        string
 }
 
@@ -51,10 +52,23 @@ func (p *inputPart) String() string {
 
 func (p *inputPart) part() {}
 
+type inPart struct {
+	types       []typeName
+	typeIsSlice []bool
+	raw         string
+}
+
+func (p *inPart) String() string {
+	return fmt.Sprintf("In[%+v]", p.types)
+}
+
+func (p *inPart) part() {}
+
 // outputPart represents a named target output variable in the SQL expression,
 // as well as the source table and column where it will be read from.
 type outputPart struct {
 	sourceColumns []columnName
+	sqlColumns    []columnName
 	targetTypes   []typeName
 	raw           string
 }
