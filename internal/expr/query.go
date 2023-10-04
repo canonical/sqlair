@@ -17,11 +17,8 @@ func (qe *QueryExpr) HasOutputs() bool {
 }
 
 type QueryExpr struct {
-	args           []any
-	outputs        []typeMember
-	queryParts     []queryPart
-	sliceLens      []int
-	longSliceQuery bool
+	args    []any
+	outputs []typeMember
 }
 
 // Query returns a query expression ready for execution, using the provided values to
