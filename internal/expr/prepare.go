@@ -15,13 +15,10 @@ const defaultSliceLen = 8
 
 // PreparedExpr contains an SQL expression that is ready for execution.
 type PreparedExpr struct {
-	outputs    []typeMember
-	inputs     []typeMember
-	queryParts []queryPart
-}
-
-func (pe *PreparedExpr) SQL() string {
-	return generateSQL(pe.queryParts, nil)
+	outputs     []typeMember
+	inputs      []typeMember
+	queryParts  []queryPart
+	partOutCols [][]columnName
 }
 
 const markerPrefix = "_sqlair_"
@@ -117,7 +114,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 
 // prepareOutput checks that the output expressions correspond to known types.
 // It then checks they are formatted correctly and finally generates the columns for the query.
-func prepareOutput(ti typeNameToInfo, p *outputPart) (typeMembers []typeMember, err error) {
+func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnName, typeMembers []typeMember, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("output expression: %s: %s", err, p.raw)
@@ -159,49 +156,49 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (typeMembers []typeMember, 
 
 		for _, t := range p.targetTypes {
 			if info, err = fetchInfo(t.name); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			if t.member == "*" {
 				// Generate asterisk columns.
 				allMembers, err := info.getAllMembers()
 				if err != nil {
-					return nil, err
+					return nil, nil, err
 				}
 				typeMembers = append(typeMembers, allMembers...)
 				for _, tm := range allMembers {
-					p.preparedColumns = append(p.preparedColumns, columnName{pref, tm.memberName()})
+					outCols = append(outCols, columnName{pref, tm.memberName()})
 				}
 			} else {
 				// Generate explicit columns.
 				tm, err := info.typeMember(t.member)
 				if err != nil {
-					return nil, err
+					return nil, nil, err
 				}
 				typeMembers = append(typeMembers, tm)
-				p.preparedColumns = append(p.preparedColumns, columnName{pref, t.member})
+				outCols = append(outCols, columnName{pref, t.member})
 			}
 		}
-		return typeMembers, nil
+		return outCols, typeMembers, nil
 	} else if numColumns > 1 && starColumns > 0 {
-		return nil, fmt.Errorf("invalid asterisk in columns")
+		return nil, nil, fmt.Errorf("invalid asterisk in columns")
 	}
 
 	// Case 2: Explicit columns, single asterisk type e.g. "(col1, t.col2) AS &P.*".
 	if starTypes == 1 && numTypes == 1 {
 		if info, err = fetchInfo(p.targetTypes[0].name); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		for _, c := range p.sourceColumns {
 			tm, err := info.typeMember(c.name)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			typeMembers = append(typeMembers, tm)
-			p.preparedColumns = append(p.preparedColumns, c)
+			outCols = append(outCols, c)
 		}
-		return typeMembers, nil
+		return outCols, typeMembers, nil
 	} else if starTypes > 0 && numTypes > 1 {
-		return nil, fmt.Errorf("invalid asterisk in types")
+		return nil, nil, fmt.Errorf("invalid asterisk in types")
 	}
 
 	// Case 3: Explicit columns and types e.g. "(col1, col2) AS (&P.name, &P.id)".
@@ -209,20 +206,20 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (typeMembers []typeMember, 
 		for i, c := range p.sourceColumns {
 			t := p.targetTypes[i]
 			if info, err = fetchInfo(t.name); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			tm, err := info.typeMember(t.member)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			typeMembers = append(typeMembers, tm)
-			p.preparedColumns = append(p.preparedColumns, c)
+			outCols = append(outCols, c)
 		}
 	} else {
-		return nil, fmt.Errorf("mismatched number of columns and target types")
+		return nil, nil, fmt.Errorf("mismatched number of columns and target types")
 	}
 
-	return typeMembers, nil
+	return outCols, typeMembers, nil
 }
 
 type typeNameToInfo map[string]typeInfo
@@ -272,6 +269,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	var outputs = make([]typeMember, 0)
 	var inputs = make([]typeMember, 0)
 	var typeMemberPresent = make(map[typeMember]bool)
+	var partOutCols = make([][]columnName, 0)
 
 	// Check and expand each query part.
 	for _, part := range pe.queryParts {
@@ -283,7 +281,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			}
 			inputs = append(inputs, tm)
 		case *outputPart:
-			typeMembers, err := prepareOutput(ti, p)
+			outCols, typeMembers, err := prepareOutput(ti, p)
 			if err != nil {
 				return nil, err
 			}
@@ -295,32 +293,44 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 				typeMemberPresent[tm] = true
 			}
 			outputs = append(outputs, typeMembers...)
+			partOutCols = append(partOutCols, outCols)
 		case *bypassPart:
 		default:
 			return nil, fmt.Errorf("internal error: unknown query part type %T", part)
 		}
 	}
-	return &PreparedExpr{inputs: inputs, outputs: outputs, queryParts: pe.queryParts}, nil
+	return &PreparedExpr{inputs: inputs, outputs: outputs, queryParts: pe.queryParts, partOutCols: partOutCols}, nil
 }
 
-func generateSQL(queryParts []queryPart, sliceLens []int) string {
+// StmtCriterion contains information that specifies the different SQL strings
+// that can be generated from a single SQLair prepared statement.
+type StmtCriterion struct {
+	enabled   bool
+	sliceLens []int
+}
+
+func (sc StmtCriterion) Enabled() bool {
+	return sc.enabled
+}
+
+func (pe *PreparedExpr) SQL(sc *StmtCriterion) string {
 	var sql bytes.Buffer
 	var inCount int
 	var outCount int
+	var outputPartCount int
 	var sliceCount int
 
-	for _, part := range queryParts {
+	for _, part := range pe.queryParts {
 		switch p := part.(type) {
 		case *inputPart:
 			if p.isSlice {
-				length := defaultSliceLen
-				if sliceLens != nil && sliceLens[sliceCount] > defaultSliceLen {
-					length = sliceLens[sliceCount]
+				if !sc.enabled {
+					panic("internal error: StmtCriterion must be enabled for statement containing slice")
 				}
-				for i := 0; i < length; i++ {
+				for i := 0; i < sc.sliceLens[sliceCount]; i++ {
 					sql.WriteString("@sqlair_")
 					sql.WriteString(strconv.Itoa(inCount))
-					if i < length-1 {
+					if i < sc.sliceLens[sliceCount]-1 {
 						sql.WriteString(", ")
 					}
 					inCount++
@@ -332,15 +342,16 @@ func generateSQL(queryParts []queryPart, sliceLens []int) string {
 				inCount++
 			}
 		case *outputPart:
-			for i, c := range p.preparedColumns {
+			for i, c := range pe.partOutCols[outputPartCount] {
 				sql.WriteString(c.String())
 				sql.WriteString(" AS ")
 				sql.WriteString(markerName(outCount))
-				if i != len(p.preparedColumns)-1 {
+				if i != len(pe.partOutCols[outputPartCount])-1 {
 					sql.WriteString(", ")
 				}
 				outCount++
 			}
+			outputPartCount++
 		case *bypassPart:
 			sql.WriteString(p.chunk)
 		default:
