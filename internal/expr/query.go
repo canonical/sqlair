@@ -12,14 +12,6 @@ func (qe *QueryExpr) QueryArgs() []any {
 	return qe.args
 }
 
-func (qe *QueryExpr) TempSQL() string {
-	sql := ""
-	if qe.longSliceQuery {
-		sql = generateSQL(qe.queryParts, qe.sliceLens)
-	}
-	return sql
-}
-
 func (qe *QueryExpr) HasOutputs() bool {
 	return len(qe.outputs) > 0
 }
@@ -39,7 +31,7 @@ type QueryExpr struct {
 //	type Person struct {
 //	        Name string `db:"fullname"`
 //	}
-func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
+func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, tempStmt string, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("invalid input parameter: %s", err)
@@ -56,17 +48,17 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	for _, arg := range args {
 		v := reflect.ValueOf(arg)
 		if v.Kind() == reflect.Invalid || (v.Kind() == reflect.Pointer && v.IsNil()) {
-			return nil, fmt.Errorf("need valid value, got nil")
+			return nil, "", fmt.Errorf("need valid value, got nil")
 		}
 		v = reflect.Indirect(v)
 		t := v.Type()
 		switch v.Kind() {
 		case reflect.Struct, reflect.Map, reflect.Slice, reflect.Array:
 		default:
-			return nil, fmt.Errorf("unsupported type: %s", t.Kind())
+			return nil, "", fmt.Errorf("unsupported type: %s", t.Kind())
 		}
 		if _, ok := typeValue[t]; ok {
-			return nil, fmt.Errorf("type %q provided more than once", t.Name())
+			return nil, "", fmt.Errorf("type %q provided more than once", t.Name())
 		}
 		typeValue[t] = v
 		typeNames = append(typeNames, t.Name())
@@ -74,26 +66,26 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 			// Check if we have a type with the same name from a different package.
 			for _, typeMember := range pe.inputs {
 				if t.Name() == typeMember.outerType().Name() {
-					return nil, fmt.Errorf("type %s not passed as a parameter, have %s", typeMember.outerType().String(), t.String())
+					return nil, "", fmt.Errorf("type %s not passed as a parameter, have %s", typeMember.outerType().String(), t.String())
 				}
 			}
-			return nil, fmt.Errorf("%s not referenced in query", t.Name())
+			return nil, "", fmt.Errorf("%s not referenced in query", t.Name())
 		}
 	}
 
 	// Query parameteres.
 	qargs := []any{}
 	argCount := 0
-	longSliceQuery := false
+	needTempStmt := false
 	sliceLens := []int{}
 	for _, typeMember := range pe.inputs {
 		outerType := typeMember.outerType()
 		v, ok := typeValue[outerType]
 		if !ok {
 			if len(typeNames) == 0 {
-				return nil, fmt.Errorf(`type %q not passed as a parameter`, outerType.Name())
+				return nil, "", fmt.Errorf(`type %q not passed as a parameter`, outerType.Name())
 			} else {
-				return nil, fmt.Errorf(`type %q not passed as a parameter, have: %s`, outerType.Name(), strings.Join(typeNames, ", "))
+				return nil, "", fmt.Errorf(`type %q not passed as a parameter, have: %s`, outerType.Name(), strings.Join(typeNames, ", "))
 			}
 		}
 		var val reflect.Value
@@ -105,17 +97,17 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		case *mapKey:
 			val = v.MapIndex(reflect.ValueOf(tm.name))
 			if val.Kind() == reflect.Invalid {
-				return nil, fmt.Errorf(`map %q does not contain key %q`, outerType.Name(), tm.name)
+				return nil, "", fmt.Errorf(`map %q does not contain key %q`, outerType.Name(), tm.name)
 			}
 			qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(argCount), val.Interface()))
 			argCount++
 		case *sliceType:
 			sliceLen := v.Len()
 			if sliceLen == 0 {
-				return nil, fmt.Errorf(`slice arg with type %q has length 0`, tm.sliceType.Name())
+				return nil, "", fmt.Errorf(`slice arg with type %q has length 0`, tm.sliceType.Name())
 			}
 			if sliceLen > defaultSliceLen {
-				longSliceQuery = true
+				needTempStmt = true
 			}
 			sliceLens = append(sliceLens, sliceLen)
 			i := 0
@@ -130,12 +122,15 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 				argCount++
 			}
 		default:
-			return nil, fmt.Errorf(`internal error: unknown type: %T`, tm)
+			return nil, "", fmt.Errorf(`internal error: unknown type: %T`, tm)
 		}
 
 	}
-	qe := &QueryExpr{outputs: pe.outputs, args: qargs, queryParts: pe.queryParts, sliceLens: sliceLens, longSliceQuery: longSliceQuery}
-	return qe, nil
+
+	if needTempStmt {
+		tempStmt = generateSQL(pe.queryParts, sliceLens)
+	}
+	return &QueryExpr{outputs: pe.outputs, args: qargs}, tempStmt, nil
 }
 
 var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()

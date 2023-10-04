@@ -166,15 +166,15 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		ctx = context.Background()
 	}
 
-	qe, err := s.pe.Query(inputArgs...)
+	qe, tempStmt, err := s.pe.Query(inputArgs...)
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
 
 	var sqlstmt *sql.Stmt
 	isTemp := false
-	if tq := qe.TempSQL(); tq != "" {
-		sqlstmt, err = db.sqldb.PrepareContext(ctx, tq)
+	if tempStmt != "" {
+		sqlstmt, err = db.sqldb.PrepareContext(ctx, tempStmt)
 		isTemp = true
 	} else {
 		sqlstmt, err = db.prepareStmt(ctx, db.sqldb, s)
@@ -570,15 +570,15 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: ErrTXDone}
 	}
 
-	qe, err := s.pe.Query(inputArgs...)
+	qe, tempStmt, err := s.pe.Query(inputArgs...)
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
 
 	var sqlstmt *sql.Stmt
 	isTemp := false
-	if tq := qe.TempSQL(); tq != "" {
-		sqlstmt, err = tx.sqlconn.PrepareContext(ctx, tq)
+	if tempStmt != "" {
+		sqlstmt, err = tx.sqlconn.PrepareContext(ctx, tempStmt)
 		isTemp = true
 	} else {
 		sqlstmt, err = tx.db.prepareStmt(ctx, tx.sqlconn, s)

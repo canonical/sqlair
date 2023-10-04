@@ -626,46 +626,53 @@ func (s *ExprSuite) TestValidQuery(c *C) {
 		prepareArgs []any
 		queryArgs   []any
 		queryValues []any
+		tempStmt    string
 	}{{
-		"SELECT * AS &Address.* FROM t WHERE x = $Person.name",
-		[]any{Address{}, Person{}},
-		[]any{Person{Fullname: "Jimany Johnson"}},
-		[]any{sql.Named("sqlair_0", "Jimany Johnson")},
+		query:       "SELECT * AS &Address.* FROM t WHERE x = $Person.name",
+		prepareArgs: []any{Address{}, Person{}},
+		queryArgs:   []any{Person{Fullname: "Jimany Johnson"}},
+		queryValues: []any{sql.Named("sqlair_0", "Jimany Johnson")},
 	}, {
-		"SELECT foo FROM t WHERE x = $Address.street, y = $Person.id",
-		[]any{Person{}, Address{}},
-		[]any{Person{ID: 666}, Address{Street: "Highway to Hell"}},
-		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
+		query:       "SELECT foo FROM t WHERE x = $Address.street, y = $Person.id",
+		prepareArgs: []any{Person{}, Address{}},
+		queryArgs:   []any{Person{ID: 666}, Address{Street: "Highway to Hell"}},
+		queryValues: []any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
 	}, {
-		"SELECT foo FROM t WHERE x = $Address.street, y = $Person.id",
-		[]any{Person{}, Address{}},
-		[]any{&Person{ID: 666}, &Address{Street: "Highway to Hell"}},
-		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
+		query:       "SELECT foo FROM t WHERE x = $Address.street, y = $Person.id",
+		prepareArgs: []any{Person{}, Address{}},
+		queryArgs:   []any{&Person{ID: 666}, &Address{Street: "Highway to Hell"}},
+		queryValues: []any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
 	}, {
-		"SELECT * AS &Address.* FROM t WHERE x = $M.fullname",
-		[]any{Address{}, sqlair.M{}},
-		[]any{sqlair.M{"fullname": "Jimany Johnson"}},
-		[]any{sql.Named("sqlair_0", "Jimany Johnson")},
+		query:       "SELECT * AS &Address.* FROM t WHERE x = $M.fullname",
+		prepareArgs: []any{Address{}, sqlair.M{}},
+		queryArgs:   []any{sqlair.M{"fullname": "Jimany Johnson"}},
+		queryValues: []any{sql.Named("sqlair_0", "Jimany Johnson")},
 	}, {
-		"SELECT foo FROM t WHERE x = $M.street, y = $Person.id",
-		[]any{Person{}, sqlair.M{}},
-		[]any{Person{ID: 666}, sqlair.M{"street": "Highway to Hell"}},
-		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
+		query:       "SELECT foo FROM t WHERE x = $M.street, y = $Person.id",
+		prepareArgs: []any{Person{}, sqlair.M{}},
+		queryArgs:   []any{Person{ID: 666}, sqlair.M{"street": "Highway to Hell"}},
+		queryValues: []any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
 	}, {
-		"SELECT * AS &Address.* FROM t WHERE x = $StringMap.fullname",
-		[]any{Address{}, StringMap{}},
-		[]any{StringMap{"fullname": "Jimany Johnson"}},
-		[]any{sql.Named("sqlair_0", "Jimany Johnson")},
+		query:       "SELECT * AS &Address.* FROM t WHERE x = $StringMap.fullname",
+		prepareArgs: []any{Address{}, StringMap{}},
+		queryArgs:   []any{StringMap{"fullname": "Jimany Johnson"}},
+		queryValues: []any{sql.Named("sqlair_0", "Jimany Johnson")},
 	}, {
-		"SELECT foo FROM t WHERE x = $StringMap.street, y = $Person.id",
-		[]any{Person{}, StringMap{}},
-		[]any{Person{ID: 666}, StringMap{"street": "Highway to Hell"}},
-		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
+		query:       "SELECT foo FROM t WHERE x = $StringMap.street, y = $Person.id",
+		prepareArgs: []any{Person{}, StringMap{}},
+		queryArgs:   []any{Person{ID: 666}, StringMap{"street": "Highway to Hell"}},
+		queryValues: []any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
 	}, {
-		"SELECT name FROM person WHERE id IN ($S.*)",
-		[]any{sqlair.S{}},
-		[]any{sqlair.S{1, 2, 3, 4, 5, 6}},
-		[]any{sql.Named("sqlair_0", 1), sql.Named("sqlair_1", 2), sql.Named("sqlair_2", 3), sql.Named("sqlair_3", 4), sql.Named("sqlair_4", 5), sql.Named("sqlair_5", 6), sql.Named("sqlair_6", nil), sql.Named("sqlair_7", nil)},
+		query:       "SELECT name FROM person WHERE id IN ($S.*)",
+		prepareArgs: []any{sqlair.S{}},
+		queryArgs:   []any{sqlair.S{1, 2, 3, 4, 5, 6}},
+		queryValues: []any{sql.Named("sqlair_0", 1), sql.Named("sqlair_1", 2), sql.Named("sqlair_2", 3), sql.Named("sqlair_3", 4), sql.Named("sqlair_4", 5), sql.Named("sqlair_5", 6), sql.Named("sqlair_6", nil), sql.Named("sqlair_7", nil)},
+	}, {
+		query:       "SELECT name FROM person WHERE id IN ($S.*)",
+		prepareArgs: []any{sqlair.S{}},
+		queryArgs:   []any{sqlair.S{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}},
+		queryValues: []any{sql.Named("sqlair_0", 1), sql.Named("sqlair_1", 2), sql.Named("sqlair_2", 3), sql.Named("sqlair_3", 4), sql.Named("sqlair_4", 5), sql.Named("sqlair_5", 6), sql.Named("sqlair_6", 7), sql.Named("sqlair_7", 8), sql.Named("sqlair_8", 9), sql.Named("sqlair_9", 10)},
+		tempStmt:    "SELECT name FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7, @sqlair_8, @sqlair_9)",
 	}}
 	for _, t := range tests {
 		parser := expr.NewParser()
@@ -679,11 +686,11 @@ func (s *ExprSuite) TestValidQuery(c *C) {
 			c.Fatal(err)
 		}
 
-		query, err := preparedExpr.Query(t.queryArgs...)
+		query, tempStmt, err := preparedExpr.Query(t.queryArgs...)
 		if err != nil {
 			c.Fatal(err)
 		}
-
+		c.Assert(tempStmt, Equals, t.tempStmt)
 		c.Assert(query.QueryArgs(), DeepEquals, t.queryValues)
 	}
 }
@@ -786,7 +793,7 @@ func (s *ExprSuite) TestQueryError(c *C) {
 			c.Fatal(err)
 		}
 
-		_, err = preparedExpr.Query(t.queryArgs...)
+		_, _, err = preparedExpr.Query(t.queryArgs...)
 		c.Assert(err, ErrorMatches, t.err,
 			Commentf("test %d failed:\ninput: %s", i, t.query))
 	}

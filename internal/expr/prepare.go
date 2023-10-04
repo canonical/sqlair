@@ -9,7 +9,8 @@ import (
 	"strings"
 )
 
-// defaultSliceLen is the maximum size of an argument slice allowed in an IN statement
+// defaultSliceLen is the maximum length an argument slice can be without
+// having to reprepare the query.
 const defaultSliceLen = 8
 
 // PreparedExpr contains an SQL expression that is ready for execution.
