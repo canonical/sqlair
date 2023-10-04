@@ -668,11 +668,11 @@ func (s *ExprSuite) TestValidQuery(c *C) {
 		queryArgs:   []any{sqlair.S{1, 2, 3, 4, 5, 6}},
 		queryValues: []any{sql.Named("sqlair_0", 1), sql.Named("sqlair_1", 2), sql.Named("sqlair_2", 3), sql.Named("sqlair_3", 4), sql.Named("sqlair_4", 5), sql.Named("sqlair_5", 6), sql.Named("sqlair_6", nil), sql.Named("sqlair_7", nil)},
 	}, {
-		query:       "SELECT name FROM person WHERE id IN ($S.*)",
-		prepareArgs: []any{sqlair.S{}},
-		queryArgs:   []any{sqlair.S{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}},
-		queryValues: []any{sql.Named("sqlair_0", 1), sql.Named("sqlair_1", 2), sql.Named("sqlair_2", 3), sql.Named("sqlair_3", 4), sql.Named("sqlair_4", 5), sql.Named("sqlair_5", 6), sql.Named("sqlair_6", 7), sql.Named("sqlair_7", 8), sql.Named("sqlair_8", 9), sql.Named("sqlair_9", 10)},
-		tempStmt:    "SELECT name FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7, @sqlair_8, @sqlair_9)",
+		query:       "SELECT name FROM person WHERE id IN ($S.*, $IntSlice.*)",
+		prepareArgs: []any{sqlair.S{}, IntSlice{}},
+		queryArgs:   []any{sqlair.S{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, IntSlice{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}},
+		queryValues: []any{sql.Named("sqlair_0", 1), sql.Named("sqlair_1", 2), sql.Named("sqlair_2", 3), sql.Named("sqlair_3", 4), sql.Named("sqlair_4", 5), sql.Named("sqlair_5", 6), sql.Named("sqlair_6", 7), sql.Named("sqlair_7", 8), sql.Named("sqlair_8", 9), sql.Named("sqlair_9", 10), sql.Named("sqlair_10", 1), sql.Named("sqlair_11", 2), sql.Named("sqlair_12", 3), sql.Named("sqlair_13", 4), sql.Named("sqlair_14", 5), sql.Named("sqlair_15", 6), sql.Named("sqlair_16", 7), sql.Named("sqlair_17", 8), sql.Named("sqlair_18", 9), sql.Named("sqlair_19", 10)},
+		tempStmt:    "SELECT name FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7, @sqlair_8, @sqlair_9, @sqlair_10, @sqlair_11, @sqlair_12, @sqlair_13, @sqlair_14, @sqlair_15, @sqlair_16, @sqlair_17, @sqlair_18, @sqlair_19)",
 	}}
 	for _, t := range tests {
 		parser := expr.NewParser()

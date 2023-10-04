@@ -324,8 +324,8 @@ func generateSQL(queryParts []queryPart, sliceLens []int) string {
 						sql.WriteString(", ")
 					}
 					inCount++
-					sliceCount++
 				}
+				sliceCount++
 			} else {
 				sql.WriteString("@sqlair_")
 				sql.WriteString(strconv.Itoa(inCount))
