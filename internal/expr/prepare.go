@@ -68,6 +68,14 @@ func starCountTypes(types []typeName) int {
 	return s
 }
 
+func typeMissingError(missingType string, existingTypes []string) error {
+	if len(existingTypes) == 0 {
+		return fmt.Errorf(`parameter with type %q missing`, missingType)
+	}
+	// "%s" is used instead of %q to correctly print double quotes within the joined string.
+	return fmt.Errorf(`parameter with type %q missing (have "%s")`, missingType, strings.Join(existingTypes, `", "`))
+}
+
 // prepareInput checks that the input expression corresponds to a known type.
 func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 	defer func() {
@@ -75,15 +83,10 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 			err = fmt.Errorf("input expression: %s: %s", err, p.raw)
 		}
 	}()
+
 	info, ok := ti[p.sourceType.name]
 	if !ok {
-		ts := getKeys(ti)
-		if len(ts) == 0 {
-			return nil, fmt.Errorf(`type %q not passed as a parameter`, p.sourceType.name)
-		} else {
-			// "%s" is used instead of %q to correctly print double quotes within the joined string.
-			return nil, fmt.Errorf(`type %q not passed as a parameter (have "%s")`, p.sourceType.name, strings.Join(ts, `", "`))
-		}
+		return nil, typeMissingError(p.sourceType.name, getKeys(ti))
 	}
 	if p.sourceType.member == "*" {
 		switch info := info.(type) {
@@ -122,26 +125,6 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnName, type
 	starTypes := starCountTypes(p.targetTypes)
 	starColumns := starCountColumns(p.sourceColumns)
 
-	// Check target struct type and its tags are valid.
-	var info typeInfo
-
-	fetchInfo := func(typeName string) (typeInfo, error) {
-		info, ok := ti[typeName]
-		if !ok {
-			ts := getKeys(ti)
-			if len(ts) == 0 {
-				return nil, fmt.Errorf(`type %q not passed as a parameter`, typeName)
-			} else {
-				// "%s" is used instead of %q to correctly print double quotes within the joined string.
-				return nil, fmt.Errorf(`type %q not passed as a parameter (have "%s")`, typeName, strings.Join(ts, `", "`))
-			}
-		}
-		if _, ok = info.(*sliceInfo); ok {
-			return nil, fmt.Errorf(`cannot use slice type %q in output expression`, info.typ().Name())
-		}
-		return info, nil
-	}
-
 	// Case 1: Generated columns e.g. "* AS (&P.*, &A.id)" or "&P.*".
 	if numColumns == 0 || (numColumns == 1 && starColumns == 1) {
 		pref := ""
@@ -151,8 +134,12 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnName, type
 		}
 
 		for _, t := range p.targetTypes {
-			if info, err = fetchInfo(t.name); err != nil {
-				return nil, nil, err
+			info, ok := ti[t.name]
+			if !ok {
+				return nil, nil, typeMissingError(t.name, getKeys(ti))
+			}
+			if _, ok = info.(*sliceInfo); ok {
+				return nil, nil, fmt.Errorf(`cannot use slice type %q in output expression`, info.typ().Name())
 			}
 			if t.member == "*" {
 				// Generate asterisk columns.
@@ -181,8 +168,12 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnName, type
 
 	// Case 2: Explicit columns, single asterisk type e.g. "(col1, t.col2) AS &P.*".
 	if starTypes == 1 && numTypes == 1 {
-		if info, err = fetchInfo(p.targetTypes[0].name); err != nil {
-			return nil, nil, err
+		info, ok := ti[p.targetTypes[0].name]
+		if !ok {
+			return nil, nil, typeMissingError(p.targetTypes[0].name, getKeys(ti))
+		}
+		if _, ok = info.(*sliceInfo); ok {
+			return nil, nil, fmt.Errorf(`cannot use slice type %q in output expression`, info.typ().Name())
 		}
 		for _, c := range p.sourceColumns {
 			tm, err := info.typeMember(c.name)
@@ -201,8 +192,12 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnName, type
 	if numColumns == numTypes {
 		for i, c := range p.sourceColumns {
 			t := p.targetTypes[i]
-			if info, err = fetchInfo(t.name); err != nil {
-				return nil, nil, err
+			info, ok := ti[t.name]
+			if !ok {
+				return nil, nil, typeMissingError(t.name, getKeys(ti))
+			}
+			if _, ok = info.(*sliceInfo); ok {
+				return nil, nil, fmt.Errorf(`cannot use slice type %q in output expression`, info.typ().Name())
 			}
 			tm, err := info.typeMember(t.member)
 			if err != nil {
