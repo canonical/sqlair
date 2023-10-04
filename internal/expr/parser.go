@@ -6,6 +6,77 @@ import (
 	"strings"
 )
 
+// A QueryPart represents a section of a parsed SQL statement, which forms
+// a complete query when processed together with its surrounding parts, in
+// their correct order.
+type queryPart interface {
+	// String returns the part's representation for debugging purposes.
+	String() string
+
+	// marker method
+	part()
+}
+
+// typeName stores a Go type and a member of it.
+type typeName struct {
+	name, member string
+}
+
+func (tn typeName) String() string {
+	return tn.name + "." + tn.member
+}
+
+// columnName stores a SQL column and optionally its table.
+type columnName struct {
+	table, name string
+}
+
+func (cn columnName) String() string {
+	if cn.table == "" {
+		return cn.name
+	}
+	return cn.table + "." + cn.name
+}
+
+// inputPart represents a named parameter that will be sent to the database
+// while performing the query.
+type inputPart struct {
+	sourceType typeName
+	raw        string
+}
+
+func (p *inputPart) String() string {
+	return fmt.Sprintf("Input[%+v]", p.sourceType)
+}
+
+func (p *inputPart) part() {}
+
+// outputPart represents a named target output variable in the SQL expression,
+// as well as the source table and column where it will be read from.
+type outputPart struct {
+	sourceColumns []columnName
+	targetTypes   []typeName
+	raw           string
+}
+
+func (p *outputPart) String() string {
+	return fmt.Sprintf("Output[%+v %+v]", p.sourceColumns, p.targetTypes)
+}
+
+func (p *outputPart) part() {}
+
+// bypassPart represents a part of the expression that we want to pass to the
+// backend database verbatim.
+type bypassPart struct {
+	chunk string
+}
+
+func (p *bypassPart) String() string {
+	return "Bypass[" + p.chunk + "]"
+}
+
+func (p *bypassPart) part() {}
+
 type Parser struct {
 	input string
 	pos   int
@@ -412,58 +483,58 @@ func (p *Parser) parseIdentifier() (string, bool) {
 // parseColumn parses a column made up of name bytes, optionally dot-prefixed by
 // its table name.
 // parseColumn returns an error so that it can be used with parseList.
-func (p *Parser) parseColumn() (fullName, bool, error) {
+func (p *Parser) parseColumn() (columnName, bool, error) {
 	cp := p.save()
 
 	if id, ok := p.parseIdentifierAsterisk(); ok {
 		if id != "*" && p.skipByte('.') {
 			if idCol, ok := p.parseIdentifierAsterisk(); ok {
-				return fullName{prefix: id, name: idCol}, true, nil
+				return columnName{table: id, name: idCol}, true, nil
 			}
 		} else {
 			// A column name specified without a table prefix should be in name.
-			return fullName{name: id}, true, nil
+			return columnName{name: id}, true, nil
 		}
 	}
 
 	cp.restore()
-	return fullName{}, false, nil
+	return columnName{}, false, nil
 }
 
-func (p *Parser) parseTargetType() (fullName, bool, error) {
+func (p *Parser) parseTargetType() (typeName, bool, error) {
 	if p.skipByte('&') {
-		return p.parseGoFullName()
+		return p.parseTypeName()
 	}
 
-	return fullName{}, false, nil
+	return typeName{}, false, nil
 }
 
-// parseGoFullName parses a Go type name qualified by a tag name (or asterisk)
-// of the form "&TypeName.col_name".
-func (p *Parser) parseGoFullName() (fullName, bool, error) {
+// parseTypeName parses a Go type name qualified by a tag name (or asterisk)
+// of the form "TypeName.col_name".
+func (p *Parser) parseTypeName() (typeName, bool, error) {
 	cp := p.save()
 
 	// The error points to the skipped & or $.
 	identifierCol := p.colNum() - 1
 	if id, ok := p.parseIdentifier(); ok {
 		if !p.skipByte('.') {
-			return fullName{}, false, errorAt(fmt.Errorf("unqualified type, expected %s.* or %s.<db tag>", id, id), p.lineNum, identifierCol, p.input)
+			return typeName{}, false, errorAt(fmt.Errorf("unqualified type, expected %s.* or %s.<db tag>", id, id), p.lineNum, identifierCol, p.input)
 		}
 
 		idField, ok := p.parseIdentifierAsterisk()
 		if !ok {
-			return fullName{}, false, errorAt(fmt.Errorf("invalid identifier suffix following %q", id), p.lineNum, p.colNum(), p.input)
+			return typeName{}, false, errorAt(fmt.Errorf("invalid identifier suffix following %q", id), p.lineNum, p.colNum(), p.input)
 		}
-		return fullName{id, idField}, true, nil
+		return typeName{name: id, member: idField}, true, nil
 	}
 
 	cp.restore()
-	return fullName{}, false, nil
+	return typeName{}, false, nil
 }
 
-// parseList takes a parsing function that returns a fullName and parses a
+// parseList takes a parsing function that returns a T and parses a
 // bracketed, comma seperated, list.
-func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]fullName, bool, error) {
+func parseList[T any](p *Parser, parseFn func(p *Parser) (T, bool, error)) ([]T, bool, error) {
 	cp := p.save()
 	if !p.skipByte('(') {
 		return nil, false, nil
@@ -473,7 +544,7 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 	openingParenCol := p.colNum() - 1
 	openingParenLine := p.lineNum
 	nextItem := true
-	var objs []fullName
+	var objs []T
 	for i := 0; nextItem; i++ {
 		p.skipBlanks()
 		if obj, ok, err := parseFn(p); ok {
@@ -501,14 +572,14 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 
 // parseColumns parses a single column or a list of columns. Lists must be
 // enclosed in parentheses.
-func (p *Parser) parseColumns() (cols []fullName, parentheses bool, ok bool) {
+func (p *Parser) parseColumns() (cols []columnName, parentheses bool, ok bool) {
 	// Case 1: A single column e.g. "p.name".
 	if col, ok, _ := p.parseColumn(); ok {
-		return []fullName{col}, false, true
+		return []columnName{col}, false, true
 	}
 
 	// Case 2: Multiple columns e.g. "(p.name, p.id)".
-	if cols, ok, _ := p.parseList((*Parser).parseColumn); ok {
+	if cols, ok, _ := parseList(p, (*Parser).parseColumn); ok {
 		return cols, true, true
 	}
 
@@ -517,16 +588,16 @@ func (p *Parser) parseColumns() (cols []fullName, parentheses bool, ok bool) {
 
 // parseTargetTypes parses a single output type or a list of output types.
 // Lists of types must be enclosed in parentheses.
-func (p *Parser) parseTargetTypes() (types []fullName, parentheses bool, ok bool, err error) {
+func (p *Parser) parseTargetTypes() (types []typeName, parentheses bool, ok bool, err error) {
 	// Case 1: A single target e.g. "&Person.name".
 	if targetTypes, ok, err := p.parseTargetType(); err != nil {
 		return nil, false, false, err
 	} else if ok {
-		return []fullName{targetTypes}, false, true, nil
+		return []typeName{targetTypes}, false, true, nil
 	}
 
 	// Case 2: Multiple types e.g. "(&Person.name, &Person.id)".
-	if targetTypes, ok, err := p.parseList((*Parser).parseTargetType); err != nil {
+	if targetTypes, ok, err := parseList(p, (*Parser).parseTargetType); err != nil {
 		return nil, true, false, err
 	} else if ok {
 		return targetTypes, true, true, nil
@@ -545,8 +616,8 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 		return nil, false, err
 	} else if ok {
 		return &outputPart{
-			sourceColumns: []fullName{},
-			targetTypes:   []fullName{targetType},
+			sourceColumns: []columnName{},
+			targetTypes:   []typeName{targetType},
 			raw:           p.input[start:p.pos],
 		}, true, nil
 	}
@@ -588,7 +659,7 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 	if p.skipByte('$') {
 		// Error points to the $ sign skipped above.
 		nameCol := p.colNum() - 1
-		if fn, ok, err := p.parseGoFullName(); ok {
+		if fn, ok, err := p.parseTypeName(); ok {
 			if fn.name == "*" {
 				return nil, false, errorAt(fmt.Errorf(`asterisk not allowed in input expression "$%s"`, fn), p.lineNum, nameCol, p.input)
 			}
