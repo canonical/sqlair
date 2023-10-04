@@ -477,15 +477,15 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Person{}, Manager{}},
-		err:         `cannot prepare statement: input expression: type "Address" not passed as a parameter (have "Manager", "Person"): $Address.street`,
+		err:         `cannot prepare statement: input expression: parameter with type "Address" missing (have "Manager", "Person"): $Address.street`,
 	}, {
 		query:       "SELECT street AS &Address.street FROM t",
 		prepareArgs: []any{},
-		err:         `cannot prepare statement: output expression: type "Address" not passed as a parameter: street AS &Address.street`,
+		err:         `cannot prepare statement: output expression: parameter with type "Address" missing: street AS &Address.street`,
 	}, {
 		query:       "SELECT street AS &Address.id FROM t",
 		prepareArgs: []any{Person{}},
-		err:         `cannot prepare statement: output expression: type "Address" not passed as a parameter (have "Person"): street AS &Address.id`,
+		err:         `cannot prepare statement: output expression: parameter with type "Address" missing (have "Person"): street AS &Address.id`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{[]any{Person{}}},
@@ -654,7 +654,7 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
 		queryArgs:   []any{Address{Street: "Dead end road"}},
-		err:         `invalid input parameter: type "Person" not passed as a parameter, have: Address`,
+		err:         `invalid input parameter: parameter with type "Person" missing (have "Address")`,
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
@@ -694,7 +694,7 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
 		queryArgs:   []any{},
-		err:         `invalid input parameter: type "Address" not passed as a parameter`,
+		err:         `invalid input parameter: parameter with type "Address" missing`,
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Person.id, y = $Person.name",
 		prepareArgs: []any{Person{}},
@@ -720,7 +720,7 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT street FROM t WHERE y = $Person.name",
 		prepareArgs: []any{outerP},
 		queryArgs:   []any{shadowedP},
-		err:         "invalid input parameter: type expr_test.Person not passed as a parameter, have expr_test.Person",
+		err:         `invalid input parameter: parameter with type "expr_test.Person" missing, have type with same name: "expr_test.Person"`,
 	}}
 
 	tests = append(tests, testsShadowed...)
@@ -738,7 +738,11 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		}
 
 		_, err = preparedExpr.Query(t.queryArgs...)
-		c.Assert(err, ErrorMatches, t.err,
-			Commentf("test %d failed:\ninput: %s", i, t.query))
+		if err != nil {
+			c.Assert(err.Error(), Equals, t.err,
+				Commentf("test %d failed:\nquery: %s", i, t.query))
+		} else {
+			c.Errorf("test %d failed:\nexpected err: %q but got nil\nquery: %q", i, t.err, t.query)
+		}
 	}
 }
