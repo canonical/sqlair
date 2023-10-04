@@ -56,8 +56,12 @@ func (p *Parser) advanceByte() {
 }
 
 // errorAt wraps an error with line and column information.
-func errorAt(err error, line int, column int) error {
-	return fmt.Errorf("line %d, column %d: %w", line, column, err)
+func errorAt(err error, line int, column int, input string) error {
+	if strings.ContainsRune(input, '\n') {
+		return fmt.Errorf("line %d, column %d: %w", line, column, err)
+	} else {
+		return fmt.Errorf("column %d: %w", column, err)
+	}
 }
 
 // A checkpoint struct for saving parser state to restore later. We only use
@@ -276,7 +280,7 @@ func (p *Parser) skipStringLiteral() (bool, error) {
 
 		// Reached end of string and didn't find the closing quote
 		cp.restore()
-		return false, errorAt(fmt.Errorf("missing closing quote in string literal"), p.lineNum, p.colNum())
+		return false, errorAt(fmt.Errorf("missing closing quote in string literal"), p.lineNum, p.colNum(), p.input)
 	}
 	return false, nil
 }
@@ -443,12 +447,12 @@ func (p *Parser) parseGoFullName() (fullName, bool, error) {
 	identifierCol := p.colNum() - 1
 	if id, ok := p.parseIdentifier(); ok {
 		if !p.skipByte('.') {
-			return fullName{}, false, errorAt(fmt.Errorf("unqualified type, expected %s.* or %s.<db tag>", id, id), p.lineNum, identifierCol)
+			return fullName{}, false, errorAt(fmt.Errorf("unqualified type, expected %s.* or %s.<db tag>", id, id), p.lineNum, identifierCol, p.input)
 		}
 
 		idField, ok := p.parseIdentifierAsterisk()
 		if !ok {
-			return fullName{}, false, errorAt(fmt.Errorf("invalid identifier suffix following %q", id), p.lineNum, p.colNum())
+			return fullName{}, false, errorAt(fmt.Errorf("invalid identifier suffix following %q", id), p.lineNum, p.colNum(), p.input)
 		}
 		return fullName{id, idField}, true, nil
 	}
@@ -482,7 +486,7 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 			return nil, false, nil
 		} else {
 			// On subsequent items we return an error.
-			return nil, false, errorAt(fmt.Errorf("invalid expression in list"), p.lineNum, p.colNum())
+			return nil, false, errorAt(fmt.Errorf("invalid expression in list"), p.lineNum, p.colNum(), p.input)
 		}
 
 		p.skipBlanks()
@@ -492,7 +496,7 @@ func (p *Parser) parseList(parseFn func(p *Parser) (fullName, bool, error)) ([]f
 
 		nextItem = p.skipByte(',')
 	}
-	return nil, false, errorAt(fmt.Errorf("missing closing parentheses"), openingParenLine, openingParenCol)
+	return nil, false, errorAt(fmt.Errorf("missing closing parentheses"), openingParenLine, openingParenCol, p.input)
 }
 
 // parseColumns parses a single column or a list of columns. Lists must be
@@ -559,10 +563,10 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 				return nil, false, err
 			} else if ok {
 				if parenCols && !parenTypes {
-					return nil, false, errorAt(fmt.Errorf(`missing parentheses around types after "AS"`), p.lineNum, parenCol)
+					return nil, false, errorAt(fmt.Errorf(`missing parentheses around types after "AS"`), p.lineNum, parenCol, p.input)
 				}
 				if !parenCols && parenTypes {
-					return nil, false, errorAt(fmt.Errorf(`unexpected parentheses around types after "AS"`), p.lineNum, parenCol)
+					return nil, false, errorAt(fmt.Errorf(`unexpected parentheses around types after "AS"`), p.lineNum, parenCol, p.input)
 				}
 				return &outputPart{
 					sourceColumns: cols,
@@ -586,7 +590,7 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 		nameCol := p.colNum() - 1
 		if fn, ok, err := p.parseGoFullName(); ok {
 			if fn.name == "*" {
-				return nil, false, errorAt(fmt.Errorf(`asterisk not allowed in input expression "$%s"`, fn), p.lineNum, nameCol)
+				return nil, false, errorAt(fmt.Errorf(`asterisk not allowed in input expression "$%s"`, fn), p.lineNum, nameCol, p.input)
 			}
 			return &inputPart{sourceType: fn, raw: p.input[cp.pos:p.pos]}, true, nil
 		} else if err != nil {

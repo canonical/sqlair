@@ -338,25 +338,25 @@ func (s *ExprSuite) TestParseErrors(c *C) {
 		err   string
 	}{{
 		query: "SELECT foo FROM t WHERE x = 'dddd",
-		err:   "cannot parse expression: line 1, column 29: missing closing quote in string literal",
+		err:   "cannot parse expression: column 29: missing closing quote in string literal",
 	}, {
 		query: "SELECT foo FROM t WHERE x = \"dddd",
-		err:   "cannot parse expression: line 1, column 29: missing closing quote in string literal",
+		err:   "cannot parse expression: column 29: missing closing quote in string literal",
 	}, {
 		query: "SELECT foo FROM t WHERE x = \"dddd'",
-		err:   "cannot parse expression: line 1, column 29: missing closing quote in string literal",
+		err:   "cannot parse expression: column 29: missing closing quote in string literal",
 	}, {
 		query: "SELECT foo FROM t WHERE x = '''",
-		err:   "cannot parse expression: line 1, column 29: missing closing quote in string literal",
+		err:   "cannot parse expression: column 29: missing closing quote in string literal",
 	}, {
 		query: `SELECT foo FROM t WHERE x = '''""`,
-		err:   "cannot parse expression: line 1, column 29: missing closing quote in string literal",
+		err:   "cannot parse expression: column 29: missing closing quote in string literal",
 	}, {
 		query: `SELECT foo FROM t WHERE x = """`,
-		err:   "cannot parse expression: line 1, column 29: missing closing quote in string literal",
+		err:   "cannot parse expression: column 29: missing closing quote in string literal",
 	}, {
 		query: `SELECT foo FROM t WHERE x = """''`,
-		err:   "cannot parse expression: line 1, column 29: missing closing quote in string literal",
+		err:   "cannot parse expression: column 29: missing closing quote in string literal",
 	}, {
 		query: `SELECT foo -- line comment
 FROM t /* multiline
@@ -375,31 +375,31 @@ comment */ WHERE x = $Address.&d`,
 		err: `cannot parse expression: line 3, column 31: invalid identifier suffix following "Address"`,
 	}, {
 		query: "SELECT foo FROM t WHERE x = $Address.-",
-		err:   `cannot parse expression: line 1, column 38: invalid identifier suffix following "Address"`,
+		err:   `cannot parse expression: column 38: invalid identifier suffix following "Address"`,
 	}, {
 		query: "SELECT foo FROM t WHERE x = $Address",
-		err:   `cannot parse expression: line 1, column 29: unqualified type, expected Address.* or Address.<db tag>`,
+		err:   `cannot parse expression: column 29: unqualified type, expected Address.* or Address.<db tag>`,
 	}, {
 		query: "SELECT name AS (&Person.*)",
-		err:   `cannot parse expression: line 1, column 16: unexpected parentheses around types after "AS"`,
+		err:   `cannot parse expression: column 16: unexpected parentheses around types after "AS"`,
 	}, {
 		query: "SELECT name AS (&Person.name, &Person.id)",
-		err:   `cannot parse expression: line 1, column 16: unexpected parentheses around types after "AS"`,
+		err:   `cannot parse expression: column 16: unexpected parentheses around types after "AS"`,
 	}, {
 		query: "SELECT (name) AS &Person.*",
-		err:   `cannot parse expression: line 1, column 18: missing parentheses around types after "AS"`,
+		err:   `cannot parse expression: column 18: missing parentheses around types after "AS"`,
 	}, {
 		query: "SELECT (name, id) AS &Person.*",
-		err:   `cannot parse expression: line 1, column 22: missing parentheses around types after "AS"`,
+		err:   `cannot parse expression: column 22: missing parentheses around types after "AS"`,
 	}, {
 		query: "SELECT (name, id) AS (&Person.name, Person.id)",
-		err:   `cannot parse expression: line 1, column 37: invalid expression in list`,
+		err:   `cannot parse expression: column 37: invalid expression in list`,
 	}, {
 		query: "SELECT (name, id) AS (&Person.name, &Person.id",
-		err:   `cannot parse expression: line 1, column 22: missing closing parentheses`,
+		err:   `cannot parse expression: column 22: missing closing parentheses`,
 	}, {
 		query: "SELECT (name, id) WHERE id = $Person.*",
-		err:   `cannot parse expression: line 1, column 30: asterisk not allowed in input expression "$Person.*"`,
+		err:   `cannot parse expression: column 30: asterisk not allowed in input expression "$Person.*"`,
 	}, {
 		query: `SELECT (name, id) AS (&Person.name, /* multiline
 comment */
