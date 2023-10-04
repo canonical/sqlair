@@ -50,14 +50,34 @@ func getKeys[T any](m map[string]T) []string {
 	return keys
 }
 
-func starCount(fns []fullName) int {
+// starCountColumns counts the number of asterisks in a list of columns.
+func starCountColumns(columns []columnName) int {
 	s := 0
-	for _, fn := range fns {
-		if fn.name == "*" {
+	for _, column := range columns {
+		if column.name == "*" {
 			s++
 		}
 	}
 	return s
+}
+
+// starCountTypes counts the number of asterisks in a list of types.
+func starCountTypes(types []typeName) int {
+	s := 0
+	for _, t := range types {
+		if t.member == "*" {
+			s++
+		}
+	}
+	return s
+}
+
+func typeMissingError(missingType string, existingTypes []string) error {
+	if len(existingTypes) == 0 {
+		return fmt.Errorf(`parameter with type %q missing`, missingType)
+	}
+	// "%s" is used instead of %q to correctly print double quotes within the joined string.
+	return fmt.Errorf(`parameter with type %q missing (have "%s")`, missingType, strings.Join(existingTypes, `", "`))
 }
 
 // prepareInput checks that the input expression corresponds to a known type.
@@ -67,18 +87,13 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 			err = fmt.Errorf("input expression: %s: %s", err, p.raw)
 		}
 	}()
-	info, ok := ti[p.sourceType.prefix]
+
+	info, ok := ti[p.sourceType.name]
 	if !ok {
-		ts := getKeys(ti)
-		if len(ts) == 0 {
-			return nil, fmt.Errorf(`type %q not passed as a parameter`, p.sourceType.prefix)
-		} else {
-			// "%s" is used instead of %q to correctly print double quotes within the joined string.
-			return nil, fmt.Errorf(`type %q not passed as a parameter (have "%s")`, p.sourceType.prefix, strings.Join(ts, `", "`))
-		}
+		return nil, typeMissingError(p.sourceType.name, getKeys(ti))
 	}
 
-	tm, err = info.typeMember(p.sourceType.name)
+	tm, err = info.typeMember(p.sourceType.member)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +102,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 
 // prepareOutput checks that the output expressions correspond to known types.
 // It then checks they are formatted correctly and finally generates the columns for the query.
-func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMembers []typeMember, err error) {
+func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnName, typeMembers []typeMember, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("output expression: %s: %s", err, p.raw)
@@ -96,39 +111,23 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 
 	numTypes := len(p.targetTypes)
 	numColumns := len(p.sourceColumns)
-	starTypes := starCount(p.targetTypes)
-	starColumns := starCount(p.sourceColumns)
-
-	// Check target struct type and its tags are valid.
-	var info typeInfo
-
-	fetchInfo := func(typeName string) (typeInfo, error) {
-		info, ok := ti[typeName]
-		if !ok {
-			ts := getKeys(ti)
-			if len(ts) == 0 {
-				return nil, fmt.Errorf(`type %q not passed as a parameter`, typeName)
-			} else {
-				// "%s" is used instead of %q to correctly print double quotes within the joined string.
-				return nil, fmt.Errorf(`type %q not passed as a parameter (have "%s")`, typeName, strings.Join(ts, `", "`))
-			}
-		}
-		return info, nil
-	}
+	starTypes := starCountTypes(p.targetTypes)
+	starColumns := starCountColumns(p.sourceColumns)
 
 	// Case 1: Generated columns e.g. "* AS (&P.*, &A.id)" or "&P.*".
 	if numColumns == 0 || (numColumns == 1 && starColumns == 1) {
 		pref := ""
 		// Prepend table name. E.g. "t" in "t.* AS &P.*".
 		if numColumns > 0 {
-			pref = p.sourceColumns[0].prefix
+			pref = p.sourceColumns[0].table
 		}
 
 		for _, t := range p.targetTypes {
-			if info, err = fetchInfo(t.prefix); err != nil {
-				return nil, nil, err
+			info, ok := ti[t.name]
+			if !ok {
+				return nil, nil, typeMissingError(t.name, getKeys(ti))
 			}
-			if t.name == "*" {
+			if t.member == "*" {
 				// Generate asterisk columns.
 				allMembers, err := info.getAllMembers()
 				if err != nil {
@@ -136,16 +135,16 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 				}
 				typeMembers = append(typeMembers, allMembers...)
 				for _, tm := range allMembers {
-					outCols = append(outCols, fullName{pref, tm.memberName()})
+					outCols = append(outCols, columnName{pref, tm.memberName()})
 				}
 			} else {
 				// Generate explicit columns.
-				tm, err := info.typeMember(t.name)
+				tm, err := info.typeMember(t.member)
 				if err != nil {
 					return nil, nil, err
 				}
 				typeMembers = append(typeMembers, tm)
-				outCols = append(outCols, fullName{pref, t.name})
+				outCols = append(outCols, columnName{pref, t.member})
 			}
 		}
 		return outCols, typeMembers, nil
@@ -155,8 +154,9 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 
 	// Case 2: Explicit columns, single asterisk type e.g. "(col1, t.col2) AS &P.*".
 	if starTypes == 1 && numTypes == 1 {
-		if info, err = fetchInfo(p.targetTypes[0].prefix); err != nil {
-			return nil, nil, err
+		info, ok := ti[p.targetTypes[0].name]
+		if !ok {
+			return nil, nil, typeMissingError(p.targetTypes[0].name, getKeys(ti))
 		}
 		for _, c := range p.sourceColumns {
 			tm, err := info.typeMember(c.name)
@@ -175,10 +175,11 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []fullName, typeMe
 	if numColumns == numTypes {
 		for i, c := range p.sourceColumns {
 			t := p.targetTypes[i]
-			if info, err = fetchInfo(t.prefix); err != nil {
-				return nil, nil, err
+			info, ok := ti[t.name]
+			if !ok {
+				return nil, nil, typeMissingError(t.name, getKeys(ti))
 			}
-			tm, err := info.typeMember(t.name)
+			tm, err := info.typeMember(t.member)
 			if err != nil {
 				return nil, nil, err
 			}
