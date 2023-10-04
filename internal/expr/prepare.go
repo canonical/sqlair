@@ -9,8 +9,8 @@ import (
 	"strings"
 )
 
-// maxSliceLen is the maximum size of an argument slice allowed in an IN statement
-const maxSliceLen = 8
+// defaultSliceLen is the maximum size of an argument slice allowed in an IN statement
+const defaultSliceLen = 8
 
 // PreparedExpr contains an SQL expression that is ready for execution.
 type PreparedExpr struct {
@@ -312,8 +312,8 @@ func generateSQL(queryParts []queryPart, sliceLens []int) string {
 		switch p := part.(type) {
 		case *inputPart:
 			if p.isSlice {
-				length := maxSliceLen
-				if sliceLens != nil && sliceLens[sliceCount] > maxSliceLen {
+				length := defaultSliceLen
+				if sliceLens != nil && sliceLens[sliceCount] > defaultSliceLen {
 					length = sliceLens[sliceCount]
 				}
 				for i := 0; i < length; i++ {

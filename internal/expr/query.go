@@ -114,7 +114,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 			if sliceLen == 0 {
 				return nil, fmt.Errorf(`slice arg with type %q has length 0`, tm.sliceType.Name())
 			}
-			if sliceLen > maxSliceLen {
+			if sliceLen > defaultSliceLen {
 				longSliceQuery = true
 			}
 			sliceLens = append(sliceLens, sliceLen)
@@ -125,7 +125,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 				argCount++
 			}
 			// Add NULL for extra slice arguments.
-			for i = i; i < maxSliceLen; i++ {
+			for i = i; i < defaultSliceLen; i++ {
 				qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(argCount), nil))
 				argCount++
 			}
