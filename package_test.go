@@ -108,6 +108,9 @@ func personAndAddressDB() ([]string, *sqlair.DB, error) {
 	}
 
 	insertPerson, err := sqlair.Prepare("INSERT INTO person (*) VALUES ($Person.*)", Person{})
+	if err != nil {
+		return nil, nil, err
+	}
 	for _, person := range allPeople {
 		err := db.Query(nil, insertPerson, person).Run()
 		if err != nil {
@@ -116,6 +119,9 @@ func personAndAddressDB() ([]string, *sqlair.DB, error) {
 	}
 
 	insertAddress, err := sqlair.Prepare("INSERT INTO address (*) VALUES ($Address.*)", Address{})
+	if err != nil {
+		return nil, nil, err
+	}
 	for _, address := range allAddresses {
 		err := db.Query(nil, insertAddress, address).Run()
 		if err != nil {

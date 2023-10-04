@@ -50,45 +50,51 @@ func getKeys[T any](m map[string]T) []string {
 	return keys
 }
 
-func starCount(fns []fullName) int {
+// starCountColumns counts the number of asterisks in a list of columns.
+func starCountColumns(columns []columnName) int {
 	s := 0
-	for _, fn := range fns {
-		if fn.name == "*" {
+	for _, column := range columns {
+		if column.name == "*" {
 			s++
 		}
 	}
 	return s
 }
 
-type typeNameToInfo map[string]typeInfo
-
-func (ti typeNameToInfo) lookupInfo(typeName string) (typeInfo, error) {
-	info, ok := ti[typeName]
-	if !ok {
-		ts := getKeys(ti)
-		if len(ts) == 0 {
-			return nil, fmt.Errorf(`type %q not passed as a parameter`, typeName)
-		} else {
-			// "%s" is used instead of %q to correctly print double quotes within the joined string.
-			return nil, fmt.Errorf(`type %q not passed as a parameter (have "%s")`, typeName, strings.Join(ts, `", "`))
+// starCountTypes counts the number of asterisks in a list of types.
+func starCountTypes(types []typeName) int {
+	s := 0
+	for _, t := range types {
+		if t.member == "*" {
+			s++
 		}
 	}
-	return info, nil
+	return s
 }
+
+func typeMissingError(missingType string, existingTypes []string) error {
+	if len(existingTypes) == 0 {
+		return fmt.Errorf(`parameter with type %q missing`, missingType)
+	}
+	// "%s" is used instead of %q to correctly print double quotes within the joined string.
+	return fmt.Errorf(`parameter with type %q missing (have "%s")`, missingType, strings.Join(existingTypes, `", "`))
+}
+
+type typeNameToInfo map[string]typeInfo
 
 // prepareColumnsAndTypes takes a list of columns and types from an input or
 // output expression. It checks that the columns and types form a valid
 // expression and generates a list of columns and corresponding type members.
 // The type members specify where to find the query arguments/put the query
 // results.
-func prepareColumnsAndTypes(ti typeNameToInfo, columns []fullName, typeNames []fullName) ([]fullName, []typeMember, error) {
+func prepareColumnsAndTypes(ti typeNameToInfo, columns []columnName, typeNames []typeName) ([]columnName, []typeMember, error) {
 	numTypes := len(typeNames)
 	numColumns := len(columns)
-	starTypes := starCount(typeNames)
-	starColumns := starCount(columns)
+	starTypes := starCountTypes(typeNames)
+	starColumns := starCountColumns(columns)
 
 	typeMembers := []typeMember{}
-	genCols := []fullName{}
+	genCols := []columnName{}
 
 	// Case 1: SQLair generated columns.
 	// For example the expressions:
@@ -99,14 +105,14 @@ func prepareColumnsAndTypes(ti typeNameToInfo, columns []fullName, typeNames []f
 		pref := ""
 		// Prepend table name. E.g. "t" in "t.* AS &P.*".
 		if numColumns == 1 {
-			pref = columns[0].prefix
+			pref = columns[0].table
 		}
 		for _, tn := range typeNames {
-			info, err := ti.lookupInfo(tn.prefix)
-			if err != nil {
-				return nil, nil, err
+			info, ok := ti[tn.name]
+			if !ok {
+				return nil, nil, typeMissingError(tn.name, getKeys(ti))
 			}
-			if tn.name == "*" {
+			if tn.member == "*" {
 				// Generate asterisk columns.
 				allMembers, err := info.getAllMembers()
 				if err != nil {
@@ -114,16 +120,16 @@ func prepareColumnsAndTypes(ti typeNameToInfo, columns []fullName, typeNames []f
 				}
 				typeMembers = append(typeMembers, allMembers...)
 				for _, tm := range allMembers {
-					genCols = append(genCols, fullName{pref, tm.memberName()})
+					genCols = append(genCols, columnName{pref, tm.memberName()})
 				}
 			} else {
 				// Generate explicit columns.
-				tm, err := info.typeMember(tn.name)
+				tm, err := info.typeMember(tn.member)
 				if err != nil {
 					return nil, nil, err
 				}
 				typeMembers = append(typeMembers, tm)
-				genCols = append(genCols, fullName{pref, tn.name})
+				genCols = append(genCols, columnName{pref, tn.member})
 			}
 		}
 		return genCols, typeMembers, nil
@@ -136,9 +142,9 @@ func prepareColumnsAndTypes(ti typeNameToInfo, columns []fullName, typeNames []f
 	//  "(col1, col2) VALUES ($P.*)"
 	//  "(col1, t.col2) AS (&P.*)"
 	if starTypes == 1 && numTypes == 1 {
-		info, err := ti.lookupInfo(typeNames[0].prefix)
-		if err != nil {
-			return nil, nil, err
+		info, ok := ti[typeNames[0].name]
+		if !ok {
+			return nil, nil, typeMissingError(typeNames[0].name, getKeys(ti))
 		}
 		for _, c := range columns {
 			tm, err := info.typeMember(c.name)
@@ -160,11 +166,11 @@ func prepareColumnsAndTypes(ti typeNameToInfo, columns []fullName, typeNames []f
 	if numColumns == numTypes {
 		for i, c := range columns {
 			tn := typeNames[i]
-			info, err := ti.lookupInfo(tn.prefix)
-			if err != nil {
-				return nil, nil, err
+			info, ok := ti[tn.name]
+			if !ok {
+				return nil, nil, typeMissingError(tn.name, getKeys(ti))
 			}
-			tm, err := info.typeMember(tn.name)
+			tm, err := info.typeMember(tn.member)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -179,7 +185,7 @@ func prepareColumnsAndTypes(ti typeNameToInfo, columns []fullName, typeNames []f
 
 // prepareOutput checks that the output expressions correspond to known types.
 // It then checks they are formatted correctly and finally generates the columns for the query.
-func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, error) {
+func prepareOutput(ti typeNameToInfo, p *outputPart) ([]columnName, []typeMember, error) {
 	outCols, typeMembers, err := prepareColumnsAndTypes(ti, p.sourceColumns, p.targetTypes)
 	if err != nil {
 		err = fmt.Errorf("output expression: %s: %s", err, p.raw)
@@ -189,7 +195,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]fullName, []typeMember, 
 
 // prepareInput checks that the input expression is correctly formatted,
 // corresponds to known types, and then generates input columns and values.
-func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembers []typeMember, err error) {
+func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []columnName, typeMembers []typeMember, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("input expression: %s: %s", err, p.raw)
@@ -203,19 +209,18 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembe
 		if len(p.sourceTypes) > 1 {
 			return nil, nil, fmt.Errorf("internal error: cannot group standalone input expressions")
 		}
-		if starCount(p.sourceTypes) > 0 {
+		if starCountTypes(p.sourceTypes) > 0 {
 			return nil, nil, fmt.Errorf("invalid asterisk")
 		}
-
-		info, err := ti.lookupInfo(p.sourceTypes[0].prefix)
+		info, ok := ti[p.sourceTypes[0].name]
+		if !ok {
+			return nil, nil, typeMissingError(p.sourceTypes[0].name, getKeys(ti))
+		}
+		tm, err := info.typeMember(p.sourceTypes[0].member)
 		if err != nil {
 			return nil, nil, err
 		}
-		tm, err := info.typeMember(p.sourceTypes[0].name)
-		if err != nil {
-			return nil, nil, err
-		}
-		return []fullName{}, []typeMember{tm}, nil
+		return []columnName{}, []typeMember{tm}, nil
 	}
 
 	// Prepare input expressions in insert statements.
@@ -230,7 +235,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []fullName, typeMembe
 
 	// Check each column is only set once by input expressions in INSERT
 	// statements.
-	columnInInput := make(map[fullName]bool)
+	columnInInput := make(map[columnName]bool)
 	for _, c := range inCols {
 		if ok := columnInInput[c]; ok {
 			return nil, nil, fmt.Errorf("column %q is set more than once", c.name)
@@ -344,7 +349,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 // genInsertSQL generates the SQL for input expressions in INSERT statements.
 // For example, when inserting three columns, it would generate the string:
 //   "(col1, col2, col3) VALUES (@sqlair_1, @sqlair_2, @sqlair_3)"
-func genInsertSQL(columns []fullName, inCount *int) string {
+func genInsertSQL(columns []columnName, inCount *int) string {
 	var sql bytes.Buffer
 
 	sql.WriteString("(")
