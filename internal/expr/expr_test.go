@@ -621,12 +621,13 @@ func (s *ExprSuite) TestPrepareMapError(c *C) {
 
 func (s *ExprSuite) TestSliceQuery(c *C) {
 	tests := []struct {
-		summery     string
-		query       string
-		parts       string
-		types       []any
-		inputs      []any
-		expectedSQL string
+		summery      string
+		query        string
+		parts        string
+		types        []any
+		inputs       []any
+		expectedSQL  string
+		expectedArgs []any
 	}{{
 		"single slice",
 		"SELECT name FROM person WHERE id IN ($S[:])",
@@ -634,6 +635,7 @@ func (s *ExprSuite) TestSliceQuery(c *C) {
 		[]any{sqlair.S{}},
 		[]any{sqlair.S{1, 2, 3}},
 		"SELECT name FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2)",
+		[]any{sql.Named("sqlair_0", 1), sql.Named("sqlair_1", 2), sql.Named("sqlair_2", 3)},
 	}, {
 		"many slices",
 		"SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $S[:], $Manager.id, $IntSlice[:], $StringSlice[:])",
@@ -641,13 +643,15 @@ func (s *ExprSuite) TestSliceQuery(c *C) {
 		[]any{sqlair.S{}, Person{}, Manager{}, IntSlice{}, StringSlice{}},
 		[]any{sqlair.S{1, 2, 3}, Person{ID: 1}, Manager{ID: 1}, IntSlice{4, 5, 6}, StringSlice{"7", "8", "9"}},
 		"SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7, @sqlair_8, @sqlair_9, @sqlair_10)",
+		[]any{sql.Named("sqlair_0", 1), sql.Named("sqlair_1", 1), sql.Named("sqlair_2", 2), sql.Named("sqlair_3", 3), sql.Named("sqlair_4", 1), sql.Named("sqlair_5", 4), sql.Named("sqlair_6", 5), sql.Named("sqlair_7", 6), sql.Named("sqlair_8", 7), sql.Named("sqlair_9", 8), sql.Named("sqlair_10", 9)},
 	}, {
 		"slices and other expressions in IN statement",
 		`SELECT name FROM person WHERE id IN ($S[:], func(1,2), "one", $IntSlice[:])`,
 		`[Bypass[SELECT name FROM person WHERE id IN (] Input[S[:]] Bypass[, func(1,2), "one", ] Input[IntSlice[:]] Bypass[)]]`,
 		[]any{sqlair.S{}, IntSlice{}},
-		[]any{sqlair.S{1, 2, 3, 4, 5, 6, 7, 8}, IntSlice{1, 2, 3, 4, 5, 6, 7, 8}},
-		`SELECT name FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7, func(1,2), "one", @sqlair_8, @sqlair_9, @sqlair_10, @sqlair_11, @sqlair_12, @sqlair_13, @sqlair_14, @sqlair_15)`,
+		[]any{sqlair.S{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, IntSlice{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}},
+		`SELECT name FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7, @sqlair_8, @sqlair_9, func(1,2), "one", @sqlair_10, @sqlair_11, @sqlair_12, @sqlair_13, @sqlair_14, @sqlair_15, @sqlair_16, @sqlair_17, @sqlair_18, @sqlair_19)`,
+		[]any{sql.Named("sqlair_0", 1), sql.Named("sqlair_1", 2), sql.Named("sqlair_2", 3), sql.Named("sqlair_3", 4), sql.Named("sqlair_4", 5), sql.Named("sqlair_5", 6), sql.Named("sqlair_6", 7), sql.Named("sqlair_7", 8), sql.Named("sqlair_8", 9), sql.Named("sqlair_9", 10), sql.Named("sqlair_10", 1), sql.Named("sqlair_11", 2), sql.Named("sqlair_12", 3), sql.Named("sqlair_13", 4), sql.Named("sqlair_14", 5), sql.Named("sqlair_15", 6), sql.Named("sqlair_16", 7), sql.Named("sqlair_17", 8), sql.Named("sqlair_18", 9), sql.Named("sqlair_19", 10)},
 	}}
 	for _, t := range tests {
 		parser := expr.NewParser()
@@ -658,10 +662,11 @@ func (s *ExprSuite) TestSliceQuery(c *C) {
 		preparedExpr, err := parsedExpr.Prepare(t.types...)
 		c.Assert(err, IsNil)
 
-		_, stmtCriterion, err := preparedExpr.Query(t.inputs...)
+		qe, err := preparedExpr.Query(t.inputs...)
 		c.Assert(err, IsNil)
+		c.Assert(qe.IsTemp(), Equals, true)
 
-		sql := preparedExpr.SQL(stmtCriterion)
+		sql := qe.SQL()
 		c.Assert(sql, Equals, t.expectedSQL,
 			Commentf("test %d failed:\ninput: %s", t.summery, t.query))
 	}
@@ -708,16 +713,6 @@ func (s *ExprSuite) TestValidQuery(c *C) {
 		[]any{Person{}, StringMap{}},
 		[]any{Person{ID: 666}, StringMap{"street": "Highway to Hell"}},
 		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
-	}, {
-		"SELECT name FROM person WHERE id IN ($S[:])",
-		[]any{sqlair.S{}},
-		[]any{sqlair.S{1, 2, 3, 4, 5, 6}},
-		[]any{sql.Named("sqlair_0", 1), sql.Named("sqlair_1", 2), sql.Named("sqlair_2", 3), sql.Named("sqlair_3", 4), sql.Named("sqlair_4", 5), sql.Named("sqlair_5", 6)},
-	}, {
-		"SELECT name FROM person WHERE id IN ($S[:], $IntSlice[:])",
-		[]any{sqlair.S{}, IntSlice{}},
-		[]any{sqlair.S{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, IntSlice{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}},
-		[]any{sql.Named("sqlair_0", 1), sql.Named("sqlair_1", 2), sql.Named("sqlair_2", 3), sql.Named("sqlair_3", 4), sql.Named("sqlair_4", 5), sql.Named("sqlair_5", 6), sql.Named("sqlair_6", 7), sql.Named("sqlair_7", 8), sql.Named("sqlair_8", 9), sql.Named("sqlair_9", 10), sql.Named("sqlair_10", 1), sql.Named("sqlair_11", 2), sql.Named("sqlair_12", 3), sql.Named("sqlair_13", 4), sql.Named("sqlair_14", 5), sql.Named("sqlair_15", 6), sql.Named("sqlair_16", 7), sql.Named("sqlair_17", 8), sql.Named("sqlair_18", 9), sql.Named("sqlair_19", 10)},
 	}}
 	for _, t := range tests {
 		parser := expr.NewParser()
@@ -731,11 +726,12 @@ func (s *ExprSuite) TestValidQuery(c *C) {
 			c.Fatal(err)
 		}
 
-		query, _, err := preparedExpr.Query(t.queryArgs...)
+		qe, err := preparedExpr.Query(t.queryArgs...)
 		if err != nil {
 			c.Fatal(err)
 		}
-		c.Assert(query.QueryArgs(), DeepEquals, t.queryValues)
+		c.Assert(qe.IsTemp(), Equals, false)
+		c.Assert(qe.QueryArgs(), DeepEquals, t.queryValues)
 	}
 }
 
@@ -837,7 +833,7 @@ func (s *ExprSuite) TestQueryError(c *C) {
 			c.Fatal(err)
 		}
 
-		_, _, err = preparedExpr.Query(t.queryArgs...)
+		_, err = preparedExpr.Query(t.queryArgs...)
 		if err != nil {
 			c.Assert(err.Error(), Equals, t.err,
 				Commentf("test %d failed:\nquery: %s", i, t.query))

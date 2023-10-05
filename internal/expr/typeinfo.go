@@ -138,7 +138,7 @@ func (si *sliceInfo) typ() reflect.Type {
 }
 
 func (si *sliceInfo) typeMember(member string) (typeMember, error) {
-	return nil, fmt.Errorf(`slice has no named member`)
+	return nil, fmt.Errorf(`cannot index slice`)
 }
 
 func (si *sliceInfo) getAllMembers() ([]typeMember, error) {
@@ -196,7 +196,7 @@ func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 
 		for i := 0; i < t.NumField(); i++ {
 			f := t.Field(i)
-			// Fields without a "db" tag are outside of SQLair's remit.
+			// Fields without a "db" tag are outside of SQLAir's remit.
 			tag := f.Tag.Get("db")
 			if tag == "" {
 				continue

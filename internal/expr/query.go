@@ -12,11 +12,21 @@ func (qe *QueryExpr) QueryArgs() []any {
 	return qe.args
 }
 
+func (qe *QueryExpr) SQL() string {
+	return qe.pe.sql(qe.sc)
+}
+
+func (qe *QueryExpr) IsTemp() bool {
+	return qe.sc.enabled
+}
+
 func (qe *QueryExpr) HasOutputs() bool {
 	return len(qe.outputs) > 0
 }
 
 type QueryExpr struct {
+	pe      *PreparedExpr
+	sc      *stmtCriterion
 	args    []any
 	outputs []typeMember
 }
@@ -28,7 +38,7 @@ type QueryExpr struct {
 //	type Person struct {
 //	        Name string `db:"fullname"`
 //	}
-func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, sc *StmtCriterion, err error) {
+func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("invalid input parameter: %s", err)
@@ -45,17 +55,17 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, sc *StmtCriterion, er
 	for _, arg := range args {
 		v := reflect.ValueOf(arg)
 		if v.Kind() == reflect.Invalid || (v.Kind() == reflect.Pointer && v.IsNil()) {
-			return nil, nil, fmt.Errorf("need valid value, got nil")
+			return nil, fmt.Errorf("need valid value, got nil")
 		}
 		v = reflect.Indirect(v)
 		t := v.Type()
 		switch v.Kind() {
 		case reflect.Struct, reflect.Map, reflect.Slice, reflect.Array:
 		default:
-			return nil, nil, fmt.Errorf("unsupported type: %s", t.Kind())
+			return nil, fmt.Errorf("unsupported type: %s", t.Kind())
 		}
 		if _, ok := typeValue[t]; ok {
-			return nil, nil, fmt.Errorf("type %q provided more than once", t.Name())
+			return nil, fmt.Errorf("type %q provided more than once", t.Name())
 		}
 		typeValue[t] = v
 		typeNames = append(typeNames, t.Name())
@@ -63,10 +73,10 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, sc *StmtCriterion, er
 			// Check if we have a type with the same name from a different package.
 			for _, typeMember := range pe.inputs {
 				if t.Name() == typeMember.outerType().Name() {
-					return nil, nil, fmt.Errorf("parameter with type %q missing, have type with same name: %q", typeMember.outerType().String(), t.String())
+					return nil, fmt.Errorf("parameter with type %q missing, have type with same name: %q", typeMember.outerType().String(), t.String())
 				}
 			}
-			return nil, nil, fmt.Errorf("%s not referenced in query", t.Name())
+			return nil, fmt.Errorf("%s not referenced in query", t.Name())
 		}
 	}
 
@@ -78,7 +88,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, sc *StmtCriterion, er
 		outerType := typeMember.outerType()
 		v, ok := typeValue[outerType]
 		if !ok {
-			return nil, nil, typeMissingError(outerType.Name(), typeNames)
+			return nil, typeMissingError(outerType.Name(), typeNames)
 		}
 		var val reflect.Value
 		switch tm := typeMember.(type) {
@@ -89,14 +99,14 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, sc *StmtCriterion, er
 		case *mapKey:
 			val = v.MapIndex(reflect.ValueOf(tm.name))
 			if val.Kind() == reflect.Invalid {
-				return nil, nil, fmt.Errorf(`map %q does not contain key %q`, outerType.Name(), tm.name)
+				return nil, fmt.Errorf(`map %q does not contain key %q`, outerType.Name(), tm.name)
 			}
 			qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(argCount), val.Interface()))
 			argCount++
 		case *sliceType:
 			sliceLen := v.Len()
 			if sliceLen == 0 {
-				return nil, nil, fmt.Errorf(`slice arg with type %q has length 0`, tm.sliceType.Name())
+				return nil, fmt.Errorf(`slice arg with type %q has length 0`, tm.sliceType.Name())
 			}
 			sliceLens = append(sliceLens, sliceLen)
 			i := 0
@@ -106,18 +116,16 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, sc *StmtCriterion, er
 				argCount++
 			}
 		default:
-			return nil, nil, fmt.Errorf(`internal error: unknown type: %T`, tm)
+			return nil, fmt.Errorf(`internal error: unknown type: %T`, tm)
 		}
-
 	}
 
-	sc = &StmtCriterion{enabled: false}
+	sc := &stmtCriterion{enabled: false}
 	if len(sliceLens) > 0 {
 		sc.enabled = true
 		sc.sliceLens = sliceLens
 	}
-
-	return &QueryExpr{outputs: pe.outputs, args: qargs}, sc, nil
+	return &QueryExpr{pe: pe, sc: sc, outputs: pe.outputs, args: qargs}, nil
 }
 
 var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()

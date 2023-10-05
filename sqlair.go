@@ -166,17 +166,17 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		ctx = context.Background()
 	}
 
-	qe, sc, err := s.pe.Query(inputArgs...)
+	qe, err := s.pe.Query(inputArgs...)
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
 
-	sqlstmt, err := db.prepareStmt(ctx, db.sqldb, s, sc)
+	sqlstmt, err := db.prepareStmt(ctx, db.sqldb, s, qe)
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
 
-	return &Query{sqlstmt: sqlstmt, isTemp: sc.Enabled(), qe: qe, ctx: ctx, err: nil}
+	return &Query{sqlstmt: sqlstmt, isTemp: qe.IsTemp(), qe: qe, ctx: ctx, err: nil}
 }
 
 // prepareSubstrate is an object that queries can be prepared on, e.g. a sql.DB
@@ -189,14 +189,17 @@ type prepareSubstrate interface {
 // the cache to see if it has already been prepared on the DB.
 // The prepareSubstrate must be assosiated with the same DB that prepareStmt is
 // a method of.
-func (db *DB) prepareStmt(ctx context.Context, ps prepareSubstrate, s *Statement, sc *expr.StmtCriterion) (sqlstmt *sql.Stmt, err error) {
+func (db *DB) prepareStmt(ctx context.Context, ps prepareSubstrate, s *Statement, qe *expr.QueryExpr) (sqlstmt *sql.Stmt, err error) {
+	if qe.IsTemp() {
+		return ps.PrepareContext(ctx, qe.SQL())
+	}
 	cacheMutex.RLock()
 	// The statement ID is only removed from the cache when the finalizer is
 	// run, so it is always in stmtDBCache.
 	sqlstmt, ok := stmtDBCache[s.cacheID][db.cacheID]
 	cacheMutex.RUnlock()
 	if !ok {
-		sqlstmt, err = ps.PrepareContext(ctx, s.pe.SQL(sc))
+		sqlstmt, err = ps.PrepareContext(ctx, qe.SQL())
 		if err != nil {
 			return nil, err
 		}
@@ -562,15 +565,15 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: ErrTXDone}
 	}
 
-	qe, sc, err := s.pe.Query(inputArgs...)
+	qe, err := s.pe.Query(inputArgs...)
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
 
-	sqlstmt, err := tx.db.prepareStmt(ctx, tx.sqlconn, s, sc)
+	sqlstmt, err := tx.db.prepareStmt(ctx, tx.sqlconn, s, qe)
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
 
-	return &Query{sqlstmt: sqlstmt, isTemp: sc.Enabled(), qe: qe, tx: tx, ctx: ctx, err: nil}
+	return &Query{sqlstmt: sqlstmt, isTemp: qe.IsTemp(), qe: qe, tx: tx, ctx: ctx, err: nil}
 }
