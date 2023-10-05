@@ -659,11 +659,11 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 	if p.skipByte('$') {
 		// Error points to the $ sign skipped above.
 		nameCol := p.colNum() - 1
-		if fn, ok, err := p.parseTypeName(); ok {
-			if fn.name == "*" {
-				return nil, false, errorAt(fmt.Errorf(`asterisk not allowed in input expression "$%s"`, fn), p.lineNum, nameCol, p.input)
+		if tn, ok, err := p.parseTypeName(); ok {
+			if tn.member == "*" {
+				return nil, false, errorAt(fmt.Errorf(`asterisk not allowed in input expression "$%s"`, tn), p.lineNum, nameCol, p.input)
 			}
-			return &inputPart{sourceType: fn, raw: p.input[cp.pos:p.pos]}, true, nil
+			return &inputPart{sourceType: tn, raw: p.input[cp.pos:p.pos]}, true, nil
 		} else if err != nil {
 			return nil, false, err
 		}
