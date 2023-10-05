@@ -11,10 +11,10 @@ import (
 
 // PreparedExpr contains an SQL expression that is ready for execution.
 type PreparedExpr struct {
-	outputs     []typeMember
-	inputs      []typeMember
-	queryParts  []queryPart
-	partOutCols [][]columnName
+	outputs    []typeMember
+	inputs     []typeMember
+	queryParts []queryPart
+	outputCols [][]columnName
 }
 
 const markerPrefix = "_sqlair_"
@@ -260,7 +260,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	var outputs = make([]typeMember, 0)
 	var inputs = make([]typeMember, 0)
 	var typeMemberPresent = make(map[typeMember]bool)
-	var partOutCols = make([][]columnName, 0)
+	var outputCols = make([][]columnName, 0)
 
 	// Check and expand each query part.
 	for _, part := range pe.queryParts {
@@ -284,13 +284,13 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 				typeMemberPresent[tm] = true
 			}
 			outputs = append(outputs, typeMembers...)
-			partOutCols = append(partOutCols, outCols)
+			outputCols = append(outputCols, outCols)
 		case *bypassPart:
 		default:
 			return nil, fmt.Errorf("internal error: unknown query part type %T", part)
 		}
 	}
-	return &PreparedExpr{inputs: inputs, outputs: outputs, queryParts: pe.queryParts, partOutCols: partOutCols}, nil
+	return &PreparedExpr{inputs: inputs, outputs: outputs, queryParts: pe.queryParts, outputCols: outputCols}, nil
 }
 
 // StmtCriterion contains information that specifies the different SQL strings
@@ -333,11 +333,11 @@ func (pe *PreparedExpr) SQL(sc *StmtCriterion) string {
 				inCount++
 			}
 		case *outputPart:
-			for i, c := range pe.partOutCols[outputPartCount] {
+			for i, c := range pe.outputCols[outputPartCount] {
 				sql.WriteString(c.String())
 				sql.WriteString(" AS ")
 				sql.WriteString(markerName(outCount))
-				if i != len(pe.partOutCols[outputPartCount])-1 {
+				if i != len(pe.outputCols[outputPartCount])-1 {
 					sql.WriteString(", ")
 				}
 				outCount++

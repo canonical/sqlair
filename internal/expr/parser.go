@@ -55,10 +55,9 @@ func (p *inputPart) part() {}
 // outputPart represents a named target output variable in the SQL expression,
 // as well as the source table and column where it will be read from.
 type outputPart struct {
-	preparedColumns []columnName
-	sourceColumns   []columnName
-	targetTypes     []typeName
-	raw             string
+	sourceColumns []columnName
+	targetTypes   []typeName
+	raw           string
 }
 
 func (p *outputPart) String() string {
