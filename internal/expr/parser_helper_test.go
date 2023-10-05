@@ -64,7 +64,7 @@ func (s *ExprInternalSuite) TestRunTable(c *C) {
 				result = v.stringf0()
 			}
 			if v.result[i] != result {
-				c.Errorf("Test %#v failed. Expected: '%t', got '%t'\n", v, result, v.result[i])
+				c.Errorf("Test %#v failed. Expected: '%t', got '%t'\n", v, v.result[i], result)
 			}
 		}
 	}
