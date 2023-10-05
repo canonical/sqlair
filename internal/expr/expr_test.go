@@ -338,52 +338,79 @@ func (s *ExprSuite) TestParseErrors(c *C) {
 		err   string
 	}{{
 		query: "SELECT foo FROM t WHERE x = 'dddd",
-		err:   "cannot parse expression: column 28: missing closing quote in string literal",
+		err:   "cannot parse expression: column 29: missing closing quote in string literal",
 	}, {
 		query: "SELECT foo FROM t WHERE x = \"dddd",
-		err:   "cannot parse expression: column 28: missing closing quote in string literal",
+		err:   "cannot parse expression: column 29: missing closing quote in string literal",
 	}, {
 		query: "SELECT foo FROM t WHERE x = \"dddd'",
-		err:   "cannot parse expression: column 28: missing closing quote in string literal",
+		err:   "cannot parse expression: column 29: missing closing quote in string literal",
 	}, {
 		query: "SELECT foo FROM t WHERE x = '''",
-		err:   "cannot parse expression: column 28: missing closing quote in string literal",
+		err:   "cannot parse expression: column 29: missing closing quote in string literal",
 	}, {
 		query: `SELECT foo FROM t WHERE x = '''""`,
-		err:   "cannot parse expression: column 28: missing closing quote in string literal",
+		err:   "cannot parse expression: column 29: missing closing quote in string literal",
 	}, {
 		query: `SELECT foo FROM t WHERE x = """`,
-		err:   "cannot parse expression: column 28: missing closing quote in string literal",
+		err:   "cannot parse expression: column 29: missing closing quote in string literal",
 	}, {
 		query: `SELECT foo FROM t WHERE x = """''`,
-		err:   "cannot parse expression: column 28: missing closing quote in string literal",
+		err:   "cannot parse expression: column 29: missing closing quote in string literal",
 	}, {
-		query: `SELECT foo FROM t WHERE x = 'O'Donnell'`,
-		err:   "cannot parse expression: column 38: missing closing quote in string literal",
+		query: `SELECT foo -- line comment
+FROM t /* multiline
+comment
+*/
+WHERE x = 'O'Donnell'`,
+		err: "cannot parse expression: line 5, column 21: missing closing quote in string literal",
 	}, {
-		query: "SELECT foo FROM t WHERE x = $Address.",
-		err:   `cannot parse expression: column 37: invalid identifier suffix following "Address"`,
+		query: `SELECT foo FROM t -- line comment
+WHERE x = $Address.`,
+		err: `cannot parse expression: line 2, column 20: invalid identifier suffix following "Address"`,
 	}, {
-		query: "SELECT foo FROM t WHERE x = $Address.&d",
-		err:   `cannot parse expression: column 37: invalid identifier suffix following "Address"`,
+		query: `SELECT foo
+FROM t /* multiline
+comment */ WHERE x = $Address.&d`,
+		err: `cannot parse expression: line 3, column 31: invalid identifier suffix following "Address"`,
 	}, {
 		query: "SELECT foo FROM t WHERE x = $Address.-",
-		err:   `cannot parse expression: column 37: invalid identifier suffix following "Address"`,
+		err:   `cannot parse expression: column 38: invalid identifier suffix following "Address"`,
 	}, {
 		query: "SELECT foo FROM t WHERE x = $Address",
-		err:   `cannot parse expression: column 36: unqualified type, expected Address.* or Address.<db tag>`,
+		err:   `cannot parse expression: column 29: unqualified type, expected Address.* or Address.<db tag>`,
 	}, {
 		query: "SELECT name AS (&Person.*)",
-		err:   `cannot parse expression: column 26: unexpected parentheses around types after "AS"`,
+		err:   `cannot parse expression: column 16: unexpected parentheses around types after "AS"`,
 	}, {
 		query: "SELECT name AS (&Person.name, &Person.id)",
-		err:   `cannot parse expression: column 41: unexpected parentheses around types after "AS"`,
+		err:   `cannot parse expression: column 16: unexpected parentheses around types after "AS"`,
 	}, {
 		query: "SELECT (name) AS &Person.*",
-		err:   `cannot parse expression: column 26: missing parentheses around types after "AS"`,
+		err:   `cannot parse expression: column 18: missing parentheses around types after "AS"`,
 	}, {
 		query: "SELECT (name, id) AS &Person.*",
-		err:   `cannot parse expression: column 30: missing parentheses around types after "AS"`,
+		err:   `cannot parse expression: column 22: missing parentheses around types after "AS"`,
+	}, {
+		query: "SELECT (name, id) AS (&Person.name, Person.id)",
+		err:   `cannot parse expression: column 37: invalid expression in list`,
+	}, {
+		query: "SELECT (name, id) AS (&Person.name, &Person.id",
+		err:   `cannot parse expression: column 22: missing closing parentheses`,
+	}, {
+		query: "SELECT (name, id) WHERE id = $Person.*",
+		err:   `cannot parse expression: column 30: asterisk not allowed in input expression "$Person.*"`,
+	}, {
+		query: `SELECT (name, id) AS (&Person.name, /* multiline
+comment */
+
+&Person.id`,
+		err: `cannot parse expression: line 1, column 22: missing closing parentheses`,
+	}, {
+		query: `SELECT (name, id) WHERE name = 'multiline
+string
+of three lines' AND id = $Person.*`,
+		err: `cannot parse expression: line 3, column 26: asterisk not allowed in input expression "$Person.*"`,
 	}}
 
 	for _, t := range tests {
@@ -473,15 +500,15 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Person{}, Manager{}},
-		err:         `cannot prepare statement: input expression: type "Address" not passed as a parameter (have "Manager", "Person"): $Address.street`,
+		err:         `cannot prepare statement: input expression: parameter with type "Address" missing (have "Manager", "Person"): $Address.street`,
 	}, {
 		query:       "SELECT street AS &Address.street FROM t",
 		prepareArgs: []any{},
-		err:         `cannot prepare statement: output expression: type "Address" not passed as a parameter: street AS &Address.street`,
+		err:         `cannot prepare statement: output expression: parameter with type "Address" missing: street AS &Address.street`,
 	}, {
 		query:       "SELECT street AS &Address.id FROM t",
 		prepareArgs: []any{Person{}},
-		err:         `cannot prepare statement: output expression: type "Address" not passed as a parameter (have "Person"): street AS &Address.id`,
+		err:         `cannot prepare statement: output expression: parameter with type "Address" missing (have "Person"): street AS &Address.id`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{[]any{Person{}}},
@@ -650,7 +677,7 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
 		queryArgs:   []any{Address{Street: "Dead end road"}},
-		err:         `invalid input parameter: type "Person" not passed as a parameter, have: Address`,
+		err:         `invalid input parameter: parameter with type "Person" missing (have "Address")`,
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
@@ -690,7 +717,7 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
 		queryArgs:   []any{},
-		err:         `invalid input parameter: type "Address" not passed as a parameter`,
+		err:         `invalid input parameter: parameter with type "Address" missing`,
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Person.id, y = $Person.name",
 		prepareArgs: []any{Person{}},
@@ -716,7 +743,7 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT street FROM t WHERE y = $Person.name",
 		prepareArgs: []any{outerP},
 		queryArgs:   []any{shadowedP},
-		err:         "invalid input parameter: type expr_test.Person not passed as a parameter, have expr_test.Person",
+		err:         `invalid input parameter: parameter with type "expr_test.Person" missing, have type with same name: "expr_test.Person"`,
 	}}
 
 	tests = append(tests, testsShadowed...)
@@ -734,7 +761,11 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		}
 
 		_, err = preparedExpr.Query(t.queryArgs...)
-		c.Assert(err, ErrorMatches, t.err,
-			Commentf("test %d failed:\ninput: %s", i, t.query))
+		if err != nil {
+			c.Assert(err.Error(), Equals, t.err,
+				Commentf("test %d failed:\nquery: %s", i, t.query))
+		} else {
+			c.Errorf("test %d failed:\nexpected err: %q but got nil\nquery: %q", i, t.err, t.query)
+		}
 	}
 }
