@@ -341,58 +341,82 @@ func (s *ExprSuite) TestParseErrors(c *C) {
 		err   string
 	}{{
 		query: "SELECT foo FROM t WHERE x = 'dddd",
-		err:   "cannot parse expression: column 28: missing closing quote in string literal",
+		err:   "cannot parse expression: column 29: missing closing quote in string literal",
 	}, {
 		query: "SELECT foo FROM t WHERE x = \"dddd",
-		err:   "cannot parse expression: column 28: missing closing quote in string literal",
+		err:   "cannot parse expression: column 29: missing closing quote in string literal",
 	}, {
 		query: "SELECT foo FROM t WHERE x = \"dddd'",
-		err:   "cannot parse expression: column 28: missing closing quote in string literal",
+		err:   "cannot parse expression: column 29: missing closing quote in string literal",
 	}, {
 		query: "SELECT foo FROM t WHERE x = '''",
-		err:   "cannot parse expression: column 28: missing closing quote in string literal",
+		err:   "cannot parse expression: column 29: missing closing quote in string literal",
 	}, {
 		query: `SELECT foo FROM t WHERE x = '''""`,
-		err:   "cannot parse expression: column 28: missing closing quote in string literal",
+		err:   "cannot parse expression: column 29: missing closing quote in string literal",
 	}, {
 		query: `SELECT foo FROM t WHERE x = """`,
-		err:   "cannot parse expression: column 28: missing closing quote in string literal",
+		err:   "cannot parse expression: column 29: missing closing quote in string literal",
 	}, {
 		query: `SELECT foo FROM t WHERE x = """''`,
-		err:   "cannot parse expression: column 28: missing closing quote in string literal",
+		err:   "cannot parse expression: column 29: missing closing quote in string literal",
 	}, {
-		query: `SELECT foo FROM t WHERE x = 'O'Donnell'`,
-		err:   "cannot parse expression: column 38: missing closing quote in string literal",
+		query: `SELECT foo -- line comment
+FROM t /* multiline
+comment
+*/
+WHERE x = 'O'Donnell'`,
+		err: "cannot parse expression: line 5, column 21: missing closing quote in string literal",
 	}, {
-		query: "SELECT foo FROM t WHERE x = $Address.",
-		err:   `cannot parse expression: column 37: invalid identifier suffix following "Address"`,
+		query: `SELECT foo FROM t -- line comment
+WHERE x = $Address.`,
+		err: `cannot parse expression: line 2, column 20: invalid identifier suffix following "Address"`,
 	}, {
-		query: "SELECT foo FROM t WHERE x = $Address.&d",
-		err:   `cannot parse expression: column 37: invalid identifier suffix following "Address"`,
+		query: `SELECT foo
+FROM t /* multiline
+comment */ WHERE x = $Address.&d`,
+		err: `cannot parse expression: line 3, column 31: invalid identifier suffix following "Address"`,
 	}, {
 		query: "SELECT foo FROM t WHERE x = $Address.-",
-		err:   `cannot parse expression: column 37: invalid identifier suffix following "Address"`,
+		err:   `cannot parse expression: column 38: invalid identifier suffix following "Address"`,
 	}, {
 		query: "SELECT foo FROM t WHERE x = $Address",
-		err:   `cannot parse expression: column 36: unqualified type, expected Address.* or Address.<db tag>`,
+		err:   `cannot parse expression: column 29: unqualified type, expected Address.* or Address.<db tag>`,
 	}, {
 		query: "SELECT name AS (&Person.*)",
-		err:   `cannot parse expression: column 26: unexpected parentheses around types after "AS"`,
+		err:   `cannot parse expression: column 16: unexpected parentheses around types after "AS"`,
 	}, {
 		query: "SELECT name AS (&Person.name, &Person.id)",
-		err:   `cannot parse expression: column 41: unexpected parentheses around types after "AS"`,
+		err:   `cannot parse expression: column 16: unexpected parentheses around types after "AS"`,
 	}, {
 		query: "SELECT (name) AS &Person.*",
-		err:   `cannot parse expression: column 26: missing parentheses around types after "AS"`,
+		err:   `cannot parse expression: column 18: missing parentheses around types after "AS"`,
 	}, {
 		query: "SELECT (name, id) AS &Person.*",
-		err:   `cannot parse expression: column 30: missing parentheses around types after "AS"`,
+		err:   `cannot parse expression: column 22: missing parentheses around types after "AS"`,
+	}, {
+		query: "SELECT (name, id) AS (&Person.name, Person.id)",
+		err:   `cannot parse expression: column 37: invalid expression in list`,
+	}, {
+		query: "SELECT (name, id) AS (&Person.name, &Person.id",
+		err:   `cannot parse expression: column 22: missing closing parentheses`,
+	}, {
+		query: `SELECT (name, id) AS (&Person.name, /* multiline
+comment */
+
+&Person.id`,
+		err: `cannot parse expression: line 1, column 22: missing closing parentheses`,
+	}, {
+		query: `SELECT (name, id) WHERE name = 'multiline
+string
+of three lines' AND id = $Person.`,
+		err: `cannot parse expression: line 3, column 34: invalid identifier suffix following "Person"`,
 	}, {
 		query: "SELECT col1 AS &S FROM t",
-		err:   `cannot parse expression: column 17: unqualified type, expected S.* or S.<db tag>`,
+		err:   `cannot parse expression: column 16: unqualified type, expected S.* or S.<db tag>`,
 	}, {
 		query: "SELECT * AS &S FROM t",
-		err:   `cannot parse expression: column 14: unqualified type, expected S.* or S.<db tag>`,
+		err:   `cannot parse expression: column 13: unqualified type, expected S.* or S.<db tag>`,
 	}}
 
 	for _, t := range tests {
@@ -529,6 +553,10 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 		err:         `cannot prepare statement: input expression: asterisk used with map in invalid context: $M.*`,
 	}, {
 		query:       "SELECT name FROM person WHERE id IN ($Person.*)",
+		prepareArgs: []any{Person{}},
+		err:         `cannot prepare statement: input expression: asterisk used with struct in invalid context: $Person.*`,
+	}, {
+		query:       "SELECT (name, id) WHERE id = $Person.*",
 		prepareArgs: []any{Person{}},
 		err:         `cannot prepare statement: input expression: asterisk used with struct in invalid context: $Person.*`,
 	}, {
