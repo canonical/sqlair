@@ -24,7 +24,7 @@ import (
 type M map[string]any
 
 // S is a slice type that, as with other named slice types, can be used with
-// SQLair to pass a slice of inputs to an IN clause.
+// SQLair to pass a slice of input values.
 type S []any
 
 var ErrNoRows = sql.ErrNoRows
@@ -171,12 +171,12 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: err}
 	}
 
-	sqlstmt, isTemp, err := db.prepareStmt(ctx, db.sqldb, s, sc)
+	sqlstmt, err := db.prepareStmt(ctx, db.sqldb, s, sc)
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
 
-	return &Query{sqlstmt: sqlstmt, isTemp: isTemp, qe: qe, ctx: ctx, err: nil}
+	return &Query{sqlstmt: sqlstmt, isTemp: sc.Enabled(), qe: qe, ctx: ctx, err: nil}
 }
 
 // prepareSubstrate is an object that queries can be prepared on, e.g. a sql.DB
@@ -189,15 +189,7 @@ type prepareSubstrate interface {
 // the cache to see if it has already been prepared on the DB.
 // The prepareSubstrate must be assosiated with the same DB that prepareStmt is
 // a method of.
-func (db *DB) prepareStmt(ctx context.Context, ps prepareSubstrate, s *Statement, sc *expr.StmtCriterion) (sqlstmt *sql.Stmt, tempStmt bool, err error) {
-	if sc.Enabled() {
-		sqlstmt, err = ps.PrepareContext(ctx, s.pe.SQL(sc))
-		if err != nil {
-			return nil, true, err
-		}
-		return sqlstmt, true, nil
-	}
-
+func (db *DB) prepareStmt(ctx context.Context, ps prepareSubstrate, s *Statement, sc *expr.StmtCriterion) (sqlstmt *sql.Stmt, err error) {
 	cacheMutex.RLock()
 	// The statement ID is only removed from the cache when the finalizer is
 	// run, so it is always in stmtDBCache.
@@ -206,7 +198,7 @@ func (db *DB) prepareStmt(ctx context.Context, ps prepareSubstrate, s *Statement
 	if !ok {
 		sqlstmt, err = ps.PrepareContext(ctx, s.pe.SQL(sc))
 		if err != nil {
-			return nil, false, err
+			return nil, err
 		}
 		cacheMutex.Lock()
 		// Check if a statement has been inserted by someone else since we last
@@ -221,7 +213,7 @@ func (db *DB) prepareStmt(ctx context.Context, ps prepareSubstrate, s *Statement
 		}
 		cacheMutex.Unlock()
 	}
-	return sqlstmt, false, nil
+	return sqlstmt, nil
 }
 
 // Run is an alias for Get that takes no arguments.
@@ -575,10 +567,10 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: err}
 	}
 
-	sqlstmt, isTemp, err := tx.db.prepareStmt(ctx, tx.sqlconn, s, sc)
+	sqlstmt, err := tx.db.prepareStmt(ctx, tx.sqlconn, s, sc)
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
 
-	return &Query{sqlstmt: sqlstmt, isTemp: isTemp, qe: qe, tx: tx, ctx: ctx, err: nil}
+	return &Query{sqlstmt: sqlstmt, isTemp: sc.Enabled(), qe: qe, tx: tx, ctx: ctx, err: nil}
 }
