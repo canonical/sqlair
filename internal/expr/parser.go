@@ -661,7 +661,7 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 	return nil, false, nil
 }
 
-// parseInputExpression parses an input expression of the form "Type.name".
+// parseInputExpression parses an input expression of the form "$Type.name".
 func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 	cp := p.save()
 

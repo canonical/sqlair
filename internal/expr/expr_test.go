@@ -401,17 +401,19 @@ comment */ WHERE x = $Address.&d`,
 		query: "SELECT (name, id) AS (&Person.name, &Person.id",
 		err:   `cannot parse expression: column 22: missing closing parentheses`,
 	}, {
+		query: "SELECT (name, id) WHERE id = $Person.*",
+		err:   `cannot parse expression: column 30: asterisk not allowed in input expression "$Person.*"`,
+	}, {
 		query: `SELECT (name, id) AS (&Person.name, /* multiline
 comment */
 
 &Person.id`,
 		err: `cannot parse expression: line 1, column 22: missing closing parentheses`,
 	}, {
-		query: "SELECT col1 AS &S FROM t",
-		err:   `cannot parse expression: column 16: unqualified type, expected S.* or S.<db tag>`,
-	}, {
-		query: "SELECT * AS &S FROM t",
-		err:   `cannot parse expression: column 13: unqualified type, expected S.* or S.<db tag>`,
+		query: `SELECT (name, id) WHERE name = 'multiline
+string
+of three lines' AND id = $Person.*`,
+		err: `cannot parse expression: line 3, column 26: asterisk not allowed in input expression "$Person.*"`,
 	}}
 
 	for _, t := range tests {
@@ -457,7 +459,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT (&Address.*, &Address.id) FROM t",
 		prepareArgs: []any{Address{}, Person{}},
-		err:         `cannot prepare statement: "Address.id" appears more than once in output expressions`,
+		err:         `cannot prepare statement: member "id" of type "Address" appears more than once in output expressions`,
 	}, {
 		query:       "SELECT (p.*, t.name) AS (&Address.*) FROM t",
 		prepareArgs: []any{Address{}},
@@ -469,7 +471,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT (&Person.*, &Person.*) FROM t",
 		prepareArgs: []any{Address{}, Person{}},
-		err:         `cannot prepare statement: "Person.address_id" appears more than once in output expressions`,
+		err:         `cannot prepare statement: member "address_id" of type "Person" appears more than once in output expressions`,
 	}, {
 		query:       "SELECT (p.*, t.*) AS (&Address.*) FROM t",
 		prepareArgs: []any{Address{}},
