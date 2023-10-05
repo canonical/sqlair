@@ -207,21 +207,21 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 		expected: [][]any{},
 	}, {
 		summary:  "simple in",
-		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($S.*)",
+		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($S[:])",
 		types:    []any{Person{}, sqlair.S{}},
 		inputs:   []any{sqlair.S{30, 35, 36, 37, 38, 39, 40}},
 		outputs:  [][]any{{&Person{}}, {&Person{}}, {&Person{}}},
 		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{40, "Mary", 3500}}, {&Person{35, "James", 4500}}},
 	}, {
 		summary:  "complex in",
-		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $S.*, $Manager.id, $IntSlice.*, $StringSlice.*)",
+		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $S[:], $Manager.id, $IntSlice[:], $StringSlice[:])",
 		types:    []any{Person{}, sqlair.S{}, Manager{}, IntSlice{}, StringSlice{}},
 		inputs:   []any{Person{ID: 20}, sqlair.S{21, 23, 24, 25, 26, 27, 28, 29}, IntSlice{31, 32, 33, 34, 35}, &Manager{ID: 30}, StringSlice{"36", "37", "38", "39", "40"}},
 		outputs:  [][]any{{&Person{}}, {&Person{}}, {&Person{}}, {&Person{}}},
 		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{20, "Mark", 1500}}, {&Person{40, "Mary", 3500}}, {&Person{35, "James", 4500}}},
 	}, {
 		summary:  "array in",
-		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($LongSlice.*)",
+		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($LongSlice[:])",
 		types:    []any{Person{}, LongSlice{}},
 		inputs:   []any{LongSlice{30, 35, 40}},
 		outputs:  [][]any{{&Person{}}, {&Person{}}, {&Person{}}},
@@ -697,7 +697,7 @@ func (s *PackageSuite) TestValidGetAll(c *C) {
 		expected: []any{&[]sqlair.M{{"name": "Mark"}}, &[]CustomMap{{"id": int64(20)}}},
 	}, {
 		summary:  "simple in",
-		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($S.*)",
+		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($S[:])",
 		types:    []any{Person{}, sqlair.S{}},
 		inputs:   []any{sqlair.S{20, 35, 36, 37, 38, 39, 40}},
 		slices:   []any{&[]*Person{}},

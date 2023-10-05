@@ -88,10 +88,10 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 	if !ok {
 		return nil, typeMissingError(p.sourceType.name, getKeys(ti))
 	}
-	if p.sourceType.member == "*" {
+	if p.sourceType.member == sliceExtention {
 		switch info := info.(type) {
 		case *structInfo, *mapInfo:
-			return nil, fmt.Errorf(`asterisk used with %s in invalid context`, info.typ().Kind())
+			return nil, fmt.Errorf(`cannot use slice syntax with %s`, info.typ().Kind())
 		case *sliceInfo:
 			tms, err := info.getAllMembers()
 			if err != nil {

@@ -22,7 +22,12 @@ type typeName struct {
 	name, member string
 }
 
+const sliceExtention = "[:]"
+
 func (tn typeName) String() string {
+	if tn.member == sliceExtention {
+		return tn.name + sliceExtention
+	}
 	return tn.name + "." + tn.member
 }
 
@@ -518,6 +523,9 @@ func (p *Parser) parseTypeName() (typeName, bool, error) {
 	// The error points to the skipped & or $.
 	identifierCol := p.colNum() - 1
 	if id, ok := p.parseIdentifier(); ok {
+		if p.skipString(sliceExtention) {
+			return typeName{name: id, member: sliceExtention}, true, nil
+		}
 		if !p.skipByte('.') {
 			return typeName{}, false, errorAt(fmt.Errorf("unqualified type, expected %s.* or %s.<db tag>", id, id), p.lineNum, identifierCol, p.input)
 		}
@@ -658,7 +666,12 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 	cp := p.save()
 
 	if p.skipByte('$') {
+		// Error points to the $ sign skipped above.
+		nameCol := p.colNum() - 1
 		if tn, ok, err := p.parseTypeName(); ok {
+			if tn.member == "*" {
+				return nil, false, errorAt(fmt.Errorf(`asterisk not allowed in input expression "$%s"`, tn), p.lineNum, nameCol, p.input)
+			}
 			return &inputPart{sourceType: tn, raw: p.input[cp.pos:p.pos]}, true, nil
 		} else if err != nil {
 			return nil, false, err

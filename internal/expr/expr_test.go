@@ -539,25 +539,17 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 		prepareArgs: []any{NoTags{}},
 		err:         `cannot prepare statement: output expression: no "db" tags found in struct "NoTags": &NoTags.*`,
 	}, {
-		query:       "SELECT street FROM t WHERE x = $Address.*",
+		query:       "SELECT street FROM t WHERE x = $Address[:]",
 		prepareArgs: []any{Person{}, Manager{}, Address{}},
-		err:         `cannot prepare statement: input expression: asterisk used with struct in invalid context: $Address.*`,
+		err:         `cannot prepare statement: input expression: cannot use slice syntax with struct: $Address[:]`,
 	}, {
-		query:       "SELECT name FROM person WHERE id IN ($M.*)",
+		query:       "SELECT name FROM person WHERE id IN ($M[:])",
 		prepareArgs: []any{M{}},
-		err:         `cannot prepare statement: input expression: asterisk used with map in invalid context: $M.*`,
+		err:         `cannot prepare statement: input expression: cannot use slice syntax with map: $M[:]`,
 	}, {
-		query:       "SELECT name FROM person WHERE id IN ($Person.*)",
-		prepareArgs: []any{Person{}},
-		err:         `cannot prepare statement: input expression: asterisk used with struct in invalid context: $Person.*`,
-	}, {
-		query:       "SELECT (name, id) WHERE id = $Person.*",
-		prepareArgs: []any{Person{}},
-		err:         `cannot prepare statement: input expression: asterisk used with struct in invalid context: $Person.*`,
-	}, {
-		query:       "SELECT &S.* FROM t",
+		query:       "SELECT &S[:] FROM t",
 		prepareArgs: []any{sqlair.S{}},
-		err:         `cannot prepare statement: output expression: cannot use slice type "S" in output expression: &S.*`,
+		err:         `cannot prepare statement: output expression: cannot use slice type "S" in output expression: &S[:]`,
 	}}
 
 	for i, test := range tests {
@@ -635,22 +627,22 @@ func (s *ExprSuite) TestSliceQuery(c *C) {
 		expectedSQL string
 	}{{
 		"single slice",
-		"SELECT name FROM person WHERE id IN ($S.*)",
-		"[Bypass[SELECT name FROM person WHERE id IN (] Input[S.*] Bypass[)]]",
+		"SELECT name FROM person WHERE id IN ($S[:])",
+		"[Bypass[SELECT name FROM person WHERE id IN (] Input[S[:]] Bypass[)]]",
 		[]any{sqlair.S{}},
 		[]any{sqlair.S{1, 2, 3}},
 		"SELECT name FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2)",
 	}, {
 		"many slices",
-		"SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $S.*, $Manager.id, $IntSlice.*, $StringSlice.*)",
-		"[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE id IN (] Input[Person.id] Bypass[, ] Input[S.*] Bypass[, ] Input[Manager.id] Bypass[, ] Input[IntSlice.*] Bypass[, ] Input[StringSlice.*] Bypass[)]]",
+		"SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $S[:], $Manager.id, $IntSlice[:], $StringSlice[:])",
+		"[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE id IN (] Input[Person.id] Bypass[, ] Input[S[:]] Bypass[, ] Input[Manager.id] Bypass[, ] Input[IntSlice[:]] Bypass[, ] Input[StringSlice[:]] Bypass[)]]",
 		[]any{sqlair.S{}, Person{}, Manager{}, IntSlice{}, StringSlice{}},
 		[]any{sqlair.S{1, 2, 3}, Person{ID: 1}, Manager{ID: 1}, IntSlice{4, 5, 6}, StringSlice{"7", "8", "9"}},
 		"SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7, @sqlair_8, @sqlair_9, @sqlair_10)",
 	}, {
 		"slices and other expressions in IN statement",
-		`SELECT name FROM person WHERE id IN ($S.*, func(1,2), "one", $IntSlice.*)`,
-		`[Bypass[SELECT name FROM person WHERE id IN (] Input[S.*] Bypass[, func(1,2), "one", ] Input[IntSlice.*] Bypass[)]]`,
+		`SELECT name FROM person WHERE id IN ($S[:], func(1,2), "one", $IntSlice[:])`,
+		`[Bypass[SELECT name FROM person WHERE id IN (] Input[S[:]] Bypass[, func(1,2), "one", ] Input[IntSlice[:]] Bypass[)]]`,
 		[]any{sqlair.S{}, IntSlice{}},
 		[]any{sqlair.S{1, 2, 3, 4, 5, 6, 7, 8}, IntSlice{1, 2, 3, 4, 5, 6, 7, 8}},
 		`SELECT name FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7, func(1,2), "one", @sqlair_8, @sqlair_9, @sqlair_10, @sqlair_11, @sqlair_12, @sqlair_13, @sqlair_14, @sqlair_15)`,
@@ -715,12 +707,12 @@ func (s *ExprSuite) TestValidQuery(c *C) {
 		[]any{Person{ID: 666}, StringMap{"street": "Highway to Hell"}},
 		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
 	}, {
-		"SELECT name FROM person WHERE id IN ($S.*)",
+		"SELECT name FROM person WHERE id IN ($S[:])",
 		[]any{sqlair.S{}},
 		[]any{sqlair.S{1, 2, 3, 4, 5, 6}},
 		[]any{sql.Named("sqlair_0", 1), sql.Named("sqlair_1", 2), sql.Named("sqlair_2", 3), sql.Named("sqlair_3", 4), sql.Named("sqlair_4", 5), sql.Named("sqlair_5", 6)},
 	}, {
-		"SELECT name FROM person WHERE id IN ($S.*, $IntSlice.*)",
+		"SELECT name FROM person WHERE id IN ($S[:], $IntSlice[:])",
 		[]any{sqlair.S{}, IntSlice{}},
 		[]any{sqlair.S{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, IntSlice{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}},
 		[]any{sql.Named("sqlair_0", 1), sql.Named("sqlair_1", 2), sql.Named("sqlair_2", 3), sql.Named("sqlair_3", 4), sql.Named("sqlair_4", 5), sql.Named("sqlair_5", 6), sql.Named("sqlair_6", 7), sql.Named("sqlair_7", 8), sql.Named("sqlair_8", 9), sql.Named("sqlair_9", 10), sql.Named("sqlair_10", 1), sql.Named("sqlair_11", 2), sql.Named("sqlair_12", 3), sql.Named("sqlair_13", 4), sql.Named("sqlair_14", 5), sql.Named("sqlair_15", 6), sql.Named("sqlair_16", 7), sql.Named("sqlair_17", 8), sql.Named("sqlair_18", 9), sql.Named("sqlair_19", 10)},
@@ -802,7 +794,7 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		queryArgs:   []any{Person{}, Person{}},
 		err:         `invalid input parameter: type "Person" provided more than once`,
 	}, {
-		query:       "SELECT street FROM t WHERE x IN ($S.*)",
+		query:       "SELECT street FROM t WHERE x IN ($S[:])",
 		prepareArgs: []any{sqlair.S{}},
 		queryArgs:   []any{sqlair.S{}},
 		err:         `invalid input parameter: slice arg with type "S" has length 0`,
