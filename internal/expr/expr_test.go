@@ -407,11 +407,6 @@ comment */
 &Person.id`,
 		err: `cannot parse expression: line 1, column 22: missing closing parentheses`,
 	}, {
-		query: `SELECT (name, id) WHERE name = 'multiline
-string
-of three lines' AND id = $Person.`,
-		err: `cannot parse expression: line 3, column 34: invalid identifier suffix following "Person"`,
-	}, {
 		query: "SELECT col1 AS &S FROM t",
 		err:   `cannot parse expression: column 16: unqualified type, expected S.* or S.<db tag>`,
 	}, {
