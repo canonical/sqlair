@@ -9,21 +9,10 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-type Location struct {
-	ID   int    `db:"room_id"`
-	Name string `db:"room_name"`
-}
-
 type Employee struct {
-	ID     int    `db:"id"`
-	TeamID int    `db:"team_id"`
-	Name   string `db:"name"`
-}
-
-type Team struct {
-	ID     int    `db:"id"`
-	RoomID int    `db:"room_id"`
-	Name   string `db:"team_name"`
+	ID   int    `db:"id"`
+	Team string `db:"team_name"`
+	Name string `db:"name"`
 }
 
 func Example() {
@@ -33,73 +22,26 @@ func Example() {
 	}
 
 	db := sqlair.NewDB(sqldb)
-	createLocations := sqlair.MustPrepare(`
-	CREATE TABLE locations (
-		room_id integer,
-		room_name text
-	);`)
 
-	createEmployees := sqlair.MustPrepare(`
-	CREATE TABLE employees (
-		id integer,
-		team_id integer,
-		name text
-	);`)
-	createTeams := sqlair.MustPrepare(`
-	CREATE TABLE teams (
-		id integer,
-		room_id integer,
-		team_name text
-	)`)
-	createTables := []*sqlair.Statement{createLocations, createEmployees, createTeams}
-	for _, createTable := range createTables {
-		err = db.Query(nil, createTable).Run()
-		if err != nil {
-			panic(err)
-		}
+	createEmployees := sqlair.MustPrepare(`CREATE TABLE employees (id integer, team_name string, name text);`)
+	err = db.Query(nil, createEmployees).Run()
+	if err != nil {
+		panic(err)
 	}
 
-	// Statement to populate the locations table.
-	insertLocation := sqlair.MustPrepare(`
-		INSERT INTO locations (room_name, room_id) 
-		VALUES ($Location.room_name, $Location.room_id)`,
-		Location{},
-	)
-
-	l1 := Location{ID: 1, Name: "The Basement"}
-	l2 := Location{ID: 2, Name: "Court"}
-	l3 := Location{ID: 3, Name: "The Market"}
-	l4 := Location{ID: 4, Name: "The Bar"}
-	l5 := Location{ID: 5, Name: "The Penthouse"}
-	locations := []Location{l1, l2, l3, l4, l5}
-	for _, l := range locations {
-		err := db.Query(nil, insertLocation, l).Run()
-		if err != nil {
-			panic(err)
-		}
-	}
+	e1 := Employee{ID: 1, Team: "Engineering", Name: "Alastair"}
+	e2 := Employee{ID: 2, Team: "Engineering", Name: "Ed"}
+	e3 := Employee{ID: 3, Team: "Management", Name: "Marco"}
+	e4 := Employee{ID: 4, Team: "Management", Name: "Pedro"}
+	e5 := Employee{ID: 5, Team: "HR", Name: "Igor"}
+	employees := []Employee{e1, e2, e3, e4, e5}
 
 	// Statement to populate the employees table.
 	insertEmployee := sqlair.MustPrepare(`
-		INSERT INTO employees (id, name, team_id)
-		VALUES ($Employee.id, $Employee.name, $Employee.team_id);`,
+		INSERT INTO employees (id, name, team_name)
+		VALUES ($Employee.id, $Employee.name, $Employee.team_name);`,
 		Employee{},
 	)
-
-	e1 := Employee{ID: 1, TeamID: 1, Name: "Alastair"}
-	e2 := Employee{ID: 2, TeamID: 1, Name: "Ed"}
-	e3 := Employee{ID: 3, TeamID: 1, Name: "Marco"}
-	e4 := Employee{ID: 4, TeamID: 2, Name: "Pedro"}
-	e5 := Employee{ID: 5, TeamID: 3, Name: "Serdar"}
-	e6 := Employee{ID: 6, TeamID: 3, Name: "Lina"}
-	e7 := Employee{ID: 7, TeamID: 4, Name: "Joe"}
-	e8 := Employee{ID: 8, TeamID: 5, Name: "Ben"}
-	e9 := Employee{ID: 9, TeamID: 5, Name: "Jenny"}
-	e10 := Employee{ID: 10, TeamID: 6, Name: "Sam"}
-	e11 := Employee{ID: 11, TeamID: 7, Name: "Melody"}
-	e12 := Employee{ID: 12, TeamID: 8, Name: "Mark"}
-	e13 := Employee{ID: 13, TeamID: 8, Name: "Gustavo"}
-	employees := []Employee{e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13}
 	for _, e := range employees {
 		err := db.Query(nil, insertEmployee, e).Run()
 		if err != nil {
@@ -107,121 +49,44 @@ func Example() {
 		}
 	}
 
-	// Statement to populate the teams table.
-	insertTeam := sqlair.MustPrepare(`
-		INSERT INTO teams (id, team_name, room_id)
-		VALUES ($Team.id, $Team.team_name, $Team.room_id);`,
-		Team{},
-	)
-
-	t1 := Team{ID: 1, RoomID: 1, Name: "Engineering"}
-	t2 := Team{ID: 2, RoomID: 1, Name: "Management"}
-	t3 := Team{ID: 3, RoomID: 1, Name: "Presentation Engineering"}
-	t4 := Team{ID: 4, RoomID: 2, Name: "Marketing"}
-	t5 := Team{ID: 5, RoomID: 3, Name: "Legal"}
-	t6 := Team{ID: 6, RoomID: 3, Name: "HR"}
-	t7 := Team{ID: 7, RoomID: 4, Name: "Sales"}
-	t8 := Team{ID: 8, RoomID: 5, Name: "Leadership"}
-	teams := []Team{t1, t2, t3, t4, t5, t6, t7, t8}
-	for _, t := range teams {
-		err := db.Query(nil, insertTeam, t).Run()
-		if err != nil {
-			panic(err)
-		}
+	// Select an employee from the database.
+	selectEmployee, err := sqlair.Prepare(`SELECT &Employee.* FROM employees`, Employee{})
+	if err != nil {
+		panic(err)
 	}
-
-	// Example 1
-	// Find the team the employee 1 works in.
-	selectSomeoneInTeam := sqlair.MustPrepare(`
-		SELECT &Team.*
-		FROM teams
-		WHERE id = $Employee.team_id`,
-		Employee{}, Team{},
-	)
-
-	// Get returns a single result.
-	team := Team{}
-	err = db.Query(nil, selectSomeoneInTeam, e1).Get(&team)
+	// Get fetches a single result from the database and scans it into the
+	// arguement. To fetch all results from the database use GetAll, and to
+	// iterate through the results row by row, use Iter.
+	employee := Employee{}
+	err = db.Query(nil, selectEmployee).Get(&employee)
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Printf("%s is on the %s team.\n", e1.Name, team.Name)
+	fmt.Printf("Employee %s has ID %d.\n", employee.Name, employee.ID)
 
-	// Example 2
-	// Find out who is in location l1 and what team they work for.
-	selectPeopleInRoom := sqlair.MustPrepare(`
-		SELECT e.* AS &Employee.*, (t.team_name, t.id) AS (&Team.*)
-		FROM employees AS e, teams AS t
-		WHERE t.room_id = $Location.room_id AND t.id = e.team_id`,
-		Employee{}, Team{}, Location{},
-	)
-
-	// GetAll returns all the results.
-	roomDwellers := []Employee{}
-	dwellersTeams := []Team{}
-	err = db.Query(nil, selectPeopleInRoom, l1).GetAll(&roomDwellers, &dwellersTeams)
+	// Select the team name of an employee with a given ID.
+	selectTeam, err := sqlair.Prepare(`SELECT &Employee.team_name FROM employees WHERE id = $Employee.id`, Employee{})
 	if err != nil {
 		panic(err)
 	}
-
-	for i := range roomDwellers {
-		fmt.Printf("%s (%s), ", roomDwellers[i].Name, dwellersTeams[i].Name)
-	}
-	fmt.Printf("are in %s.\n", l1.Name)
-
-	// Example 3
-	// Cycle through employees until we find one in the Penthouse.
-
-	// A map with a key type of string is used to pass arguments that are not
-	// fields of structs. Any named map type with a key type of string can be
-	// used. SQLair provides the sqlair.M type which is of type map[string]any.
-	selectPeopleAndRoom := sqlair.MustPrepare(`
-		SELECT (e.name, t.team_name, l.room_name) AS (&M.employee_name, &M.team, &M.location)
-		FROM locations AS l
-		JOIN teams AS t
-		ON t.room_id = l.room_id
-		JOIN employees AS e
-		ON e.team_id = t.id`,
-		sqlair.M{},
-	)
-
-	// Results can be iterated through with an Iterable.
-	// iter.Next prepares the next result.
-	// iter.Get reads it into structs.
-	// iter.Close closes the query returning any errors. It must be called after iteration is finished.
-	iter := db.Query(nil, selectPeopleAndRoom).Iter()
-	defer iter.Close()
-	for iter.Next() {
-		m := sqlair.M{}
-		err := iter.Get(&m)
-		if err != nil {
-			panic(err)
-		}
-		if m["location"] == "The Penthouse" {
-			fmt.Printf("%s from team %s is in %s.\n", m["employee_name"], m["team"], m["location"])
-			break
-		}
-	}
-	err = iter.Close()
+	// Get the team of employee with ID 4
+	employee4 := Employee{ID: 4}
+	err = db.Query(nil, selectTeam, employee4).Get(&employee4)
 	if err != nil {
 		panic(err)
 	}
+	fmt.Printf("Employee %s is in the %s team.\n", employee.Name, employee.Team)
 
-	drop := sqlair.MustPrepare(`
-		DROP TABLE employees;
-		DROP TABLE teams;
-		DROP TABLE locations;`,
-	)
-	err = db.Query(nil, drop).Run()
+	dropEmployees := sqlair.MustPrepare(`DROP TABLE employees`)
+	err = db.Query(nil, dropEmployees).Run()
 	if err != nil {
 		panic(err)
 	}
 
 	// Output:
-	// Alastair is on the Engineering team.
-	// Alastair (Engineering), Ed (Engineering), Marco (Engineering), Pedro (Management), Serdar (Presentation Engineering), Lina (Presentation Engineering), are in The Basement.
-	// Gustavo from team Leadership is in The Penthouse.
+	// Employee Alastair has ID 1.
+	// Employee Alastair is in the Engineering team.
 }
 
 func ExampleOutcome_get() {
