@@ -18,8 +18,8 @@ type queryPart interface {
 }
 
 // valueAccessor stores information for accessing a Go value. It consists of a
-// type name and a part of it to access, for example a field of a struct or key
-// of a map.
+// type name and some value within it to be accessed. For example: a field of a
+// struct, or a key of a map.
 type valueAccessor struct {
 	typeName, memberName string
 }
