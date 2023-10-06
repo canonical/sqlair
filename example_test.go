@@ -37,11 +37,13 @@ func Example() {
 	employees := []Employee{e1, e2, e3, e4, e5}
 
 	// Statement to populate the employees table.
-	insertEmployee := sqlair.MustPrepare(`
-		INSERT INTO employees (id, name, team_name)
-		VALUES ($Employee.id, $Employee.name, $Employee.team_name);`,
+	insertEmployee, err := sqlair.Prepare(
+		`INSERT INTO employees (id, name, team_name) VALUES ($Employee.id, $Employee.name, $Employee.team_name);`,
 		Employee{},
 	)
+	if err != nil {
+		panic(err)
+	}
 	for _, e := range employees {
 		err := db.Query(nil, insertEmployee, e).Run()
 		if err != nil {
@@ -66,7 +68,10 @@ func Example() {
 	fmt.Printf("Employee %s has ID %d.\n", employee.Name, employee.ID)
 
 	// Select the team name of an employee with a given ID.
-	selectTeam, err := sqlair.Prepare(`SELECT &Employee.team_name FROM employees WHERE id = $Employee.id`, Employee{})
+	selectTeam, err := sqlair.Prepare(
+		`SELECT &Employee.team_name FROM employees WHERE id = $Employee.id`,
+		Employee{},
+	)
 	if err != nil {
 		panic(err)
 	}
@@ -95,21 +100,24 @@ func ExampleOutcome_get() {
 		panic(err)
 	}
 	db := sqlair.NewDB(sqldb)
-	stmt := sqlair.MustPrepare(`
-	CREATE TABLE people (
-		name text,
-		id integer
-	);
-	`)
+	stmt := sqlair.MustPrepare(`CREATE TABLE people (name text, id integer);`)
 
 	outcome := sqlair.Outcome{}
 
 	err = db.Query(nil, stmt).Get(&outcome)
 
 	res := outcome.Result()
-	s, _ := res.RowsAffected()
+	s, err := res.RowsAffected()
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println(s)
 
+	dropPeople := sqlair.MustPrepare(`DROP TABLE people`)
+	err = db.Query(nil, dropPeople).Run()
+	if err != nil {
+		panic(err)
+	}
 	// Output:
 	// 0
 }
@@ -120,12 +128,7 @@ func ExampleOutcome_iter() {
 		panic(err)
 	}
 	db := sqlair.NewDB(sqldb)
-	stmt := sqlair.MustPrepare(`
-	CREATE TABLE people (
-		name text,
-		id integer
-	);
-	`)
+	stmt := sqlair.MustPrepare(`CREATE TABLE people (name text, id integer);`)
 
 	outcome := sqlair.Outcome{}
 
@@ -133,12 +136,26 @@ func ExampleOutcome_iter() {
 	// can be passed to Iter.Get before Iter.Next is called.
 	iter := db.Query(nil, stmt).Iter()
 	err = iter.Get(&outcome)
-	iter.Close()
+	if err != nil {
+		panic(err)
+	}
+	err = iter.Close()
+	if err != nil {
+		panic(err)
+	}
 
 	res := outcome.Result()
-	s, _ := res.RowsAffected()
+	s, err := res.RowsAffected()
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println(s)
 
+	dropPeople := sqlair.MustPrepare(`DROP TABLE people`)
+	err = db.Query(nil, dropPeople).Run()
+	if err != nil {
+		panic(err)
+	}
 	// Output:
 	// 0
 }
@@ -150,12 +167,7 @@ func ExampleM() {
 	}
 	db := sqlair.NewDB(sqldb)
 
-	stmt := sqlair.MustPrepare(`
-		CREATE TABLE people (
-			name text,
-			id integer
-		);
-	`)
+	stmt := sqlair.MustPrepare(`CREATE TABLE people (name text, id integer);`)
 	err = db.Query(nil, stmt).Run()
 	if err != nil {
 		panic(err)
@@ -166,11 +178,13 @@ func ExampleM() {
 	m["name"] = "Fred"
 	m["id"] = 30
 
-	stmt = sqlair.MustPrepare(`
-		INSERT INTO people (name, id)
-		VALUES ($M.name, $M.id)
-	`, sqlair.M{})
-
+	stmt, err = sqlair.Prepare(
+		`INSERT INTO people (name, id) VALUES ($M.name, $M.id)`,
+		sqlair.M{},
+	)
+	if err != nil {
+		panic(err)
+	}
 	// This will insert Fred with id 30 into the database.
 	err = db.Query(nil, stmt, m).Run()
 	if err != nil {
@@ -180,23 +194,25 @@ func ExampleM() {
 	// Maps can be used in queries, the only requisite is that they have a
 	// name, and a key type of string.
 	type MyIntMap map[string]int
-	mm := MyIntMap{}
 
-	stmt = sqlair.MustPrepare(`
-		SELECT &MyIntMap.id
-		FROM people
-		WHERE name = $M.name
-	`, sqlair.M{}, MyIntMap{})
-
+	stmt, err = sqlair.Prepare(
+		`SELECT &MyIntMap.id FROM people WHERE name = $M.name`,
+		sqlair.M{}, MyIntMap{},
+	)
 	// Select the id of Fred into mm["id"].
 	// Maps do not have to be passed as a pointer.
+	mm := MyIntMap{}
 	err = db.Query(nil, stmt, m).Get(mm)
 	if err != nil {
 		panic(err)
 	}
-
 	fmt.Printf("Fred's id is %d", mm["id"])
 
+	dropPeople := sqlair.MustPrepare(`DROP TABLE people`)
+	err = db.Query(nil, dropPeople).Run()
+	if err != nil {
+		panic(err)
+	}
 	// Output:
 	// Fred's id is 30
 }
