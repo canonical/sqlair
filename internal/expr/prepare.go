@@ -51,10 +51,10 @@ func getKeys[T any](m map[string]T) []string {
 }
 
 // starCountColumns counts the number of asterisks in a list of columns.
-func starCountColumns(columns []columnName) int {
+func starCountColumns(cs []columnAccessor) int {
 	s := 0
-	for _, column := range columns {
-		if column.name == "*" {
+	for _, c := range cs {
+		if c.columnName == "*" {
 			s++
 		}
 	}
@@ -62,10 +62,10 @@ func starCountColumns(columns []columnName) int {
 }
 
 // starCountTypes counts the number of asterisks in a list of types.
-func starCountTypes(types []typeName) int {
+func starCountTypes(vs []valueAccessor) int {
 	s := 0
-	for _, t := range types {
-		if t.member == "*" {
+	for _, v := range vs {
+		if v.memberName == "*" {
 			s++
 		}
 	}
@@ -87,12 +87,13 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 			err = fmt.Errorf("input expression: %s: %s", err, p.raw)
 		}
 	}()
-	info, ok := lookupType(ti, p.sourceType.name)
+
+	info, ok := lookupType(ti, p.sourceType.typeName)
 	if !ok {
-		return nil, typeMissingError(p.sourceType.name, getKeys(ti))
+		return nil, typeMissingError(p.sourceType.typeName, getKeys(ti))
 	}
 
-	tm, err = info.typeMember(p.sourceType.member)
+	tm, err = info.typeMember(p.sourceType.memberName)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +102,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 
 // prepareOutput checks that the output expressions correspond to known types.
 // It then checks they are formatted correctly and finally generates the columns for the query.
-func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnName, typeMembers []typeMember, err error) {
+func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnAccessor, typeMembers []typeMember, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("output expression: %s: %s", err, p.raw)
@@ -118,18 +119,18 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnName, type
 		pref := ""
 		// Prepend table name. E.g. "t" in "t.* AS &P.*".
 		if numColumns > 0 {
-			pref = p.sourceColumns[0].table
+			pref = p.sourceColumns[0].tableName
 		}
 
 		for _, t := range p.targetTypes {
-			info, ok := lookupType(ti, t.name)
+			info, ok := lookupType(ti, t.typeName)
 			if !ok {
-				return nil, nil, typeMissingError(t.name, getKeys(ti))
+				return nil, nil, typeMissingError(t.typeName, getKeys(ti))
 			}
 			if _, ok := info.(*primitiveTypeInfo); ok {
 				return nil, nil, fmt.Errorf(`column not specified for primitive type`)
 			}
-			if t.member == "*" {
+			if t.memberName == "*" {
 				// Generate asterisk columns.
 				allMembers, err := info.getAllMembers()
 				if err != nil {
@@ -137,16 +138,16 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnName, type
 				}
 				typeMembers = append(typeMembers, allMembers...)
 				for _, tm := range allMembers {
-					outCols = append(outCols, columnName{pref, tm.memberName()})
+					outCols = append(outCols, columnAccessor{pref, tm.memberName()})
 				}
 			} else {
 				// Generate explicit columns.
-				tm, err := info.typeMember(t.member)
+				tm, err := info.typeMember(t.memberName)
 				if err != nil {
 					return nil, nil, err
 				}
 				typeMembers = append(typeMembers, tm)
-				outCols = append(outCols, columnName{pref, t.member})
+				outCols = append(outCols, columnAccessor{pref, t.memberName})
 			}
 		}
 		return outCols, typeMembers, nil
@@ -156,15 +157,15 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnName, type
 
 	// Case 2: Explicit columns, single asterisk type e.g. "(col1, t.col2) AS &P.*".
 	if starTypes == 1 && numTypes == 1 {
-		info, ok := lookupType(ti, p.targetTypes[0].name)
+		info, ok := lookupType(ti, p.targetTypes[0].typeName)
 		if !ok {
-			return nil, nil, typeMissingError(p.targetTypes[0].name, getKeys(ti))
+			return nil, nil, typeMissingError(p.targetTypes[0].typeName, getKeys(ti))
 		}
 		if _, ok := info.(*primitiveTypeInfo); ok {
 			return nil, nil, fmt.Errorf(`cannot use star with primitive type %q in expression`, info.typ().Name())
 		}
 		for _, c := range p.sourceColumns {
-			tm, err := info.typeMember(c.name)
+			tm, err := info.typeMember(c.columnName)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -180,11 +181,11 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnName, type
 	if numColumns == numTypes {
 		for i, c := range p.sourceColumns {
 			t := p.targetTypes[i]
-			info, ok := lookupType(ti, t.name)
+			info, ok := lookupType(ti, t.typeName)
 			if !ok {
-				return nil, nil, typeMissingError(t.name, getKeys(ti))
+				return nil, nil, typeMissingError(t.typeName, getKeys(ti))
 			}
-			tm, err := info.typeMember(t.member)
+			tm, err := info.typeMember(t.memberName)
 			if err != nil {
 				return nil, nil, err
 			}
