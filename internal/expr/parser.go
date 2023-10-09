@@ -24,6 +24,12 @@ type valueAccessor struct {
 	typeName, memberName string
 }
 
+// sliceExtention is the string following a type to indicate that it is a
+// slice. It indicates that all elements of the input slice are passed to the
+// query.
+// A more comprehensive slice syntax/semantics is planned. Matching against
+// this string is a simple way of recognising slices until the complete
+// solution is ready.
 const sliceExtention = "[:]"
 
 func (va valueAccessor) String() string {
