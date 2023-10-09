@@ -88,7 +88,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 	if !ok {
 		return nil, typeMissingError(p.sourceType.typeName, getKeys(ti))
 	}
-	if p.sourceType.isSlice {
+	if p.isSlice {
 		switch info := info.(type) {
 		case *structInfo, *mapInfo:
 			return nil, fmt.Errorf(`cannot use slice syntax with %s`, info.typ().Kind())

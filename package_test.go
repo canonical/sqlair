@@ -113,7 +113,7 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 	}
 	type IntSlice []int
 	type StringSlice []string
-	type LongSlice [10]int
+	type LongArray [10]int
 	var tests = []struct {
 		summary  string
 		query    string
@@ -221,9 +221,9 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{20, "Mark", 1500}}, {&Person{40, "Mary", 3500}}, {&Person{35, "James", 4500}}},
 	}, {
 		summary:  "array in",
-		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($LongSlice[:])",
-		types:    []any{Person{}, LongSlice{}},
-		inputs:   []any{LongSlice{30, 35, 40}},
+		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($LongArray[:])",
+		types:    []any{Person{}, LongArray{}},
+		inputs:   []any{LongArray{30, 35, 40}},
 		outputs:  [][]any{{&Person{}}, {&Person{}}, {&Person{}}},
 		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{40, "Mary", 3500}}, {&Person{35, "James", 4500}}},
 	}}
