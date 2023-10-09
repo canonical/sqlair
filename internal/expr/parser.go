@@ -687,7 +687,11 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 			if tn.memberName == "*" {
 				return nil, false, errorAt(fmt.Errorf(`asterisk not allowed in input expression "$%s"`, tn), p.lineNum, nameCol, p.input)
 			}
-			return &inputPart{sourceType: tn, raw: p.input[cp.pos:p.pos]}, true, nil
+			isSlice := false
+			if tn.memberName == sliceExtention {
+				isSlice = true
+			}
+			return &inputPart{sourceType: tn, raw: p.input[cp.pos:p.pos], isSlice: isSlice}, true, nil
 		} else if err != nil {
 			return nil, false, err
 		}
