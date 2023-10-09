@@ -50,11 +50,11 @@ func getKeys[T any](m map[string]T) []string {
 }
 
 // starCountColumns counts the number of asterisks in a list of columns.
-func starCountColumns(columns []columnExpr) int {
+func starCountColumns(cs []columnExpr) int {
 	s := 0
-	for _, column := range columns {
-		if cn, ok := column.(columnName); ok {
-			if cn.name == "*" {
+	for _, c := range cs {
+		if ca, ok := c.(columnAccessor); ok {
+			if ca.columnName == "*" {
 				s++
 			}
 		}
@@ -63,10 +63,10 @@ func starCountColumns(columns []columnExpr) int {
 }
 
 // starCountTypes counts the number of asterisks in a list of types.
-func starCountTypes(types []typeName) int {
+func starCountTypes(vs []valueAccessor) int {
 	s := 0
-	for _, t := range types {
-		if t.member == "*" {
+	for _, v := range vs {
+		if v.memberName == "*" {
 			s++
 		}
 	}
@@ -89,12 +89,12 @@ func (pe *PreparedExpr) prepareInput(ti typeNameToInfo, p *inputPart) (err error
 		}
 	}()
 
-	info, ok := ti[p.sourceType.name]
+	info, ok := ti[p.sourceType.typeName]
 	if !ok {
-		return typeMissingError(p.sourceType.name, getKeys(ti))
+		return typeMissingError(p.sourceType.typeName, getKeys(ti))
 	}
 
-	tm, err := info.typeMember(p.sourceType.member)
+	tm, err := info.typeMember(p.sourceType.memberName)
 	if err != nil {
 		return err
 	}
@@ -127,35 +127,35 @@ func (pe *PreparedExpr) prepareOutput(ti typeNameToInfo, p *outputPart) (err err
 		pref := ""
 		// Prepend table name. E.g. "t" in "t.* AS &P.*".
 		if numColumns > 0 {
-			starCol, ok := p.sourceColumns[0].(columnName)
+			starCol, ok := p.sourceColumns[0].(columnAccessor)
 			if !ok {
-				return fmt.Errorf("internal error: expected starCol to be of type fullName, got %T", starCol)
+				return fmt.Errorf("internal error: expected starCol to be of type columnAccessor, got %T", starCol)
 			}
-			pref = starCol.table
+			pref = starCol.tableName
 		}
 
 		for _, t := range p.targetTypes {
-			info, ok := ti[t.name]
+			info, ok := ti[t.typeName]
 			if !ok {
-				return typeMissingError(t.name, getKeys(ti))
+				return typeMissingError(t.typeName, getKeys(ti))
 			}
-			if t.member == "*" {
+			if t.memberName == "*" {
 				// Generate asterisk columns.
 				allMembers, err := info.getAllMembers()
 				if err != nil {
 					return err
 				}
 				for _, tm := range allMembers {
-					pe.sql += columnName{pref, tm.memberName()}.String() + " AS " + markerName(len(pe.outputs)) + ", "
+					pe.sql += columnAccessor{pref, tm.memberName()}.String() + " AS " + markerName(len(pe.outputs)) + ", "
 					pe.outputs = append(pe.outputs, tm)
 				}
 			} else {
 				// Generate explicit columns.
-				tm, err := info.typeMember(t.member)
+				tm, err := info.typeMember(t.memberName)
 				if err != nil {
 					return err
 				}
-				pe.sql += columnName{pref, t.member}.String() + " AS " + markerName(len(pe.outputs)) + ", "
+				pe.sql += columnAccessor{pref, t.memberName}.String() + " AS " + markerName(len(pe.outputs)) + ", "
 				pe.outputs = append(pe.outputs, tm)
 			}
 		}
@@ -166,16 +166,16 @@ func (pe *PreparedExpr) prepareOutput(ti typeNameToInfo, p *outputPart) (err err
 
 	// Case 2: Explicit columns, single asterisk type e.g. "(col1, t.col2) AS &P.*".
 	if starTypes == 1 && numTypes == 1 {
-		info, ok := ti[p.targetTypes[0].name]
+		info, ok := ti[p.targetTypes[0].typeName]
 		if !ok {
-			return typeMissingError(p.targetTypes[0].name, getKeys(ti))
+			return typeMissingError(p.targetTypes[0].typeName, getKeys(ti))
 		}
 		for _, c := range p.sourceColumns {
 			switch c := c.(type) {
 			case funcExpr:
 				return fmt.Errorf(`cannot use function with star type`)
-			case columnName:
-				tm, err := info.typeMember(c.name)
+			case columnAccessor:
+				tm, err := info.typeMember(c.columnName)
 				if err != nil {
 					return err
 				}
@@ -192,9 +192,9 @@ func (pe *PreparedExpr) prepareOutput(ti typeNameToInfo, p *outputPart) (err err
 	if numColumns == numTypes {
 		for i, c := range p.sourceColumns {
 			t := p.targetTypes[i]
-			info, ok := ti[t.name]
+			info, ok := ti[t.typeName]
 			if !ok {
-				return typeMissingError(t.name, getKeys(ti))
+				return typeMissingError(t.typeName, getKeys(ti))
 			}
 
 			var column string
@@ -206,10 +206,10 @@ func (pe *PreparedExpr) prepareOutput(ti typeNameToInfo, p *outputPart) (err err
 				// We leave the column black since it has already been written
 				// by prepareParts.
 				column = ""
-			case columnName:
+			case columnAccessor:
 				column = c.String()
 			}
-			tm, err := info.typeMember(t.member)
+			tm, err := info.typeMember(t.memberName)
 			if err != nil {
 				return err
 			}

@@ -17,13 +17,15 @@ type queryPart interface {
 	part()
 }
 
-// typeName stores a Go type and a member of it.
-type typeName struct {
-	name, member string
+// valueAccessor stores information for accessing a Go value. It consists of a
+// type name and some value within it to be accessed. For example: a field of a
+// struct, or a key of a map.
+type valueAccessor struct {
+	typeName, memberName string
 }
 
-func (tn typeName) String() string {
-	return tn.name + "." + tn.member
+func (va valueAccessor) String() string {
+	return va.typeName + "." + va.memberName
 }
 
 // A columnExpr represents the columns at the start of an output expression.
@@ -33,19 +35,19 @@ type columnExpr interface {
 	colExpr()
 }
 
-// columnName stores a SQL column and optionally its table.
-type columnName struct {
-	table, name string
+// columnAccessor stores a SQL column name and optionally its table name.
+type columnAccessor struct {
+	tableName, columnName string
 }
 
 // columnExpr marker method.
-func (cn columnName) colExpr() {}
+func (ca columnAccessor) colExpr() {}
 
-func (cn columnName) String() string {
-	if cn.table == "" {
-		return cn.name
+func (ca columnAccessor) String() string {
+	if ca.tableName == "" {
+		return ca.columnName
 	}
-	return cn.table + "." + cn.name
+	return ca.tableName + "." + ca.columnName
 }
 
 type funcExpr struct {
@@ -64,7 +66,7 @@ func (fe funcExpr) String() string {
 // inputPart represents a named parameter that will be sent to the database
 // while performing the query.
 type inputPart struct {
-	sourceType typeName
+	sourceType valueAccessor
 	raw        string
 }
 
@@ -78,7 +80,7 @@ func (p *inputPart) part() {}
 // as well as the source table and column where it will be read from.
 type outputPart struct {
 	sourceColumns []columnExpr
-	targetTypes   []typeName
+	targetTypes   []valueAccessor
 	raw           string
 }
 
@@ -549,16 +551,15 @@ func (p *Parser) parseColumn() (columnExpr, bool, error) {
 	if id, ok := p.parseIdentifierAsterisk(); ok {
 		if id != "*" && p.skipByte('.') {
 			if idCol, ok := p.parseIdentifierAsterisk(); ok {
-				return columnName{table: id, name: idCol}, true, nil
+				return columnAccessor{tableName: id, columnName: idCol}, true, nil
 			}
 		} else {
-			// A column name specified without a table prefix should be in name.
-			return columnName{name: id}, true, nil
+			return columnAccessor{columnName: id}, true, nil
 		}
 	}
 
 	cp.restore()
-	return columnName{}, false, nil
+	return columnAccessor{}, false, nil
 }
 
 func (p *Parser) parseFunc() (funcExpr, bool, error) {
@@ -580,35 +581,35 @@ func (p *Parser) parseFunc() (funcExpr, bool, error) {
 	return funcExpr{}, false, nil
 }
 
-func (p *Parser) parseTargetType() (typeName, bool, error) {
+func (p *Parser) parseTargetType() (valueAccessor, bool, error) {
 	if p.skipByte('&') {
 		return p.parseTypeName()
 	}
 
-	return typeName{}, false, nil
+	return valueAccessor{}, false, nil
 }
 
 // parseTypeName parses a Go type name qualified by a tag name (or asterisk)
 // of the form "TypeName.col_name".
-func (p *Parser) parseTypeName() (typeName, bool, error) {
+func (p *Parser) parseTypeName() (valueAccessor, bool, error) {
 	cp := p.save()
 
 	// The error points to the skipped & or $.
 	identifierCol := p.colNum() - 1
 	if id, ok := p.parseIdentifier(); ok {
 		if !p.skipByte('.') {
-			return typeName{}, false, errorAt(fmt.Errorf("unqualified type, expected %s.* or %s.<db tag>", id, id), p.lineNum, identifierCol, p.input)
+			return valueAccessor{}, false, errorAt(fmt.Errorf("unqualified type, expected %s.* or %s.<db tag>", id, id), p.lineNum, identifierCol, p.input)
 		}
 
 		idField, ok := p.parseIdentifierAsterisk()
 		if !ok {
-			return typeName{}, false, errorAt(fmt.Errorf("invalid identifier suffix following %q", id), p.lineNum, p.colNum(), p.input)
+			return valueAccessor{}, false, errorAt(fmt.Errorf("invalid identifier suffix following %q", id), p.lineNum, p.colNum(), p.input)
 		}
-		return typeName{name: id, member: idField}, true, nil
+		return valueAccessor{typeName: id, memberName: idField}, true, nil
 	}
 
 	cp.restore()
-	return typeName{}, false, nil
+	return valueAccessor{}, false, nil
 }
 
 // parseList takes a parsing function that returns a T and parses a
@@ -667,12 +668,12 @@ func (p *Parser) parseColumns() (cols []columnExpr, parentheses bool, ok bool) {
 
 // parseTargetTypes parses a single output type or a list of output types.
 // Lists of types must be enclosed in parentheses.
-func (p *Parser) parseTargetTypes() (types []typeName, parentheses bool, ok bool, err error) {
+func (p *Parser) parseTargetTypes() (types []valueAccessor, parentheses bool, ok bool, err error) {
 	// Case 1: A single target e.g. "&Person.name".
 	if targetTypes, ok, err := p.parseTargetType(); err != nil {
 		return nil, false, false, err
 	} else if ok {
-		return []typeName{targetTypes}, false, true, nil
+		return []valueAccessor{targetTypes}, false, true, nil
 	}
 
 	// Case 2: Multiple types e.g. "(&Person.name, &Person.id)".
@@ -696,7 +697,7 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 	} else if ok {
 		return &outputPart{
 			sourceColumns: []columnExpr{},
-			targetTypes:   []typeName{targetType},
+			targetTypes:   []valueAccessor{targetType},
 			raw:           p.input[start:p.pos],
 		}, true, nil
 	}
@@ -739,7 +740,7 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 		// Error points to the $ sign skipped above.
 		nameCol := p.colNum() - 1
 		if tn, ok, err := p.parseTypeName(); ok {
-			if tn.member == "*" {
+			if tn.memberName == "*" {
 				return nil, false, errorAt(fmt.Errorf(`asterisk not allowed in input expression "$%s"`, tn), p.lineNum, nameCol, p.input)
 			}
 			return &inputPart{sourceType: tn, raw: p.input[cp.pos:p.pos]}, true, nil
