@@ -296,6 +296,9 @@ func (pe *PreparedExpr) sql(sc *stmtCriterion) string {
 		switch p := part.(type) {
 		case *inputPart:
 			if p.isSlice {
+				if sliceCount >= len(sc.sliceLens) {
+					panic("internal error: slice information not found")
+				}
 				for i := 0; i < sc.sliceLens[sliceCount]; i++ {
 					sql.WriteString("@sqlair_")
 					sql.WriteString(strconv.Itoa(inCount))
