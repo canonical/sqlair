@@ -17,31 +17,33 @@ type queryPart interface {
 	part()
 }
 
-// typeName stores a Go type and a member of it.
-type typeName struct {
-	name, member string
+// valueAccessor stores information for accessing a Go value. It consists of a
+// type name and some value within it to be accessed. For example: a field of a
+// struct, or a key of a map.
+type valueAccessor struct {
+	typeName, memberName string
 }
 
-func (tn typeName) String() string {
-	return tn.name + "." + tn.member
+func (va valueAccessor) String() string {
+	return va.typeName + "." + va.memberName
 }
 
-// columnName stores a SQL column and optionally its table.
-type columnName struct {
-	table, name string
+// columnAccessor stores a SQL column name and optionally its table name.
+type columnAccessor struct {
+	tableName, columnName string
 }
 
-func (cn columnName) String() string {
-	if cn.table == "" {
-		return cn.name
+func (ca columnAccessor) String() string {
+	if ca.tableName == "" {
+		return ca.columnName
 	}
-	return cn.table + "." + cn.name
+	return ca.tableName + "." + ca.columnName
 }
 
 // inputPart represents SQLair query parameters.
 type inputPart struct {
-	targetColumns []columnName
-	sourceTypes   []typeName
+	targetColumns []columnAccessor
+	sourceTypes   []valueAccessor
 	raw           string
 }
 
@@ -59,8 +61,8 @@ func (p *inputPart) isInsert() bool {
 // outputPart represents a named target output variable in the SQL expression,
 // as well as the source table and column where it will be read from.
 type outputPart struct {
-	sourceColumns []columnName
-	targetTypes   []typeName
+	sourceColumns []columnAccessor
+	targetTypes   []valueAccessor
 	raw           string
 }
 
@@ -494,60 +496,59 @@ func (p *Parser) parseIdentifier() (string, bool) {
 // parseColumn parses a column made up of name bytes, optionally dot-prefixed by
 // its table name.
 // parseColumn returns an error so that it can be used with parseList.
-func (p *Parser) parseColumn() (columnName, bool, error) {
+func (p *Parser) parseColumn() (columnAccessor, bool, error) {
 	cp := p.save()
 
 	if id, ok := p.parseIdentifierAsterisk(); ok {
 		if id != "*" && p.skipByte('.') {
 			if idCol, ok := p.parseIdentifierAsterisk(); ok {
-				return columnName{table: id, name: idCol}, true, nil
+				return columnAccessor{tableName: id, columnName: idCol}, true, nil
 			}
 		} else {
-			// A column name specified without a table prefix should be in name.
-			return columnName{name: id}, true, nil
+			return columnAccessor{columnName: id}, true, nil
 		}
 	}
 
 	cp.restore()
-	return columnName{}, false, nil
+	return columnAccessor{}, false, nil
 }
 
-func (p *Parser) parseTargetType() (typeName, bool, error) {
+func (p *Parser) parseTargetType() (valueAccessor, bool, error) {
 	if p.skipByte('&') {
 		return p.parseTypeName()
 	}
 
-	return typeName{}, false, nil
+	return valueAccessor{}, false, nil
 }
 
-func (p *Parser) parseSourceType() (typeName, bool, error) {
+func (p *Parser) parseSourceType() (valueAccessor, bool, error) {
 	if p.skipByte('$') {
 		return p.parseTypeName()
 	}
-	return typeName{}, false, nil
+	return valueAccessor{}, false, nil
 }
 
 // parseTypeName parses a Go type name qualified by a tag name (or asterisk)
 // of the form "TypeName.col_name".
-func (p *Parser) parseTypeName() (typeName, bool, error) {
+func (p *Parser) parseTypeName() (valueAccessor, bool, error) {
 	cp := p.save()
 
 	// The error points to the skipped & or $.
 	identifierCol := p.colNum() - 1
 	if id, ok := p.parseIdentifier(); ok {
 		if !p.skipByte('.') {
-			return typeName{}, false, errorAt(fmt.Errorf("unqualified type, expected %s.* or %s.<db tag>", id, id), p.lineNum, identifierCol, p.input)
+			return valueAccessor{}, false, errorAt(fmt.Errorf("unqualified type, expected %s.* or %s.<db tag>", id, id), p.lineNum, identifierCol, p.input)
 		}
 
 		idField, ok := p.parseIdentifierAsterisk()
 		if !ok {
-			return typeName{}, false, errorAt(fmt.Errorf("invalid identifier suffix following %q", id), p.lineNum, p.colNum(), p.input)
+			return valueAccessor{}, false, errorAt(fmt.Errorf("invalid identifier suffix following %q", id), p.lineNum, p.colNum(), p.input)
 		}
-		return typeName{name: id, member: idField}, true, nil
+		return valueAccessor{typeName: id, memberName: idField}, true, nil
 	}
 
 	cp.restore()
-	return typeName{}, false, nil
+	return valueAccessor{}, false, nil
 }
 
 // parseList takes a parsing function that returns a T and parses a
@@ -590,10 +591,10 @@ func parseList[T any](p *Parser, parseFn func(p *Parser) (T, bool, error)) ([]T,
 
 // parseColumns parses a list of columns. Lists of more than one column must be
 // enclosed in parentheses.
-func (p *Parser) parseColumns() (cols []columnName, parentheses bool, ok bool) {
+func (p *Parser) parseColumns() (cols []columnAccessor, parentheses bool, ok bool) {
 	// Case 1: A single column e.g. "p.name".
 	if col, ok, _ := p.parseColumn(); ok {
-		return []columnName{col}, false, true
+		return []columnAccessor{col}, false, true
 	}
 
 	// Case 2: Multiple columns e.g. "(p.name, p.id)".
@@ -606,12 +607,12 @@ func (p *Parser) parseColumns() (cols []columnName, parentheses bool, ok bool) {
 
 // parseTargetTypes parses a single output type or a list of output types.
 // Lists of types must be enclosed in parentheses.
-func (p *Parser) parseTargetTypes() (types []typeName, parentheses bool, ok bool, err error) {
+func (p *Parser) parseTargetTypes() (types []valueAccessor, parentheses bool, ok bool, err error) {
 	// Case 1: A single target e.g. "&Person.name".
 	if targetTypes, ok, err := p.parseTargetType(); err != nil {
 		return nil, false, false, err
 	} else if ok {
-		return []typeName{targetTypes}, false, true, nil
+		return []valueAccessor{targetTypes}, false, true, nil
 	}
 
 	// Case 2: Multiple types e.g. "(&Person.name, &Person.id)".
@@ -634,8 +635,8 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 		return nil, false, err
 	} else if ok {
 		return &outputPart{
-			sourceColumns: []columnName{},
-			targetTypes:   []typeName{targetType},
+			sourceColumns: []columnAccessor{},
+			targetTypes:   []valueAccessor{targetType},
 			raw:           p.input[start:p.pos],
 		}, true, nil
 	}
@@ -678,8 +679,8 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 		return nil, false, err
 	} else if ok {
 		return &inputPart{
-			targetColumns: []columnName{},
-			sourceTypes:   []typeName{sourceType},
+			targetColumns: []columnAccessor{},
+			sourceTypes:   []valueAccessor{sourceType},
 			raw:           p.input[start:p.pos],
 		}, true, nil
 	}

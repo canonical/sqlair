@@ -51,10 +51,10 @@ func getKeys[T any](m map[string]T) []string {
 }
 
 // starCountColumns counts the number of asterisks in a list of columns.
-func starCountColumns(columns []columnName) int {
+func starCountColumns(cs []columnAccessor) int {
 	s := 0
-	for _, column := range columns {
-		if column.name == "*" {
+	for _, c := range cs {
+		if c.columnName == "*" {
 			s++
 		}
 	}
@@ -62,10 +62,10 @@ func starCountColumns(columns []columnName) int {
 }
 
 // starCountTypes counts the number of asterisks in a list of types.
-func starCountTypes(types []typeName) int {
+func starCountTypes(vs []valueAccessor) int {
 	s := 0
-	for _, t := range types {
-		if t.member == "*" {
+	for _, v := range vs {
+		if v.memberName == "*" {
 			s++
 		}
 	}
@@ -87,14 +87,14 @@ type typeNameToInfo map[string]typeInfo
 // expression and generates a list of columns and corresponding type members.
 // The type members specify where to find the query arguments/put the query
 // results.
-func prepareColumnsAndTypes(ti typeNameToInfo, columns []columnName, typeNames []typeName) ([]columnName, []typeMember, error) {
-	numTypes := len(typeNames)
+func prepareColumnsAndTypes(ti typeNameToInfo, columns []columnAccessor, types []valueAccessor) ([]columnAccessor, []typeMember, error) {
+	numTypes := len(types)
 	numColumns := len(columns)
-	starTypes := starCountTypes(typeNames)
+	starTypes := starCountTypes(types)
 	starColumns := starCountColumns(columns)
 
 	typeMembers := []typeMember{}
-	genCols := []columnName{}
+	genCols := []columnAccessor{}
 
 	// Case 1: SQLair generated columns.
 	// For example the expressions:
@@ -105,14 +105,14 @@ func prepareColumnsAndTypes(ti typeNameToInfo, columns []columnName, typeNames [
 		pref := ""
 		// Prepend table name. E.g. "t" in "t.* AS &P.*".
 		if numColumns == 1 {
-			pref = columns[0].table
+			pref = columns[0].tableName
 		}
-		for _, tn := range typeNames {
-			info, ok := ti[tn.name]
+		for _, t := range types {
+			info, ok := ti[t.typeName]
 			if !ok {
-				return nil, nil, typeMissingError(tn.name, getKeys(ti))
+				return nil, nil, typeMissingError(t.typeName, getKeys(ti))
 			}
-			if tn.member == "*" {
+			if t.memberName == "*" {
 				// Generate asterisk columns.
 				allMembers, err := info.getAllMembers()
 				if err != nil {
@@ -120,16 +120,16 @@ func prepareColumnsAndTypes(ti typeNameToInfo, columns []columnName, typeNames [
 				}
 				typeMembers = append(typeMembers, allMembers...)
 				for _, tm := range allMembers {
-					genCols = append(genCols, columnName{pref, tm.memberName()})
+					genCols = append(genCols, columnAccessor{pref, tm.memberName()})
 				}
 			} else {
 				// Generate explicit columns.
-				tm, err := info.typeMember(tn.member)
+				tm, err := info.typeMember(t.memberName)
 				if err != nil {
 					return nil, nil, err
 				}
 				typeMembers = append(typeMembers, tm)
-				genCols = append(genCols, columnName{pref, tn.member})
+				genCols = append(genCols, columnAccessor{pref, t.memberName})
 			}
 		}
 		return genCols, typeMembers, nil
@@ -142,12 +142,12 @@ func prepareColumnsAndTypes(ti typeNameToInfo, columns []columnName, typeNames [
 	//  "(col1, col2) VALUES ($P.*)"
 	//  "(col1, t.col2) AS (&P.*)"
 	if starTypes == 1 && numTypes == 1 {
-		info, ok := ti[typeNames[0].name]
+		info, ok := ti[types[0].typeName]
 		if !ok {
-			return nil, nil, typeMissingError(typeNames[0].name, getKeys(ti))
+			return nil, nil, typeMissingError(types[0].typeName, getKeys(ti))
 		}
 		for _, c := range columns {
-			tm, err := info.typeMember(c.name)
+			tm, err := info.typeMember(c.columnName)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -165,12 +165,12 @@ func prepareColumnsAndTypes(ti typeNameToInfo, columns []columnName, typeNames [
 	//  "(col1, col2) AS (&P.name, &P.id)"
 	if numColumns == numTypes {
 		for i, c := range columns {
-			tn := typeNames[i]
-			info, ok := ti[tn.name]
+			t := types[i]
+			info, ok := ti[t.typeName]
 			if !ok {
-				return nil, nil, typeMissingError(tn.name, getKeys(ti))
+				return nil, nil, typeMissingError(t.typeName, getKeys(ti))
 			}
-			tm, err := info.typeMember(tn.member)
+			tm, err := info.typeMember(t.memberName)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -185,7 +185,7 @@ func prepareColumnsAndTypes(ti typeNameToInfo, columns []columnName, typeNames [
 
 // prepareOutput checks that the output expressions correspond to known types.
 // It then checks they are formatted correctly and finally generates the columns for the query.
-func prepareOutput(ti typeNameToInfo, p *outputPart) ([]columnName, []typeMember, error) {
+func prepareOutput(ti typeNameToInfo, p *outputPart) ([]columnAccessor, []typeMember, error) {
 	outCols, typeMembers, err := prepareColumnsAndTypes(ti, p.sourceColumns, p.targetTypes)
 	if err != nil {
 		err = fmt.Errorf("output expression: %s: %s", err, p.raw)
@@ -195,7 +195,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) ([]columnName, []typeMember
 
 // prepareInput checks that the input expression is correctly formatted,
 // corresponds to known types, and then generates input columns and values.
-func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []columnName, typeMembers []typeMember, err error) {
+func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []columnAccessor, typeMembers []typeMember, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("input expression: %s: %s", err, p.raw)
@@ -212,15 +212,15 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []columnName, typeMem
 		if starCountTypes(p.sourceTypes) > 0 {
 			return nil, nil, fmt.Errorf("invalid asterisk")
 		}
-		info, ok := ti[p.sourceTypes[0].name]
+		info, ok := ti[p.sourceTypes[0].typeName]
 		if !ok {
-			return nil, nil, typeMissingError(p.sourceTypes[0].name, getKeys(ti))
+			return nil, nil, typeMissingError(p.sourceTypes[0].typeName, getKeys(ti))
 		}
-		tm, err := info.typeMember(p.sourceTypes[0].member)
+		tm, err := info.typeMember(p.sourceTypes[0].memberName)
 		if err != nil {
 			return nil, nil, err
 		}
-		return []columnName{}, []typeMember{tm}, nil
+		return []columnAccessor{}, []typeMember{tm}, nil
 	}
 
 	// Prepare input expressions in insert statements.
@@ -235,10 +235,10 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (inCols []columnName, typeMem
 
 	// Check each column is only set once by input expressions in INSERT
 	// statements.
-	columnInInput := make(map[columnName]bool)
+	columnInInput := make(map[columnAccessor]bool)
 	for _, c := range inCols {
 		if ok := columnInInput[c]; ok {
-			return nil, nil, fmt.Errorf("column %q is set more than once", c.name)
+			return nil, nil, fmt.Errorf("column %q is set more than once", c.columnName)
 		}
 		columnInInput[c] = true
 	}
@@ -349,7 +349,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 // genInsertSQL generates the SQL for input expressions in INSERT statements.
 // For example, when inserting three columns, it would generate the string:
 //   "(col1, col2, col3) VALUES (@sqlair_1, @sqlair_2, @sqlair_3)"
-func genInsertSQL(columns []columnName, inCount *int) string {
+func genInsertSQL(columns []columnAccessor, inCount *int) string {
 	var sql bytes.Buffer
 
 	sql.WriteString("(")
