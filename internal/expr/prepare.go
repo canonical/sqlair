@@ -279,10 +279,9 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	return &PreparedExpr{inputs: inputs, outputs: outputs, queryParts: pe.queryParts, outputCols: outputCols}, nil
 }
 
-// stmtCriterion contains information that differentiates the different SQL
-// strings that can be generated from a single SQLair prepared statement.
+// stmtCriterion contains information that differentiates the SQL strings that
+// can be generated from a single SQLair prepared statement.
 type stmtCriterion struct {
-	enabled   bool
 	sliceLens []int
 }
 
@@ -297,9 +296,6 @@ func (pe *PreparedExpr) sql(sc *stmtCriterion) string {
 		switch p := part.(type) {
 		case *inputPart:
 			if p.isSlice {
-				if !sc.enabled {
-					panic("internal error: stmtCriterion must be enabled for statement containing slice")
-				}
 				for i := 0; i < sc.sliceLens[sliceCount]; i++ {
 					sql.WriteString("@sqlair_")
 					sql.WriteString(strconv.Itoa(inCount))

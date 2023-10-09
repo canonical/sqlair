@@ -17,7 +17,7 @@ func (qe *QueryExpr) SQL() string {
 }
 
 func (qe *QueryExpr) IsTemp() bool {
-	return qe.sc.enabled
+	return len(qe.sc.sliceLens) > 0
 }
 
 func (qe *QueryExpr) HasOutputs() bool {
@@ -120,11 +120,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		}
 	}
 
-	sc := &stmtCriterion{enabled: false}
-	if len(sliceLens) > 0 {
-		sc.enabled = true
-		sc.sliceLens = sliceLens
-	}
+	sc := &stmtCriterion{sliceLens: sliceLens}
 	return &QueryExpr{pe: pe, sc: sc, outputs: pe.outputs, args: qargs}, nil
 }
 
