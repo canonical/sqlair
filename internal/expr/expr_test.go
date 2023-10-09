@@ -417,6 +417,12 @@ of three lines' AND id = $Person.*`,
 	}, {
 		query: "SELECT &S[:] FROM t",
 		err:   `cannot parse expression: cannot use slice type "S" in output expression: &S[:]`,
+	}, {
+		query: "SELECT * AS &S[:] FROM t",
+		err:   `cannot parse expression: cannot use slice type "S" in output expression: &S[:]`,
+	}, {
+		query: "SELECT (name, id, address) AS (&Person.name, &Address.id, &S[:]) FROM t",
+		err:   `cannot parse expression: cannot use slice type "S" in output expression: &S[:]`,
 	}}
 
 	for _, t := range tests {
