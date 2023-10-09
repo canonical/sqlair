@@ -414,6 +414,9 @@ comment */
 string
 of three lines' AND id = $Person.*`,
 		err: `cannot parse expression: line 3, column 26: asterisk not allowed in input expression "$Person.*"`,
+	}, {
+		query: "SELECT &S[:] FROM t",
+		err:   `cannot parse expression: cannot use slice type "S" in output expression: &S[:]`,
 	}}
 
 	for _, t := range tests {
@@ -548,10 +551,6 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 		query:       "SELECT name FROM person WHERE id IN ($M[:])",
 		prepareArgs: []any{M{}},
 		err:         `cannot prepare statement: input expression: cannot use slice syntax with map: $M[:]`,
-	}, {
-		query:       "SELECT &S[:] FROM t",
-		prepareArgs: []any{sqlair.S{}},
-		err:         `cannot prepare statement: output expression: cannot use slice type "S" in output expression: &S[:]`,
 	}}
 
 	for i, test := range tests {

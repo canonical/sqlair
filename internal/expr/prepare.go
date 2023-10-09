@@ -138,9 +138,6 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnAccessor, 
 			if !ok {
 				return nil, nil, typeMissingError(t.typeName, getKeys(ti))
 			}
-			if _, ok = info.(*sliceInfo); ok {
-				return nil, nil, fmt.Errorf(`cannot use slice type %q in output expression`, info.typ().Name())
-			}
 			if t.memberName == "*" {
 				// Generate asterisk columns.
 				allMembers, err := info.getAllMembers()
@@ -172,9 +169,6 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnAccessor, 
 		if !ok {
 			return nil, nil, typeMissingError(p.targetTypes[0].typeName, getKeys(ti))
 		}
-		if _, ok = info.(*sliceInfo); ok {
-			return nil, nil, fmt.Errorf(`cannot use slice type %q in output expression`, info.typ().Name())
-		}
 		for _, c := range p.sourceColumns {
 			tm, err := info.typeMember(c.columnName)
 			if err != nil {
@@ -195,9 +189,6 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnAccessor, 
 			info, ok := ti[t.typeName]
 			if !ok {
 				return nil, nil, typeMissingError(t.typeName, getKeys(ti))
-			}
-			if _, ok = info.(*sliceInfo); ok {
-				return nil, nil, fmt.Errorf(`cannot use slice type %q in output expression`, info.typ().Name())
 			}
 			tm, err := info.typeMember(t.memberName)
 			if err != nil {

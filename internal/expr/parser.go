@@ -510,7 +510,15 @@ func (p *Parser) parseColumn() (columnAccessor, bool, error) {
 
 func (p *Parser) parseTargetType() (valueAccessor, bool, error) {
 	if p.skipByte('&') {
-		return p.parseTypeName()
+		va, ok, err := p.parseTypeName()
+		if !ok {
+			return valueAccessor{}, false, err
+		}
+		if va.memberName == sliceExtention {
+			err = fmt.Errorf("cannot use slice type %q in output expression: &%s", va.typeName, va)
+			return valueAccessor{}, false, err
+		}
+		return va, true, nil
 	}
 
 	return valueAccessor{}, false, nil
