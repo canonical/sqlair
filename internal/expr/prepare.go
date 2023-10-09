@@ -93,12 +93,8 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 		case *structInfo, *mapInfo:
 			return nil, fmt.Errorf(`cannot use slice syntax with %s`, info.typ().Kind())
 		case *sliceInfo:
-			tms, err := info.getAllMembers()
-			if err != nil {
-				return nil, err
-			}
+			tm = info.getSliceType()
 			p.isSlice = true
-			tm = tms[0]
 		default:
 			return nil, fmt.Errorf(`internal error: unknown type: %T`, info)
 		}

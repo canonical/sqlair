@@ -138,11 +138,15 @@ func (si *sliceInfo) typ() reflect.Type {
 }
 
 func (si *sliceInfo) typeMember(member string) (typeMember, error) {
-	return nil, fmt.Errorf(`cannot index slice`)
+	return nil, fmt.Errorf("cannot index slice")
 }
 
 func (si *sliceInfo) getAllMembers() ([]typeMember, error) {
-	return []typeMember{&sliceType{sliceType: si.sliceType}}, nil
+	return nil, fmt.Errorf("cannot get all members of slice")
+}
+
+func (si *sliceInfo) getSliceType() typeMember {
+	return &sliceType{sliceType: si.sliceType}
 }
 
 var _ typeInfo = &sliceInfo{}
