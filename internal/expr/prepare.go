@@ -279,8 +279,8 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	return &PreparedExpr{inputs: inputs, outputs: outputs, queryParts: pe.queryParts, outputCols: outputCols}, nil
 }
 
-// stmtCriterion contains information that specifies the different SQL strings
-// that can be generated from a single SQLair prepared statement.
+// stmtCriterion contains information that differentiates the different SQL
+// strings that can be generated from a single SQLair prepared statement.
 type stmtCriterion struct {
 	enabled   bool
 	sliceLens []int
