@@ -141,6 +141,10 @@ type Query struct {
 	ctx     context.Context
 	err     error
 	tx      *TX // tx is only set for queries in transactions.
+	// Persist statement so it is not closed until the Query is dropped.
+	stmt *Statement
+	// Persist db so it is not closed until the Query is dropped.
+	db *DB
 }
 
 // Iterator is used to iterate over the results of the query.
@@ -171,7 +175,7 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: err}
 	}
 
-	return &Query{sqlstmt: sqlstmt, qe: qe, ctx: ctx, err: nil}
+	return &Query{sqlstmt: sqlstmt, stmt: s, db: db, qe: qe, ctx: ctx, err: nil}
 }
 
 // prepareSubstrate is an object that queries can be prepared on, e.g. a sql.DB
@@ -565,5 +569,5 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: err}
 	}
 
-	return &Query{sqlstmt: sqlstmt, qe: qe, tx: tx, ctx: ctx, err: nil}
+	return &Query{sqlstmt: sqlstmt, stmt: s, db: tx.db, qe: qe, tx: tx, ctx: ctx, err: nil}
 }
