@@ -237,9 +237,9 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			}
 			ti[t.Name()] = info
 		case reflect.Pointer:
-			return nil, fmt.Errorf("unsupported type: pointer to %s", t.Elem().Kind())
+			return nil, fmt.Errorf("need supported type, got pointer to %s", t.Elem().Kind())
 		default:
-			return nil, fmt.Errorf("unsupported type: %s", t.Kind())
+			return nil, fmt.Errorf("need supported type, got %s", t.Kind())
 		}
 	}
 

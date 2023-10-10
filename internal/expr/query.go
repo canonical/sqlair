@@ -64,7 +64,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		switch v.Kind() {
 		case reflect.Struct, reflect.Map, reflect.Slice:
 		default:
-			return nil, fmt.Errorf("unsupported type: %s", t.Kind())
+			return nil, fmt.Errorf("need supported type, got %s", t.Kind())
 		}
 		if _, ok := typeValue[t]; ok {
 			return nil, fmt.Errorf("type %q provided more than once", t.Name())

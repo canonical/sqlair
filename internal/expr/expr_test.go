@@ -524,15 +524,15 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{func() {}},
-		err:         `cannot prepare statement: unsupported type: func`,
+		err:         `cannot prepare statement: need supported type, got func`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{&Person{}},
-		err:         `cannot prepare statement: unsupported type: pointer to struct`,
+		err:         `cannot prepare statement: need supported type, got pointer to struct`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{(*Person)(nil)},
-		err:         `cannot prepare statement: unsupported type: pointer to struct`,
+		err:         `cannot prepare statement: need supported type, got pointer to struct`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{map[string]any{}},
@@ -771,12 +771,12 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Address{}},
 		queryArgs:   []any{8},
-		err:         "invalid input parameter: unsupported type: int",
+		err:         "invalid input parameter: need supported type, got int",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Address{}},
 		queryArgs:   []any{func() {}},
-		err:         "invalid input parameter: unsupported type: func",
+		err:         "invalid input parameter: need supported type, got func",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Address{}},
