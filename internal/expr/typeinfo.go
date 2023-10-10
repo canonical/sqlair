@@ -142,7 +142,7 @@ func (si *sliceInfo) typeMember(member string) (typeMember, error) {
 }
 
 func (si *sliceInfo) getAllMembers() ([]typeMember, error) {
-	return nil, fmt.Errorf("cannot get all members of slice")
+	return nil, fmt.Errorf("cannot use slice with asterisk")
 }
 
 func (si *sliceInfo) getSliceType() typeMember {

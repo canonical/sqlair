@@ -557,6 +557,10 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 		query:       "SELECT name FROM person WHERE id IN ($M[:])",
 		prepareArgs: []any{M{}},
 		err:         `cannot prepare statement: input expression: cannot use slice syntax with map: $M[:]`,
+	}, {
+		query:       "SELECT &S.* FROM person",
+		prepareArgs: []any{sqlair.S{}},
+		err:         `cannot prepare statement: output expression: cannot use slice with asterisk: &S.*`,
 	}}
 
 	for i, test := range tests {

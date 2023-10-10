@@ -17,6 +17,8 @@ func (qe *QueryExpr) SQL() string {
 }
 
 func (qe *QueryExpr) IsTemp() bool {
+	// If the SQLair statement contains slices then it needs to be reprepared
+	// for each query as the number of argument placeholders is not fixed.
 	return len(qe.sc.sliceLens) > 0
 }
 
