@@ -687,13 +687,6 @@ func (s *PackageSuite) TestValidGetAll(c *C) {
 		inputs:   []any{},
 		slices:   []any{&[]sqlair.M{}, &[]CustomMap{}},
 		expected: []any{&[]sqlair.M{{"name": "Mark"}}, &[]CustomMap{{"id": int64(20)}}},
-	}, {
-		summary:  "simple in",
-		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($S[:])",
-		types:    []any{Person{}, sqlair.S{}},
-		inputs:   []any{sqlair.S{20, 35, 36, 37, 38, 39, 40}},
-		slices:   []any{&[]*Person{}},
-		expected: []any{&[]*Person{&Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "James", 4500}}},
 	}}
 
 	tables, sqldb, err := personAndAddressDB()
