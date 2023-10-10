@@ -14,7 +14,7 @@ type PreparedExpr struct {
 	outputs    []typeMember
 	inputs     []typeMember
 	queryParts []queryPart
-	outputCols [][]columnAccessor
+	outputCols map[*outputPart][]columnAccessor
 }
 
 const markerPrefix = "_sqlair_"
@@ -246,7 +246,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	var outputs = make([]typeMember, 0)
 	var inputs = make([]typeMember, 0)
 	var typeMemberPresent = make(map[typeMember]bool)
-	var outputCols = make([][]columnAccessor, 0)
+	var outputCols = make(map[*outputPart][]columnAccessor, 0)
 
 	// Check and expand each query part.
 	for _, part := range pe.queryParts {
@@ -270,7 +270,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 				typeMemberPresent[tm] = true
 			}
 			outputs = append(outputs, typeMembers...)
-			outputCols = append(outputCols, outCols)
+			outputCols[p] = outCols
 		case *bypassPart:
 		default:
 			return nil, fmt.Errorf("internal error: unknown query part type %T", part)
@@ -289,7 +289,6 @@ func (pe *PreparedExpr) sql(sc *stmtCriterion) string {
 	var sql bytes.Buffer
 	var inCount int
 	var outCount int
-	var outputPartCount int
 	var sliceCount int
 
 	for _, part := range pe.queryParts {
@@ -314,16 +313,15 @@ func (pe *PreparedExpr) sql(sc *stmtCriterion) string {
 				inCount++
 			}
 		case *outputPart:
-			for i, c := range pe.outputCols[outputPartCount] {
+			for i, c := range pe.outputCols[p] {
 				sql.WriteString(c.String())
 				sql.WriteString(" AS ")
 				sql.WriteString(markerName(outCount))
-				if i != len(pe.outputCols[outputPartCount])-1 {
+				if i != len(pe.outputCols[p])-1 {
 					sql.WriteString(", ")
 				}
 				outCount++
 			}
-			outputPartCount++
 		case *bypassPart:
 			sql.WriteString(p.chunk)
 		default:
