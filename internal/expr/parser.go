@@ -521,7 +521,7 @@ func (p *Parser) parseTargetType() (valueAccessor, bool, error) {
 			return valueAccessor{}, false, err
 		}
 		if va.memberName == sliceExtention {
-			err = fmt.Errorf("cannot use slice type %q in output expression: &%s", va.typeName, va)
+			err = fmt.Errorf("cannot use slice in output expression: &%s", va)
 			return valueAccessor{}, false, err
 		}
 		return va, true, nil
