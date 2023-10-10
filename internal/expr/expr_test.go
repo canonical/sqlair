@@ -648,7 +648,7 @@ func (s *ExprSuite) TestSliceQuery(c *C) {
 		[]any{sqlair.S{}, Person{}, Manager{}, IntSlice{}, StringSlice{}},
 		[]any{sqlair.S{1, 2, 3}, Person{ID: 1}, Manager{ID: 1}, IntSlice{4, 5, 6}, StringSlice{"7", "8", "9"}},
 		"SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7, @sqlair_8, @sqlair_9, @sqlair_10)",
-		[]any{sql.Named("sqlair_0", 1), sql.Named("sqlair_1", 1), sql.Named("sqlair_2", 2), sql.Named("sqlair_3", 3), sql.Named("sqlair_4", 1), sql.Named("sqlair_5", 4), sql.Named("sqlair_6", 5), sql.Named("sqlair_7", 6), sql.Named("sqlair_8", 7), sql.Named("sqlair_9", 8), sql.Named("sqlair_10", 9)},
+		[]any{sql.Named("sqlair_0", 1), sql.Named("sqlair_1", 1), sql.Named("sqlair_2", 2), sql.Named("sqlair_3", 3), sql.Named("sqlair_4", 1), sql.Named("sqlair_5", 4), sql.Named("sqlair_6", 5), sql.Named("sqlair_7", 6), sql.Named("sqlair_8", "7"), sql.Named("sqlair_9", "8"), sql.Named("sqlair_10", "9")},
 	}, {
 		"slices and other expressions in IN statement",
 		`SELECT name FROM person WHERE id IN ($S[:], func(1,2), "one", $IntSlice[:])`,
@@ -671,8 +671,10 @@ func (s *ExprSuite) TestSliceQuery(c *C) {
 		c.Assert(err, IsNil)
 		c.Assert(qe.IsTemp(), Equals, true)
 
-		sql := qe.SQL()
-		c.Assert(sql, Equals, t.expectedSQL,
+		c.Assert(qe.SQL(), Equals, t.expectedSQL,
+			Commentf("test %d failed:\ninput: %s", t.summery, t.query))
+
+		c.Assert(qe.QueryArgs(), DeepEquals, t.expectedArgs,
 			Commentf("test %d failed:\ninput: %s", t.summery, t.query))
 	}
 }
