@@ -113,7 +113,6 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 	}
 	type IntSlice []int
 	type StringSlice []string
-	type LongArray [10]int
 	var tests = []struct {
 		summary  string
 		query    string
@@ -219,13 +218,6 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 		inputs:   []any{Person{ID: 20}, sqlair.S{21, 23, 24, 25, 26, 27, 28, 29}, IntSlice{31, 32, 33, 34, 35}, &Manager{ID: 30}, StringSlice{"36", "37", "38", "39", "40"}},
 		outputs:  [][]any{{&Person{}}, {&Person{}}, {&Person{}}, {&Person{}}},
 		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{20, "Mark", 1500}}, {&Person{40, "Mary", 3500}}, {&Person{35, "James", 4500}}},
-	}, {
-		summary:  "array in",
-		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($LongArray[:])",
-		types:    []any{Person{}, LongArray{}},
-		inputs:   []any{LongArray{30, 35, 40}},
-		outputs:  [][]any{{&Person{}}, {&Person{}}, {&Person{}}},
-		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{40, "Mary", 3500}}, {&Person{35, "James", 4500}}},
 	}}
 
 	// A Person struct that shadows the one in tests above and has different int types.

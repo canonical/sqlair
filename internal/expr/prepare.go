@@ -221,7 +221,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 		}
 		t := reflect.TypeOf(arg)
 		switch t.Kind() {
-		case reflect.Struct, reflect.Map, reflect.Slice, reflect.Array:
+		case reflect.Struct, reflect.Map, reflect.Slice:
 			if t.Name() == "" {
 				return nil, fmt.Errorf("cannot use anonymous %s", t.Kind())
 			}

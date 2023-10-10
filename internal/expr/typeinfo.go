@@ -227,7 +227,7 @@ func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 		info.tags = tags
 
 		return &info, nil
-	case reflect.Slice, reflect.Array:
+	case reflect.Slice:
 		return &sliceInfo{sliceType: t}, nil
 	default:
 		return nil, fmt.Errorf("internal error: cannot obtain type information for type that is not map or struct: %s.", t)

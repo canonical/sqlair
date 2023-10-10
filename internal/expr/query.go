@@ -60,7 +60,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		v = reflect.Indirect(v)
 		t := v.Type()
 		switch v.Kind() {
-		case reflect.Struct, reflect.Map, reflect.Slice, reflect.Array:
+		case reflect.Struct, reflect.Map, reflect.Slice:
 		default:
 			return nil, fmt.Errorf("unsupported type: %s", t.Kind())
 		}
