@@ -1,42 +1,39 @@
 package expr
 
 import (
-	"bytes"
 	"fmt"
 	"reflect"
 	"sort"
-	"strconv"
 	"strings"
 )
 
 // PreparedExpr contains an SQL expression that is ready for execution.
 type PreparedExpr struct {
-	outputs []typeMember
-	inputs  []typeMember
-	sql     string
+	preparedParts []preparedPart
 }
 
-// SQL returns the SQL ready for execution.
-func (pe *PreparedExpr) SQL() string {
-	return pe.sql
+type preparedPart interface {
+	preparedPart()
 }
 
-const markerPrefix = "_sqlair_"
-
-func markerName(n int) string {
-	return markerPrefix + strconv.Itoa(n)
+type preparedOutput struct {
+	queryColumns []columnAccessor
+	outputValues []typeMember
 }
 
-// markerIndex returns the int X from the string "_sqlair_X".
-func markerIndex(s string) (int, bool) {
-	if strings.HasPrefix(s, markerPrefix) {
-		n, err := strconv.Atoi(s[len(markerPrefix):])
-		if err == nil {
-			return n, true
-		}
-	}
-	return 0, false
+func (*preparedOutput) preparedPart() {}
+
+type preparedInput struct {
+	inputValue typeMember
 }
+
+func (*preparedInput) preparedPart() {}
+
+type preparedBypass struct {
+	chunk string
+}
+
+func (*preparedBypass) preparedPart() {}
 
 // getKeys returns the keys of a string map in a deterministic order.
 func getKeys[T any](m map[string]T) []string {
@@ -81,7 +78,7 @@ func typeMissingError(missingType string, existingTypes []string) error {
 }
 
 // prepareInput checks that the input expression corresponds to a known type.
-func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
+func prepareInput(ti typeNameToInfo, p *inputPart) (pi *preparedInput, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("input expression: %s: %s", err, p.raw)
@@ -93,16 +90,16 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 		return nil, typeMissingError(p.sourceType.typeName, getKeys(ti))
 	}
 
-	tm, err = info.typeMember(p.sourceType.memberName)
+	tm, err := info.typeMember(p.sourceType.memberName)
 	if err != nil {
 		return nil, err
 	}
-	return tm, nil
+	return &preparedInput{tm}, nil
 }
 
 // prepareOutput checks that the output expressions correspond to known types.
 // It then checks they are formatted correctly and finally generates the columns for the query.
-func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnAccessor, typeMembers []typeMember, err error) {
+func prepareOutput(ti typeNameToInfo, p *outputPart) (po *preparedOutput, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("output expression: %s: %s", err, p.raw)
@@ -113,6 +110,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnAccessor, 
 	numColumns := len(p.sourceColumns)
 	starTypes := starCountTypes(p.targetTypes)
 	starColumns := starCountColumns(p.sourceColumns)
+
+	po = &preparedOutput{}
 
 	// Case 1: Generated columns e.g. "* AS (&P.*, &A.id)" or "&P.*".
 	if numColumns == 0 || (numColumns == 1 && starColumns == 1) {
@@ -125,50 +124,50 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnAccessor, 
 		for _, t := range p.targetTypes {
 			info, ok := ti[t.typeName]
 			if !ok {
-				return nil, nil, typeMissingError(t.typeName, getKeys(ti))
+				return nil, typeMissingError(t.typeName, getKeys(ti))
 			}
 			if t.memberName == "*" {
 				// Generate asterisk columns.
 				allMembers, err := info.getAllMembers()
 				if err != nil {
-					return nil, nil, err
+					return nil, err
 				}
-				typeMembers = append(typeMembers, allMembers...)
+				po.outputValues = append(po.outputValues, allMembers...)
 				for _, tm := range allMembers {
-					outCols = append(outCols, columnAccessor{pref, tm.memberName()})
+					po.queryColumns = append(po.queryColumns, columnAccessor{pref, tm.memberName()})
 				}
 			} else {
 				// Generate explicit columns.
 				tm, err := info.typeMember(t.memberName)
 				if err != nil {
-					return nil, nil, err
+					return nil, err
 				}
-				typeMembers = append(typeMembers, tm)
-				outCols = append(outCols, columnAccessor{pref, t.memberName})
+				po.outputValues = append(po.outputValues, tm)
+				po.queryColumns = append(po.queryColumns, columnAccessor{pref, t.memberName})
 			}
 		}
-		return outCols, typeMembers, nil
+		return po, nil
 	} else if numColumns > 1 && starColumns > 0 {
-		return nil, nil, fmt.Errorf("invalid asterisk in columns")
+		return nil, fmt.Errorf("invalid asterisk in columns")
 	}
 
 	// Case 2: Explicit columns, single asterisk type e.g. "(col1, t.col2) AS &P.*".
 	if starTypes == 1 && numTypes == 1 {
 		info, ok := ti[p.targetTypes[0].typeName]
 		if !ok {
-			return nil, nil, typeMissingError(p.targetTypes[0].typeName, getKeys(ti))
+			return nil, typeMissingError(p.targetTypes[0].typeName, getKeys(ti))
 		}
 		for _, c := range p.sourceColumns {
 			tm, err := info.typeMember(c.columnName)
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
-			typeMembers = append(typeMembers, tm)
-			outCols = append(outCols, c)
+			po.outputValues = append(po.outputValues, tm)
+			po.queryColumns = append(po.queryColumns, c)
 		}
-		return outCols, typeMembers, nil
+		return po, nil
 	} else if starTypes > 0 && numTypes > 1 {
-		return nil, nil, fmt.Errorf("invalid asterisk in types")
+		return nil, fmt.Errorf("invalid asterisk in types")
 	}
 
 	// Case 3: Explicit columns and types e.g. "(col1, col2) AS (&P.name, &P.id)".
@@ -177,20 +176,20 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnAccessor, 
 			t := p.targetTypes[i]
 			info, ok := ti[t.typeName]
 			if !ok {
-				return nil, nil, typeMissingError(t.typeName, getKeys(ti))
+				return nil, typeMissingError(t.typeName, getKeys(ti))
 			}
 			tm, err := info.typeMember(t.memberName)
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
-			typeMembers = append(typeMembers, tm)
-			outCols = append(outCols, c)
+			po.outputValues = append(po.outputValues, tm)
+			po.queryColumns = append(po.queryColumns, c)
 		}
 	} else {
-		return nil, nil, fmt.Errorf("mismatched number of columns and target types")
+		return nil, fmt.Errorf("mismatched number of columns and target types")
 	}
 
-	return outCols, typeMembers, nil
+	return po, nil
 }
 
 type typeNameToInfo map[string]typeInfo
@@ -237,56 +236,36 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 		}
 	}
 
-	var sql bytes.Buffer
-
-	var inCount int
-	var outCount int
-
-	var outputs = make([]typeMember, 0)
-	var inputs = make([]typeMember, 0)
-
-	var typeMemberPresent = make(map[typeMember]bool)
+	typeMemberPresent := make(map[typeMember]bool)
+	preparedParts := make([]preparedPart, 0)
 
 	// Check and expand each query part.
 	for _, part := range pe.queryParts {
 		switch p := part.(type) {
 		case *inputPart:
-			inLoc, err := prepareInput(ti, p)
+			pi, err := prepareInput(ti, p)
 			if err != nil {
 				return nil, err
 			}
-			sql.WriteString("@sqlair_" + strconv.Itoa(inCount))
-			inCount++
-			inputs = append(inputs, inLoc)
+			preparedParts = append(preparedParts, pi)
 		case *outputPart:
-			outCols, typeMembers, err := prepareOutput(ti, p)
+			po, err := prepareOutput(ti, p)
 			if err != nil {
 				return nil, err
 			}
 
-			for _, tm := range typeMembers {
+			for _, tm := range po.outputValues {
 				if ok := typeMemberPresent[tm]; ok {
 					return nil, fmt.Errorf("member %q of type %q appears more than once in output expressions", tm.memberName(), tm.outerType().Name())
 				}
 				typeMemberPresent[tm] = true
 			}
-
-			for i, c := range outCols {
-				sql.WriteString(c.String())
-				sql.WriteString(" AS ")
-				sql.WriteString(markerName(outCount))
-				if i != len(outCols)-1 {
-					sql.WriteString(", ")
-				}
-				outCount++
-			}
-			outputs = append(outputs, typeMembers...)
+			preparedParts = append(preparedParts, po)
 		case *bypassPart:
-			sql.WriteString(p.chunk)
+			preparedParts = append(preparedParts, &preparedBypass{p.chunk})
 		default:
 			return nil, fmt.Errorf("internal error: unknown query part type %T", part)
 		}
 	}
-
-	return &PreparedExpr{inputs: inputs, outputs: outputs, sql: sql.String()}, nil
+	return &PreparedExpr{preparedParts: preparedParts}, nil
 }

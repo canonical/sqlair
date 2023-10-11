@@ -161,12 +161,12 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		ctx = context.Background()
 	}
 
-	sqlstmt, err := db.prepareStmt(ctx, db.sqldb, s)
+	qe, err := s.pe.Query(inputArgs...)
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
 
-	qe, err := s.pe.Query(inputArgs...)
+	sqlstmt, err := db.prepareStmt(ctx, db.sqldb, qe.SQL(), s.cacheID)
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
@@ -184,28 +184,28 @@ type prepareSubstrate interface {
 // the cache to see if it has already been prepared on the DB.
 // The prepareSubstrate must be assosiated with the same DB that prepareStmt is
 // a method of.
-func (db *DB) prepareStmt(ctx context.Context, ps prepareSubstrate, s *Statement) (*sql.Stmt, error) {
+func (db *DB) prepareStmt(ctx context.Context, ps prepareSubstrate, sql string, stmtID stmtID) (*sql.Stmt, error) {
 	var err error
 	cacheMutex.RLock()
 	// The statement ID is only removed from the cache when the finalizer is
 	// run, so it is always in stmtDBCache.
-	sqlstmt, ok := stmtDBCache[s.cacheID][db.cacheID]
+	sqlstmt, ok := stmtDBCache[stmtID][db.cacheID]
 	cacheMutex.RUnlock()
 	if !ok {
-		sqlstmt, err = ps.PrepareContext(ctx, s.pe.SQL())
+		sqlstmt, err = ps.PrepareContext(ctx, sql)
 		if err != nil {
 			return nil, err
 		}
 		cacheMutex.Lock()
 		// Check if a statement has been inserted by someone else since we last
 		// checked.
-		sqlstmtAlt, ok := stmtDBCache[s.cacheID][db.cacheID]
+		sqlstmtAlt, ok := stmtDBCache[stmtID][db.cacheID]
 		if ok {
 			sqlstmt.Close()
 			sqlstmt = sqlstmtAlt
 		} else {
-			stmtDBCache[s.cacheID][db.cacheID] = sqlstmt
-			dbStmtCache[db.cacheID][s.cacheID] = true
+			stmtDBCache[stmtID][db.cacheID] = sqlstmt
+			dbStmtCache[db.cacheID][stmtID] = true
 		}
 		cacheMutex.Unlock()
 	}
@@ -555,12 +555,12 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: ErrTXDone}
 	}
 
-	sqlstmt, err := tx.db.prepareStmt(ctx, tx.sqlconn, s)
+	qe, err := s.pe.Query(inputArgs...)
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
 
-	qe, err := s.pe.Query(inputArgs...)
+	sqlstmt, err := tx.db.prepareStmt(ctx, tx.sqlconn, qe.SQL(), s.cacheID)
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}

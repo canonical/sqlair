@@ -1,6 +1,7 @@
 package expr
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
 	"reflect"
@@ -10,6 +11,10 @@ import (
 
 func (qe *QueryExpr) QueryArgs() []any {
 	return qe.args
+}
+
+func (qe *QueryExpr) SQL() string {
+	return qe.sql
 }
 
 func (qe *QueryExpr) HasOutputs() bool {
@@ -22,6 +27,23 @@ type QueryExpr struct {
 	outputs []typeMember
 }
 
+const markerPrefix = "_sqlair_"
+
+func markerName(n int) string {
+	return markerPrefix + strconv.Itoa(n)
+}
+
+// markerIndex returns the int X from the string "_sqlair_X".
+func markerIndex(s string) (int, bool) {
+	if strings.HasPrefix(s, markerPrefix) {
+		n, err := strconv.Atoi(s[len(markerPrefix):])
+		if err == nil {
+			return n, true
+		}
+	}
+	return 0, false
+}
+
 // Query returns a query expression ready for execution, using the provided values to
 // substitute the input placeholders in the prepared expression. These placeholders use
 // the syntax "$Person.fullname", where Person would be a type such as:
@@ -29,17 +51,12 @@ type QueryExpr struct {
 //	type Person struct {
 //	        Name string `db:"fullname"`
 //	}
-func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
+func (pe *PreparedExpr) Query(args ...any) (qe *QueryExpr, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("invalid input parameter: %s", err)
 		}
 	}()
-
-	var inQuery = make(map[reflect.Type]bool)
-	for _, typeMember := range pe.inputs {
-		inQuery[typeMember.outerType()] = true
-	}
 
 	var typeValue = make(map[reflect.Type]reflect.Value)
 	var typeNames []string
@@ -58,38 +75,80 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		}
 		typeValue[t] = v
 		typeNames = append(typeNames, t.Name())
-		if !inQuery[t] {
-			// Check if we have a type with the same name from a different package.
-			for _, typeMember := range pe.inputs {
-				if t.Name() == typeMember.outerType().Name() {
-					return nil, fmt.Errorf("parameter with type %q missing, have type with same name: %q", typeMember.outerType().String(), t.String())
-				}
-			}
-			return nil, fmt.Errorf("%s not referenced in query", t.Name())
-		}
 	}
 
 	// Query parameteres.
-	qargs := []any{}
-	for i, typeMember := range pe.inputs {
-		outerType := typeMember.outerType()
-		v, ok := typeValue[outerType]
-		if !ok {
-			return nil, typeMissingError(outerType.Name(), typeNames)
-		}
-		var val reflect.Value
-		switch tm := typeMember.(type) {
-		case *structField:
-			val = v.Field(tm.index)
-		case *mapKey:
-			val = v.MapIndex(reflect.ValueOf(tm.name))
-			if val.Kind() == reflect.Invalid {
-				return nil, fmt.Errorf(`map %q does not contain key %q`, outerType.Name(), tm.name)
+	qargs := make([]any, 0)
+	outputs := make([]typeMember, 0)
+	inQuery := make(map[reflect.Type]bool)
+	inCount := 0
+	outCount := 0
+	var sqlStr bytes.Buffer
+	for _, pp := range pe.preparedParts {
+		switch pp := pp.(type) {
+		case *preparedInput:
+			typeMember := pp.inputValue
+			outerType := typeMember.outerType()
+			v, ok := typeValue[outerType]
+			if !ok {
+				argTypes := make([]reflect.Type, 0)
+				for argType, _ := range typeValue {
+					argTypes = append(argTypes, argType)
+				}
+				if err := checkShadowedType(outerType, argTypes); err != nil {
+					return nil, err
+				}
+				return nil, typeMissingError(outerType.Name(), typeNames)
 			}
+			inQuery[outerType] = true
+			var val reflect.Value
+			switch tm := typeMember.(type) {
+			case *structField:
+				val = v.Field(tm.index)
+			case *mapKey:
+				val = v.MapIndex(reflect.ValueOf(tm.name))
+				if val.Kind() == reflect.Invalid {
+					return nil, fmt.Errorf(`map %q does not contain key %q`, outerType.Name(), tm.name)
+				}
+			}
+			qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(inCount), val.Interface()))
+
+			sqlStr.WriteString("@sqlair_" + strconv.Itoa(inCount))
+			inCount++
+		case *preparedOutput:
+			for i, c := range pp.queryColumns {
+				sqlStr.WriteString(c.String())
+				sqlStr.WriteString(" AS ")
+				sqlStr.WriteString(markerName(outCount))
+				if i != len(pp.queryColumns)-1 {
+					sqlStr.WriteString(", ")
+				}
+				outCount++
+			}
+			outputs = append(outputs, pp.outputValues...)
+		case *preparedBypass:
+			sqlStr.WriteString(pp.chunk)
 		}
-		qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(i), val.Interface()))
 	}
-	return &QueryExpr{outputs: pe.outputs, sql: pe.sql, args: qargs}, nil
+
+	for argType, _ := range typeValue {
+		if !inQuery[argType] {
+			return nil, fmt.Errorf("%s not referenced in query", argType.Name())
+		}
+	}
+
+	return &QueryExpr{outputs: outputs, sql: sqlStr.String(), args: qargs}, nil
+}
+
+// checkShadowedType returns an error if a query type and some argument type
+// have the same name but are from a different package.
+func checkShadowedType(queryType reflect.Type, argTypes []reflect.Type) error {
+	for _, argType := range argTypes {
+		if argType.Name() == queryType.Name() {
+			return fmt.Errorf("parameter with type %q missing, have type with same name: %q", queryType.String(), argType.String())
+		}
+	}
+	return nil
 }
 
 var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
