@@ -21,6 +21,8 @@ func (qe *QueryExpr) HasOutputs() bool {
 	return len(qe.outputs) > 0
 }
 
+// QueryExpr represents a complete SQLair query, ready for execution on a
+// database.
 type QueryExpr struct {
 	sql     string
 	args    []any
@@ -44,7 +46,7 @@ func markerIndex(s string) (int, bool) {
 	return 0, false
 }
 
-// Query returns a query expression ready for execution, using the provided values to
+// Query returns a QueryExpr ready for execution, using the provided values to
 // substitute the input placeholders in the prepared expression. These placeholders use
 // the syntax "$Person.fullname", where Person would be a type such as:
 //

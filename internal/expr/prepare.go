@@ -7,11 +7,14 @@ import (
 	"strings"
 )
 
-// PreparedExpr contains an SQL expression that is ready for execution.
+// PreparedExpr represents a valid SQLair statement.
 type PreparedExpr struct {
 	preparedParts []preparedPart
 }
 
+// preparedPart represents a part of a SQLair statement. It contains
+// information to generate the relevent SQL and access any Go types pertaining
+// to the part.
 type preparedPart interface {
 	preparedPart()
 }
@@ -21,18 +24,21 @@ type preparedOutput struct {
 	outputValues []typeMember
 }
 
+// preparedPart is a marker method for preparedPart.
 func (*preparedOutput) preparedPart() {}
 
 type preparedInput struct {
 	inputValue typeMember
 }
 
+// preparedPart is a marker method for preparedPart.
 func (*preparedInput) preparedPart() {}
 
 type preparedBypass struct {
 	chunk string
 }
 
+// preparedPart is a marker method for preparedPart.
 func (*preparedBypass) preparedPart() {}
 
 // getKeys returns the keys of a string map in a deterministic order.
