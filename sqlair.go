@@ -141,10 +141,9 @@ type Query struct {
 	ctx     context.Context
 	err     error
 	tx      *TX // tx is only set for queries in transactions.
-	// Persist statement so it is not closed until the Query is dropped.
+	// Persist statement and db so the sql.Stmt is not closed until the Query is dropped.
 	stmt *Statement
-	// Persist db so it is not closed until the Query is dropped.
-	db *DB
+	db   *DB
 }
 
 // Iterator is used to iterate over the results of the query.

@@ -1358,6 +1358,9 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 	}
 }
 
+// Because the Query struct did not contain references to either Statement or
+// DB, if either of those would go out of scope the underlying sql.Stmt would
+// be closed.
 func (s *PackageSuite) TestRaceConditionFinalizer(c *C) {
 	var q *sqlair.Query
 	// Drop all the values except the query itself.
@@ -1377,9 +1380,9 @@ func (s *PackageSuite) TestRaceConditionFinalizer(c *C) {
 		time.Sleep(0)
 	}
 
+	// Assert that sql.Stmt was not closed early.
 	c.Assert(q.Run(), IsNil)
 }
-
 func (s *PackageSuite) TestRaceConditionFinalizerTX(c *C) {
 	var q *sqlair.Query
 	// Drop all the values except the query itself.
@@ -1401,5 +1404,6 @@ func (s *PackageSuite) TestRaceConditionFinalizerTX(c *C) {
 		time.Sleep(0)
 	}
 
+	// Assert that sql.Stmt was not closed early.
 	c.Assert(q.Run(), IsNil)
 }
