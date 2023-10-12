@@ -150,9 +150,11 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 	for _, column := range columns {
 		idx, ok := markerIndex(column)
 		if !ok {
-			// Columns not mentioned in output expressions are scanned into x.
-			var x any
-			ptrs = append(ptrs, &x)
+			// Columns not mentioned in output expressions are scanned into a
+			// dummy variable because sql.Scan needs pointers for all columns.
+			// We use sql.RawBytes to avoid unnecesary allocations.
+			var dummy sql.RawBytes
+			ptrs = append(ptrs, &dummy)
 			continue
 		}
 		if idx >= len(qe.outputs) {
