@@ -46,13 +46,9 @@ func markerIndex(s string) (int, bool) {
 	return 0, false
 }
 
-// Query returns a QueryExpr ready for execution, using the provided values to
-// substitute the input placeholders in the prepared expression. These placeholders use
-// the syntax "$Person.fullname", where Person would be a type such as:
-//
-//	type Person struct {
-//	        Name string `db:"fullname"`
-//	}
+// Query returns a query expression ready for execution on a database. Query
+// generates the SQL and uses the using the provided values to generate the
+// query arguments.
 func (pe *PreparedExpr) Query(args ...any) (qe *QueryExpr, err error) {
 	defer func() {
 		if err != nil {
@@ -79,7 +75,7 @@ func (pe *PreparedExpr) Query(args ...any) (qe *QueryExpr, err error) {
 		typeNames = append(typeNames, t.Name())
 	}
 
-	// Query parameters.
+	// Generate SQL and query parameters.
 	qargs := make([]any, 0)
 	outputs := make([]typeMember, 0)
 	typeUsed := make(map[reflect.Type]bool)
@@ -89,10 +85,12 @@ func (pe *PreparedExpr) Query(args ...any) (qe *QueryExpr, err error) {
 	for _, pp := range pe.preparedParts {
 		switch pp := pp.(type) {
 		case *preparedInput:
+			// Find argument associated with input.
 			typeMember := pp.input
 			outerType := typeMember.outerType()
 			v, ok := typeValue[outerType]
 			if !ok {
+				// Get the types of all arguments passed for checkShadowType.
 				argTypes := make([]reflect.Type, 0, len(typeValue))
 				for argType := range typeValue {
 					argTypes = append(argTypes, argType)
@@ -103,6 +101,8 @@ func (pe *PreparedExpr) Query(args ...any) (qe *QueryExpr, err error) {
 				return nil, typeMissingError(outerType.Name(), typeNames)
 			}
 			typeUsed[outerType] = true
+
+			// Retrieve query parameter.
 			var val reflect.Value
 			switch tm := typeMember.(type) {
 			case *structField:
@@ -115,6 +115,7 @@ func (pe *PreparedExpr) Query(args ...any) (qe *QueryExpr, err error) {
 			}
 			qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(inCount), val.Interface()))
 
+			// Generate input SQL.
 			sqlStr.WriteString("@sqlair_" + strconv.Itoa(inCount))
 			inCount++
 		case *preparedOutput:
@@ -133,7 +134,7 @@ func (pe *PreparedExpr) Query(args ...any) (qe *QueryExpr, err error) {
 		}
 	}
 
-	for argType, _ := range typeValue {
+	for argType := range typeValue {
 		if !typeUsed[argType] {
 			return nil, fmt.Errorf("%s not referenced in query", argType.Name())
 		}
