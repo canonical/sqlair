@@ -20,8 +20,8 @@ type preparedPart interface {
 }
 
 type preparedOutput struct {
-	queryColumns []columnAccessor
-	outputValues []typeMember
+	queryColumns    []columnAccessor
+	outputAccessors []typeMember
 }
 
 // preparedPart is a marker method for preparedPart.
@@ -138,7 +138,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (po *preparedOutput, err er
 				if err != nil {
 					return nil, err
 				}
-				po.outputValues = append(po.outputValues, allMembers...)
+				po.outputAccessors = append(po.outputAccessors, allMembers...)
 				for _, tm := range allMembers {
 					po.queryColumns = append(po.queryColumns, columnAccessor{pref, tm.memberName()})
 				}
@@ -148,7 +148,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (po *preparedOutput, err er
 				if err != nil {
 					return nil, err
 				}
-				po.outputValues = append(po.outputValues, tm)
+				po.outputAccessors = append(po.outputAccessors, tm)
 				po.queryColumns = append(po.queryColumns, columnAccessor{pref, t.memberName})
 			}
 		}
@@ -168,7 +168,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (po *preparedOutput, err er
 			if err != nil {
 				return nil, err
 			}
-			po.outputValues = append(po.outputValues, tm)
+			po.outputAccessors = append(po.outputAccessors, tm)
 			po.queryColumns = append(po.queryColumns, c)
 		}
 		return po, nil
@@ -188,7 +188,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (po *preparedOutput, err er
 			if err != nil {
 				return nil, err
 			}
-			po.outputValues = append(po.outputValues, tm)
+			po.outputAccessors = append(po.outputAccessors, tm)
 			po.queryColumns = append(po.queryColumns, c)
 		}
 	} else {
@@ -260,7 +260,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 				return nil, err
 			}
 
-			for _, tm := range po.outputValues {
+			for _, tm := range po.outputAccessors {
 				if ok := typeMemberPresent[tm]; ok {
 					return nil, fmt.Errorf("member %q of type %q appears more than once in output expressions", tm.memberName(), tm.outerType().Name())
 				}

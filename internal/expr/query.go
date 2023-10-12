@@ -79,13 +79,13 @@ func (pe *PreparedExpr) Query(args ...any) (qe *QueryExpr, err error) {
 		typeNames = append(typeNames, t.Name())
 	}
 
-	// Query parameteres.
+	// Query parameters.
 	qargs := make([]any, 0)
 	outputs := make([]typeMember, 0)
-	inQuery := make(map[reflect.Type]bool)
+	typeUsed := make(map[reflect.Type]bool)
 	inCount := 0
 	outCount := 0
-	var sqlStr bytes.Buffer
+	sqlStr := bytes.Buffer{}
 	for _, pp := range pe.preparedParts {
 		switch pp := pp.(type) {
 		case *preparedInput:
@@ -93,8 +93,8 @@ func (pe *PreparedExpr) Query(args ...any) (qe *QueryExpr, err error) {
 			outerType := typeMember.outerType()
 			v, ok := typeValue[outerType]
 			if !ok {
-				argTypes := make([]reflect.Type, 0)
-				for argType, _ := range typeValue {
+				argTypes := make([]reflect.Type, 0, len(typeValue))
+				for argType := range typeValue {
 					argTypes = append(argTypes, argType)
 				}
 				if err := checkShadowedType(outerType, argTypes); err != nil {
@@ -102,7 +102,7 @@ func (pe *PreparedExpr) Query(args ...any) (qe *QueryExpr, err error) {
 				}
 				return nil, typeMissingError(outerType.Name(), typeNames)
 			}
-			inQuery[outerType] = true
+			typeUsed[outerType] = true
 			var val reflect.Value
 			switch tm := typeMember.(type) {
 			case *structField:
@@ -127,14 +127,14 @@ func (pe *PreparedExpr) Query(args ...any) (qe *QueryExpr, err error) {
 				}
 				outCount++
 			}
-			outputs = append(outputs, pp.outputValues...)
+			outputs = append(outputs, pp.outputAccessors...)
 		case *preparedBypass:
 			sqlStr.WriteString(pp.chunk)
 		}
 	}
 
 	for argType, _ := range typeValue {
-		if !inQuery[argType] {
+		if !typeUsed[argType] {
 			return nil, fmt.Errorf("%s not referenced in query", argType.Name())
 		}
 	}
@@ -159,11 +159,11 @@ var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
 // All the structs and maps mentioned in the query must be in outputArgs.
 func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []any, onSuccess func(), err error) {
 	var typesInQuery = []string{}
-	var inQuery = make(map[reflect.Type]bool)
+	var typeUsed = make(map[reflect.Type]bool)
 	for _, typeMember := range qe.outputs {
 		outerType := typeMember.outerType()
-		if ok := inQuery[outerType]; !ok {
-			inQuery[outerType] = true
+		if ok := typeUsed[outerType]; !ok {
+			typeUsed[outerType] = true
 			typesInQuery = append(typesInQuery, outerType.Name())
 		}
 	}
@@ -196,7 +196,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 				return nil, nil, fmt.Errorf("need map or pointer to struct, got pointer to %s", k)
 			}
 		}
-		if !inQuery[outputVal.Type()] {
+		if !typeUsed[outputVal.Type()] {
 			return nil, nil, fmt.Errorf("type %q does not appear in query, have: %s", outputVal.Type().Name(), strings.Join(typesInQuery, ", "))
 		}
 		if _, ok := typeDest[outputVal.Type()]; ok {
