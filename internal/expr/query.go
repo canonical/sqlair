@@ -160,11 +160,11 @@ var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
 // All the structs and maps mentioned in the query must be in outputArgs.
 func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []any, onSuccess func(), err error) {
 	var typesInQuery = []string{}
-	var typeUsed = make(map[reflect.Type]bool)
+	var inQuery = make(map[reflect.Type]bool)
 	for _, typeMember := range qe.outputs {
 		outerType := typeMember.outerType()
-		if ok := typeUsed[outerType]; !ok {
-			typeUsed[outerType] = true
+		if ok := inQuery[outerType]; !ok {
+			inQuery[outerType] = true
 			typesInQuery = append(typesInQuery, outerType.Name())
 		}
 	}
@@ -197,7 +197,7 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 				return nil, nil, fmt.Errorf("need map or pointer to struct, got pointer to %s", k)
 			}
 		}
-		if !typeUsed[outputVal.Type()] {
+		if !inQuery[outputVal.Type()] {
 			return nil, nil, fmt.Errorf("type %q does not appear in query, have: %s", outputVal.Type().Name(), strings.Join(typesInQuery, ", "))
 		}
 		if _, ok := typeDest[outputVal.Type()]; ok {
