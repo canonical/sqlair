@@ -7,12 +7,12 @@ import (
 	"strings"
 )
 
-// PreparedExpr represents a valid SQLair statement.
+// PreparedExpr represents a valid SQLair statement ready for use in a query.
 type PreparedExpr struct {
 	preparedParts []preparedPart
 }
 
-// preparedPart represents a part of a SQLair statement. It contains
+// preparedPart represents a part of a valid SQLair statement. It contains
 // information to generate the SQL for the part and to access Go types
 // referenced in the part.
 type preparedPart interface {
@@ -37,6 +37,8 @@ type preparedInput struct {
 // preparedPart is a marker method.
 func (*preparedInput) preparedPart() {}
 
+// preparedBypass stores a section of the input SQL that we want to pass to the
+// database verbatim.
 type preparedBypass struct {
 	chunk string
 }
