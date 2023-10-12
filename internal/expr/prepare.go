@@ -20,7 +20,7 @@ type preparedPart interface {
 }
 
 // preparedOutput contains the columns to fetch from the database and
-// information about the Go values to read the results into.
+// information about the Go values to read the query results into.
 type preparedOutput struct {
 	columns []columnAccessor
 	outputs []typeMember
