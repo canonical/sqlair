@@ -119,7 +119,7 @@ func (pe *PreparedExpr) Query(args ...any) (qe *QueryExpr, err error) {
 			inCount++
 		case *preparedOutput:
 			for i, c := range pp.columns {
-				sqlStr.WriteString(c.String())
+				sqlStr.WriteString(c)
 				sqlStr.WriteString(" AS ")
 				sqlStr.WriteString(markerName(outCount))
 				if i != len(pp.columns)-1 {

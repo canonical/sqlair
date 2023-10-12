@@ -22,7 +22,7 @@ type preparedPart interface {
 // preparedOutput contains the columns to fetch from the database and
 // information about the Go values to read the query results into.
 type preparedOutput struct {
-	columns []columnAccessor
+	columns []string
 	outputs []typeMember
 }
 
@@ -145,7 +145,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (po *preparedOutput, err er
 				}
 				po.outputs = append(po.outputs, allMembers...)
 				for _, tm := range allMembers {
-					po.columns = append(po.columns, columnAccessor{pref, tm.memberName()})
+					po.columns = append(po.columns, colString(pref, tm.memberName()))
 				}
 			} else {
 				// Generate explicit columns.
@@ -154,7 +154,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (po *preparedOutput, err er
 					return nil, err
 				}
 				po.outputs = append(po.outputs, tm)
-				po.columns = append(po.columns, columnAccessor{pref, t.memberName})
+				po.columns = append(po.columns, colString(pref, t.memberName))
 			}
 		}
 		return po, nil
@@ -174,7 +174,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (po *preparedOutput, err er
 				return nil, err
 			}
 			po.outputs = append(po.outputs, tm)
-			po.columns = append(po.columns, c)
+			po.columns = append(po.columns, c.String())
 		}
 		return po, nil
 	} else if starTypes > 0 && numTypes > 1 {
@@ -194,7 +194,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (po *preparedOutput, err er
 				return nil, err
 			}
 			po.outputs = append(po.outputs, tm)
-			po.columns = append(po.columns, c)
+			po.columns = append(po.columns, c.String())
 		}
 	} else {
 		return nil, fmt.Errorf("mismatched number of columns and target types")

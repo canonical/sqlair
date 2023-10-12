@@ -33,11 +33,15 @@ type columnAccessor struct {
 	tableName, columnName string
 }
 
-func (ca columnAccessor) String() string {
-	if ca.tableName == "" {
-		return ca.columnName
+func colString(tableName string, columnName string) string {
+	if tableName == "" {
+		return columnName
 	}
-	return ca.tableName + "." + ca.columnName
+	return tableName + "." + columnName
+}
+
+func (ca columnAccessor) String() string {
+	return colString(ca.tableName, ca.columnName)
 }
 
 // inputPart represents a named parameter that will be sent to the database
