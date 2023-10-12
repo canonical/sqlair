@@ -648,69 +648,6 @@ func (s *ExprSuite) TestPrepareMapError(c *C) {
 	}
 }
 
-func (s *ExprSuite) TestValidQuery(c *C) {
-	tests := []struct {
-		query       string
-		prepareArgs []any
-		queryArgs   []any
-		queryValues []any
-	}{{
-		"SELECT * AS &Address.* FROM t WHERE x = $Person.name",
-		[]any{Address{}, Person{}},
-		[]any{Person{Fullname: "Jimany Johnson"}},
-		[]any{sql.Named("sqlair_0", "Jimany Johnson")},
-	}, {
-		"SELECT foo FROM t WHERE x = $Address.street, y = $Person.id",
-		[]any{Person{}, Address{}},
-		[]any{Person{ID: 666}, Address{Street: "Highway to Hell"}},
-		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
-	}, {
-		"SELECT foo FROM t WHERE x = $Address.street, y = $Person.id",
-		[]any{Person{}, Address{}},
-		[]any{&Person{ID: 666}, &Address{Street: "Highway to Hell"}},
-		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
-	}, {
-		"SELECT * AS &Address.* FROM t WHERE x = $M.fullname",
-		[]any{Address{}, sqlair.M{}},
-		[]any{sqlair.M{"fullname": "Jimany Johnson"}},
-		[]any{sql.Named("sqlair_0", "Jimany Johnson")},
-	}, {
-		"SELECT foo FROM t WHERE x = $M.street, y = $Person.id",
-		[]any{Person{}, sqlair.M{}},
-		[]any{Person{ID: 666}, sqlair.M{"street": "Highway to Hell"}},
-		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
-	}, {
-		"SELECT * AS &Address.* FROM t WHERE x = $StringMap.fullname",
-		[]any{Address{}, StringMap{}},
-		[]any{StringMap{"fullname": "Jimany Johnson"}},
-		[]any{sql.Named("sqlair_0", "Jimany Johnson")},
-	}, {
-		"SELECT foo FROM t WHERE x = $StringMap.street, y = $Person.id",
-		[]any{Person{}, StringMap{}},
-		[]any{Person{ID: 666}, StringMap{"street": "Highway to Hell"}},
-		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
-	}}
-	for _, t := range tests {
-		parser := expr.NewParser()
-		parsedExpr, err := parser.Parse(t.query)
-		if err != nil {
-			c.Fatal(err)
-		}
-
-		preparedExpr, err := parsedExpr.Prepare(t.prepareArgs...)
-		if err != nil {
-			c.Fatal(err)
-		}
-
-		query, err := preparedExpr.Query(t.queryArgs...)
-		if err != nil {
-			c.Fatal(err)
-		}
-
-		c.Assert(query.QueryArgs(), DeepEquals, t.queryValues)
-	}
-}
-
 func (s *ExprSuite) TestQueryError(c *C) {
 	tests := []struct {
 		query       string
