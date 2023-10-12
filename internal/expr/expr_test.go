@@ -411,6 +411,18 @@ comment */
 string
 of three lines' AND id = $Person.*`,
 		err: `cannot parse expression: line 3, column 26: asterisk not allowed in input expression "$Person.*"`,
+	}, {
+		query: "SELECT &S[:] FROM t",
+		err:   `cannot parse expression: column 8: cannot use slice syntax "S[:]" in output expression`,
+	}, {
+		query: "SELECT &S[0] FROM t",
+		err:   `cannot parse expression: column 8: cannot use slice syntax "S[0]" in output expression`,
+	}, {
+		query: "SELECT &S[1:5] FROM t",
+		err:   `cannot parse expression: column 8: cannot use slice syntax "S[1:5]" in output expression`,
+	}, {
+		query: "SELECT col1 AS &S[1:5] FROM t",
+		err:   `cannot parse expression: column 16: cannot use slice syntax "S[1:5]" in output expression`,
 	}}
 
 	for _, t := range tests {
@@ -767,5 +779,31 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		} else {
 			c.Errorf("test %d failed:\nexpected err: %q but got nil\nquery: %q", i, t.err, t.query)
 		}
+	}
+}
+
+func (s *ExprSuite) TestSliceSyntax(c *C) {
+	tests := []struct {
+		summery string
+		query   string
+		parts   string
+	}{{
+		"single slice",
+		"SELECT name FROM person WHERE id IN ($S[:])",
+		"[Bypass[SELECT name FROM person WHERE id IN (] Input[S[:]] Bypass[)]]",
+	}, {
+		"many slice ranges",
+		"SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $S[:], $Manager.id, $IntSlice[:2], $StringSlice[2:])",
+		"[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE id IN (] Input[Person.id] Bypass[, ] Input[S[:]] Bypass[, ] Input[Manager.id] Bypass[, ] Input[IntSlice[:2]] Bypass[, ] Input[StringSlice[2:]] Bypass[)]]",
+	}, {
+		"slices and other expressions in IN statement",
+		`SELECT name FROM person WHERE id IN ($S[:], func(1,2), "one", $IntSlice[1:10])`,
+		`[Bypass[SELECT name FROM person WHERE id IN (] Input[S[:]] Bypass[, func(1,2), "one", ] Input[IntSlice[1:10]] Bypass[)]]`,
+	}}
+	for _, t := range tests {
+		parser := expr.NewParser()
+		parsedExpr, err := parser.Parse(t.query)
+		c.Assert(err, IsNil)
+		c.Assert(parsedExpr.String(), Equals, t.parts)
 	}
 }

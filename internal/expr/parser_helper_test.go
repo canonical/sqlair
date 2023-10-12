@@ -48,6 +48,12 @@ func (s *ExprInternalSuite) TestRunTable(c *C) {
 		{stringf0: p.skipName, result: []bool{false}, input: "*", data: []string{}},
 		{stringf0: p.skipName, result: []bool{true}, input: "hello", data: []string{}},
 		{stringf0: p.skipName, result: []bool{false}, input: "2d3d", data: []string{}},
+
+		{stringf0: p.skipNumber, result: []bool{true}, input: "2d3d", data: []string{}},
+		{stringf0: p.skipNumber, result: []bool{false}, input: "-2", data: []string{}},
+		{stringf0: p.skipNumber, result: []bool{false}, input: "a2", data: []string{}},
+		{stringf0: p.skipNumber, result: []bool{true}, input: "2123918", data: []string{}},
+		{stringf0: p.skipNumber, result: []bool{true}, input: "2123918as", data: []string{}},
 	}
 	for _, v := range parseTests {
 		// Reset the input.
@@ -166,6 +172,64 @@ func (s *ExprInternalSuite) TestRemoveComments(c *C) {
 		p.init(s)
 		if ok := p.skipComment(); ok {
 			c.Errorf("comment %s parsed as comment when it should not be", s)
+		}
+	}
+}
+
+func (s *ExprInternalSuite) TestParseSliceRange(c *C) {
+	validSliceRanges := []struct {
+		input  string
+		output valueAccessor
+	}{
+		{"mySlice[:]", sliceRangeAccessor{typ: "mySlice", low: "", high: ""}},
+		{"mySlice[ : ]", sliceRangeAccessor{typ: "mySlice", low: "", high: ""}},
+		{"mySlice[1020:]", sliceRangeAccessor{typ: "mySlice", low: "1020", high: ""}},
+		{"mySlice[:33]", sliceRangeAccessor{typ: "mySlice", low: "", high: "33"}},
+		{"mySlice[12:34]", sliceRangeAccessor{typ: "mySlice", low: "12", high: "34"}},
+		{"mySlice[ 12  : 34   ]", sliceRangeAccessor{typ: "mySlice", low: "12", high: "34"}},
+		{"mySlice[1234]", sliceIndexAccessor{typ: "mySlice", index: 1234}},
+		{"mySlice[ 0 ]", sliceIndexAccessor{typ: "mySlice", index: 0}},
+	}
+	invalidSliceRanges := []struct {
+		input  string
+		errMsg string
+	}{
+		{input: "[]"},
+		{input: "[:]"},
+		{input: "[1:10]"},
+		{input: "[1]"},
+		{input: "name[:-1]", errMsg: `column 7: invalid slice: expected ]`},
+		{input: "name[3:1]", errMsg: `column 1: invalid slice: invalid indexes: "1" <= "3"`},
+		{input: "name[1:1]", errMsg: `column 1: invalid slice: invalid indexes: "1" <= "1"`},
+		{input: "name[a:]", errMsg: `column 6: invalid slice: expected index or colon`},
+		{input: "name[:b]", errMsg: `column 7: invalid slice: expected ]`},
+		{input: "name[1a2:]", errMsg: `column 7: invalid slice: expected ] or colon`},
+		{input: "name[1 2:]", errMsg: `column 8: invalid slice: expected ] or colon`},
+		{input: "name[:1 2]", errMsg: `column 9: invalid slice: expected ]`},
+		{input: "name[:1b2]", errMsg: `column 8: invalid slice: expected ]`},
+		{input: "name[1a:2b]", errMsg: `column 7: invalid slice: expected ] or colon`},
+		{input: "name[1a]", errMsg: `column 7: invalid slice: expected ] or colon`},
+		{input: "name[a1]", errMsg: `column 6: invalid slice: expected index or colon`},
+		{input: "name[]", errMsg: `column 6: invalid slice: expected index or colon`},
+	}
+
+	var p = NewParser()
+	for _, t := range validSliceRanges {
+		p.init(t.input)
+		sr, ok, err := p.parseSliceAccessor()
+		if !ok || err != nil {
+			c.Errorf("test failed. %s not parsed as valid slice range", t.input)
+		}
+		c.Assert(t.output, DeepEquals, sr)
+	}
+	for _, t := range invalidSliceRanges {
+		p.init(t.input)
+		_, ok, err := p.parseSliceAccessor()
+		if ok && err == nil {
+			c.Errorf("test failed. %s parsed as valid slice range", t)
+		}
+		if err != nil {
+			c.Assert(err.Error(), Equals, t.errMsg, Commentf(t.input))
 		}
 	}
 }

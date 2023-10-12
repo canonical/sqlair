@@ -62,7 +62,7 @@ func starCountColumns(cs []columnAccessor) int {
 }
 
 // starCountTypes counts the number of asterisks in a list of types.
-func starCountTypes(vs []valueAccessor) int {
+func starCountTypes(vs []keyedAccesor) int {
 	s := 0
 	for _, v := range vs {
 		if v.memberName == "*" {
@@ -88,15 +88,24 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 		}
 	}()
 
-	info, ok := ti[p.sourceType.typeName]
+	info, ok := ti[p.sourceType.TypeName()]
 	if !ok {
-		return nil, typeMissingError(p.sourceType.typeName, getKeys(ti))
+		return nil, typeMissingError(p.sourceType.TypeName(), getKeys(ti))
 	}
 
-	tm, err = info.typeMember(p.sourceType.memberName)
-	if err != nil {
-		return nil, err
+	switch t := p.sourceType.(type) {
+	case keyedAccesor:
+		if t.memberName == "*" {
+			return nil, fmt.Errorf(`asterisk used with %s in invalid context`, info.typ().Kind())
+		}
+		tm, err = info.typeMember(t.memberName)
+		if err != nil {
+			return nil, err
+		}
+	case sliceRangeAccessor:
+		return nil, fmt.Errorf("internal error: slice support not implemented")
 	}
+
 	return tm, nil
 }
 
