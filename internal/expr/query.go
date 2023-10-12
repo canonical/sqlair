@@ -89,7 +89,7 @@ func (pe *PreparedExpr) Query(args ...any) (qe *QueryExpr, err error) {
 	for _, pp := range pe.preparedParts {
 		switch pp := pp.(type) {
 		case *preparedInput:
-			typeMember := pp.inputValue
+			typeMember := pp.input
 			outerType := typeMember.outerType()
 			v, ok := typeValue[outerType]
 			if !ok {
@@ -118,16 +118,16 @@ func (pe *PreparedExpr) Query(args ...any) (qe *QueryExpr, err error) {
 			sqlStr.WriteString("@sqlair_" + strconv.Itoa(inCount))
 			inCount++
 		case *preparedOutput:
-			for i, c := range pp.queryColumns {
+			for i, c := range pp.columns {
 				sqlStr.WriteString(c.String())
 				sqlStr.WriteString(" AS ")
 				sqlStr.WriteString(markerName(outCount))
-				if i != len(pp.queryColumns)-1 {
+				if i != len(pp.columns)-1 {
 					sqlStr.WriteString(", ")
 				}
 				outCount++
 			}
-			outputs = append(outputs, pp.outputAccessors...)
+			outputs = append(outputs, pp.outputs...)
 		case *preparedBypass:
 			sqlStr.WriteString(pp.chunk)
 		}

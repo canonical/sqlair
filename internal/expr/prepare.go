@@ -13,32 +13,35 @@ type PreparedExpr struct {
 }
 
 // preparedPart represents a part of a SQLair statement. It contains
-// information to generate the relevent SQL and access any Go types pertaining
-// to the part.
+// information to generate the SQL for the part and to access Go types
+// referenced in the part.
 type preparedPart interface {
 	preparedPart()
 }
 
+// preparedOutput contains the columns to fetch from the database and
+// information about the Go values to read the results into.
 type preparedOutput struct {
-	queryColumns    []columnAccessor
-	outputAccessors []typeMember
+	columns []columnAccessor
+	outputs []typeMember
 }
 
-// preparedPart is a marker method for preparedPart.
+// preparedPart is a marker method.
 func (*preparedOutput) preparedPart() {}
 
+// preparedInput stores information about a Go value to use as a query input.
 type preparedInput struct {
-	inputValue typeMember
+	input typeMember
 }
 
-// preparedPart is a marker method for preparedPart.
+// preparedPart is a marker method.
 func (*preparedInput) preparedPart() {}
 
 type preparedBypass struct {
 	chunk string
 }
 
-// preparedPart is a marker method for preparedPart.
+// preparedPart is a marker method.
 func (*preparedBypass) preparedPart() {}
 
 // getKeys returns the keys of a string map in a deterministic order.
@@ -138,9 +141,9 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (po *preparedOutput, err er
 				if err != nil {
 					return nil, err
 				}
-				po.outputAccessors = append(po.outputAccessors, allMembers...)
+				po.outputs = append(po.outputs, allMembers...)
 				for _, tm := range allMembers {
-					po.queryColumns = append(po.queryColumns, columnAccessor{pref, tm.memberName()})
+					po.columns = append(po.columns, columnAccessor{pref, tm.memberName()})
 				}
 			} else {
 				// Generate explicit columns.
@@ -148,8 +151,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (po *preparedOutput, err er
 				if err != nil {
 					return nil, err
 				}
-				po.outputAccessors = append(po.outputAccessors, tm)
-				po.queryColumns = append(po.queryColumns, columnAccessor{pref, t.memberName})
+				po.outputs = append(po.outputs, tm)
+				po.columns = append(po.columns, columnAccessor{pref, t.memberName})
 			}
 		}
 		return po, nil
@@ -168,8 +171,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (po *preparedOutput, err er
 			if err != nil {
 				return nil, err
 			}
-			po.outputAccessors = append(po.outputAccessors, tm)
-			po.queryColumns = append(po.queryColumns, c)
+			po.outputs = append(po.outputs, tm)
+			po.columns = append(po.columns, c)
 		}
 		return po, nil
 	} else if starTypes > 0 && numTypes > 1 {
@@ -188,8 +191,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (po *preparedOutput, err er
 			if err != nil {
 				return nil, err
 			}
-			po.outputAccessors = append(po.outputAccessors, tm)
-			po.queryColumns = append(po.queryColumns, c)
+			po.outputs = append(po.outputs, tm)
+			po.columns = append(po.columns, c)
 		}
 	} else {
 		return nil, fmt.Errorf("mismatched number of columns and target types")
@@ -260,7 +263,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 				return nil, err
 			}
 
-			for _, tm := range po.outputAccessors {
+			for _, tm := range po.outputs {
 				if ok := typeMemberPresent[tm]; ok {
 					return nil, fmt.Errorf("member %q of type %q appears more than once in output expressions", tm.memberName(), tm.outerType().Name())
 				}
