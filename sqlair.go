@@ -184,12 +184,12 @@ type prepareSubstrate interface {
 // the cache to see if it has already been prepared on the DB.
 // The prepareSubstrate must be assosiated with the same DB that prepareStmt is
 // a method of.
-func (db *DB) prepareStmt(ctx context.Context, ps prepareSubstrate, sql string, stmtID stmtID) (*sql.Stmt, error) {
+func (db *DB) prepareStmt(ctx context.Context, ps prepareSubstrate, sql string, stmtCacheID stmtID) (*sql.Stmt, error) {
 	var err error
 	cacheMutex.RLock()
 	// The statement ID is only removed from the cache when the finalizer is
 	// run, so it is always in stmtDBCache.
-	sqlstmt, ok := stmtDBCache[stmtID][db.cacheID]
+	sqlstmt, ok := stmtDBCache[stmtCacheID][db.cacheID]
 	cacheMutex.RUnlock()
 	if !ok {
 		sqlstmt, err = ps.PrepareContext(ctx, sql)
@@ -199,13 +199,13 @@ func (db *DB) prepareStmt(ctx context.Context, ps prepareSubstrate, sql string, 
 		cacheMutex.Lock()
 		// Check if a statement has been inserted by someone else since we last
 		// checked.
-		sqlstmtAlt, ok := stmtDBCache[stmtID][db.cacheID]
+		sqlstmtAlt, ok := stmtDBCache[stmtCacheID][db.cacheID]
 		if ok {
 			sqlstmt.Close()
 			sqlstmt = sqlstmtAlt
 		} else {
-			stmtDBCache[stmtID][db.cacheID] = sqlstmt
-			dbStmtCache[db.cacheID][stmtID] = true
+			stmtDBCache[stmtCacheID][db.cacheID] = sqlstmt
+			dbStmtCache[db.cacheID][stmtCacheID] = true
 		}
 		cacheMutex.Unlock()
 	}
