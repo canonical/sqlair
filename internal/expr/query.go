@@ -22,6 +22,23 @@ type QueryExpr struct {
 	outputs []typeMember
 }
 
+const markerPrefix = "_sqlair_"
+
+func markerName(n int) string {
+	return markerPrefix + strconv.Itoa(n)
+}
+
+// markerIndex returns the int X from the string "_sqlair_X".
+func markerIndex(s string) (int, bool) {
+	if strings.HasPrefix(s, markerPrefix) {
+		n, err := strconv.Atoi(s[len(markerPrefix):])
+		if err == nil {
+			return n, true
+		}
+	}
+	return 0, false
+}
+
 // Query returns a query expression ready for execution, using the provided values to
 // substitute the input placeholders in the prepared expression. These placeholders use
 // the syntax "$Person.fullname", where Person would be a type such as:

@@ -21,23 +21,6 @@ func (pe *PreparedExpr) SQL() string {
 	return pe.sql
 }
 
-const markerPrefix = "_sqlair_"
-
-func markerName(n int) string {
-	return markerPrefix + strconv.Itoa(n)
-}
-
-// markerIndex returns the int X from the string "_sqlair_X".
-func markerIndex(s string) (int, bool) {
-	if strings.HasPrefix(s, markerPrefix) {
-		n, err := strconv.Atoi(s[len(markerPrefix):])
-		if err == nil {
-			return n, true
-		}
-	}
-	return 0, false
-}
-
 // getKeys returns the keys of a string map in a deterministic order.
 func getKeys[T any](m map[string]T) []string {
 	i := 0
