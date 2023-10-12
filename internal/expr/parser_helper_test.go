@@ -177,16 +177,20 @@ func (s *ExprInternalSuite) TestRemoveComments(c *C) {
 }
 
 func (s *ExprInternalSuite) TestParseSliceRange(c *C) {
+	numToPtr := func(n uint64) *uint64 {
+		m := n
+		return &m
+	}
 	validSliceRanges := []struct {
 		input  string
 		output valueAccessor
 	}{
-		{"mySlice[:]", sliceRangeAccessor{typ: "mySlice", low: "", high: ""}},
-		{"mySlice[ : ]", sliceRangeAccessor{typ: "mySlice", low: "", high: ""}},
-		{"mySlice[1020:]", sliceRangeAccessor{typ: "mySlice", low: "1020", high: ""}},
-		{"mySlice[:33]", sliceRangeAccessor{typ: "mySlice", low: "", high: "33"}},
-		{"mySlice[12:34]", sliceRangeAccessor{typ: "mySlice", low: "12", high: "34"}},
-		{"mySlice[ 12  : 34   ]", sliceRangeAccessor{typ: "mySlice", low: "12", high: "34"}},
+		{"mySlice[:]", sliceRangeAccessor{typ: "mySlice", low: nil, high: nil}},
+		{"mySlice[ : ]", sliceRangeAccessor{typ: "mySlice", low: nil, high: nil}},
+		{"mySlice[1020:]", sliceRangeAccessor{typ: "mySlice", low: numToPtr(1020), high: nil}},
+		{"mySlice[:33]", sliceRangeAccessor{typ: "mySlice", low: nil, high: numToPtr(33)}},
+		{"mySlice[12:34]", sliceRangeAccessor{typ: "mySlice", low: numToPtr(12), high: numToPtr(34)}},
+		{"mySlice[ 12  : 34   ]", sliceRangeAccessor{typ: "mySlice", low: numToPtr(12), high: numToPtr(34)}},
 		{"mySlice[1234]", sliceIndexAccessor{typ: "mySlice", index: 1234}},
 		{"mySlice[ 0 ]", sliceIndexAccessor{typ: "mySlice", index: 0}},
 	}
@@ -199,8 +203,8 @@ func (s *ExprInternalSuite) TestParseSliceRange(c *C) {
 		{input: "[1:10]"},
 		{input: "[1]"},
 		{input: "name[:-1]", errMsg: `column 7: invalid slice: expected ]`},
-		{input: "name[3:1]", errMsg: `column 1: invalid slice: invalid indexes: "1" <= "3"`},
-		{input: "name[1:1]", errMsg: `column 1: invalid slice: invalid indexes: "1" <= "1"`},
+		{input: "name[3:1]", errMsg: `column 1: invalid slice: invalid indexes: 1 <= 3`},
+		{input: "name[1:1]", errMsg: `column 1: invalid slice: invalid indexes: 1 <= 1`},
 		{input: "name[a:]", errMsg: `column 6: invalid slice: expected index or colon`},
 		{input: "name[:b]", errMsg: `column 7: invalid slice: expected ]`},
 		{input: "name[1a2:]", errMsg: `column 7: invalid slice: expected ] or colon`},

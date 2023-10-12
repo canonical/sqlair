@@ -59,7 +59,9 @@ func (ca columnAccessor) String() string {
 
 // sliceRangeAccessor represents the expression typeName[low:high].
 type sliceRangeAccessor struct {
-	typ, low, high string
+	typ string
+	// Using pointers to represent that the both low and high are optional.
+	low, high *uint64
 }
 
 func (st sliceRangeAccessor) TypeName() string {
@@ -67,7 +69,15 @@ func (st sliceRangeAccessor) TypeName() string {
 }
 
 func (st sliceRangeAccessor) String() string {
-	return fmt.Sprintf("%s[%s:%s]", st.typ, st.low, st.high)
+	strLow := ""
+	if st.low != nil {
+		strLow = strconv.FormatUint(*st.low, 10)
+	}
+	strHigh := ""
+	if st.high != nil {
+		strHigh = strconv.FormatUint(*st.high, 10)
+	}
+	return fmt.Sprintf("%s[%s:%s]", st.typ, strLow, strHigh)
 }
 
 func (st sliceRangeAccessor) accessor() {
@@ -76,7 +86,7 @@ func (st sliceRangeAccessor) accessor() {
 // sliceIndexAccessor represents the expression typeName[index].
 type sliceIndexAccessor struct {
 	typ   string
-	index uint
+	index uint64
 }
 
 func (st sliceIndexAccessor) TypeName() string {
@@ -585,13 +595,14 @@ func (p *Parser) parseTargetType() (keyedAccesor, bool, error) {
 	return keyedAccesor{}, false, nil
 }
 
-// parseNumber parses a positive number composed of one or more digits.
-func (p *Parser) parseNumber() (string, bool) {
+// parseUNumber parses a non-negative number composed of one or more digits.
+func (p *Parser) parseUNumber() (*uint64, bool) {
 	mark := p.pos
 	if !p.skipNumber() {
-		return "", false
+		return nil, false
 	}
-	return p.input[mark:p.pos], true
+	n, _ := strconv.ParseUint(p.input[mark:p.pos], 10, 64)
+	return &n, true
 }
 
 // parseSliceAccessor parses a slice range composed of two indexes of the form
@@ -608,35 +619,32 @@ func (p *Parser) parseSliceAccessor() (sr valueAccessor, ok bool, err error) {
 		return sliceRangeAccessor{}, false, nil
 	}
 	p.skipBlanks()
-	low, ok := p.parseNumber()
+	low, ok := p.parseUNumber()
 	if !ok {
-		low = ""
+		low = nil
 	}
 	p.skipBlanks()
 	if !p.skipByte(':') {
-		if low == "" {
+		if low == nil {
 			return sliceRangeAccessor{}, false, errorAt(fmt.Errorf("invalid slice: expected index or colon"), p.lineNum, p.colNum(), p.input)
 		}
 		if p.skipByte(']') {
-			i, _ := strconv.Atoi(low)
-			return sliceIndexAccessor{typ: id, index: uint(i)}, true, nil
+			return sliceIndexAccessor{typ: id, index: *low}, true, nil
 		}
 		return sliceRangeAccessor{}, false, errorAt(fmt.Errorf("invalid slice: expected ] or colon"), p.lineNum, p.colNum(), p.input)
 	}
 	p.skipBlanks()
-	high, ok := p.parseNumber()
+	high, ok := p.parseUNumber()
 	if !ok {
-		high = ""
+		high = nil
 	}
 	p.skipBlanks()
 	if !p.skipByte(']') {
 		return sliceRangeAccessor{}, false, errorAt(fmt.Errorf("invalid slice: expected ]"), p.lineNum, p.colNum(), p.input)
 	}
-	if high != "" && low != "" {
-		highN, _ := strconv.Atoi(high)
-		lowN, _ := strconv.Atoi(low)
-		if lowN >= highN {
-			return sliceRangeAccessor{}, false, errorAt(fmt.Errorf("invalid slice: invalid indexes: %q <= %q", high, low), cp.lineNum, cp.colNum(), p.input)
+	if high != nil && low != nil {
+		if *low >= *high {
+			return sliceRangeAccessor{}, false, errorAt(fmt.Errorf("invalid slice: invalid indexes: %d <= %d", *high, *low), cp.lineNum, cp.colNum(), p.input)
 		}
 	}
 	return sliceRangeAccessor{typ: id, low: low, high: high}, true, nil
