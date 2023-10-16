@@ -95,15 +95,12 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 
 	switch t := p.sourceType.(type) {
 	case memberAcessor:
-		if t.memberName == "*" {
-			return nil, fmt.Errorf(`asterisk used with %s in invalid context`, info.typ().Kind())
-		}
 		tm, err = info.typeMember(t.memberName)
 		if err != nil {
 			return nil, err
 		}
 	case sliceRangeAccessor:
-		return nil, fmt.Errorf("internal error: slice support not implemented")
+		return nil, fmt.Errorf("slice support not implemented")
 	}
 
 	return tm, nil
