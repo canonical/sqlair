@@ -62,7 +62,7 @@ func starCountColumns(cs []columnAccessor) int {
 }
 
 // starCountTypes counts the number of asterisks in a list of types.
-func starCountTypes(vs []keyedAccesor) int {
+func starCountTypes(vs []memberAcessor) int {
 	s := 0
 	for _, v := range vs {
 		if v.memberName == "*" {
@@ -94,7 +94,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 	}
 
 	switch t := p.sourceType.(type) {
-	case keyedAccesor:
+	case memberAcessor:
 		if t.memberName == "*" {
 			return nil, fmt.Errorf(`asterisk used with %s in invalid context`, info.typ().Kind())
 		}
