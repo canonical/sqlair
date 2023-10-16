@@ -211,10 +211,9 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (po *preparedOutput, err er
 
 type typeNameToInfo map[string]typeInfo
 
-// Prepare takes a parsed expression and struct instantiations of all the types
-// mentioned in it.
-// The IO parts of the statement are checked for validity against the types
-// and expanded if necessary.
+// Prepare takes samples of all types mentioned in the SQLair expressions of
+// the query. It validates the SQLair expressions and generates the type
+// information required for the query stage.
 func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	defer func() {
 		if err != nil {

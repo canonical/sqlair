@@ -85,12 +85,12 @@ func (pe *PreparedExpr) Query(args ...any) (qe *QueryExpr, err error) {
 	for _, pp := range pe.preparedParts {
 		switch pp := pp.(type) {
 		case *preparedInput:
-			// Find argument associated with input.
+			// Find arg associated with input.
 			typeMember := pp.input
 			outerType := typeMember.outerType()
 			v, ok := typeValue[outerType]
 			if !ok {
-				// Get the types of all arguments passed for checkShadowType.
+				// Get the types of all args for checkShadowType.
 				argTypes := make([]reflect.Type, 0, len(typeValue))
 				for argType := range typeValue {
 					argTypes = append(argTypes, argType)
