@@ -47,8 +47,8 @@ func markerIndex(s string) (int, bool) {
 }
 
 // Query returns a query expression ready for execution on a database. Query
-// generates the SQL and uses the using the provided values to generate the
-// query arguments.
+// generates the SQL and uses the provided values to generate the query
+// arguments.
 func (pe *PreparedExpr) Query(args ...any) (qe *QueryExpr, err error) {
 	defer func() {
 		if err != nil {
