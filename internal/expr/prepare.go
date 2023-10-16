@@ -19,11 +19,17 @@ type preparedPart interface {
 	preparedPart()
 }
 
+// outputColumn stores the name of a column to fetch from the database and the
+// type member to scan the result into.
+type outputColumn struct {
+	sql string
+	tm  typeMember
+}
+
 // preparedOutput contains the columns to fetch from the database and
 // information about the Go values to read the query results into.
 type preparedOutput struct {
-	columns []string
-	outputs []typeMember
+	outputColumns []outputColumn
 }
 
 // preparedPart is a marker method.
@@ -143,9 +149,9 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (po *preparedOutput, err er
 				if err != nil {
 					return nil, err
 				}
-				po.outputs = append(po.outputs, allMembers...)
 				for _, tm := range allMembers {
-					po.columns = append(po.columns, colString(pref, tm.memberName()))
+					oc := outputColumn{sql: colString(pref, tm.memberName()), tm: tm}
+					po.outputColumns = append(po.outputColumns, oc)
 				}
 			} else {
 				// Generate explicit columns.
@@ -153,8 +159,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (po *preparedOutput, err er
 				if err != nil {
 					return nil, err
 				}
-				po.outputs = append(po.outputs, tm)
-				po.columns = append(po.columns, colString(pref, t.memberName))
+				oc := outputColumn{sql: colString(pref, t.memberName), tm: tm}
+				po.outputColumns = append(po.outputColumns, oc)
 			}
 		}
 		return po, nil
@@ -173,8 +179,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (po *preparedOutput, err er
 			if err != nil {
 				return nil, err
 			}
-			po.outputs = append(po.outputs, tm)
-			po.columns = append(po.columns, c.String())
+			oc := outputColumn{sql: c.String(), tm: tm}
+			po.outputColumns = append(po.outputColumns, oc)
 		}
 		return po, nil
 	} else if starTypes > 0 && numTypes > 1 {
@@ -193,8 +199,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (po *preparedOutput, err er
 			if err != nil {
 				return nil, err
 			}
-			po.outputs = append(po.outputs, tm)
-			po.columns = append(po.columns, c.String())
+			oc := outputColumn{sql: c.String(), tm: tm}
+			po.outputColumns = append(po.outputColumns, oc)
 		}
 	} else {
 		return nil, fmt.Errorf("mismatched number of columns and target types")
@@ -265,7 +271,8 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 				return nil, err
 			}
 
-			for _, tm := range po.outputs {
+			for _, oc := range po.outputColumns {
+				tm := oc.tm
 				if ok := typeMemberPresent[tm]; ok {
 					return nil, fmt.Errorf("member %q of type %q appears more than once in output expressions", tm.memberName(), tm.outerType().Name())
 				}

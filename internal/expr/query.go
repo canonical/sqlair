@@ -119,16 +119,16 @@ func (pe *PreparedExpr) Query(args ...any) (qe *QueryExpr, err error) {
 			sqlStr.WriteString("@sqlair_" + strconv.Itoa(inCount))
 			inCount++
 		case *preparedOutput:
-			for i, c := range pp.columns {
-				sqlStr.WriteString(c)
+			for i, oc := range pp.outputColumns {
+				sqlStr.WriteString(oc.sql)
 				sqlStr.WriteString(" AS ")
 				sqlStr.WriteString(markerName(outCount))
-				if i != len(pp.columns)-1 {
+				if i != len(pp.outputColumns)-1 {
 					sqlStr.WriteString(", ")
 				}
 				outCount++
+				outputs = append(outputs, oc.tm)
 			}
-			outputs = append(outputs, pp.outputs...)
 		case *preparedBypass:
 			sqlStr.WriteString(pp.chunk)
 		}
