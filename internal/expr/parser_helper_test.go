@@ -202,19 +202,6 @@ func (s *ExprInternalSuite) TestParseSliceRange(c *C) {
 		{input: "[:]"},
 		{input: "[1:10]"},
 		{input: "[1]"},
-		{input: "name[:-1]", errMsg: `column 7: invalid slice: expected ]`},
-		{input: "name[3:1]", errMsg: `column 1: invalid slice: invalid indexes: 1 <= 3`},
-		{input: "name[1:1]", errMsg: `column 1: invalid slice: invalid indexes: 1 <= 1`},
-		{input: "name[a:]", errMsg: `column 6: invalid slice: expected index or colon`},
-		{input: "name[:b]", errMsg: `column 7: invalid slice: expected ]`},
-		{input: "name[1a2:]", errMsg: `column 7: invalid slice: expected ] or colon`},
-		{input: "name[1 2:]", errMsg: `column 8: invalid slice: expected ] or colon`},
-		{input: "name[:1 2]", errMsg: `column 9: invalid slice: expected ]`},
-		{input: "name[:1b2]", errMsg: `column 8: invalid slice: expected ]`},
-		{input: "name[1a:2b]", errMsg: `column 7: invalid slice: expected ] or colon`},
-		{input: "name[1a]", errMsg: `column 7: invalid slice: expected ] or colon`},
-		{input: "name[a1]", errMsg: `column 6: invalid slice: expected index or colon`},
-		{input: "name[]", errMsg: `column 6: invalid slice: expected index or colon`},
 	}
 
 	var p = NewParser()

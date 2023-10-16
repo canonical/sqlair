@@ -423,6 +423,45 @@ of three lines' AND id = $Person.*`,
 	}, {
 		query: "SELECT col1 AS &S[1:5] FROM t",
 		err:   `cannot parse expression: column 16: cannot use slice syntax "S[1:5]" in output expression`,
+	}, {
+		query: "SELECT * FROM t WHERE id IN $ids[:-1]",
+		err:   `cannot parse expression: column 35: invalid slice: expected ]`,
+	}, {
+		query: "SELECT * FROM t WHERE id IN $ids[3:1]",
+		err:   `cannot parse expression: column 30: invalid slice: invalid indexes: 1 <= 3`,
+	}, {
+		query: "SELECT * FROM t WHERE id IN $ids[1:1]",
+		err:   `cannot parse expression: column 30: invalid slice: invalid indexes: 1 <= 1`,
+	}, {
+		query: "SELECT * FROM t WHERE id IN $ids[a:]",
+		err:   `cannot parse expression: column 34: invalid slice: expected index or colon`,
+	}, {
+		query: "SELECT * FROM t WHERE id IN $ids[:b]",
+		err:   `cannot parse expression: column 35: invalid slice: expected ]`,
+	}, {
+		query: "SELECT * FROM t WHERE id IN $ids[1a2:]",
+		err:   `cannot parse expression: column 35: invalid slice: expected ] or colon`,
+	}, {
+		query: "SELECT * FROM t WHERE id IN $ids[1 2:]",
+		err:   `cannot parse expression: column 36: invalid slice: expected ] or colon`,
+	}, {
+		query: "SELECT * FROM t WHERE id IN $ids[:1 2]",
+		err:   `cannot parse expression: column 37: invalid slice: expected ]`,
+	}, {
+		query: "SELECT * FROM t WHERE id IN $ids[:1b2]",
+		err:   `cannot parse expression: column 36: invalid slice: expected ]`,
+	}, {
+		query: "SELECT * FROM t WHERE id IN $ids[1a:2b]",
+		err:   `cannot parse expression: column 35: invalid slice: expected ] or colon`,
+	}, {
+		query: "SELECT * FROM t WHERE id = $ids[1a]",
+		err:   `cannot parse expression: column 34: invalid slice: expected ] or colon`,
+	}, {
+		query: "SELECT * FROM t WHERE id = $ids[a1]",
+		err:   `cannot parse expression: column 33: invalid slice: expected index or colon`,
+	}, {
+		query: "SELECT * FROM t WHERE id = $ids[]",
+		err:   `cannot parse expression: column 33: invalid slice: expected index or colon`,
 	}}
 
 	for _, t := range tests {
