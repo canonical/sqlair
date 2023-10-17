@@ -600,7 +600,7 @@ func (p *Parser) parseUNumber() (*uint64, bool) {
 	}
 	n, err := strconv.ParseUint(p.input[mark:p.pos], 10, 64)
 	if err != nil {
-		panic("internal error: skipNumber did not return a valid number")
+		panic("internal error: skipNumber did not skip a valid number")
 	}
 	return &n, true
 }
