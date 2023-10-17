@@ -1357,3 +1357,53 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 		}
 	}
 }
+
+// Because the Query struct did not contain references to either Statement or
+// DB, if either of those would go out of scope the underlying sql.Stmt would
+// be closed.
+func (s *PackageSuite) TestRaceConditionFinalizer(c *C) {
+	var q *sqlair.Query
+	// Drop all the values except the query itself.
+	func() {
+		sqldb, err := setupDB()
+		c.Assert(err, IsNil)
+
+		db := sqlair.NewDB(sqldb)
+
+		selectStmt := sqlair.MustPrepare(`SELECT 'hello'`)
+		q = db.Query(nil, selectStmt)
+	}()
+
+	// Try to run their finalizers by calling GC several times.
+	for i := 0; i <= 10; i++ {
+		runtime.GC()
+		time.Sleep(0)
+	}
+
+	// Assert that sql.Stmt was not closed early.
+	c.Assert(q.Run(), IsNil)
+}
+func (s *PackageSuite) TestRaceConditionFinalizerTX(c *C) {
+	var q *sqlair.Query
+	// Drop all the values except the query itself.
+	func() {
+		sqldb, err := setupDB()
+		c.Assert(err, IsNil)
+
+		db := sqlair.NewDB(sqldb)
+
+		selectStmt := sqlair.MustPrepare(`SELECT 'hello'`)
+		tx, err := db.Begin(nil, nil)
+		c.Assert(err, IsNil)
+		q = tx.Query(nil, selectStmt)
+	}()
+
+	// Try to run their finalizers by calling GC several times.
+	for i := 0; i <= 10; i++ {
+		runtime.GC()
+		time.Sleep(0)
+	}
+
+	// Assert that sql.Stmt was not closed early.
+	c.Assert(q.Run(), IsNil)
+}
