@@ -21,7 +21,7 @@ type queryPart interface {
 // valueAccessor stores information about how to access a Go value. For example,
 // by index, by key, or by slice syntax.
 type valueAccessor interface {
-	TypeName() string
+	getTypeName() string
 
 	// accessor is a marker method.
 	accessor()
@@ -38,7 +38,7 @@ func (va memberAcessor) String() string {
 	return va.typeName + "." + va.memberName
 }
 
-func (va memberAcessor) TypeName() string {
+func (va memberAcessor) getTypeName() string {
 	return va.typeName
 }
 
@@ -63,7 +63,7 @@ type sliceRangeAccessor struct {
 	low, high *uint64
 }
 
-func (st sliceRangeAccessor) TypeName() string {
+func (st sliceRangeAccessor) getTypeName() string {
 	return st.typ
 }
 
@@ -87,7 +87,7 @@ type sliceIndexAccessor struct {
 	index uint64
 }
 
-func (st sliceIndexAccessor) TypeName() string {
+func (st sliceIndexAccessor) getTypeName() string {
 	return st.typ
 }
 

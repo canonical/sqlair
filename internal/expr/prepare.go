@@ -88,9 +88,9 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 		}
 	}()
 
-	info, ok := ti[p.sourceType.TypeName()]
+	info, ok := ti[p.sourceType.getTypeName()]
 	if !ok {
-		return nil, typeMissingError(p.sourceType.TypeName(), getKeys(ti))
+		return nil, typeMissingError(p.sourceType.getTypeName(), getKeys(ti))
 	}
 
 	switch t := p.sourceType.(type) {
