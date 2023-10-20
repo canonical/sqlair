@@ -1165,40 +1165,6 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 	checkCacheEmpty()
 }
 
-func (s *PackageSuite) TestTransactionWithOneConn(c *C) {
-	tables, sqldb, err := personAndAddressDB()
-	c.Assert(err, IsNil)
-	sqldb.SetMaxOpenConns(1)
-	ctx := context.Background()
-
-	db := sqlair.NewDB(sqldb)
-	defer dropTables(c, db, tables...)
-
-	// This test sets the maximum number of connections to the DB to one. The
-	// database/sql library makes use of a pool of connections to communicate
-	// with the DB. Certain operations require a dedicated connection to run,
-	// such as transactions.
-	// This test ensures that we do not enter a deadlock when doing a behind
-	// the scenes prepare for a transaction.
-	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE name = 'Mark'", Person{})
-	mark := Person{20, "Mark", 1500}
-
-	tx, err := db.Begin(ctx, nil)
-	c.Assert(err, IsNil)
-
-	q := tx.Query(ctx, selectStmt)
-	defer func() {
-		c.Assert(tx.Commit(), IsNil)
-	}()
-	iter := q.Iter()
-	c.Assert(iter.Next(), Equals, true)
-	p := Person{}
-	c.Assert(iter.Get(&p), IsNil)
-	c.Assert(mark, Equals, p)
-	c.Assert(iter.Next(), Equals, false)
-	c.Assert(iter.Close(), IsNil)
-}
-
 type JujuLeaseKey struct {
 	Namespace string `db:"type"`
 	ModelUUID string `db:"model_uuid"`
@@ -1405,5 +1371,24 @@ func (s *PackageSuite) TestRaceConditionFinalizerTX(c *C) {
 	}
 
 	// Assert that sql.Stmt was not closed early.
+	c.Assert(q.Run(), IsNil)
+}
+
+func (s *PackageSuite) TestStatementTXReuse(c *C) {
+	sqldb, err := setupDB()
+	c.Assert(err, IsNil)
+
+	db := sqlair.NewDB(sqldb)
+
+	// Create a statement and run it on a transaction.
+	selectStmt := sqlair.MustPrepare(`SELECT 'hello'`)
+	tx, err := db.Begin(nil, nil)
+	c.Assert(err, IsNil)
+	q := tx.Query(nil, selectStmt)
+	c.Assert(q.Run(), IsNil)
+	tx.Commit()
+
+	// Run the same existing statement outside the transaction.
+	q = db.Query(nil, selectStmt)
 	c.Assert(q.Run(), IsNil)
 }

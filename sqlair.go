@@ -558,7 +558,7 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: ErrTXDone}
 	}
 
-	sqlstmt, err := tx.db.prepareStmt(ctx, tx.sqlconn, s)
+	sqlstmt, err := tx.db.prepareStmt(ctx, tx.db.sqldb, s)
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
