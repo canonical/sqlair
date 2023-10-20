@@ -613,11 +613,11 @@ func (p *Parser) parseSliceAccessor() (va valueAccessor, ok bool, err error) {
 
 	id, ok := p.parseIdentifier()
 	if !ok {
-		return sliceRangeAccessor{}, false, nil
+		return nil, false, nil
 	}
 	if !p.skipByte('[') {
 		cp.restore()
-		return sliceRangeAccessor{}, false, nil
+		return nil, false, nil
 	}
 	p.skipBlanks()
 	low, ok := p.parseUNumber()
@@ -627,12 +627,12 @@ func (p *Parser) parseSliceAccessor() (va valueAccessor, ok bool, err error) {
 	p.skipBlanks()
 	if !p.skipByte(':') {
 		if low == nil {
-			return sliceRangeAccessor{}, false, errorAt(fmt.Errorf("invalid slice: expected index or colon"), p.lineNum, p.colNum(), p.input)
+			return nil, false, errorAt(fmt.Errorf("invalid slice: expected index or colon"), p.lineNum, p.colNum(), p.input)
 		}
 		if p.skipByte(']') {
 			return sliceIndexAccessor{typ: id, index: *low}, true, nil
 		}
-		return sliceRangeAccessor{}, false, errorAt(fmt.Errorf("invalid slice: expected ] or colon"), p.lineNum, p.colNum(), p.input)
+		return nil, false, errorAt(fmt.Errorf("invalid slice: expected ] or colon"), p.lineNum, p.colNum(), p.input)
 	}
 	p.skipBlanks()
 	high, ok := p.parseUNumber()
@@ -641,11 +641,11 @@ func (p *Parser) parseSliceAccessor() (va valueAccessor, ok bool, err error) {
 	}
 	p.skipBlanks()
 	if !p.skipByte(']') {
-		return sliceRangeAccessor{}, false, errorAt(fmt.Errorf("invalid slice: expected ]"), p.lineNum, p.colNum(), p.input)
+		return nil, false, errorAt(fmt.Errorf("invalid slice: expected ]"), p.lineNum, p.colNum(), p.input)
 	}
 	if high != nil && low != nil {
 		if *low >= *high {
-			return sliceRangeAccessor{}, false, errorAt(fmt.Errorf("invalid slice: invalid indexes: %d <= %d", *high, *low), cp.lineNum, cp.colNum(), p.input)
+			return nil, false, errorAt(fmt.Errorf("invalid slice: invalid indexes: %d <= %d", *high, *low), cp.lineNum, cp.colNum(), p.input)
 		}
 	}
 	return sliceRangeAccessor{typ: id, low: low, high: high}, true, nil
