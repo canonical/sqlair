@@ -56,7 +56,8 @@ func (ca columnAccessor) String() string {
 	return ca.tableName + "." + ca.columnName
 }
 
-// sliceRangeAccessor represents the expression typeName[low:high].
+// sliceRangeAccessor stores information for accessing a slice using the
+// expression "typeName[low:high]".
 type sliceRangeAccessor struct {
 	typ string
 	// Using pointers to represent that the both low and high are optional.
@@ -81,7 +82,8 @@ func (st sliceRangeAccessor) String() string {
 
 func (st sliceRangeAccessor) accessor() {}
 
-// sliceIndexAccessor represents the expression typeName[index].
+// sliceIndexAccessor stores information for accessing an item of a slice using
+// the expression "typeName[index]".
 type sliceIndexAccessor struct {
 	typ   string
 	index uint64
