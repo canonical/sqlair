@@ -194,15 +194,9 @@ func (s *ExprInternalSuite) TestParseSliceRange(c *C) {
 		{"mySlice[1234]", sliceIndexAccessor{typ: "mySlice", index: 1234}},
 		{"mySlice[ 0 ]", sliceIndexAccessor{typ: "mySlice", index: 0}},
 	}
-	invalidSliceRanges := []struct {
-		input  string
-		errMsg string
-	}{
-		{input: "[]"},
-		{input: "[:]"},
-		{input: "[1:10]"},
-		{input: "[1]"},
-	}
+	// invalidSliceRanges contains ranges that are invalid but that do not
+	// result in an error.
+	invalidSliceRanges := []string{"[]", "[:]", "[1:10]", "[1]"}
 
 	var p = NewParser()
 	for _, t := range validSliceRanges {
@@ -214,13 +208,13 @@ func (s *ExprInternalSuite) TestParseSliceRange(c *C) {
 		c.Assert(t.output, DeepEquals, sr)
 	}
 	for _, t := range invalidSliceRanges {
-		p.init(t.input)
+		p.init(t)
 		_, ok, err := p.parseSliceAccessor()
-		if ok && err == nil {
+		if ok {
 			c.Errorf("test failed. %s parsed as valid slice range", t)
 		}
 		if err != nil {
-			c.Assert(err.Error(), Equals, t.errMsg, Commentf(t.input))
+			c.Errorf("test failed. parsing %s returned an error", t)
 		}
 	}
 }
