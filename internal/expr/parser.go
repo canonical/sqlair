@@ -18,7 +18,7 @@ type queryPart interface {
 	part()
 }
 
-// valueAccessor stores information about how to access a Go value. For example,
+// valueAccessor stores information about how to access a Go value. For example:
 // by index, by key, or by slice syntax.
 type valueAccessor interface {
 	getTypeName() string
@@ -38,11 +38,11 @@ func (va memberAcessor) String() string {
 	return va.typeName + "." + va.memberName
 }
 
-func (va memberAcessor) getTypeName() string {
-	return va.typeName
+func (ma memberAcessor) getTypeName() string {
+	return ma.typeName
 }
 
-func (va memberAcessor) accessor() {}
+func (ma memberAcessor) accessor() {}
 
 // columnAccessor stores a SQL column name and optionally its table name.
 type columnAccessor struct {
