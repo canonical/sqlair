@@ -608,8 +608,8 @@ func (p *Parser) parseUNumber() (uint64, bool) {
 }
 
 // parseSliceAccessor parses a slice range composed of two indexes of the form
-// "[low:high]". On success it returns either a sliceIndexAccessor or a
-// sliceRangeAccessor.
+// "[low:high]" and returns a sliceRangeAccessor, or it parses a single index
+// of the form "[index]" and returns a sliceIndexAccessor.
 func (p *Parser) parseSliceAccessor() (va valueAccessor, ok bool, err error) {
 	cp := p.save()
 
