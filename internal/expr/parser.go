@@ -593,16 +593,16 @@ func (p *Parser) parseTargetType() (memberAcessor, bool, error) {
 }
 
 // parseUNumber parses a non-negative number composed of one or more digits.
-func (p *Parser) parseUNumber() (*uint64, bool) {
+func (p *Parser) parseUNumber() (uint64, bool) {
 	mark := p.pos
 	if !p.skipNumber() {
-		return nil, false
+		return 0, false
 	}
 	n, err := strconv.ParseUint(p.input[mark:p.pos], 10, 64)
 	if err != nil {
 		panic("internal error: skipNumber did not skip a valid number")
 	}
-	return &n, true
+	return n, true
 }
 
 // parseSliceAccessor parses a slice range composed of two indexes of the form
@@ -621,34 +621,36 @@ func (p *Parser) parseSliceAccessor() (va valueAccessor, ok bool, err error) {
 	}
 	p.skipBlanks()
 	low, ok := p.parseUNumber()
+	lowP := &low
 	if !ok {
-		low = nil
+		lowP = nil
 	}
 	p.skipBlanks()
 	if !p.skipByte(':') {
-		if low == nil {
+		if lowP == nil {
 			return nil, false, errorAt(fmt.Errorf("invalid slice: expected index or colon"), p.lineNum, p.colNum(), p.input)
 		}
 		if p.skipByte(']') {
-			return sliceIndexAccessor{typ: id, index: *low}, true, nil
+			return sliceIndexAccessor{typ: id, index: *lowP}, true, nil
 		}
 		return nil, false, errorAt(fmt.Errorf("invalid slice: expected ] or colon"), p.lineNum, p.colNum(), p.input)
 	}
 	p.skipBlanks()
 	high, ok := p.parseUNumber()
+	highP := &high
 	if !ok {
-		high = nil
+		highP = nil
 	}
 	p.skipBlanks()
 	if !p.skipByte(']') {
 		return nil, false, errorAt(fmt.Errorf("invalid slice: expected ]"), p.lineNum, p.colNum(), p.input)
 	}
-	if high != nil && low != nil {
-		if *low >= *high {
-			return nil, false, errorAt(fmt.Errorf("invalid slice: invalid indexes: %d <= %d", *high, *low), cp.lineNum, cp.colNum(), p.input)
+	if highP != nil && lowP != nil {
+		if *lowP >= *highP {
+			return nil, false, errorAt(fmt.Errorf("invalid slice: invalid indexes: %d <= %d", *highP, *lowP), cp.lineNum, cp.colNum(), p.input)
 		}
 	}
-	return sliceRangeAccessor{typ: id, low: low, high: high}, true, nil
+	return sliceRangeAccessor{typ: id, low: lowP, high: highP}, true, nil
 }
 
 // parseTypeName parses a Go type name qualified by a tag name (or asterisk)
