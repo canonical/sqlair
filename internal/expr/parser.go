@@ -484,8 +484,8 @@ func (p *Parser) skipString(s string) bool {
 	return false
 }
 
-// skipNumber consumes one or more consecutive digits.
-func (p *Parser) skipNumber() bool {
+// skipUNumber consumes one or more consecutive digits.
+func (p *Parser) skipUNumber() bool {
 	found := false
 	for p.pos < len(p.input) && '0' <= p.input[p.pos] && p.input[p.pos] <= '9' {
 		found = true
@@ -597,12 +597,12 @@ func (p *Parser) parseTargetType() (memberAcessor, bool, error) {
 // parseUNumber parses a non-negative number composed of one or more digits.
 func (p *Parser) parseUNumber() (uint64, bool) {
 	mark := p.pos
-	if !p.skipNumber() {
+	if !p.skipUNumber() {
 		return 0, false
 	}
 	n, err := strconv.ParseUint(p.input[mark:p.pos], 10, 64)
 	if err != nil {
-		panic("internal error: skipNumber did not skip a valid number")
+		panic("internal error: skipUNumber did not skip a valid number")
 	}
 	return n, true
 }

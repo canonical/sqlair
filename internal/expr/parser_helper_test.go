@@ -49,11 +49,11 @@ func (s *ExprInternalSuite) TestRunTable(c *C) {
 		{stringf0: p.skipName, result: []bool{true}, input: "hello", data: []string{}},
 		{stringf0: p.skipName, result: []bool{false}, input: "2d3d", data: []string{}},
 
-		{stringf0: p.skipNumber, result: []bool{true}, input: "2d3d", data: []string{}},
-		{stringf0: p.skipNumber, result: []bool{false}, input: "-2", data: []string{}},
-		{stringf0: p.skipNumber, result: []bool{false}, input: "a2", data: []string{}},
-		{stringf0: p.skipNumber, result: []bool{true}, input: "2123918", data: []string{}},
-		{stringf0: p.skipNumber, result: []bool{true}, input: "2123918as", data: []string{}},
+		{stringf0: p.skipUNumber, result: []bool{true}, input: "2d3d", data: []string{}},
+		{stringf0: p.skipUNumber, result: []bool{false}, input: "-2", data: []string{}},
+		{stringf0: p.skipUNumber, result: []bool{false}, input: "a2", data: []string{}},
+		{stringf0: p.skipUNumber, result: []bool{true}, input: "2123918", data: []string{}},
+		{stringf0: p.skipUNumber, result: []bool{true}, input: "2123918as", data: []string{}},
 	}
 	for _, v := range parseTests {
 		// Reset the input.
