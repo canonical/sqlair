@@ -424,6 +424,9 @@ of three lines' AND id = $Person.*`,
 		query: "SELECT col1 AS &S[1:5] FROM t",
 		err:   `cannot parse expression: column 16: cannot use slice syntax "S[1:5]" in output expression`,
 	}, {
+		query: "SELECT col1 AS &S[] FROM t",
+		err:   `cannot parse expression: column 19: invalid slice: expected index or colon`,
+	}, {
 		query: "SELECT * FROM t WHERE id IN $ids[:-1]",
 		err:   `cannot parse expression: column 35: invalid slice: expected ]`,
 	}, {
