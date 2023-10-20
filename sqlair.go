@@ -164,7 +164,7 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		ctx = context.Background()
 	}
 
-	sqlstmt, err := db.prepareStmt(ctx, db.sqldb, s)
+	sqlstmt, err := db.prepareStmt(ctx, s)
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
@@ -177,17 +177,9 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 	return &Query{sqlstmt: sqlstmt, stmt: s, db: db, qe: qe, ctx: ctx, err: nil}
 }
 
-// prepareSubstrate is an object that queries can be prepared on, e.g. a sql.DB
-// or sql.Conn. It is used in prepareStmt.
-type prepareSubstrate interface {
-	PrepareContext(context.Context, string) (*sql.Stmt, error)
-}
-
-// prepareStmt prepares a Statement on a prepareSubstrate. It first checks in
-// the cache to see if it has already been prepared on the DB.
-// The prepareSubstrate must be assosiated with the same DB that prepareStmt is
-// a method of.
-func (db *DB) prepareStmt(ctx context.Context, ps prepareSubstrate, s *Statement) (*sql.Stmt, error) {
+// prepareStmt prepares a Statement on a DB. It first checks in the cache to
+// see if it has already been prepared.
+func (db *DB) prepareStmt(ctx context.Context, s *Statement) (*sql.Stmt, error) {
 	var err error
 	cacheMutex.RLock()
 	// The statement ID is only removed from the cache when the finalizer is
@@ -195,7 +187,7 @@ func (db *DB) prepareStmt(ctx context.Context, ps prepareSubstrate, s *Statement
 	sqlstmt, ok := stmtDBCache[s.cacheID][db.cacheID]
 	cacheMutex.RUnlock()
 	if !ok {
-		sqlstmt, err = ps.PrepareContext(ctx, s.pe.SQL())
+		sqlstmt, err = db.sqldb.PrepareContext(ctx, s.pe.SQL())
 		if err != nil {
 			return nil, err
 		}
@@ -558,7 +550,7 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: ErrTXDone}
 	}
 
-	sqlstmt, err := tx.db.prepareStmt(ctx, tx.db.sqldb, s)
+	sqlstmt, err := tx.db.prepareStmt(ctx, s)
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
