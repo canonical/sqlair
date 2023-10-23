@@ -468,10 +468,9 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 }
 
 type TX struct {
-	sqltx   *sql.Tx
-	sqlconn *sql.Conn
-	db      *DB
-	done    int32
+	sqltx *sql.Tx
+	db    *DB
+	done  int32
 }
 
 func (tx *TX) isDone() bool {
@@ -490,15 +489,11 @@ func (db *DB) Begin(ctx context.Context, opts *TXOptions) (*TX, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	sqlconn, err := db.sqldb.Conn(ctx)
+	sqltx, err := db.sqldb.BeginTx(ctx, opts.plainTXOptions())
 	if err != nil {
 		return nil, err
 	}
-	sqltx, err := sqlconn.BeginTx(ctx, opts.plainTXOptions())
-	if err != nil {
-		return nil, err
-	}
-	return &TX{sqltx: sqltx, sqlconn: sqlconn, db: db}, nil
+	return &TX{sqltx: sqltx, db: db}, nil
 }
 
 // Commit commits the transaction.
@@ -506,9 +501,6 @@ func (tx *TX) Commit() error {
 	err := tx.setDone()
 	if err == nil {
 		err = tx.sqltx.Commit()
-	}
-	if cerr := tx.sqlconn.Close(); err == nil {
-		err = cerr
 	}
 	return err
 }
@@ -518,9 +510,6 @@ func (tx *TX) Rollback() error {
 	err := tx.setDone()
 	if err == nil {
 		err = tx.sqltx.Rollback()
-	}
-	if cerr := tx.sqlconn.Close(); err == nil {
-		err = cerr
 	}
 	return err
 }
