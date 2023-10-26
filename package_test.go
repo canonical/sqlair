@@ -22,8 +22,29 @@ type PackageSuite struct{}
 
 var _ = Suite(&PackageSuite{})
 
+func (s *PackageSuite) TearDownTest(c *C) {
+	// Try to run finalizers by calling GC several times.
+	for i := 0; i <= 10; i++ {
+		runtime.GC()
+		time.Sleep(0)
+	}
+
+	stmtRegistryMutex.Lock()
+	defer stmtRegistryMutex.Unlock()
+
+	// Asssert that all the open statements were closed.
+	for sPtr, query := range openStmts {
+		c.Check(closedStmts[sPtr], Equals, true,
+			Commentf("%s: failed to close statement: %s", c.TestName(), query))
+	}
+
+	// Reset state for next test.
+	closedStmts = map[uintptr]bool{}
+	openStmts = map[uintptr]string{}
+}
+
 func setupDB() (*sql.DB, error) {
-	return sql.Open("sqlite3", "file:test.db?cache=shared&mode=memory")
+	return sql.Open("sqlite3_stmtChecked", "file:test.db?cache=shared&mode=memory")
 }
 
 func createExampleDB(createTables string, inserts []string) (*sql.DB, error) {
