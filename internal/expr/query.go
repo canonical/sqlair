@@ -14,7 +14,29 @@ func (qe *QueryExpr) QueryArgs() []any {
 }
 
 func (qe *QueryExpr) SQL() string {
-	return qe.sql
+	inCount := 0
+	outCount := 0
+	sql := bytes.Buffer{}
+	for _, pp := range qe.preparedParts {
+		switch pp := pp.(type) {
+		case *preparedInput:
+			sql.WriteString("@sqlair_" + strconv.Itoa(inCount))
+			inCount++
+		case *preparedOutput:
+			for i, oc := range pp.outputColumns {
+				sql.WriteString(oc.sql)
+				sql.WriteString(" AS ")
+				sql.WriteString(markerName(outCount))
+				if i != len(pp.outputColumns)-1 {
+					sql.WriteString(", ")
+				}
+				outCount++
+			}
+		case *preparedBypass:
+			sql.WriteString(pp.chunk)
+		}
+	}
+	return sql.String()
 }
 
 func (qe *QueryExpr) HasOutputs() bool {
@@ -24,9 +46,9 @@ func (qe *QueryExpr) HasOutputs() bool {
 // QueryExpr represents a complete SQLair query, ready for execution on a
 // database.
 type QueryExpr struct {
-	sql     string
-	args    []any
-	outputs []typeMember
+	preparedParts []preparedPart
+	args          []any
+	outputs       []typeMember
 }
 
 const markerPrefix = "_sqlair_"
@@ -75,13 +97,11 @@ func (pe *PreparedExpr) Query(args ...any) (qe *QueryExpr, err error) {
 		typeNames = append(typeNames, t.Name())
 	}
 
-	// Generate SQL and query parameters.
+	// Generate query parameters.
 	qargs := make([]any, 0)
 	outputs := make([]typeMember, 0)
 	typeUsed := make(map[reflect.Type]bool)
 	inCount := 0
-	outCount := 0
-	sqlStr := bytes.Buffer{}
 	for _, pp := range pe.preparedParts {
 		switch pp := pp.(type) {
 		case *preparedInput:
@@ -114,23 +134,14 @@ func (pe *PreparedExpr) Query(args ...any) (qe *QueryExpr, err error) {
 				}
 			}
 			qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(inCount), val.Interface()))
-
-			// Generate input SQL.
-			sqlStr.WriteString("@sqlair_" + strconv.Itoa(inCount))
 			inCount++
 		case *preparedOutput:
-			for i, oc := range pp.outputColumns {
-				sqlStr.WriteString(oc.sql)
-				sqlStr.WriteString(" AS ")
-				sqlStr.WriteString(markerName(outCount))
-				if i != len(pp.outputColumns)-1 {
-					sqlStr.WriteString(", ")
-				}
-				outCount++
+			for _, oc := range pp.outputColumns {
 				outputs = append(outputs, oc.tm)
 			}
 		case *preparedBypass:
-			sqlStr.WriteString(pp.chunk)
+		default:
+			return nil, fmt.Errorf("internal error: unknown part type %T", pp)
 		}
 	}
 
@@ -140,7 +151,7 @@ func (pe *PreparedExpr) Query(args ...any) (qe *QueryExpr, err error) {
 		}
 	}
 
-	return &QueryExpr{outputs: outputs, sql: sqlStr.String(), args: qargs}, nil
+	return &QueryExpr{preparedParts: pe.preparedParts, outputs: outputs, args: qargs}, nil
 }
 
 // checkShadowedType returns an error if a query type and some argument type
