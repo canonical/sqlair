@@ -33,35 +33,29 @@ func (s *PackageSuite) TearDownTest(c *C) {
 	defer stmtRegistryMutex.Unlock()
 
 	// Asssert that all the open statements were closed.
-	for sPtr, query := range openStmts {
-		c.Check(closedStmts[sPtr], Equals, true,
+	for sPtr, query := range openStmts[c.TestName()] {
+		c.Check(closedStmts[c.TestName()][sPtr], Equals, true,
 			Commentf("%s: failed to close statement: %s", c.TestName(), query))
 	}
 
 	// Reset state for next test.
-	closedStmts = map[uintptr]bool{}
-	openStmts = map[uintptr]string{}
+	closedStmts = map[string]map[uintptr]bool{}
+	openStmts = map[string]map[uintptr]string{}
 }
 
-func setupDB() (*sql.DB, error) {
-	return sql.Open("sqlite3_stmtChecked", "file:test.db?cache=shared&mode=memory")
+func setupDB(testName string) (*sql.DB, error) {
+	return sql.Open("sqlite3_stmtChecked", "file:test.db?cache=shared&mode=memory&testName="+testName)
 }
 
-func createExampleDB(createTables string, inserts []string) (*sql.DB, error) {
-	db, err := setupDB()
-	if err != nil {
-		return nil, err
-	}
+func createExampleDB(c *C, createTables string, inserts []string) (*sql.DB, error) {
+	db, err := setupDB(c.TestName())
+	c.Assert(err, IsNil)
 
 	_, err = db.Exec(createTables)
-	if err != nil {
-		return nil, err
-	}
+	c.Assert(err, IsNil)
 	for _, insert := range inserts {
 		_, err := db.Exec(insert)
-		if err != nil {
-			return nil, err
-		}
+		c.Assert(err, IsNil)
 	}
 	return db, nil
 }
@@ -94,7 +88,7 @@ type District struct{}
 
 type CustomMap map[string]any
 
-func personAndAddressDB() ([]string, *sql.DB, error) {
+func personAndAddressDB(c *C) ([]string, *sql.DB, error) {
 
 	createTables := `
 CREATE TABLE person (
@@ -119,10 +113,8 @@ CREATE TABLE address (
 		"INSERT INTO address VALUES (3500, 'Ambivalent Commons', 'Station Lane');",
 	}
 
-	db, err := createExampleDB(createTables, inserts)
-	if err != nil {
-		return nil, nil, err
-	}
+	db, err := createExampleDB(c, createTables, inserts)
+	c.Assert(err, IsNil)
 	return []string{"person", "address"}, db, nil
 }
 
@@ -250,7 +242,7 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 
 	tests = append(tests, testsWithShadowPerson...)
 
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -359,7 +351,7 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		err:     `cannot get result: type "M" provided more than once, rename one of them`,
 	}}
 
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -480,7 +472,7 @@ func (s *PackageSuite) TestNulls(c *C) {
 		expected: []any{&ScannerDude{Fullname: ScannerString{SS: "ScannerString scanned well!"}, ID: ScannerInt{SI: 666}, PostalCode: ScannerInt{SI: 666}}},
 	}}
 
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -543,7 +535,7 @@ func (s *PackageSuite) TestValidGet(c *C) {
 		expected: []any{sqlair.M{"name": "Fred"}},
 	}}
 
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -602,7 +594,7 @@ func (s *PackageSuite) TestGetErrors(c *C) {
 		err:     `invalid input parameter: map "M" does not contain key "p1"`,
 	}}
 
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -624,7 +616,7 @@ func (s *PackageSuite) TestGetErrors(c *C) {
 }
 
 func (s *PackageSuite) TestErrNoRows(c *C) {
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -694,7 +686,7 @@ func (s *PackageSuite) TestValidGetAll(c *C) {
 		expected: []any{&[]sqlair.M{{"name": "Mark"}}, &[]CustomMap{{"id": int64(20)}}},
 	}}
 
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -795,7 +787,7 @@ func (s *PackageSuite) TestGetAllErrors(c *C) {
 		err:     `cannot populate slice: output variables provided but not referenced in query`,
 	}}
 
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -817,7 +809,7 @@ func (s *PackageSuite) TestGetAllErrors(c *C) {
 }
 
 func (s *PackageSuite) TestRun(c *C) {
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
 
 	var jim = Person{
@@ -843,7 +835,7 @@ func (s *PackageSuite) TestRun(c *C) {
 }
 
 func (s *PackageSuite) TestOutcome(c *C) {
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
 
 	var jim = Person{
@@ -910,7 +902,7 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	oneOutput := &Person{}
 	oneExpected := &Person{30, "Fred", 1000}
 
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
@@ -976,7 +968,7 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 }
 
 func (s *PackageSuite) TestTransactions(c *C) {
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
 
 	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE address_id = $Person.address_id", Person{})
@@ -1024,7 +1016,7 @@ func (s *PackageSuite) TestTransactions(c *C) {
 }
 
 func (s *PackageSuite) TestTransactionErrors(c *C) {
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
@@ -1153,7 +1145,7 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 	// createDBAndTestStmt opens a new database and runs testStmtsOnDB on it.
 	createDBAndTestStmt := func(stmt *sqlair.Statement) (dbID int64) {
 		// Create db.
-		tables, sqldb, err := personAndAddressDB()
+		tables, sqldb, err := personAndAddressDB(c)
 		c.Assert(err, IsNil)
 		db := sqlair.NewDB(sqldb)
 		defer dropTables(c, db, tables...)
@@ -1187,7 +1179,7 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 }
 
 func (s *PackageSuite) TestTransactionWithOneConn(c *C) {
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
 	sqldb.SetMaxOpenConns(1)
 	ctx := context.Background()
@@ -1231,7 +1223,7 @@ type JujuLeaseInfo struct {
 	Expiry int    `db:"expiry"`
 }
 
-func JujuStoreLeaseDB() ([]string, *sql.DB, error) {
+func JujuStoreLeaseDB(c *C) ([]string, *sql.DB, error) {
 	createTables := `
 CREATE TABLE lease (
 	model_uuid text,
@@ -1256,16 +1248,14 @@ CREATE TABLE lease_type (
 		"INSERT INTO lease_type VALUES ('type_id2', 'type2');",
 	}
 
-	db, err := createExampleDB(createTables, inserts)
-	if err != nil {
-		return nil, nil, err
-	}
+	db, err := createExampleDB(c, createTables, inserts)
+	c.Assert(err, IsNil)
 	return tables, db, nil
 
 }
 
 func (s *PackageSuite) TestIterMethodOrder(c *C) {
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -1342,7 +1332,7 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 		expected: [][]any{{&JujuLeaseKey{Namespace: "type1", ModelUUID: "uuid1", Lease: "name1"}, &JujuLeaseInfo{Holder: "holder1", Expiry: 1}}},
 	}}
 
-	tables, sqldb, err := JujuStoreLeaseDB()
+	tables, sqldb, err := JujuStoreLeaseDB(c)
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -1386,7 +1376,7 @@ func (s *PackageSuite) TestRaceConditionFinalizer(c *C) {
 	var q *sqlair.Query
 	// Drop all the values except the query itself.
 	func() {
-		sqldb, err := setupDB()
+		sqldb, err := setupDB(c.TestName())
 		c.Assert(err, IsNil)
 
 		db := sqlair.NewDB(sqldb)
@@ -1408,7 +1398,7 @@ func (s *PackageSuite) TestRaceConditionFinalizerTX(c *C) {
 	var q *sqlair.Query
 	// Drop all the values except the query itself.
 	func() {
-		sqldb, err := setupDB()
+		sqldb, err := setupDB(c.TestName())
 		c.Assert(err, IsNil)
 
 		db := sqlair.NewDB(sqldb)

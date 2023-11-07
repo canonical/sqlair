@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"strings"
 	"sync"
 	"unsafe"
 
@@ -19,8 +20,8 @@ import (
 // detect resource leaks. It uses pointers instead of references to the object
 // because if we stored a reference the runtime.Finalizer would not be able to
 // run.
-var openStmts map[uintptr]string = map[uintptr]string{}
-var closedStmts map[uintptr]bool = map[uintptr]bool{}
+var openStmts = map[string]map[uintptr]string{}
+var closedStmts = map[string]map[uintptr]bool{}
 var stmtRegistryMutex sync.RWMutex
 
 // Structs used for wrapping the underlying SQLite driver.
@@ -28,16 +29,22 @@ type Driver struct {
 	driver.Driver
 }
 type Conn struct {
+	testName string
 	*sqlite3.SQLiteConn
 }
 type Stmt struct {
+	testName string
 	*sqlite3.SQLiteStmt
 }
 
 func (s *Stmt) Close() error {
 	stmtRegistryMutex.Lock()
-	closedStmts[uintptr(unsafe.Pointer(s))] = true
-	stmtRegistryMutex.Unlock()
+	defer stmtRegistryMutex.Unlock()
+	_, ok := closedStmts[s.testName]
+	if !ok {
+		closedStmts[s.testName] = map[uintptr]bool{}
+	}
+	closedStmts[s.testName][uintptr(unsafe.Pointer(s))] = true
 
 	return s.SQLiteStmt.Close()
 }
@@ -45,11 +52,15 @@ func (s *Stmt) Close() error {
 func (c *Conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
 	s, err := c.SQLiteConn.PrepareContext(ctx, query)
 	if s, ok := s.(*sqlite3.SQLiteStmt); ok {
-		sPtr := &Stmt{s}
+		sPtr := &Stmt{SQLiteStmt: s, testName: c.testName}
 
 		stmtRegistryMutex.Lock()
-		openStmts[uintptr(unsafe.Pointer(sPtr))] = query
-		stmtRegistryMutex.Unlock()
+		defer stmtRegistryMutex.Unlock()
+		_, ok := openStmts[c.testName]
+		if !ok {
+			openStmts[c.testName] = map[uintptr]string{}
+		}
+		openStmts[c.testName][uintptr(unsafe.Pointer(sPtr))] = query
 
 		return sPtr, err
 	} else {
@@ -61,13 +72,22 @@ func (c *Conn) Prepare(query string) (driver.Stmt, error) {
 	return c.PrepareContext(context.Background(), query)
 }
 
+var testNameTag = "testName"
+
 func (d *Driver) Open(name string) (driver.Conn, error) {
+	var testName string
+	for _, p := range strings.Split(name, "&") {
+		if strings.HasPrefix(p, testNameTag) {
+			testName = strings.Split(p, "=")[1]
+		}
+	}
+
 	baseConn, err := d.Driver.Open(name)
 	if err != nil {
 		return nil, err
 	}
 	if baseConn, ok := baseConn.(*sqlite3.SQLiteConn); ok {
-		return &Conn{baseConn}, err
+		return &Conn{SQLiteConn: baseConn, testName: testName}, err
 	} else {
 		panic("internal error: base driver is not SQLite")
 	}
