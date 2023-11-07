@@ -33,14 +33,14 @@ func (s *PackageSuite) TearDownTest(c *C) {
 	defer stmtRegistryMutex.Unlock()
 
 	// Asssert that all the open statements were closed.
-	for sPtr, query := range openStmts[c.TestName()] {
+	for sPtr, query := range openedStmts[c.TestName()] {
 		c.Check(closedStmts[c.TestName()][sPtr], Equals, true,
 			Commentf("%s: failed to close statement: %s", c.TestName(), query))
 	}
 
 	// Reset state for next test.
 	closedStmts = map[string]map[uintptr]bool{}
-	openStmts = map[string]map[uintptr]string{}
+	openedStmts = map[string]map[uintptr]string{}
 }
 
 func setupDB(testName string) (*sql.DB, error) {

@@ -11,16 +11,16 @@ import (
 	"github.com/mattn/go-sqlite3"
 )
 
-// This file contains a wrapper sql.Driver over the SQLite driver which does
-// the real work behind the scenes. On top of it, it monitors the creation and
-// closing of prepared statements and stores the references to said statements.
-// We can later use that information to check for leaks.
+// This file contains a wrapper sql.Driver over the SQLite driver. On top of
+// it, it monitors the creation and closing of prepared statements and stores
+// the references to said statements. We can later use that information to
+// check for statement leaks.
 
 // The stmt registry keeps the pointers for the open and closed statements to
-// detect resource leaks. It uses pointers instead of references to the object
-// because if we stored a reference the runtime.Finalizer would not be able to
-// run.
-var openStmts = map[string]map[uintptr]string{}
+// detect resource leaks. It uses unsafe pointers instead of references to the
+// object because if we stored a reference the runtime.Finalizer would not be
+// able to run.
+var openedStmts = map[string]map[uintptr]string{}
 var closedStmts = map[string]map[uintptr]bool{}
 var stmtRegistryMutex sync.RWMutex
 
@@ -56,11 +56,11 @@ func (c *Conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, e
 
 		stmtRegistryMutex.Lock()
 		defer stmtRegistryMutex.Unlock()
-		_, ok := openStmts[c.testName]
+		_, ok := openedStmts[c.testName]
 		if !ok {
-			openStmts[c.testName] = map[uintptr]string{}
+			openedStmts[c.testName] = map[uintptr]string{}
 		}
-		openStmts[c.testName][uintptr(unsafe.Pointer(sPtr))] = query
+		openedStmts[c.testName][uintptr(unsafe.Pointer(sPtr))] = query
 
 		return sPtr, err
 	} else {
