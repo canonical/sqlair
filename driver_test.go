@@ -72,14 +72,18 @@ func (c *Conn) Prepare(query string) (driver.Stmt, error) {
 	return c.PrepareContext(context.Background(), query)
 }
 
-var testNameTag = "testName"
+const testNameTag = "testName"
 
 func (d *Driver) Open(name string) (driver.Conn, error) {
 	var testName string
-	for _, p := range strings.Split(name, "&") {
+	parameters := strings.Split(name, "?")[1]
+	for _, p := range strings.Split(parameters, "&") {
 		if strings.HasPrefix(p, testNameTag) {
 			testName = strings.Split(p, "=")[1]
 		}
+	}
+	if testName == "" {
+		panic("internal error: testName is not found in the db DSN")
 	}
 
 	baseConn, err := d.Driver.Open(name)
