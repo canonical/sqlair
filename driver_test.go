@@ -11,10 +11,10 @@ import (
 	"github.com/mattn/go-sqlite3"
 )
 
-// This file contains a wrapper sql.Driver over the SQLite driver. On top of
-// it, it monitors the creation and closing of prepared statements and stores
-// the references to said statements. We can later use that information to
-// check for statement leaks.
+// This file contains a wrapper sql.Driver over the SQLite driver which
+// monitors the creation and closing of prepared statements and stores the
+// references to said statements. We can later use that information to check
+// for statement leaks.
 
 // The stmt registry keeps the pointers for the open and closed statements to
 // detect resource leaks. It uses unsafe pointers instead of references to the
