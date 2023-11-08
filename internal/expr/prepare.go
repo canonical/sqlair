@@ -8,9 +8,7 @@ import (
 )
 
 // PreparedExpr represents a valid SQLair statement ready for use in a query.
-type PreparedExpr struct {
-	preparedParts []preparedPart
-}
+type PreparedExpr []preparedPart
 
 // preparedPart represents a part of a valid SQLair statement. It contains
 // information to generate the SQL for the part and to access Go types
@@ -256,7 +254,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	preparedParts := make([]preparedPart, 0)
 
 	// Check and expand each query part.
-	for _, part := range pe.queryParts {
+	for _, part := range *pe {
 		switch p := part.(type) {
 		case *inputPart:
 			pi, err := prepareInput(ti, p)
@@ -284,5 +282,6 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			return nil, fmt.Errorf("internal error: unknown query part type %T", part)
 		}
 	}
-	return &PreparedExpr{preparedParts: preparedParts}, nil
+	preparedExpr := PreparedExpr(preparedParts)
+	return &preparedExpr, nil
 }

@@ -187,16 +187,14 @@ func (cp *checkpoint) restore() {
 // would be represented as:
 //
 // [bypassPart outputPart bypassPart inputPart]
-type ParsedExpr struct {
-	queryParts []queryPart
-}
+type ParsedExpr []queryPart
 
 // String returns a textual representation of the AST contained in the
 // ParsedExpr for debugging purposes.
 func (pe *ParsedExpr) String() string {
 	var out bytes.Buffer
 	out.WriteString("[")
-	for i, p := range pe.queryParts {
+	for i, p := range *pe {
 		if i > 0 {
 			out.WriteString(" ")
 		}
@@ -263,7 +261,7 @@ func (p *Parser) skipComment() bool {
 
 // Parse takes an input string and parses the input and output parts. It returns
 // a pointer to a ParsedExpr.
-func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
+func (p *Parser) Parse(input string) (expr ParsedExpr, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("cannot parse expression: %s", err)
@@ -301,7 +299,7 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 
 	// Add any remaining unparsed string input to the parser.
 	p.add(nil)
-	return &ParsedExpr{p.parts}, nil
+	return ParsedExpr(p.parts), nil
 }
 
 // advance increments p.pos until it reaches content that might preceed a token

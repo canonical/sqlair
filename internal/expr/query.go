@@ -17,7 +17,7 @@ func (qe *QueryExpr) SQL() string {
 	inCount := 0
 	outCount := 0
 	sql := bytes.Buffer{}
-	for _, pp := range qe.preparedParts {
+	for _, pp := range *qe.pe {
 		switch pp := pp.(type) {
 		case *preparedInput:
 			sql.WriteString("@sqlair_" + strconv.Itoa(inCount))
@@ -46,9 +46,9 @@ func (qe *QueryExpr) HasOutputs() bool {
 // QueryExpr represents a complete SQLair query, ready for execution on a
 // database.
 type QueryExpr struct {
-	preparedParts []preparedPart
-	args          []any
-	outputs       []typeMember
+	pe      *PreparedExpr
+	args    []any
+	outputs []typeMember
 }
 
 const markerPrefix = "_sqlair_"
@@ -102,7 +102,7 @@ func (pe *PreparedExpr) Query(args ...any) (qe *QueryExpr, err error) {
 	outputs := make([]typeMember, 0)
 	typeUsed := make(map[reflect.Type]bool)
 	inCount := 0
-	for _, pp := range pe.preparedParts {
+	for _, pp := range *pe {
 		switch pp := pp.(type) {
 		case *preparedInput:
 			// Find arg associated with input.
@@ -151,7 +151,7 @@ func (pe *PreparedExpr) Query(args ...any) (qe *QueryExpr, err error) {
 		}
 	}
 
-	return &QueryExpr{preparedParts: pe.preparedParts, outputs: outputs, args: qargs}, nil
+	return &QueryExpr{pe: pe, outputs: outputs, args: qargs}, nil
 }
 
 // checkShadowedType returns an error if a query type and some argument type
