@@ -57,7 +57,7 @@ func Example() {
 		panic(err)
 	}
 	// Get fetches a single result from the database and scans it into the
-	// arguement. To fetch all results from the database use GetAll, and to
+	// argument. To fetch all results from the database use GetAll, and to
 	// iterate through the results row by row, use Iter.
 	employee := Employee{}
 	err = db.Query(nil, selectEmployee).Get(&employee)
