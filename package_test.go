@@ -1002,6 +1002,27 @@ func (s *PackageSuite) TestTransactions(c *C) {
 	c.Assert(err, IsNil)
 }
 
+// Test that when preparing a statement inside a transaction it can still be prepared on the db directly and that it is
+// not closed along with the transaction.
+func (s *PackageSuite) TestStatementTXReuse(c *C) {
+	sqldb, err := setupDB()
+	c.Assert(err, IsNil)
+
+	db := sqlair.NewDB(sqldb)
+
+	// Create a statement and run it on a transaction.
+	selectStmt := sqlair.MustPrepare(`SELECT 'hello'`)
+	tx, err := db.Begin(nil, nil)
+	c.Assert(err, IsNil)
+	q := tx.Query(nil, selectStmt)
+	c.Assert(q.Run(), IsNil)
+	c.Assert(tx.Commit(), IsNil)
+
+	// Run the same existing statement outside the transaction.
+	q = db.Query(nil, selectStmt)
+	c.Assert(q.Run(), IsNil)
+}
+
 func (s *PackageSuite) TestTransactionErrors(c *C) {
 	tables, sqldb, err := personAndAddressDB()
 	c.Assert(err, IsNil)
@@ -1371,24 +1392,5 @@ func (s *PackageSuite) TestRaceConditionFinalizerTX(c *C) {
 	}
 
 	// Assert that sql.Stmt was not closed early.
-	c.Assert(q.Run(), IsNil)
-}
-
-func (s *PackageSuite) TestStatementTXReuse(c *C) {
-	sqldb, err := setupDB()
-	c.Assert(err, IsNil)
-
-	db := sqlair.NewDB(sqldb)
-
-	// Create a statement and run it on a transaction.
-	selectStmt := sqlair.MustPrepare(`SELECT 'hello'`)
-	tx, err := db.Begin(nil, nil)
-	c.Assert(err, IsNil)
-	q := tx.Query(nil, selectStmt)
-	c.Assert(q.Run(), IsNil)
-	tx.Commit()
-
-	// Run the same existing statement outside the transaction.
-	q = db.Query(nil, selectStmt)
 	c.Assert(q.Run(), IsNil)
 }
