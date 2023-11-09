@@ -245,7 +245,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	var outputs = make([]typeMember, 0)
 	var inputs = make([]typeMember, 0)
 
-	var typeMemberPresent = make(map[typeMember]bool)
+	var typeMemberPresent = make(map[string]bool)
 
 	// Check and expand each query part.
 	for _, part := range pe.queryParts {
@@ -265,10 +265,10 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			}
 
 			for _, tm := range typeMembers {
-				if ok := typeMemberPresent[tm]; ok {
+				if ok := typeMemberPresent[tm.accessor()]; ok {
 					return nil, fmt.Errorf("member %q of type %q appears more than once in output expressions", tm.memberName(), tm.outerType().Name())
 				}
-				typeMemberPresent[tm] = true
+				typeMemberPresent[tm.accessor()] = true
 			}
 
 			for i, c := range outCols {

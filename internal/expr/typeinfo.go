@@ -15,6 +15,7 @@ import (
 type typeMember interface {
 	outerType() reflect.Type
 	memberName() string
+	accessor() string
 }
 
 type mapKey struct {
@@ -26,8 +27,12 @@ func (mk mapKey) outerType() reflect.Type {
 	return mk.mapType
 }
 
-func (mk mapKey) memberName() string {
+func (mk *mapKey) memberName() string {
 	return mk.name
+}
+
+func (mk *mapKey) accessor() string {
+	return mk.mapType.Name() + "." + mk.memberName()
 }
 
 // structField represents reflection information about a field from some struct type.
@@ -54,6 +59,10 @@ func (f *structField) outerType() reflect.Type {
 
 func (f *structField) memberName() string {
 	return f.tag
+}
+
+func (f *structField) accessor() string {
+	return f.structType.Name() + "." + f.memberName()
 }
 
 // typeInfo exposes useful information about types used in SQLair queries.
