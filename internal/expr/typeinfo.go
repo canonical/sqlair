@@ -9,9 +9,6 @@ import (
 	"sync"
 )
 
-// typeMember should be implemented without pointer receivers as it is used as
-// a key in maps and, even if the underlying structs are equal, the pointers
-// may not be.
 type typeMember interface {
 	outerType() reflect.Type
 	memberName() string
@@ -23,7 +20,7 @@ type mapKey struct {
 	mapType reflect.Type
 }
 
-func (mk mapKey) outerType() reflect.Type {
+func (mk *mapKey) outerType() reflect.Type {
 	return mk.mapType
 }
 
@@ -120,7 +117,7 @@ func (mi *mapInfo) typ() reflect.Type {
 }
 
 func (mi *mapInfo) typeMember(member string) (typeMember, error) {
-	return mapKey{name: member, mapType: mi.mapType}, nil
+	return &mapKey{name: member, mapType: mi.mapType}, nil
 }
 
 func (mi *mapInfo) getAllMembers() ([]typeMember, error) {
