@@ -199,6 +199,12 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 		}
 	}
 
+	for i := 0; i < len(qe.outputs); i++ {
+		if !columnInResult[i] {
+			return nil, nil, fmt.Errorf(`query uses "&%s" outside of result context`, qe.outputs[i].outerType().Name())
+		}
+	}
+
 	onSuccess = func() {
 		for _, sp := range scanProxies {
 			if sp.key.IsValid() {
