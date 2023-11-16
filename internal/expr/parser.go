@@ -6,15 +6,13 @@ import (
 	"strings"
 )
 
-// A QueryPart represents a section of a parsed SQL statement, which forms
-// a complete query when processed together with its surrounding parts, in
-// their correct order.
-type queryPart interface {
-	// String returns the part's representation for debugging purposes.
+// expr represents a section of a parsed SQL statement.
+type expr interface {
+	// String returns a text representation for debugging and testing purposes.
 	String() string
 
 	// marker method
-	part()
+	expr()
 }
 
 // valueAccessor stores information for accessing a Go value. It consists of a
@@ -40,54 +38,54 @@ func (ca columnAccessor) String() string {
 	return ca.tableName + "." + ca.columnName
 }
 
-// inputPart represents a named parameter that will be sent to the database
+// inputExpr represents a named parameter that will be sent to the database
 // while performing the query.
-type inputPart struct {
+type inputExpr struct {
 	sourceType valueAccessor
 	raw        string
 }
 
-func (p *inputPart) String() string {
+func (p *inputExpr) String() string {
 	return fmt.Sprintf("Input[%+v]", p.sourceType)
 }
 
-func (p *inputPart) part() {}
+func (p *inputExpr) expr() {}
 
-// outputPart represents a named target output variable in the SQL expression,
+// outputExpr represents a named target output variable in the SQL expression,
 // as well as the source table and column where it will be read from.
-type outputPart struct {
+type outputExpr struct {
 	sourceColumns []columnAccessor
 	targetTypes   []valueAccessor
 	raw           string
 }
 
-func (p *outputPart) String() string {
+func (p *outputExpr) String() string {
 	return fmt.Sprintf("Output[%+v %+v]", p.sourceColumns, p.targetTypes)
 }
 
-func (p *outputPart) part() {}
+func (p *outputExpr) expr() {}
 
-// bypassPart represents a part of the expression that we want to pass to the
+// bypass represents expr of the expression that we want to pass to the
 // backend database verbatim.
-type bypassPart struct {
+type bypass struct {
 	chunk string
 }
 
-func (p *bypassPart) String() string {
+func (p *bypass) String() string {
 	return "Bypass[" + p.chunk + "]"
 }
 
-func (p *bypassPart) part() {}
+func (p *bypass) expr() {}
 
 type Parser struct {
 	input string
 	pos   int
-	// prevPart is the value of pos when we last finished parsing a part.
-	prevPart int
-	// partStart is the value of pos just before we started parsing the part
-	// under pos. We maintain partStart >= prevPart.
-	partStart int
-	parts     []queryPart
+	// prevExpr is the value of pos when we last finished parsing a expr.
+	prevExpr int
+	// exprStart is the value of pos just before we started parsing the expr
+	// under pos. We maintain exprStart >= prevExpr.
+	exprStart int
+	exprs     []expr
 	// lineNum is the number of the current line of the input.
 	lineNum int
 	// lineStart is the position of the first byte of the current line in
@@ -103,9 +101,9 @@ func NewParser() *Parser {
 func (p *Parser) init(input string) {
 	p.input = input
 	p.pos = 0
-	p.prevPart = 0
-	p.partStart = 0
-	p.parts = []queryPart{}
+	p.prevExpr = 0
+	p.exprStart = 0
+	p.exprs = []expr{}
 	p.lineNum = 1
 	p.lineStart = 0
 }
@@ -138,14 +136,14 @@ func errorAt(err error, line int, column int, input string) error {
 }
 
 // A checkpoint struct for saving parser state to restore later. We only use
-// a checkpoint within an attempted parsing of an part, not at a higher level
-// since we don't keep track of the parts in the checkpoint.
+// a checkpoint within an attempted parsing of an expr, not at a higher level
+// since we don't keep track of the exprs in the checkpoint.
 type checkpoint struct {
 	parser    *Parser
 	pos       int
-	prevPart  int
-	partStart int
-	parts     []queryPart
+	prevExpr  int
+	exprStart int
+	exprs     []expr
 	lineNum   int
 	lineStart int
 }
@@ -156,9 +154,9 @@ func (p *Parser) save() *checkpoint {
 	return &checkpoint{
 		parser:    p,
 		pos:       p.pos,
-		prevPart:  p.prevPart,
-		partStart: p.partStart,
-		parts:     p.parts,
+		prevExpr:  p.prevExpr,
+		exprStart: p.exprStart,
+		exprs:     p.exprs,
 		lineNum:   p.lineNum,
 		lineStart: p.lineStart,
 	}
@@ -168,31 +166,25 @@ func (p *Parser) save() *checkpoint {
 // checkpoint.
 func (cp *checkpoint) restore() {
 	cp.parser.pos = cp.pos
-	cp.parser.prevPart = cp.prevPart
-	cp.parser.partStart = cp.partStart
-	cp.parser.parts = cp.parts
+	cp.parser.prevExpr = cp.prevExpr
+	cp.parser.exprStart = cp.exprStart
+	cp.parser.exprs = cp.exprs
 	cp.parser.lineNum = cp.lineNum
 	cp.parser.lineStart = cp.lineStart
 }
 
-// ParsedExpr is the AST representation of an SQL expression. The AST is made up
-// of queryParts. For example, a SQL statement like this:
-//
-// Select p.* as &Person.* from person where p.name = $Boss.col_name
-//
-// would be represented as:
-//
-// [bypassPart outputPart bypassPart inputPart]
+// ParsedExpr is the AST representation of SQLair query. It contains only
+// information encoded in the SQLair query string.
 type ParsedExpr struct {
-	queryParts []queryPart
+	exprs []expr
 }
 
 // String returns a textual representation of the AST contained in the
-// ParsedExpr for debugging purposes.
+// ParsedExpr for debugging and testing purposes.
 func (pe *ParsedExpr) String() string {
 	var out bytes.Buffer
 	out.WriteString("[")
-	for i, p := range pe.queryParts {
+	for i, p := range pe.exprs {
 		if i > 0 {
 			out.WriteString(" ")
 		}
@@ -202,24 +194,24 @@ func (pe *ParsedExpr) String() string {
 	return out.String()
 }
 
-// add pushes the parsed part to the parsedExprBuilder along with the bypassPart
-// that stretches from the end of the previous part to the beginning of this
-// part.
-func (p *Parser) add(part queryPart) {
-	// Add the string between the previous I/O part and the current part.
-	if p.prevPart != p.partStart {
-		p.parts = append(p.parts,
-			&bypassPart{p.input[p.prevPart:p.partStart]})
+// add pushes the parsed expr to the list of exprs along with the bypass chunk
+// that stretches from the end of the previous expr to the beginning of this
+// expr.
+func (p *Parser) add(expr expr) {
+	// Add the string between the previous I/O expr and the current expr.
+	if p.prevExpr != p.exprStart {
+		p.exprs = append(p.exprs,
+			&bypass{p.input[p.prevExpr:p.exprStart]})
 	}
 
-	if part != nil {
-		p.parts = append(p.parts, part)
+	if expr != nil {
+		p.exprs = append(p.exprs, expr)
 	}
 
-	// Save this position at the end of the part.
-	p.prevPart = p.pos
-	// Ensure that partStart >= prevPart.
-	p.partStart = p.pos
+	// Save this position at the end of the expr.
+	p.prevExpr = p.pos
+	// Ensure that exprStart >= prevExpr.
+	p.exprStart = p.pos
 }
 
 // skipComment jumps over comments as defined by the SQLite spec.
@@ -257,16 +249,15 @@ func (p *Parser) skipComment() bool {
 	return false
 }
 
-// Parse takes an input string and parses the input and output parts. It returns
-// a pointer to a ParsedExpr.
-func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
+// Parse takes an SQLair query string and returns a ParsedExpr.
+func (p *Parser) Parse(query string) (pe *ParsedExpr, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("cannot parse expression: %s", err)
 		}
 	}()
 
-	p.init(input)
+	p.init(query)
 
 	for {
 		// Advance the parser to the start of the next expression.
@@ -274,20 +265,20 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 			return nil, err
 		}
 
-		p.partStart = p.pos
+		p.exprStart = p.pos
 
 		if p.pos == len(p.input) {
 			break
 		}
 
-		if out, ok, err := p.parseOutputExpression(); err != nil {
+		if out, ok, err := p.parseOutputExpr(); err != nil {
 			return nil, err
 		} else if ok {
 			p.add(out)
 			continue
 		}
 
-		if in, ok, err := p.parseInputExpression(); err != nil {
+		if in, ok, err := p.parseInputExpr(); err != nil {
 			return nil, err
 		} else if ok {
 			p.add(in)
@@ -297,7 +288,7 @@ func (p *Parser) Parse(input string) (expr *ParsedExpr, err error) {
 
 	// Add any remaining unparsed string input to the parser.
 	p.add(nil)
-	return &ParsedExpr{p.parts}, nil
+	return &ParsedExpr{exprs: p.exprs}, nil
 }
 
 // advance increments p.pos until it reaches content that might preceed a token
@@ -607,16 +598,16 @@ func (p *Parser) parseTargetTypes() (types []valueAccessor, parentheses bool, ok
 	return nil, false, false, nil
 }
 
-// parseOutputExpression requires that the ampersand before the identifiers must
+// parseOutputExpr requires that the ampersand before the identifiers must
 // be followed by a name byte.
-func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
+func (p *Parser) parseOutputExpr() (*outputExpr, bool, error) {
 	start := p.pos
 
 	// Case 1: There are no columns e.g. "&Person.*".
 	if targetType, ok, err := p.parseTargetType(); err != nil {
 		return nil, false, err
 	} else if ok {
-		return &outputPart{
+		return &outputExpr{
 			sourceColumns: []columnAccessor{},
 			targetTypes:   []valueAccessor{targetType},
 			raw:           p.input[start:p.pos],
@@ -640,7 +631,7 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 				if !parenCols && parenTypes {
 					return nil, false, errorAt(fmt.Errorf(`unexpected parentheses around types after "AS"`), p.lineNum, parenCol, p.input)
 				}
-				return &outputPart{
+				return &outputExpr{
 					sourceColumns: cols,
 					targetTypes:   targetTypes,
 					raw:           p.input[start:p.pos],
@@ -653,8 +644,8 @@ func (p *Parser) parseOutputExpression() (*outputPart, bool, error) {
 	return nil, false, nil
 }
 
-// parseInputExpression parses an input expression of the form "$Type.name".
-func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
+// parseInputExpr parses an input expression of the form "$Type.name".
+func (p *Parser) parseInputExpr() (*inputExpr, bool, error) {
 	cp := p.save()
 
 	if p.skipByte('$') {
@@ -664,7 +655,7 @@ func (p *Parser) parseInputExpression() (*inputPart, bool, error) {
 			if tn.memberName == "*" {
 				return nil, false, errorAt(fmt.Errorf(`asterisk not allowed in input expression "$%s"`, tn), p.lineNum, nameCol, p.input)
 			}
-			return &inputPart{sourceType: tn, raw: p.input[cp.pos:p.pos]}, true, nil
+			return &inputExpr{sourceType: tn, raw: p.input[cp.pos:p.pos]}, true, nil
 		} else if err != nil {
 			return nil, false, err
 		}

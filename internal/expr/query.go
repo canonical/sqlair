@@ -8,28 +8,28 @@ import (
 	"strings"
 )
 
-func (qe *QueryExpr) QueryArgs() []any {
-	return qe.args
+// Params returns the query parameters to pass with the SQL to a database.
+func (qv *QueryValues) Params() []any {
+	return qv.params
 }
 
-func (qe *QueryExpr) HasOutputs() bool {
-	return len(qe.outputs) > 0
+// HasOutputs returns true if the SQLair query contains at least one output
+// expression.
+func (qv *QueryValues) HasOutputs() bool {
+	return len(qv.outputs) > 0
 }
 
-type QueryExpr struct {
+// QueryValues contains all concrete values needed to run a SQLair query on a
+// database.
+type QueryValues struct {
 	sql     string
-	args    []any
+	params  []any
 	outputs []typeMember
 }
 
-// Query returns a query expression ready for execution, using the provided values to
-// substitute the input placeholders in the prepared expression. These placeholders use
-// the syntax "$Person.fullname", where Person would be a type such as:
-//
-//	type Person struct {
-//	        Name string `db:"fullname"`
-//	}
-func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
+// BindInputs takes the SQLair input arguments and returns the QueryValues ready
+// for use with the database.
+func (te *TypedExpr) BindInputs(args ...any) (qv *QueryValues, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("invalid input parameter: %s", err)
@@ -37,7 +37,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	}()
 
 	var inQuery = make(map[reflect.Type]bool)
-	for _, typeMember := range pe.inputs {
+	for _, typeMember := range te.inputs {
 		inQuery[typeMember.outerType()] = true
 	}
 
@@ -60,7 +60,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		typeNames = append(typeNames, t.Name())
 		if !inQuery[t] {
 			// Check if we have a type with the same name from a different package.
-			for _, typeMember := range pe.inputs {
+			for _, typeMember := range te.inputs {
 				if t.Name() == typeMember.outerType().Name() {
 					return nil, fmt.Errorf("parameter with type %q missing, have type with same name: %q", typeMember.outerType().String(), t.String())
 				}
@@ -69,9 +69,9 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		}
 	}
 
-	// Query parameteres.
-	qargs := []any{}
-	for i, typeMember := range pe.inputs {
+	// Query parameters.
+	params := []any{}
+	for i, typeMember := range te.inputs {
 		outerType := typeMember.outerType()
 		v, ok := typeValue[outerType]
 		if !ok {
@@ -87,19 +87,22 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 				return nil, fmt.Errorf(`map %q does not contain key %q`, outerType.Name(), tm.name)
 			}
 		}
-		qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(i), val.Interface()))
+		params = append(params, sql.Named("sqlair_"+strconv.Itoa(i), val.Interface()))
 	}
-	return &QueryExpr{outputs: pe.outputs, sql: pe.sql, args: qargs}, nil
+	return &QueryValues{outputs: te.outputs, sql: te.sql, params: params}, nil
 }
 
 var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
 
-// ScanArgs returns list of pointers to the struct fields that are listed in qe.outputs.
-// All the structs and maps mentioned in the query must be in outputArgs.
-func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []any, onSuccess func(), err error) {
+// ScanArgs takes the result column names and the SQLair output arguments. It
+// returns list of pointers to be used as arguments for rows.Scan. They point to
+// locations within the SQLair output arguments. The onSuccess function should
+// be run once the pointers have been scanned to populate output arguments that
+// cannot be written to directly (such as map values).
+func (qv *QueryValues) ScanArgs(columns []string, outputArgs []any) (scanArgs []any, onSuccess func(), err error) {
 	var typesInQuery = []string{}
 	var inQuery = make(map[reflect.Type]bool)
-	for _, typeMember := range qe.outputs {
+	for _, typeMember := range qv.outputs {
 		outerType := typeMember.outerType()
 		if ok := inQuery[outerType]; !ok {
 			inQuery[outerType] = true
@@ -156,11 +159,11 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 			ptrs = append(ptrs, &x)
 			continue
 		}
-		if idx >= len(qe.outputs) {
-			return nil, nil, fmt.Errorf("internal error: sqlair column not in outputs (%d>=%d)", idx, len(qe.outputs))
+		if idx >= len(qv.outputs) {
+			return nil, nil, fmt.Errorf("internal error: sqlair column not in outputs (%d>=%d)", idx, len(qv.outputs))
 		}
 		columnInResult[idx] = true
-		typeMember := qe.outputs[idx]
+		typeMember := qv.outputs[idx]
 		outputVal, ok := typeDest[typeMember.outerType()]
 		if !ok {
 			return nil, nil, fmt.Errorf("type %q found in query but not passed to get", typeMember.outerType().Name())
@@ -189,9 +192,9 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 		}
 	}
 
-	for i := 0; i < len(qe.outputs); i++ {
+	for i := 0; i < len(qv.outputs); i++ {
 		if !columnInResult[i] {
-			return nil, nil, fmt.Errorf(`query uses "&%s" outside of result context`, qe.outputs[i].outerType().Name())
+			return nil, nil, fmt.Errorf(`query uses "&%s" outside of result context`, qv.outputs[i].outerType().Name())
 		}
 	}
 
