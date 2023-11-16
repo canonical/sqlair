@@ -1,17 +1,23 @@
-package expr
+package typeinfo
 
 import (
 	"reflect"
 	"sync"
+	"testing"
 
 	. "gopkg.in/check.v1"
 )
 
-type ExprInternalSuite struct{}
+var _ Info = &structInfo{}
+var _ Info = &mapInfo{}
 
-var _ = Suite(&ExprInternalSuite{})
+func TestTypeInfo(t *testing.T) { TestingT(t) }
 
-func (e *ExprInternalSuite) TestReflectStruct(c *C) {
+type typeInfoSuite struct{}
+
+var _ = Suite(&typeInfoSuite{})
+
+func (e *typeInfoSuite) TestReflectStruct(c *C) {
 	type something struct {
 		ID      int64  `db:"id"`
 		Name    string `db:"name,omitempty"`
@@ -24,7 +30,7 @@ func (e *ExprInternalSuite) TestReflectStruct(c *C) {
 		NotInDB: "doesn't matter",
 	}
 
-	info, err := getTypeInfo(s)
+	info, err := GetTypeInfo(s)
 	c.Assert(err, IsNil)
 
 	switch info := info.(type) {
@@ -46,12 +52,12 @@ func (e *ExprInternalSuite) TestReflectStruct(c *C) {
 	}
 }
 
-func (s *ExprInternalSuite) TestReflectSimpleConcurrent(c *C) {
+func (s *typeInfoSuite) TestReflectSimpleConcurrent(c *C) {
 	type myStruct struct{}
 
 	// Get the type info of a struct sequentially.
 	var seqSt myStruct
-	seqInfo, err := getTypeInfo(seqSt)
+	seqInfo, err := GetTypeInfo(seqSt)
 	c.Assert(err, IsNil)
 
 	// Get some type info concurrently.
@@ -62,13 +68,13 @@ func (s *ExprInternalSuite) TestReflectSimpleConcurrent(c *C) {
 	for i := 0; i < 5; i++ {
 		wg.Add(1)
 		go func() {
-			_, _ = getTypeInfo(concSt)
+			_, _ = GetTypeInfo(concSt)
 			wg.Done()
 		}()
 	}
 
 	// Get type info alongside concurrent access.
-	concInfo, err := getTypeInfo(concSt)
+	concInfo, err := GetTypeInfo(concSt)
 	c.Assert(err, IsNil)
 
 	c.Assert(seqInfo, Equals, concInfo)
@@ -76,20 +82,20 @@ func (s *ExprInternalSuite) TestReflectSimpleConcurrent(c *C) {
 	wg.Wait()
 }
 
-func (s *ExprInternalSuite) TestReflectNonStructType(c *C) {
+func (s *typeInfoSuite) TestReflectNonStructType(c *C) {
 	var nonStructs = []any{
 		int(0),
 		string(""),
 	}
 
 	for _, value := range nonStructs {
-		i, err := getTypeInfo(value)
+		i, err := GetTypeInfo(value)
 		c.Assert(err, ErrorMatches, "internal error: cannot obtain type information for type that is not map or struct: .*")
 		c.Assert(i, IsNil)
 	}
 }
 
-func (s *ExprInternalSuite) TestReflectBadTagError(c *C) {
+func (s *typeInfoSuite) TestReflectBadTagError(c *C) {
 
 	var unsupportedFlag = []any{
 		struct {
@@ -134,20 +140,20 @@ func (s *ExprInternalSuite) TestReflectBadTagError(c *C) {
 	}
 
 	for _, value := range unsupportedFlag {
-		_, err := getTypeInfo(value)
+		_, err := GetTypeInfo(value)
 		c.Assert(err, ErrorMatches, "cannot parse tag for field .ID: unsupported flag .*")
 	}
 	for _, value := range tagEmpty {
-		_, err := getTypeInfo(value)
+		_, err := GetTypeInfo(value)
 		c.Assert(err, ErrorMatches, "cannot parse tag for field .ID: .*")
 	}
 	for _, value := range invalidColumn {
-		_, err := getTypeInfo(value)
+		_, err := GetTypeInfo(value)
 		c.Assert(err, ErrorMatches, "cannot parse tag for field .ID: invalid column name in 'db' tag: .*")
 	}
 }
 
-func (s *ExprInternalSuite) TestReflectValidTag(c *C) {
+func (s *typeInfoSuite) TestReflectValidTag(c *C) {
 	var validTags = []any{
 		struct {
 			ID int64 `db:"id_"`
@@ -167,12 +173,12 @@ func (s *ExprInternalSuite) TestReflectValidTag(c *C) {
 	}
 
 	for _, value := range validTags {
-		_, err := getTypeInfo(value)
+		_, err := GetTypeInfo(value)
 		c.Assert(err, IsNil)
 	}
 }
 
-func (s *ExprInternalSuite) TestUnexportedField(c *C) {
+func (s *typeInfoSuite) TestUnexportedField(c *C) {
 	var unexportedFields = []any{
 		struct {
 			ID    int64 `db:"id"`
@@ -188,7 +194,7 @@ func (s *ExprInternalSuite) TestUnexportedField(c *C) {
 	}
 
 	for _, value := range unexportedFields {
-		_, err := getTypeInfo(value)
+		_, err := GetTypeInfo(value)
 		c.Assert(err, ErrorMatches, `field "unexp" of struct  not exported`)
 	}
 }

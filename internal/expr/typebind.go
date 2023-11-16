@@ -8,13 +8,15 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/canonical/sqlair/internal/typeinfo"
 )
 
 // TypedExpr represents a SQLair query bound to concrete Go types. It contains
 // all the type information needed by SQLair.
 type TypedExpr struct {
-	outputs []typeMember
-	inputs  []typeMember
+	outputs []typeinfo.Member
+	inputs  []typeinfo.Member
 	sql     string
 }
 
@@ -34,7 +36,7 @@ func (te *TypedExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 
 	var inQuery = make(map[reflect.Type]bool)
 	for _, typeMember := range te.inputs {
-		inQuery[typeMember.outerType()] = true
+		inQuery[typeMember.OuterType()] = true
 	}
 
 	var typeValue = make(map[reflect.Type]reflect.Value)
@@ -57,8 +59,8 @@ func (te *TypedExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 		if !inQuery[t] {
 			// Check if we have a type with the same name from a different package.
 			for _, typeMember := range te.inputs {
-				if t.Name() == typeMember.outerType().Name() {
-					return nil, fmt.Errorf("parameter with type %q missing, have type with same name: %q", typeMember.outerType().String(), t.String())
+				if t.Name() == typeMember.OuterType().Name() {
+					return nil, fmt.Errorf("parameter with type %q missing, have type with same name: %q", typeMember.OuterType().String(), t.String())
 				}
 			}
 			return nil, fmt.Errorf("%s not referenced in query", t.Name())
@@ -66,23 +68,19 @@ func (te *TypedExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 	}
 
 	// Query parameters.
-	params := []any{}
+	var params []any
 	for i, typeMember := range te.inputs {
-		outerType := typeMember.outerType()
+		outerType := typeMember.OuterType()
 		v, ok := typeValue[outerType]
 		if !ok {
 			return nil, typeMissingError(outerType.Name(), typeNames)
 		}
-		var val reflect.Value
-		switch tm := typeMember.(type) {
-		case *structField:
-			val = v.Field(tm.index)
-		case *mapKey:
-			val = v.MapIndex(reflect.ValueOf(tm.name))
-			if val.Kind() == reflect.Invalid {
-				return nil, fmt.Errorf(`map %q does not contain key %q`, outerType.Name(), tm.name)
-			}
+
+		val, err := typeMember.ValueForOuter(v)
+		if err != nil {
+			return nil, err
 		}
+
 		params = append(params, sql.Named("sqlair_"+strconv.Itoa(i), val.Interface()))
 	}
 	return &PrimedQuery{outputs: te.outputs, sql: te.sql, params: params}, nil
@@ -149,7 +147,7 @@ func typeMissingError(missingType string, existingTypes []string) error {
 
 // bindInputTypes binds the input expression to a type and returns the
 // typeMember represented by the expression.
-func bindInputTypes(ti typeNameToInfo, e *inputExpr) (tm typeMember, err error) {
+func bindInputTypes(ti typeNameToInfo, e *inputExpr) (tm typeinfo.Member, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("input expression: %s: %s", err, e.raw)
@@ -161,7 +159,7 @@ func bindInputTypes(ti typeNameToInfo, e *inputExpr) (tm typeMember, err error) 
 		return nil, typeMissingError(e.sourceType.typeName, getKeys(ti))
 	}
 
-	tm, err = info.typeMember(e.sourceType.memberName)
+	tm, err = info.TypeMember(e.sourceType.memberName)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +169,7 @@ func bindInputTypes(ti typeNameToInfo, e *inputExpr) (tm typeMember, err error) 
 // bindOutputTypes binds the output expression to concrete types. It then checks
 // the expression is formatted correctly and generates the columns for the query
 // and the typeMembers the columns correspond to.
-func bindOutputTypes(ti typeNameToInfo, e *outputExpr) (outCols []columnAccessor, typeMembers []typeMember, err error) {
+func bindOutputTypes(ti typeNameToInfo, e *outputExpr) (outCols []columnAccessor, typeMembers []typeinfo.Member, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("output expression: %s: %s", err, e.raw)
@@ -198,17 +196,17 @@ func bindOutputTypes(ti typeNameToInfo, e *outputExpr) (outCols []columnAccessor
 			}
 			if t.memberName == "*" {
 				// Generate asterisk columns.
-				allMembers, err := info.getAllMembers()
+				allMembers, err := info.GetAllMembers()
 				if err != nil {
 					return nil, nil, err
 				}
 				typeMembers = append(typeMembers, allMembers...)
 				for _, tm := range allMembers {
-					outCols = append(outCols, columnAccessor{pref, tm.memberName()})
+					outCols = append(outCols, columnAccessor{pref, tm.MemberName()})
 				}
 			} else {
 				// Generate explicit columns.
-				tm, err := info.typeMember(t.memberName)
+				tm, err := info.TypeMember(t.memberName)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -228,7 +226,7 @@ func bindOutputTypes(ti typeNameToInfo, e *outputExpr) (outCols []columnAccessor
 			return nil, nil, typeMissingError(e.targetTypes[0].typeName, getKeys(ti))
 		}
 		for _, c := range e.sourceColumns {
-			tm, err := info.typeMember(c.columnName)
+			tm, err := info.TypeMember(c.columnName)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -248,7 +246,7 @@ func bindOutputTypes(ti typeNameToInfo, e *outputExpr) (outCols []columnAccessor
 			if !ok {
 				return nil, nil, typeMissingError(t.typeName, getKeys(ti))
 			}
-			tm, err := info.typeMember(t.memberName)
+			tm, err := info.TypeMember(t.memberName)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -262,7 +260,7 @@ func bindOutputTypes(ti typeNameToInfo, e *outputExpr) (outCols []columnAccessor
 	return outCols, typeMembers, nil
 }
 
-type typeNameToInfo map[string]typeInfo
+type typeNameToInfo map[string]typeinfo.Info
 
 // BindTypes takes samples of all types mentioned in the SQLair expressions of
 // the query. The expressions are checked for validity and required information
@@ -287,15 +285,15 @@ func (pe *ParsedExpr) BindTypes(args ...any) (te *TypedExpr, err error) {
 			if t.Name() == "" {
 				return nil, fmt.Errorf("cannot use anonymous %s", t.Kind())
 			}
-			info, err := getTypeInfo(arg)
+			info, err := typeinfo.GetTypeInfo(arg)
 			if err != nil {
 				return nil, err
 			}
 			if dupeInfo, ok := ti[t.Name()]; ok {
-				if dupeInfo.typ() == t {
+				if dupeInfo.Typ() == t {
 					return nil, fmt.Errorf("found multiple instances of type %q", t.Name())
 				}
-				return nil, fmt.Errorf("two types found with name %q: %q and %q", t.Name(), dupeInfo.typ().String(), t.String())
+				return nil, fmt.Errorf("two types found with name %q: %q and %q", t.Name(), dupeInfo.Typ().String(), t.String())
 			}
 			ti[t.Name()] = info
 		case reflect.Pointer:
@@ -310,10 +308,10 @@ func (pe *ParsedExpr) BindTypes(args ...any) (te *TypedExpr, err error) {
 	var inCount int
 	var outCount int
 
-	var outputs = make([]typeMember, 0)
-	var inputs = make([]typeMember, 0)
+	var outputs = make([]typeinfo.Member, 0)
+	var inputs = make([]typeinfo.Member, 0)
 
-	var typeMemberPresent = make(map[typeMember]bool)
+	var typeMemberPresent = make(map[typeinfo.Member]bool)
 
 	// Check and expand each query expr.
 	for _, expr := range pe.exprs {
@@ -334,7 +332,7 @@ func (pe *ParsedExpr) BindTypes(args ...any) (te *TypedExpr, err error) {
 
 			for _, tm := range typeMembers {
 				if ok := typeMemberPresent[tm]; ok {
-					return nil, fmt.Errorf("member %q of type %q appears more than once in output expressions", tm.memberName(), tm.outerType().Name())
+					return nil, fmt.Errorf("member %q of type %q appears more than once in output expressions", tm.MemberName(), tm.OuterType().Name())
 				}
 				typeMemberPresent[tm] = true
 			}
