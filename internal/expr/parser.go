@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// expr represents a section of a parsed SQL statement.
+// expr represents a parsed node of the SQLair query's AST.
 type expr interface {
 	// String returns a text representation for debugging and testing purposes.
 	String() string
@@ -80,12 +80,12 @@ func (p *bypass) expr() {}
 type Parser struct {
 	input string
 	pos   int
-	// prevExpr is the value of pos when we last finished parsing a expr.
-	prevExpr int
-	// exprStart is the value of pos just before we started parsing the expr
-	// under pos. We maintain exprStart >= prevExpr.
-	exprStart int
-	exprs     []expr
+	// prevExprEnd is the value of pos when we last finished parsing a expr.
+	prevExprEnd int
+	// currentExprStart is the value of pos just before we started parsing the expr
+	// under pos. We maintain currentExprStart >= prevExprEnd.
+	currentExprStart int
+	exprs            []expr
 	// lineNum is the number of the current line of the input.
 	lineNum int
 	// lineStart is the position of the first byte of the current line in
@@ -101,8 +101,8 @@ func NewParser() *Parser {
 func (p *Parser) init(input string) {
 	p.input = input
 	p.pos = 0
-	p.prevExpr = 0
-	p.exprStart = 0
+	p.prevExprEnd = 0
+	p.currentExprStart = 0
 	p.exprs = []expr{}
 	p.lineNum = 1
 	p.lineStart = 0
@@ -139,26 +139,26 @@ func errorAt(err error, line int, column int, input string) error {
 // a checkpoint within an attempted parsing of an expr, not at a higher level
 // since we don't keep track of the exprs in the checkpoint.
 type checkpoint struct {
-	parser    *Parser
-	pos       int
-	prevExpr  int
-	exprStart int
-	exprs     []expr
-	lineNum   int
-	lineStart int
+	parser           *Parser
+	pos              int
+	prevExprEnd      int
+	currentExprStart int
+	exprs            []expr
+	lineNum          int
+	lineStart        int
 }
 
 // save takes a snapshot of the state of the parser and returns a pointer to a
 // checkpoint that represents it.
 func (p *Parser) save() *checkpoint {
 	return &checkpoint{
-		parser:    p,
-		pos:       p.pos,
-		prevExpr:  p.prevExpr,
-		exprStart: p.exprStart,
-		exprs:     p.exprs,
-		lineNum:   p.lineNum,
-		lineStart: p.lineStart,
+		parser:           p,
+		pos:              p.pos,
+		prevExprEnd:      p.prevExprEnd,
+		currentExprStart: p.currentExprStart,
+		exprs:            p.exprs,
+		lineNum:          p.lineNum,
+		lineStart:        p.lineStart,
 	}
 }
 
@@ -166,8 +166,8 @@ func (p *Parser) save() *checkpoint {
 // checkpoint.
 func (cp *checkpoint) restore() {
 	cp.parser.pos = cp.pos
-	cp.parser.prevExpr = cp.prevExpr
-	cp.parser.exprStart = cp.exprStart
+	cp.parser.prevExprEnd = cp.prevExprEnd
+	cp.parser.currentExprStart = cp.currentExprStart
 	cp.parser.exprs = cp.exprs
 	cp.parser.lineNum = cp.lineNum
 	cp.parser.lineStart = cp.lineStart
@@ -199,9 +199,9 @@ func (pe *ParsedExpr) String() string {
 // expr.
 func (p *Parser) add(expr expr) {
 	// Add the string between the previous I/O expr and the current expr.
-	if p.prevExpr != p.exprStart {
+	if p.prevExprEnd != p.currentExprStart {
 		p.exprs = append(p.exprs,
-			&bypass{p.input[p.prevExpr:p.exprStart]})
+			&bypass{p.input[p.prevExprEnd:p.currentExprStart]})
 	}
 
 	if expr != nil {
@@ -209,9 +209,9 @@ func (p *Parser) add(expr expr) {
 	}
 
 	// Save this position at the end of the expr.
-	p.prevExpr = p.pos
-	// Ensure that exprStart >= prevExpr.
-	p.exprStart = p.pos
+	p.prevExprEnd = p.pos
+	// Ensure that currentExprStart >= prevExprEnd.
+	p.currentExprStart = p.pos
 }
 
 // skipComment jumps over comments as defined by the SQLite spec.
@@ -250,14 +250,14 @@ func (p *Parser) skipComment() bool {
 }
 
 // Parse takes an SQLair query string and returns a ParsedExpr.
-func (p *Parser) Parse(query string) (pe *ParsedExpr, err error) {
+func (p *Parser) Parse(input string) (pe *ParsedExpr, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("cannot parse expression: %s", err)
 		}
 	}()
 
-	p.init(query)
+	p.init(input)
 
 	for {
 		// Advance the parser to the start of the next expression.
@@ -265,7 +265,7 @@ func (p *Parser) Parse(query string) (pe *ParsedExpr, err error) {
 			return nil, err
 		}
 
-		p.exprStart = p.pos
+		p.currentExprStart = p.pos
 
 		if p.pos == len(p.input) {
 			break

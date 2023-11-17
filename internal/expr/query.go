@@ -22,8 +22,10 @@ func (qv *QueryValues) HasOutputs() bool {
 // QueryValues contains all concrete values needed to run a SQLair query on a
 // database.
 type QueryValues struct {
-	sql     string
-	params  []any
+	sql string
+	// params are the query parameters to pass to the database.
+	params []any
+	// outputs specifies where to scan the query results.
 	outputs []typeMember
 }
 
@@ -94,12 +96,11 @@ func (te *TypedExpr) BindInputs(args ...any) (qv *QueryValues, err error) {
 
 var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
 
-// ScanArgs takes the result column names and the SQLair output arguments. It
-// returns list of pointers to be used as arguments for rows.Scan. They point to
-// locations within the SQLair output arguments. The onSuccess function should
-// be run once the pointers have been scanned to populate output arguments that
-// cannot be written to directly (such as map values).
-func (qv *QueryValues) ScanArgs(columns []string, outputArgs []any) (scanArgs []any, onSuccess func(), err error) {
+// ScanArgs produces a list of pointers to be passed to rows.Scan. After a
+// successful call, the onSuccess function must be invoked. The outputArgs will
+// be populated with the query results. All the structs/maps/slices mentioned in
+// the query must be in outputArgs.
+func (qv *QueryValues) ScanArgs(columnNames []string, outputArgs []any) (scanArgs []any, onSuccess func(), err error) {
 	var typesInQuery = []string{}
 	var inQuery = make(map[reflect.Type]bool)
 	for _, typeMember := range qv.outputs {
@@ -150,8 +151,8 @@ func (qv *QueryValues) ScanArgs(columns []string, outputArgs []any) (scanArgs []
 
 	// Generate the pointers.
 	var ptrs = []any{}
-	var columnInResult = make([]bool, len(columns))
-	for _, column := range columns {
+	var columnInResult = make([]bool, len(columnNames))
+	for _, column := range columnNames {
 		idx, ok := markerIndex(column)
 		if !ok {
 			// Columns not mentioned in output expressions are scanned into x.

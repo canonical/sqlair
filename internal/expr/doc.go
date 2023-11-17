@@ -17,8 +17,8 @@ expressions.
 # Type Binding stage
 
 The Type Binding stage binds concrete Go types to the type names in the SQLair
-query expressions. Type samples are provided by the user. These are used to
-validate the SQLair query expressions, and to generate an intermediate
+expressions. Type samples are provided by the user. These are used to
+validate the SQLair expressions, and to generate an intermediate
 representation with all the type information needed by SQLair.
 
 The output of this stage retains the shape of the AST from the parse stage.

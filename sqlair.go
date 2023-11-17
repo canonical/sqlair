@@ -50,7 +50,9 @@ var cacheMutex sync.RWMutex
 // It is ready to be run on a SQLair DB.
 type Statement struct {
 	cacheID stmtID
-	te      *expr.TypedExpr
+	// te is the type checked SQLair query. It is used to generate the required
+	// query values when the Statement is run on a database.
+	te *expr.TypedExpr
 }
 
 // stmtFinalizer removes a Statement from the statement caches and closes it.
