@@ -93,7 +93,7 @@ func (si *structInfo) typ() reflect.Type {
 
 func (si *structInfo) typeMember(member string) (typeMember, error) {
 	if member == "" {
-		return nil, fmt.Errorf(`type %q missing struct db tag`, si.structType.Name())
+		return nil, fmt.Errorf(`unqualified type %q must be a primitive type in`, si.structType.Name())
 	}
 	tm, ok := si.tagToField[member]
 	if !ok {

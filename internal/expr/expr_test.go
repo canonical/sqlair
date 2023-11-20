@@ -563,15 +563,15 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT &Person FROM t",
 		prepareArgs: []any{Person{}},
-		err:         `cannot prepare statement: output expression: type "Person" missing struct db tag: &Person`,
+		err:         `cannot prepare statement: output expression: unqualified type "Person" must be a primitive type in: &Person`,
 	}, {
 		query:       "SELECT (*) AS (&Person) FROM t",
 		prepareArgs: []any{Person{}},
-		err:         `cannot prepare statement: output expression: type "Person" missing struct db tag: (*) AS (&Person)`,
+		err:         `cannot prepare statement: output expression: unqualified type "Person" must be a primitive type in: (*) AS (&Person)`,
 	}, {
 		query:       "SELECT foo FROM t WHERE x = $Person",
 		prepareArgs: []any{Person{}},
-		err:         `cannot prepare statement: input expression: type "Person" missing struct db tag: $Person`,
+		err:         `cannot prepare statement: input expression: unqualified type "Person" must be a primitive type in: $Person`,
 	}, {
 		query:       "SELECT &string FROM t",
 		prepareArgs: []any{},
