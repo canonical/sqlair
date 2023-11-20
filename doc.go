@@ -4,8 +4,6 @@ SQLair is a convenience layer for SQL databases that embeds Go types directly in
 The SQL syntax is expanded with SQLair input and output expressions which indicate the parts of the query that correspond to Go types.
 This allows the user to specify the Go types they want in the SQL query itself whilst allowing the full power of SQL to be utilised.
 The Go types in the input and output expressions can be structs, maps or primitive types.
-SQLair is designed around for use with the struct type.
-Struct fields are tagged with column names allowing query results to be read directly into them.
 This package also provides an alternative API for reading the rows from the database.
 SQLair relies on database/sql for all the underlying operations.
 
@@ -62,12 +60,11 @@ SQLair output expressions can take the following formats:
  4. (t1.col_name1, t2.col_name2) AS &Type.*
     - Fetches and sets only the specified columns (the table is optional).
     - If Type is a map they will be stored at "col_name1" and "col_name2".
-	- This form cannot be used with primitive types.
+    - This form cannot be used with primitive types.
 
  5. (col_name1, col_name2) AS (&Type.other_col1, &Type.other_col2)
     - Fetches the columns from the database and stores them at other_col1 and other_col2 in Type.
-	- If Type is a primitive type then the "other_col" is dropped e.g. "(col_name AS &string)".
-
+    - If Type is a primitive type then the "other_col" is dropped e.g. "(col_name AS &string)".
 
 Multiple input and output expressions can be written in a single query.
 */
