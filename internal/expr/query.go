@@ -46,7 +46,7 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	for _, arg := range args {
 		v := reflect.ValueOf(arg)
 		if v.Kind() == reflect.Invalid || (v.Kind() == reflect.Pointer && v.IsNil()) {
-			return nil, fmt.Errorf("need struct, map, or primitive type, got nil")
+			return nil, fmt.Errorf("need valid type, got nil")
 		}
 		v = reflect.Indirect(v)
 		t := v.Type()

@@ -217,7 +217,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	// Generate and save reflection info.
 	for _, arg := range args {
 		if arg == nil {
-			return nil, fmt.Errorf("need struct, map, or primitive type, got nil")
+			return nil, fmt.Errorf("need valid type, got nil")
 		}
 		t := reflect.TypeOf(arg)
 		switch kind := t.Kind(); {
@@ -237,9 +237,9 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 			}
 			ti[t.Name()] = info
 		case kind == reflect.Pointer:
-			return nil, fmt.Errorf("need struct, map, or primitive type, got pointer to %s", t.Elem().Kind())
+			return nil, fmt.Errorf("need valid type, got pointer to %s", t.Elem().Kind())
 		default:
-			return nil, fmt.Errorf("need struct, map, or primitive type, got %s", t.Kind())
+			return nil, fmt.Errorf("need valid type, got %s", t.Kind())
 		}
 	}
 
