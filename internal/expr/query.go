@@ -53,12 +53,12 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		if _, ok := typeValue[t]; ok {
 			return nil, fmt.Errorf("type %q provided more than once", t.Name())
 		}
+		if t.Name() == "" {
+			return nil, fmt.Errorf("invalid input type: %q", t.String())
+		}
 		typeValue[t] = v
 		typeNames = append(typeNames, t.Name())
 		if !inQuery[t] {
-			if t.Name() == "" {
-				return nil, fmt.Errorf("invalid input type: %q", t.String())
-			}
 			// Check if we have a type with the same name from a different package.
 			for _, typeMember := range pe.inputs {
 				if t.Name() == typeMember.outerType().Name() {
