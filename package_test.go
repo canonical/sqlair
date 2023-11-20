@@ -286,7 +286,7 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: []any{nil},
-		err:     "cannot get result: need map or pointer to struct/primitive type, got nil",
+		err:     "cannot get result: need map or pointer to valid type, got nil",
 	}, {
 		summary: "nil pointer parameter",
 		query:   "SELECT * AS &Person.* FROM person",
@@ -300,7 +300,7 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: []any{Person{}},
-		err:     "cannot get result: need map or pointer to struct/primitive type, got struct",
+		err:     "cannot get result: need map or pointer to valid type, got struct",
 	}, {
 		summary: "wrong struct",
 		query:   "SELECT * AS &Person.* FROM person",

@@ -122,13 +122,13 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 	outputVals := []reflect.Value{}
 	for _, outputArg := range outputArgs {
 		if outputArg == nil {
-			return nil, nil, fmt.Errorf("need map or pointer to struct/primitive type, got nil")
+			return nil, nil, fmt.Errorf("need map or pointer to valid type, got nil")
 		}
 		outputVal := reflect.ValueOf(outputArg)
 		k := outputVal.Kind()
 		if k != reflect.Map {
 			if k != reflect.Pointer {
-				return nil, nil, fmt.Errorf("need map or pointer to struct/primitive type, got %s", k)
+				return nil, nil, fmt.Errorf("need map or pointer to valid type, got %s", k)
 			}
 			if outputVal.IsNil() {
 				return nil, nil, fmt.Errorf("got nil pointer")
