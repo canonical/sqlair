@@ -25,6 +25,9 @@ type valueAccessor struct {
 }
 
 func (va valueAccessor) String() string {
+	if va.memberName == "" {
+		return va.typeName
+	}
 	return va.typeName + "." + va.memberName
 }
 
@@ -510,16 +513,13 @@ func (p *Parser) parseTargetType() (valueAccessor, bool, error) {
 	return valueAccessor{}, false, nil
 }
 
-// parseTypeName parses a Go type name qualified by a tag name (or asterisk)
-// of the form "TypeName.col_name".
+// parseTypeName parses a Go type name optionally qualified by a tag name (or
+// asterisk). For example "Type" or "Type.col_name".
 func (p *Parser) parseTypeName() (valueAccessor, bool, error) {
 	cp := p.save()
-
-	// The error points to the skipped & or $.
-	identifierCol := p.colNum() - 1
 	if id, ok := p.parseIdentifier(); ok {
 		if !p.skipByte('.') {
-			return valueAccessor{}, false, errorAt(fmt.Errorf("unqualified type, expected %s.* or %s.<db tag>", id, id), p.lineNum, identifierCol, p.input)
+			return valueAccessor{typeName: id}, true, nil
 		}
 
 		idField, ok := p.parseIdentifierAsterisk()

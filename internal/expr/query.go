@@ -46,15 +46,15 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 	for _, arg := range args {
 		v := reflect.ValueOf(arg)
 		if v.Kind() == reflect.Invalid || (v.Kind() == reflect.Pointer && v.IsNil()) {
-			return nil, fmt.Errorf("need struct or map, got nil")
+			return nil, fmt.Errorf("need valid type, got nil")
 		}
 		v = reflect.Indirect(v)
 		t := v.Type()
-		if v.Kind() != reflect.Struct && v.Kind() != reflect.Map {
-			return nil, fmt.Errorf("need struct or map, got %s", t.Kind())
-		}
 		if _, ok := typeValue[t]; ok {
 			return nil, fmt.Errorf("type %q provided more than once", t.Name())
+		}
+		if t.Name() == "" {
+			return nil, fmt.Errorf("invalid input type: %q", t.String())
 		}
 		typeValue[t] = v
 		typeNames = append(typeNames, t.Name())
@@ -79,13 +79,17 @@ func (pe *PreparedExpr) Query(args ...any) (ce *QueryExpr, err error) {
 		}
 		var val reflect.Value
 		switch tm := typeMember.(type) {
-		case *structField:
+		case basicType:
+			val = v
+		case structField:
 			val = v.Field(tm.index)
-		case *mapKey:
+		case mapKey:
 			val = v.MapIndex(reflect.ValueOf(tm.name))
 			if val.Kind() == reflect.Invalid {
 				return nil, fmt.Errorf(`map %q does not contain key %q`, outerType.Name(), tm.name)
 			}
+		default:
+			return nil, fmt.Errorf(`internal error: unknown type: %T`, tm)
 		}
 		qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(i), val.Interface()))
 	}
@@ -118,25 +122,25 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 	outputVals := []reflect.Value{}
 	for _, outputArg := range outputArgs {
 		if outputArg == nil {
-			return nil, nil, fmt.Errorf("need map or pointer to struct, got nil")
+			return nil, nil, fmt.Errorf("need map or pointer to valid type, got nil")
 		}
 		outputVal := reflect.ValueOf(outputArg)
 		k := outputVal.Kind()
 		if k != reflect.Map {
 			if k != reflect.Pointer {
-				return nil, nil, fmt.Errorf("need map or pointer to struct, got %s", k)
+				return nil, nil, fmt.Errorf("need map or pointer to valid type, got %s", k)
 			}
 			if outputVal.IsNil() {
 				return nil, nil, fmt.Errorf("got nil pointer")
 			}
 			outputVal = outputVal.Elem()
-			k = outputVal.Kind()
-			if k != reflect.Struct && k != reflect.Map {
-				return nil, nil, fmt.Errorf("need map or pointer to struct, got pointer to %s", k)
-			}
 		}
 		if !inQuery[outputVal.Type()] {
-			return nil, nil, fmt.Errorf("type %q does not appear in query, have: %s", outputVal.Type().Name(), strings.Join(typesInQuery, ", "))
+			typeName := outputVal.Type().Name()
+			if typeName == "" {
+				return nil, nil, fmt.Errorf("invalid output type: %q, valid output types are: %s", outputVal.Type().String(), strings.Join(typesInQuery, ", "))
+			}
+			return nil, nil, fmt.Errorf("output type %q does not appear in query, have: %s", typeName, strings.Join(typesInQuery, ", "))
 		}
 		if _, ok := typeDest[outputVal.Type()]; ok {
 			return nil, nil, fmt.Errorf("type %q provided more than once, rename one of them", outputVal.Type().Name())
@@ -166,26 +170,31 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 			return nil, nil, fmt.Errorf("type %q found in query but not passed to get", typeMember.outerType().Name())
 		}
 		switch tm := typeMember.(type) {
-		case *structField:
-			val := outputVal.Field(tm.index)
-			if !val.CanSet() {
-				return nil, nil, fmt.Errorf("internal error: cannot set field %s of struct %s", tm.name, tm.structType.Name())
+		case basicType, structField:
+			if tm, ok := tm.(structField); ok {
+				outputVal = outputVal.Field(tm.index)
 			}
-			pt := reflect.PointerTo(val.Type())
-			if val.Type().Kind() != reflect.Pointer && !pt.Implements(scannerInterface) {
+			if !outputVal.CanSet() {
+				return nil, nil, fmt.Errorf("internal error: cannot set %s", tm.memberName())
+			}
+
+			pt := reflect.PointerTo(outputVal.Type())
+			if outputVal.Type().Kind() != reflect.Pointer && !pt.Implements(scannerInterface) {
 				// Rows.Scan will return an error if it tries to scan NULL into a type that cannot be set to nil.
 				// For types that are not a pointer and do not implement sql.Scanner a pointer to them is generated
 				// and passed to Rows.Scan. If Scan has set this pointer to nil the value is zeroed.
 				scanVal := reflect.New(pt).Elem()
 				ptrs = append(ptrs, scanVal.Addr().Interface())
-				scanProxies = append(scanProxies, scanProxy{original: val, scan: scanVal})
+				scanProxies = append(scanProxies, scanProxy{original: outputVal, scan: scanVal})
 			} else {
-				ptrs = append(ptrs, val.Addr().Interface())
+				ptrs = append(ptrs, outputVal.Addr().Interface())
 			}
-		case *mapKey:
+		case mapKey:
 			scanVal := reflect.New(tm.mapType.Elem()).Elem()
 			ptrs = append(ptrs, scanVal.Addr().Interface())
 			scanProxies = append(scanProxies, scanProxy{original: outputVal, scan: scanVal, key: reflect.ValueOf(tm.name)})
+		default:
+			return nil, nil, fmt.Errorf(`internal error: unknown type: %T`, tm)
 		}
 	}
 

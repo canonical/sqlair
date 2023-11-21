@@ -88,7 +88,7 @@ func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
 		}
 	}()
 
-	info, ok := ti[p.sourceType.typeName]
+	info, ok := lookupType(ti, p.sourceType.typeName)
 	if !ok {
 		return nil, typeMissingError(p.sourceType.typeName, getKeys(ti))
 	}
@@ -123,9 +123,12 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnAccessor, 
 		}
 
 		for _, t := range p.targetTypes {
-			info, ok := ti[t.typeName]
+			info, ok := lookupType(ti, t.typeName)
 			if !ok {
 				return nil, nil, typeMissingError(t.typeName, getKeys(ti))
+			}
+			if _, ok := info.(*basicTypeInfo); ok {
+				return nil, nil, fmt.Errorf(`column not specified for basic type`)
 			}
 			if t.memberName == "*" {
 				// Generate asterisk columns.
@@ -154,9 +157,12 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnAccessor, 
 
 	// Case 2: Explicit columns, single asterisk type e.g. "(col1, t.col2) AS &P.*".
 	if starTypes == 1 && numTypes == 1 {
-		info, ok := ti[p.targetTypes[0].typeName]
+		info, ok := lookupType(ti, p.targetTypes[0].typeName)
 		if !ok {
 			return nil, nil, typeMissingError(p.targetTypes[0].typeName, getKeys(ti))
+		}
+		if _, ok := info.(*basicTypeInfo); ok {
+			return nil, nil, fmt.Errorf(`cannot use star with basic type %q in expression`, info.typ().Name())
 		}
 		for _, c := range p.sourceColumns {
 			tm, err := info.typeMember(c.columnName)
@@ -175,7 +181,7 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnAccessor, 
 	if numColumns == numTypes {
 		for i, c := range p.sourceColumns {
 			t := p.targetTypes[i]
-			info, ok := ti[t.typeName]
+			info, ok := lookupType(ti, t.typeName)
 			if !ok {
 				return nil, nil, typeMissingError(t.typeName, getKeys(ti))
 			}
@@ -211,11 +217,11 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 	// Generate and save reflection info.
 	for _, arg := range args {
 		if arg == nil {
-			return nil, fmt.Errorf("need struct or map, got nil")
+			return nil, fmt.Errorf("need valid type, got nil")
 		}
 		t := reflect.TypeOf(arg)
-		switch t.Kind() {
-		case reflect.Struct, reflect.Map:
+		switch kind := t.Kind(); {
+		case kind == reflect.Struct || kind == reflect.Map || IsBasicKind(kind):
 			if t.Name() == "" {
 				return nil, fmt.Errorf("cannot use anonymous %s", t.Kind())
 			}
@@ -230,10 +236,10 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 				return nil, fmt.Errorf("two types found with name %q: %q and %q", t.Name(), dupeInfo.typ().String(), t.String())
 			}
 			ti[t.Name()] = info
-		case reflect.Pointer:
-			return nil, fmt.Errorf("need struct or map, got pointer to %s", t.Elem().Kind())
+		case kind == reflect.Pointer:
+			return nil, fmt.Errorf("need valid type, got pointer to %s", t.Elem().Kind())
 		default:
-			return nil, fmt.Errorf("need struct or map, got %s", t.Kind())
+			return nil, fmt.Errorf("need valid type, got %s", t.Kind())
 		}
 	}
 
@@ -266,7 +272,14 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 
 			for _, tm := range typeMembers {
 				if ok := typeMemberPresent[tm]; ok {
-					return nil, fmt.Errorf("member %q of type %q appears more than once in output expressions", tm.memberName(), tm.outerType().Name())
+					switch tm.(type) {
+					case structField, mapKey:
+						return nil, fmt.Errorf("member %q of type %q appears more than once in output expressions", tm.memberName(), tm.outerType().Name())
+					case basicType:
+						return nil, fmt.Errorf("type %q appears more than once in output expressions", tm.outerType().Name())
+					default:
+						return nil, fmt.Errorf(`internal error: unknown type: %T`, tm)
+					}
 				}
 				typeMemberPresent[tm] = true
 			}

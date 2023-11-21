@@ -43,6 +43,10 @@ type IntMap map[string]int
 
 type StringMap map[string]string
 
+type nameStr string
+type addressStr string
+type idInt int
+
 var tests = []struct {
 	summary          string
 	query            string
@@ -307,6 +311,24 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	"[Bypass[INSERT INTO arr VALUES (ARRAY[[1,2],[] Input[HardMaths.x] Bypass[,4]], ARRAY[[5,6],[] Input[HardMaths.y] Bypass[,8]]);]]",
 	[]any{HardMaths{}},
 	"INSERT INTO arr VALUES (ARRAY[[1,2],[@sqlair_0,4]], ARRAY[[5,6],[@sqlair_1,8]]);",
+}, {
+	"all basic types",
+	"SELECT (stringCol AS &string), (boolCol AS &bool), (uintCol AS &uint), (uint8Col AS &uint8), (uint16Col AS &uint16), (uint32Col AS &uint32), (uint64Col AS &uint64), (intCol AS &int), (int8Col AS &int8), (int16Col AS &int16), (int32Col AS &int32), (int64Col AS &int64), (float32Col AS &float32), (float64Col AS &float64) FROM t",
+	"[Bypass[SELECT (] Output[[stringCol] [string]] Bypass[), (] Output[[boolCol] [bool]] Bypass[), (] Output[[uintCol] [uint]] Bypass[), (] Output[[uint8Col] [uint8]] Bypass[), (] Output[[uint16Col] [uint16]] Bypass[), (] Output[[uint32Col] [uint32]] Bypass[), (] Output[[uint64Col] [uint64]] Bypass[), (] Output[[intCol] [int]] Bypass[), (] Output[[int8Col] [int8]] Bypass[), (] Output[[int16Col] [int16]] Bypass[), (] Output[[int32Col] [int32]] Bypass[), (] Output[[int64Col] [int64]] Bypass[), (] Output[[float32Col] [float32]] Bypass[), (] Output[[float64Col] [float64]] Bypass[) FROM t]]",
+	[]any{},
+	"SELECT (stringCol AS _sqlair_0), (boolCol AS _sqlair_1), (uintCol AS _sqlair_2), (uint8Col AS _sqlair_3), (uint16Col AS _sqlair_4), (uint32Col AS _sqlair_5), (uint64Col AS _sqlair_6), (intCol AS _sqlair_7), (int8Col AS _sqlair_8), (int16Col AS _sqlair_9), (int32Col AS _sqlair_10), (int64Col AS _sqlair_11), (float32Col AS _sqlair_12), (float64Col AS _sqlair_13) FROM t",
+}, {
+	"custom basic types",
+	"SELECT name AS &nameStr, address AS &addressStr, id AS &idInt FROM t WHERE name = $nameStr AND address = $addressStr AND id = $idInt",
+	"[Bypass[SELECT ] Output[[name] [nameStr]] Bypass[, ] Output[[address] [addressStr]] Bypass[, ] Output[[id] [idInt]] Bypass[ FROM t WHERE name = ] Input[nameStr] Bypass[ AND address = ] Input[addressStr] Bypass[ AND id = ] Input[idInt]]",
+	[]any{(idInt)(0), (addressStr)(""), (nameStr)("")},
+	"SELECT name AS _sqlair_0, address AS _sqlair_1, id AS _sqlair_2 FROM t WHERE name = @sqlair_0 AND address = @sqlair_1 AND id = @sqlair_2",
+}, {
+	"basic types passed to prepare unnecessarily",
+	"SELECT id AS &int64, id AS &uint16 FROM t",
+	"[Bypass[SELECT ] Output[[id] [int64]] Bypass[, ] Output[[id] [uint16]] Bypass[ FROM t]]",
+	[]any{int64(0), uint16(0)},
+	"SELECT id AS _sqlair_0, id AS _sqlair_1 FROM t",
 }}
 
 func (s *ExprSuite) TestExpr(c *C) {
@@ -377,9 +399,6 @@ comment */ WHERE x = $Address.&d`,
 		query: "SELECT foo FROM t WHERE x = $Address.-",
 		err:   `cannot parse expression: column 38: invalid identifier suffix following "Address"`,
 	}, {
-		query: "SELECT foo FROM t WHERE x = $Address",
-		err:   `cannot parse expression: column 29: unqualified type, expected Address.* or Address.<db tag>`,
-	}, {
 		query: "SELECT name AS (&Person.*)",
 		err:   `cannot parse expression: column 16: unexpected parentheses around types after "AS"`,
 	}, {
@@ -392,14 +411,14 @@ comment */ WHERE x = $Address.&d`,
 		query: "SELECT (name, id) AS &Person.*",
 		err:   `cannot parse expression: column 22: missing parentheses around types after "AS"`,
 	}, {
+		query: "SELECT foo FROM t WHERE x = $string.*",
+		err:   `cannot parse expression: column 29: asterisk not allowed in input expression "$string.*"`,
+	}, {
 		query: "SELECT (name, id) AS (&Person.name, Person.id)",
 		err:   `cannot parse expression: column 37: invalid expression in list`,
 	}, {
 		query: "SELECT (name, id) AS (&Person.name, &Person.id",
 		err:   `cannot parse expression: column 22: missing closing parentheses`,
-	}, {
-		query: "SELECT (name, id) WHERE id = $Person.*",
-		err:   `cannot parse expression: column 30: asterisk not allowed in input expression "$Person.*"`,
 	}, {
 		query: `SELECT (name, id) AS (&Person.name, /* multiline
 comment */
@@ -409,8 +428,8 @@ comment */
 	}, {
 		query: `SELECT (name, id) WHERE name = 'multiline
 string
-of three lines' AND id = $Person.*`,
-		err: `cannot parse expression: line 3, column 26: asterisk not allowed in input expression "$Person.*"`,
+of three lines' AND id = $Person.`,
+		err: `cannot parse expression: line 3, column 34: invalid identifier suffix following "Person"`,
 	}}
 
 	for _, t := range tests {
@@ -470,6 +489,10 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 		prepareArgs: []any{Address{}, Person{}},
 		err:         `cannot prepare statement: member "address_id" of type "Person" appears more than once in output expressions`,
 	}, {
+		query:       "SELECT (&M.id, &M.id) FROM t",
+		prepareArgs: []any{sqlair.M{}},
+		err:         `cannot prepare statement: member "id" of type "M" appears more than once in output expressions`,
+	}, {
 		query:       "SELECT (p.*, t.*) AS (&Address.*) FROM t",
 		prepareArgs: []any{Address{}},
 		err:         "cannot prepare statement: output expression: invalid asterisk in columns: (p.*, t.*) AS (&Address.*)",
@@ -512,15 +535,15 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{[]any{Person{}}},
-		err:         `cannot prepare statement: need struct or map, got slice`,
+		err:         `cannot prepare statement: need valid type, got slice`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{&Person{}},
-		err:         `cannot prepare statement: need struct or map, got pointer to struct`,
+		err:         `cannot prepare statement: need valid type, got pointer to struct`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{(*Person)(nil)},
-		err:         `cannot prepare statement: need struct or map, got pointer to struct`,
+		err:         `cannot prepare statement: need valid type, got pointer to struct`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{map[string]any{}},
@@ -528,7 +551,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		prepareArgs: []any{nil},
-		err:         `cannot prepare statement: need struct or map, got nil`,
+		err:         `cannot prepare statement: need valid type, got nil`,
 	}, {
 		query:       "SELECT * AS &.* FROM t",
 		prepareArgs: []any{struct{ f int }{f: 1}},
@@ -537,6 +560,54 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 		query:       "SELECT &NoTags.* FROM t",
 		prepareArgs: []any{NoTags{}},
 		err:         `cannot prepare statement: output expression: no "db" tags found in struct "NoTags": &NoTags.*`,
+	}, {
+		query:       "SELECT &Person FROM t",
+		prepareArgs: []any{Person{}},
+		err:         `cannot prepare statement: output expression: unqualified type "Person" must be a basic type in: &Person`,
+	}, {
+		query:       "SELECT (*) AS (&Person) FROM t",
+		prepareArgs: []any{Person{}},
+		err:         `cannot prepare statement: output expression: unqualified type "Person" must be a basic type in: (*) AS (&Person)`,
+	}, {
+		query:       "SELECT foo FROM t WHERE x = $Person",
+		prepareArgs: []any{Person{}},
+		err:         `cannot prepare statement: input expression: unqualified type "Person" must be a basic type in: $Person`,
+	}, {
+		query:       "SELECT &string FROM t",
+		prepareArgs: []any{},
+		err:         `cannot prepare statement: output expression: column not specified for basic type: &string`,
+	}, {
+		query:       "SELECT &int FROM t",
+		prepareArgs: []any{},
+		err:         `cannot prepare statement: output expression: column not specified for basic type: &int`,
+	}, {
+		query:       "SELECT * AS &string FROM t",
+		prepareArgs: []any{},
+		err:         `cannot prepare statement: output expression: column not specified for basic type: * AS &string`,
+	}, {
+		query:       "SELECT * AS &string.* FROM t",
+		prepareArgs: []any{},
+		err:         `cannot prepare statement: output expression: column not specified for basic type: * AS &string.*`,
+	}, {
+		query:       "SELECT name AS &string.* FROM t",
+		prepareArgs: []any{},
+		err:         `cannot prepare statement: output expression: cannot use star with basic type "string" in expression: name AS &string.*`,
+	}, {
+		query:       "SELECT name AS &string.name FROM t",
+		prepareArgs: []any{},
+		err:         `cannot prepare statement: output expression: cannot specify member of basic type "string": name AS &string.name`,
+	}, {
+		query:       "SELECT name AS &string, address AS &string FROM t",
+		prepareArgs: []any{},
+		err:         `cannot prepare statement: type "string" appears more than once in output expressions`,
+	}, {
+		query:       "SELECT foo FROM t WHERE x = $string.name",
+		prepareArgs: []any{},
+		err:         `cannot prepare statement: input expression: cannot specify member of basic type "string": $string.name`,
+	}, {
+		query:       "SELECT foo FROM t WHERE x = $S",
+		prepareArgs: []any{},
+		err:         `cannot prepare statement: input expression: parameter with type "S" missing: $S`,
 	}}
 
 	for i, test := range tests {
@@ -645,6 +716,11 @@ func (s *ExprSuite) TestValidQuery(c *C) {
 		[]any{Person{}, StringMap{}},
 		[]any{Person{ID: 666}, StringMap{"street": "Highway to Hell"}},
 		[]any{sql.Named("sqlair_0", "Highway to Hell"), sql.Named("sqlair_1", 666)},
+	}, {
+		"SELECT foo FROM t WHERE x = $string, y = $int",
+		[]any{0, ""},
+		[]any{"arg1", 2},
+		[]any{sql.Named("sqlair_0", "arg1"), sql.Named("sqlair_1", 2)},
 	}}
 	for _, t := range tests {
 		parser := expr.NewParser()
@@ -682,22 +758,22 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
 		queryArgs:   []any{nil, Person{Fullname: "Monty Bingles"}},
-		err:         "invalid input parameter: need struct or map, got nil",
+		err:         "invalid input parameter: need valid type, got nil",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		prepareArgs: []any{Address{}, Person{}},
 		queryArgs:   []any{(*Person)(nil)},
-		err:         "invalid input parameter: need struct or map, got nil",
+		err:         "invalid input parameter: need valid type, got nil",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Address{}},
-		queryArgs:   []any{8},
-		err:         "invalid input parameter: need struct or map, got int",
+		queryArgs:   []any{'c'},
+		err:         "invalid input parameter: int32 not referenced in query",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Address{}},
 		queryArgs:   []any{[]any{}},
-		err:         "invalid input parameter: need struct or map, got slice",
+		err:         `invalid input parameter: invalid input type: "[]interface {}"`,
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		prepareArgs: []any{Address{}},
@@ -723,6 +799,11 @@ func (s *ExprSuite) TestQueryError(c *C) {
 		prepareArgs: []any{Person{}},
 		queryArgs:   []any{Person{}, Person{}},
 		err:         `invalid input parameter: type "Person" provided more than once`,
+	}, {
+		query:       "SELECT street FROM t WHERE x = $string",
+		prepareArgs: []any{},
+		queryArgs:   []any{0},
+		err:         `invalid input parameter: int not referenced in query`,
 	}}
 
 	outerP := Person{}

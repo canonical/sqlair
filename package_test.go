@@ -105,6 +105,10 @@ CREATE TABLE address (
 	return []string{"person", "address"}, db, nil
 }
 
+func ptr[T any](val T) *T {
+	return &val
+}
+
 func (s *PackageSuite) TestValidIterGet(c *C) {
 	type StringMap map[string]string
 	type lowerCaseMap map[string]any
@@ -286,7 +290,7 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: []any{nil},
-		err:     "cannot get result: need map or pointer to struct, got nil",
+		err:     "cannot get result: need map or pointer to valid type, got nil",
 	}, {
 		summary: "nil pointer parameter",
 		query:   "SELECT * AS &Person.* FROM person",
@@ -300,21 +304,21 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: []any{Person{}},
-		err:     "cannot get result: need map or pointer to struct, got struct",
+		err:     "cannot get result: need map or pointer to valid type, got struct",
 	}, {
 		summary: "wrong struct",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: []any{&Address{}},
-		err:     `cannot get result: type "Address" does not appear in query, have: Person`,
+		err:     `cannot get result: output type "Address" does not appear in query, have: Person`,
 	}, {
 		summary: "not a struct",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: []any{&[]any{}},
-		err:     "cannot get result: need map or pointer to struct, got pointer to slice",
+		err:     `cannot get result: invalid output type: "\[\]interface {}", valid output types are: Person`,
 	}, {
 		summary: "missing get value",
 		query:   "SELECT * AS &Person.* FROM person",
@@ -376,28 +380,24 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 	}
 }
 
-type ScannerInt struct {
-	SI int
-}
+type ScannerInt int
 
 func (si *ScannerInt) Scan(v any) error {
 	if _, ok := v.(int); ok {
-		si.SI = 42
+		*si = 42
 	} else {
-		si.SI = 666
+		*si = 666
 	}
 	return nil
 }
 
-type ScannerString struct {
-	SS string
-}
+type ScannerString string
 
 func (ss *ScannerString) Scan(v any) error {
 	if _, ok := v.(string); ok {
-		ss.SS = "ScannerString scanned well!"
+		*ss = "ScannerString scanned well!"
 	} else {
-		ss.SS = "ScannerString found a NULL"
+		*ss = "ScannerString found a NULL"
 	}
 	return nil
 }
@@ -421,7 +421,6 @@ func (s *PackageSuite) TestNulls(c *C) {
 		Fullname   ScannerString `db:"name"`
 		PostalCode ScannerInt    `db:"address_id"`
 	}
-
 	var tests = []struct {
 		summary  string
 		query    string
@@ -456,7 +455,14 @@ func (s *PackageSuite) TestNulls(c *C) {
 		types:    []any{ScannerDude{}},
 		inputs:   []any{},
 		outputs:  []any{&ScannerDude{}},
-		expected: []any{&ScannerDude{Fullname: ScannerString{SS: "ScannerString scanned well!"}, ID: ScannerInt{SI: 666}, PostalCode: ScannerInt{SI: 666}}},
+		expected: []any{&ScannerDude{Fullname: "ScannerString scanned well!", ID: 666, PostalCode: 666}},
+	}, {
+		summary:  "simple null types",
+		query:    `SELECT name AS &ScannerString, id AS &ScannerInt FROM person WHERE name = "Nully"`,
+		types:    []any{(ScannerString)(""), (ScannerInt)(0)},
+		inputs:   []any{},
+		outputs:  []any{ptr(ScannerInt(0)), ptr(ScannerString(""))},
+		expected: []any{ptr(ScannerInt(666)), ptr(ScannerString("ScannerString scanned well!"))},
 	}}
 
 	tables, sqldb, err := personAndAddressDB()
@@ -520,6 +526,13 @@ func (s *PackageSuite) TestValidGet(c *C) {
 		inputs:   []any{sqlair.M{"p1": 1000}},
 		outputs:  []any{sqlair.M{}},
 		expected: []any{sqlair.M{"name": "Fred"}},
+	}, {
+		summary:  "basic types",
+		query:    "SELECT name AS &string, id AS &int FROM person WHERE name = $string AND id = $int",
+		types:    []any{},
+		inputs:   []any{"Fred", 30},
+		outputs:  []any{ptr(""), ptr(0)},
+		expected: []any{ptr("Fred"), ptr(30)},
 	}}
 
 	tables, sqldb, err := personAndAddressDB()
@@ -671,6 +684,13 @@ func (s *PackageSuite) TestValidGetAll(c *C) {
 		inputs:   []any{},
 		slices:   []any{&[]sqlair.M{}, &[]CustomMap{}},
 		expected: []any{&[]sqlair.M{{"name": "Mark"}}, &[]CustomMap{{"id": int64(20)}}},
+	}, {
+		summary:  "basic types",
+		query:    "SELECT name AS &string, id AS &int FROM person WHERE name = $string AND id = $int",
+		types:    []any{},
+		inputs:   []any{"Fred", 30},
+		slices:   []any{&[]string{}, &[]*int{}},
+		expected: []any{&[]string{"Fred"}, &[]*int{ptr(30)}},
 	}}
 
 	tables, sqldb, err := personAndAddressDB()
@@ -743,28 +763,28 @@ func (s *PackageSuite) TestGetAllErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		slices:  []any{&[]*Address{}},
-		err:     `cannot populate slice: cannot get result: type "Address" does not appear in query, have: Person`,
+		err:     `cannot populate slice: cannot get result: output type "Address" does not appear in query, have: Person`,
 	}, {
 		summary: "wrong slice type (int)",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
 		slices:  []any{&[]int{}},
-		err:     `cannot populate slice: need slice of structs/maps, got slice of int`,
+		err:     `cannot populate slice: cannot get result: output type "int" does not appear in query, have: Person`,
 	}, {
-		summary: "wrong slice type (pointer to int)",
+		summary: "wrong slice type (pointer to func)",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
-		slices:  []any{&[]*int{}},
-		err:     `cannot populate slice: need slice of structs/maps, got slice of pointer to int`,
+		slices:  []any{&[]*func(){}},
+		err:     `cannot populate slice: need slice of valid types, got slice of pointer to func`,
 	}, {
 		summary: "wrong slice type (pointer to map)",
 		query:   "SELECT &M.name FROM person",
 		types:   []any{sqlair.M{}},
 		inputs:  []any{},
 		slices:  []any{&[]*sqlair.M{}},
-		err:     `cannot populate slice: need slice of structs/maps, got slice of pointer to map`,
+		err:     `cannot populate slice: need slice of valid types, got slice of pointer to map`,
 	}, {
 		summary: "output not referenced in query",
 		query:   "SELECT name FROM person",
@@ -1356,6 +1376,128 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 			c.Errorf("\ntest %q failed (Close):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
 		}
 	}
+}
+
+func (s *PackageSuite) TestBasicTypes(c *C) {
+	tables, sqldb, err := personAndAddressDB()
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	db := sqlair.NewDB(sqldb)
+	defer dropTables(c, db, tables...)
+
+	v1 := int(30)
+	o1 := int(0)
+	stmt, err := sqlair.Prepare("SELECT id AS &int FROM person WHERE id = $int")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v1).Get(&o1)
+	c.Assert(err, IsNil)
+	c.Assert(v1, Equals, o1)
+
+	v2 := int8(30)
+	o2 := int8(0)
+	stmt, err = sqlair.Prepare("SELECT id AS &int8 FROM person WHERE id = $int8")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v2).Get(&o2)
+	c.Assert(err, IsNil)
+	c.Assert(v2, Equals, o2)
+
+	v3 := int16(30)
+	o3 := int16(0)
+	stmt, err = sqlair.Prepare("SELECT id AS &int16 FROM person WHERE id = $int16")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v3).Get(&o3)
+	c.Assert(err, IsNil)
+	c.Assert(v3, Equals, o3)
+
+	v4 := int32(30)
+	o4 := int32(0)
+	stmt, err = sqlair.Prepare("SELECT id AS &int32 FROM person WHERE id = $int32")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v4).Get(&o4)
+	c.Assert(err, IsNil)
+	c.Assert(v4, Equals, o4)
+
+	v5 := int64(30)
+	o5 := int64(0)
+	stmt, err = sqlair.Prepare("SELECT id AS &int64 FROM person WHERE id = $int64")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v5).Get(&o5)
+	c.Assert(err, IsNil)
+	c.Assert(v5, Equals, o5)
+
+	v6 := uint(30)
+	o6 := uint(0)
+	stmt, err = sqlair.Prepare("SELECT id AS &uint FROM person WHERE id = $uint")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v6).Get(&o6)
+	c.Assert(err, IsNil)
+	c.Assert(v6, Equals, o6)
+
+	v7 := uint8(30)
+	o7 := uint8(0)
+	stmt, err = sqlair.Prepare("SELECT id AS &uint8 FROM person WHERE id = $uint8")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v7).Get(&o7)
+	c.Assert(err, IsNil)
+	c.Assert(v7, Equals, o7)
+
+	v8 := uint16(30)
+	o8 := uint16(0)
+	stmt, err = sqlair.Prepare("SELECT id AS &uint16 FROM person WHERE id = $uint16")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v8).Get(&o8)
+	c.Assert(err, IsNil)
+	c.Assert(v8, Equals, o8)
+
+	v9 := uint32(30)
+	o9 := uint32(0)
+	stmt, err = sqlair.Prepare("SELECT id AS &uint32 FROM person WHERE id = $uint32")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v9).Get(&o9)
+	c.Assert(err, IsNil)
+	c.Assert(v9, Equals, o9)
+
+	v10 := uint64(30)
+	o10 := uint64(0)
+	stmt, err = sqlair.Prepare("SELECT id AS &uint64 FROM person WHERE id = $uint64")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v10).Get(&o10)
+	c.Assert(err, IsNil)
+	c.Assert(v10, Equals, o10)
+
+	v11 := float32(30)
+	o11 := float32(0)
+	stmt, err = sqlair.Prepare("SELECT id AS &float32 FROM person WHERE id = $float32")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v11).Get(&o11)
+	c.Assert(err, IsNil)
+	c.Assert(v11, Equals, o11)
+
+	v12 := float64(30)
+	o12 := float64(0)
+	stmt, err = sqlair.Prepare("SELECT id AS &float64 FROM person WHERE id = $float64")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v12).Get(&o12)
+	c.Assert(err, IsNil)
+	c.Assert(v12, Equals, o12)
+
+	v13 := string("Fred")
+	o13 := string("")
+	stmt, err = sqlair.Prepare("SELECT name AS &string FROM person WHERE name = $string")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v13).Get(&o13)
+	c.Assert(err, IsNil)
+	c.Assert(v13, Equals, o13)
+
+	v14 := bool(true)
+	o14 := bool(false)
+	stmt, err = sqlair.Prepare("SELECT true AS &bool FROM person WHERE 1 = $bool")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt, v14).Get(&o14)
+	c.Assert(err, IsNil)
+	c.Assert(v14, Equals, o14)
 }
 
 // Because the Query struct did not contain references to either Statement or
