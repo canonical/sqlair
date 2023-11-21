@@ -1378,7 +1378,7 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 	}
 }
 
-func (s *PackageSuite) TestPrimativeTypes(c *C) {
+func (s *PackageSuite) TestPrimitiveTypes(c *C) {
 	tables, sqldb, err := personAndAddressDB()
 	if err != nil {
 		c.Fatal(err)
