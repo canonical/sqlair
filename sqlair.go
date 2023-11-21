@@ -435,7 +435,7 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 				k := elemType.Elem().Kind()
 				if k != reflect.Struct && !expr.IsPrimitiveKind(k) {
 					iter.Close()
-					return fmt.Errorf("need slice of structs, maps, or primitive types, got slice of pointer to %s", elemType.Elem().Kind())
+					return fmt.Errorf("need slice of valid types, got slice of pointer to %s", elemType.Elem().Kind())
 				}
 				outputArg = reflect.New(elemType.Elem())
 			case elemKind == reflect.Struct || expr.IsPrimitiveKind(elemKind):
@@ -444,7 +444,7 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 				outputArg = reflect.MakeMap(elemType)
 			default:
 				iter.Close()
-				return fmt.Errorf("need slice of structs, maps, or primitive types, got slice of %s", elemType.Kind())
+				return fmt.Errorf("need slice of valid types, got slice of %s", elemType.Kind())
 			}
 			outputArgs = append(outputArgs, outputArg.Interface())
 		}

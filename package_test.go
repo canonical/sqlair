@@ -777,14 +777,14 @@ func (s *PackageSuite) TestGetAllErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		slices:  []any{&[]*func(){}},
-		err:     `cannot populate slice: need slice of structs, maps, or primitive types, got slice of pointer to func`,
+		err:     `cannot populate slice: need slice of valid types, got slice of pointer to func`,
 	}, {
 		summary: "wrong slice type (pointer to map)",
 		query:   "SELECT &M.name FROM person",
 		types:   []any{sqlair.M{}},
 		inputs:  []any{},
 		slices:  []any{&[]*sqlair.M{}},
-		err:     `cannot populate slice: need slice of structs, maps, or primitive types, got slice of pointer to map`,
+		err:     `cannot populate slice: need slice of valid types, got slice of pointer to map`,
 	}, {
 		summary: "output not referenced in query",
 		query:   "SELECT name FROM person",
