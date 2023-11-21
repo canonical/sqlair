@@ -171,18 +171,11 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 		}
 		switch tm := typeMember.(type) {
 		case primitiveType, structField:
-			switch tm := tm.(type) {
-			case primitiveType:
-				if !outputVal.CanSet() {
-					return nil, nil, fmt.Errorf("internal error: cannot set %s", tm.primitiveType.Name())
-				}
-			case structField:
+			if tm, ok := tm.(structField); ok {
 				outputVal = outputVal.Field(tm.index)
-				if !outputVal.CanSet() {
-					return nil, nil, fmt.Errorf("internal error: cannot set field %s of struct %s", tm.name, tm.structType.Name())
-				}
-			default:
-				return nil, nil, fmt.Errorf(`internal error: unknown type: %T`, tm)
+			}
+			if !outputVal.CanSet() {
+				return nil, nil, fmt.Errorf("internal error: cannot set %s", tm.memberName())
 			}
 
 			pt := reflect.PointerTo(outputVal.Type())
