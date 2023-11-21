@@ -8,20 +8,9 @@ import (
 	"strings"
 )
 
-// Params returns the query parameters to pass with the SQL to a database.
-func (qv *QueryValues) Params() []any {
-	return qv.params
-}
-
-// HasOutputs returns true if the SQLair query contains at least one output
-// expression.
-func (qv *QueryValues) HasOutputs() bool {
-	return len(qv.outputs) > 0
-}
-
-// QueryValues contains all concrete values needed to run a SQLair query on a
+// PrimedQuery contains all concrete values needed to run a SQLair query on a
 // database.
-type QueryValues struct {
+type PrimedQuery struct {
 	sql string
 	// params are the query parameters to pass to the database.
 	params []any
@@ -29,9 +18,20 @@ type QueryValues struct {
 	outputs []typeMember
 }
 
-// BindInputs takes the SQLair input arguments and returns the QueryValues ready
+// Params returns the query parameters to pass with the SQL to a database.
+func (pq *PrimedQuery) Params() []any {
+	return pq.params
+}
+
+// HasOutputs returns true if the SQLair query contains at least one output
+// expression.
+func (pq *PrimedQuery) HasOutputs() bool {
+	return len(pq.outputs) > 0
+}
+
+// BindInputs takes the SQLair input arguments and returns the PrimedQuery ready
 // for use with the database.
-func (te *TypedExpr) BindInputs(args ...any) (qv *QueryValues, err error) {
+func (te *TypedExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("invalid input parameter: %s", err)
@@ -91,7 +91,7 @@ func (te *TypedExpr) BindInputs(args ...any) (qv *QueryValues, err error) {
 		}
 		params = append(params, sql.Named("sqlair_"+strconv.Itoa(i), val.Interface()))
 	}
-	return &QueryValues{outputs: te.outputs, sql: te.sql, params: params}, nil
+	return &PrimedQuery{outputs: te.outputs, sql: te.sql, params: params}, nil
 }
 
 var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
@@ -100,10 +100,10 @@ var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
 // successful call, the onSuccess function must be invoked. The outputArgs will
 // be populated with the query results. All the structs/maps/slices mentioned in
 // the query must be in outputArgs.
-func (qv *QueryValues) ScanArgs(columnNames []string, outputArgs []any) (scanArgs []any, onSuccess func(), err error) {
+func (pq *PrimedQuery) ScanArgs(columnNames []string, outputArgs []any) (scanArgs []any, onSuccess func(), err error) {
 	var typesInQuery = []string{}
 	var inQuery = make(map[reflect.Type]bool)
-	for _, typeMember := range qv.outputs {
+	for _, typeMember := range pq.outputs {
 		outerType := typeMember.outerType()
 		if ok := inQuery[outerType]; !ok {
 			inQuery[outerType] = true
@@ -160,11 +160,11 @@ func (qv *QueryValues) ScanArgs(columnNames []string, outputArgs []any) (scanArg
 			ptrs = append(ptrs, &x)
 			continue
 		}
-		if idx >= len(qv.outputs) {
-			return nil, nil, fmt.Errorf("internal error: sqlair column not in outputs (%d>=%d)", idx, len(qv.outputs))
+		if idx >= len(pq.outputs) {
+			return nil, nil, fmt.Errorf("internal error: sqlair column not in outputs (%d>=%d)", idx, len(pq.outputs))
 		}
 		columnInResult[idx] = true
-		typeMember := qv.outputs[idx]
+		typeMember := pq.outputs[idx]
 		outputVal, ok := typeDest[typeMember.outerType()]
 		if !ok {
 			return nil, nil, fmt.Errorf("type %q found in query but not passed to get", typeMember.outerType().Name())
@@ -193,9 +193,9 @@ func (qv *QueryValues) ScanArgs(columnNames []string, outputArgs []any) (scanArg
 		}
 	}
 
-	for i := 0; i < len(qv.outputs); i++ {
+	for i := 0; i < len(pq.outputs); i++ {
 		if !columnInResult[i] {
-			return nil, nil, fmt.Errorf(`query uses "&%s" outside of result context`, qv.outputs[i].outerType().Name())
+			return nil, nil, fmt.Errorf(`query uses "&%s" outside of result context`, pq.outputs[i].outerType().Name())
 		}
 	}
 
