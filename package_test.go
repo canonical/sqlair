@@ -1493,7 +1493,7 @@ func (s *PackageSuite) TestPrimitiveTypes(c *C) {
 
 	v14 := bool(true)
 	o14 := bool(false)
-	stmt, err = sqlair.Prepare("SELECT true AS &bool FROM person WHERE id > $bool")
+	stmt, err = sqlair.Prepare("SELECT true AS &bool FROM person WHERE 1 = $bool")
 	c.Assert(err, IsNil)
 	err = db.Query(nil, stmt, v14).Get(&o14)
 	c.Assert(err, IsNil)
