@@ -97,8 +97,14 @@ func (pq *PrimedQuery) ScanArgs(columnNames []string, outputArgs []any) (scanArg
 			return nil, nil, fmt.Errorf("type %q found in query but not passed to get", typeMember.OuterType().Name())
 		}
 
-		if ptrs, scanProxies, err = typeMember.AddScanTarget(outputVal, ptrs, scanProxies); err != nil {
+		ptr, scanProxy, err := typeMember.GetScanTarget(outputVal)
+		if err != nil {
 			return nil, nil, err
+		}
+
+		ptrs = append(ptrs, ptr)
+		if scanProxy != nil {
+			scanProxies = append(scanProxies, *scanProxy)
 		}
 	}
 

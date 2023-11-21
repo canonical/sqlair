@@ -76,7 +76,7 @@ func (te *TypedExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 			return nil, typeMissingError(outerType.Name(), typeNames)
 		}
 
-		val, err := typeMember.ValueForOuter(v)
+		val, err := typeMember.ValueFromOuter(v)
 		if err != nil {
 			return nil, err
 		}

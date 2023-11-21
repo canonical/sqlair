@@ -17,11 +17,14 @@ type Member interface {
 	// MemberName returns this member's name.
 	MemberName() string
 
-	// ValueForOuter returns the value represented by this
+	// ValueFromOuter returns the value represented by this
 	// type member within the input outer value.
-	ValueForOuter(reflect.Value) (reflect.Value, error)
+	ValueFromOuter(reflect.Value) (reflect.Value, error)
 
-	AddScanTarget(reflect.Value, []any, []ScanProxy) ([]any, []ScanProxy, error)
+	// GetScanTarget returns a pointer for the target of rows.Scan, and a
+	// ScanProxy reference in the event that we need to coerce that pointer
+	// into a struct field or map key.
+	GetScanTarget(reflect.Value) (any, *ScanProxy, error)
 }
 
 type mapKey struct {
@@ -29,15 +32,20 @@ type mapKey struct {
 	mapType reflect.Type
 }
 
+// OuterType returns the reflected type of the map
+// for which this Member implementation is a key.
 func (mk *mapKey) OuterType() reflect.Type {
 	return mk.mapType
 }
 
+// MemberName returns the map key.
 func (mk *mapKey) MemberName() string {
 	return mk.name
 }
 
-func (mk *mapKey) ValueForOuter(v reflect.Value) (reflect.Value, error) {
+// ValueFromOuter returns the value for this map key in the input reflected map.
+// An error is returned if the map does not contain this key.
+func (mk *mapKey) ValueFromOuter(v reflect.Value) (reflect.Value, error) {
 	val := v.MapIndex(reflect.ValueOf(mk.name))
 	if val.Kind() == reflect.Invalid {
 		return val, fmt.Errorf("map %q does not contain key %q", mk.OuterType().Name(), mk.name)
@@ -45,43 +53,57 @@ func (mk *mapKey) ValueForOuter(v reflect.Value) (reflect.Value, error) {
 	return val, nil
 }
 
-func (mk *mapKey) AddScanTarget(outVal reflect.Value, ptrs []any, proxies []ScanProxy) ([]any, []ScanProxy, error) {
+// GetScanTarget returns a pointer for the target of rows.Scan, and a ScanProxy
+// reference for setting that target as the value for this map key.
+func (mk *mapKey) GetScanTarget(outVal reflect.Value) (any, *ScanProxy, error) {
 	scanVal := reflect.New(mk.mapType.Elem()).Elem()
-	return append(ptrs, scanVal.Addr().Interface()),
-		append(proxies, ScanProxy{original: outVal, scan: scanVal, key: reflect.ValueOf(mk.name)}), nil
+	return scanVal.Addr().Interface(), &ScanProxy{original: outVal, scan: scanVal, key: reflect.ValueOf(mk.name)}, nil
 }
 
 // structField represents reflection information about a field from some struct type.
 type structField struct {
+	// name is the member name within the struct.
 	name string
 
-	// The type of the containing struct.
+	// structType is the reflected type of the struct containing this field.
 	structType reflect.Type
 
-	// Index for Type.Field.
+	// index for Type.Field.
 	index int
 
-	// The tag associated with this field
+	// tag is the struct tag associated with this field.
 	tag string
 
-	// OmitEmpty is true when "omitempty" is
+	// omitEmpty is true when "omitempty" is
 	// a property of the field's "db" tag.
 	omitEmpty bool
 }
 
+// OuterType returns the reflected type of struct in
+// which this Member implementation is a field.
 func (f *structField) OuterType() reflect.Type {
 	return f.structType
 }
 
+// MemberName returns the name of this struct field.
 func (f *structField) MemberName() string {
 	return f.tag
 }
 
-func (f *structField) ValueForOuter(v reflect.Value) (reflect.Value, error) {
+// ValueFromOuter returns the value of this field in the input reflected struct.
+func (f *structField) ValueFromOuter(v reflect.Value) (reflect.Value, error) {
 	return v.Field(f.index), nil
 }
 
-func (f *structField) AddScanTarget(outVal reflect.Value, ptrs []any, proxies []ScanProxy) ([]any, []ScanProxy, error) {
+// GetScanTarget returns a pointer for the target of rows.Scan, and a ScanProxy
+// reference in the event that we need to coerce that pointer into a struct
+// field.
+// Rows.Scan will return an error if it tries to scan NULL into a type that
+// cannot be set to nil, so for types that are not a pointer and do not
+// implement sql.Scanner, a pointer to them is generated and passed to
+// Rows.Scan. If Scan has set this pointer to nil the value is zeroed by
+// ScanProxy.OnSuccess.
+func (f *structField) GetScanTarget(outVal reflect.Value) (any, *ScanProxy, error) {
 	val := outVal.Field(f.index)
 	if !val.CanSet() {
 		return nil, nil, fmt.Errorf("internal error: cannot set field %s of struct %s", f.name, f.structType.Name())
@@ -89,11 +111,8 @@ func (f *structField) AddScanTarget(outVal reflect.Value, ptrs []any, proxies []
 
 	pt := reflect.PointerTo(val.Type())
 	if val.Type().Kind() != reflect.Pointer && !pt.Implements(scannerInterface) {
-		// Rows.Scan will return an error if it tries to scan NULL into a type that cannot be set to nil.
-		// For types that are not a pointer and do not implement sql.Scanner a pointer to them is generated
-		// and passed to Rows.Scan. If Scan has set this pointer to nil the value is zeroed.
 		scanVal := reflect.New(pt).Elem()
-		return append(ptrs, scanVal.Addr().Interface()), append(proxies, ScanProxy{original: val, scan: scanVal}), nil
+		return scanVal.Addr().Interface(), &ScanProxy{original: val, scan: scanVal}, nil
 	}
-	return append(ptrs, val.Addr().Interface()), proxies, nil
+	return val.Addr().Interface(), nil, nil
 }
