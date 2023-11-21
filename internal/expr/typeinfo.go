@@ -16,16 +16,16 @@ type typeMember interface {
 	memberName() string
 }
 
-type primitiveType struct {
-	primitiveType reflect.Type
+type basicType struct {
+	basicType reflect.Type
 }
 
-func (st primitiveType) outerType() reflect.Type {
-	return st.primitiveType
+func (st basicType) outerType() reflect.Type {
+	return st.basicType
 }
 
-func (st primitiveType) memberName() string {
-	panic("internal error: memberName called on primitiveType")
+func (st basicType) memberName() string {
+	panic("internal error: memberName called on basicType")
 }
 
 type mapKey struct {
@@ -93,7 +93,7 @@ func (si *structInfo) typ() reflect.Type {
 
 func (si *structInfo) typeMember(member string) (typeMember, error) {
 	if member == "" {
-		return nil, fmt.Errorf(`unqualified type %q must be a primitive type in`, si.structType.Name())
+		return nil, fmt.Errorf(`unqualified type %q must be a basic type in`, si.structType.Name())
 	}
 	tm, ok := si.tagToField[member]
 	if !ok {
@@ -137,28 +137,28 @@ func (mi *mapInfo) getAllMembers() ([]typeMember, error) {
 
 var _ typeInfo = &mapInfo{}
 
-type primitiveTypeInfo struct {
-	primitiveType reflect.Type
+type basicTypeInfo struct {
+	basicType reflect.Type
 }
 
-func (pti *primitiveTypeInfo) typ() reflect.Type {
-	return pti.primitiveType
+func (pti *basicTypeInfo) typ() reflect.Type {
+	return pti.basicType
 }
 
-func (pti *primitiveTypeInfo) typeMember(member string) (typeMember, error) {
+func (pti *basicTypeInfo) typeMember(member string) (typeMember, error) {
 	if member != "" {
-		return nil, fmt.Errorf(`cannot specify member of primitive type %q`, pti.primitiveType.Name())
+		return nil, fmt.Errorf(`cannot specify member of basic type %q`, pti.basicType.Name())
 	}
-	return primitiveType{primitiveType: pti.primitiveType}, nil
+	return basicType{basicType: pti.basicType}, nil
 }
 
-func (pti *primitiveTypeInfo) getAllMembers() ([]typeMember, error) {
-	return nil, fmt.Errorf(`internal error: primitive type used in invalid context`)
+func (pti *basicTypeInfo) getAllMembers() ([]typeMember, error) {
+	return nil, fmt.Errorf(`internal error: basic type used in invalid context`)
 }
 
-var _ typeInfo = &primitiveTypeInfo{}
+var _ typeInfo = &basicTypeInfo{}
 
-var primitiveKinds = map[reflect.Kind]bool{
+var basicKinds = map[reflect.Kind]bool{
 	reflect.String:  true,
 	reflect.Bool:    true,
 	reflect.Int:     true,
@@ -175,11 +175,11 @@ var primitiveKinds = map[reflect.Kind]bool{
 	reflect.Float64: true,
 }
 
-func IsPrimitiveKind(k reflect.Kind) bool {
-	return primitiveKinds[k]
+func IsBasicKind(k reflect.Kind) bool {
+	return basicKinds[k]
 }
 
-var primitiveTypes = map[string]any{
+var basicTypes = map[string]any{
 	"string":  "",
 	"bool":    false,
 	"uint":    uint(0),
@@ -197,8 +197,8 @@ var primitiveTypes = map[string]any{
 }
 
 func lookupType(ti typeNameToInfo, typeName string) (typeInfo, bool) {
-	if v, ok := primitiveTypes[typeName]; ok {
-		return &primitiveTypeInfo{primitiveType: reflect.TypeOf(v)}, true
+	if v, ok := basicTypes[typeName]; ok {
+		return &basicTypeInfo{basicType: reflect.TypeOf(v)}, true
 	}
 	v, ok := ti[typeName]
 	return v, ok
@@ -239,8 +239,8 @@ func getTypeInfo(value any) (typeInfo, error) {
 // reflect.Value that is specifically required for SQLair operation.
 func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 	switch k := t.Kind(); {
-	case IsPrimitiveKind(k):
-		return &primitiveTypeInfo{primitiveType: t}, nil
+	case IsBasicKind(k):
+		return &basicTypeInfo{basicType: t}, nil
 	case k == reflect.Map:
 		if t.Key().Kind() != reflect.String {
 			return nil, fmt.Errorf(`map type %s must have key type string, found type %s`, t.Name(), t.Key().Kind())

@@ -312,19 +312,19 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	[]any{HardMaths{}},
 	"INSERT INTO arr VALUES (ARRAY[[1,2],[@sqlair_0,4]], ARRAY[[5,6],[@sqlair_1,8]]);",
 }, {
-	"all primitive types",
+	"all basic types",
 	"SELECT (stringCol AS &string), (boolCol AS &bool), (uintCol AS &uint), (uint8Col AS &uint8), (uint16Col AS &uint16), (uint32Col AS &uint32), (uint64Col AS &uint64), (intCol AS &int), (int8Col AS &int8), (int16Col AS &int16), (int32Col AS &int32), (int64Col AS &int64), (float32Col AS &float32), (float64Col AS &float64) FROM t",
 	"[Bypass[SELECT (] Output[[stringCol] [string]] Bypass[), (] Output[[boolCol] [bool]] Bypass[), (] Output[[uintCol] [uint]] Bypass[), (] Output[[uint8Col] [uint8]] Bypass[), (] Output[[uint16Col] [uint16]] Bypass[), (] Output[[uint32Col] [uint32]] Bypass[), (] Output[[uint64Col] [uint64]] Bypass[), (] Output[[intCol] [int]] Bypass[), (] Output[[int8Col] [int8]] Bypass[), (] Output[[int16Col] [int16]] Bypass[), (] Output[[int32Col] [int32]] Bypass[), (] Output[[int64Col] [int64]] Bypass[), (] Output[[float32Col] [float32]] Bypass[), (] Output[[float64Col] [float64]] Bypass[) FROM t]]",
 	[]any{},
 	"SELECT (stringCol AS _sqlair_0), (boolCol AS _sqlair_1), (uintCol AS _sqlair_2), (uint8Col AS _sqlair_3), (uint16Col AS _sqlair_4), (uint32Col AS _sqlair_5), (uint64Col AS _sqlair_6), (intCol AS _sqlair_7), (int8Col AS _sqlair_8), (int16Col AS _sqlair_9), (int32Col AS _sqlair_10), (int64Col AS _sqlair_11), (float32Col AS _sqlair_12), (float64Col AS _sqlair_13) FROM t",
 }, {
-	"custom primitive types",
+	"custom basic types",
 	"SELECT name AS &nameStr, address AS &addressStr, id AS &idInt FROM t WHERE name = $nameStr AND address = $addressStr AND id = $idInt",
 	"[Bypass[SELECT ] Output[[name] [nameStr]] Bypass[, ] Output[[address] [addressStr]] Bypass[, ] Output[[id] [idInt]] Bypass[ FROM t WHERE name = ] Input[nameStr] Bypass[ AND address = ] Input[addressStr] Bypass[ AND id = ] Input[idInt]]",
 	[]any{(idInt)(0), (addressStr)(""), (nameStr)("")},
 	"SELECT name AS _sqlair_0, address AS _sqlair_1, id AS _sqlair_2 FROM t WHERE name = @sqlair_0 AND address = @sqlair_1 AND id = @sqlair_2",
 }, {
-	"primitive types passed to prepare unnecessarily",
+	"basic types passed to prepare unnecessarily",
 	"SELECT id AS &int64, id AS &uint16 FROM t",
 	"[Bypass[SELECT ] Output[[id] [int64]] Bypass[, ] Output[[id] [uint16]] Bypass[ FROM t]]",
 	[]any{int64(0), uint16(0)},
@@ -563,39 +563,39 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT &Person FROM t",
 		prepareArgs: []any{Person{}},
-		err:         `cannot prepare statement: output expression: unqualified type "Person" must be a primitive type in: &Person`,
+		err:         `cannot prepare statement: output expression: unqualified type "Person" must be a basic type in: &Person`,
 	}, {
 		query:       "SELECT (*) AS (&Person) FROM t",
 		prepareArgs: []any{Person{}},
-		err:         `cannot prepare statement: output expression: unqualified type "Person" must be a primitive type in: (*) AS (&Person)`,
+		err:         `cannot prepare statement: output expression: unqualified type "Person" must be a basic type in: (*) AS (&Person)`,
 	}, {
 		query:       "SELECT foo FROM t WHERE x = $Person",
 		prepareArgs: []any{Person{}},
-		err:         `cannot prepare statement: input expression: unqualified type "Person" must be a primitive type in: $Person`,
+		err:         `cannot prepare statement: input expression: unqualified type "Person" must be a basic type in: $Person`,
 	}, {
 		query:       "SELECT &string FROM t",
 		prepareArgs: []any{},
-		err:         `cannot prepare statement: output expression: column not specified for primitive type: &string`,
+		err:         `cannot prepare statement: output expression: column not specified for basic type: &string`,
 	}, {
 		query:       "SELECT &int FROM t",
 		prepareArgs: []any{},
-		err:         `cannot prepare statement: output expression: column not specified for primitive type: &int`,
+		err:         `cannot prepare statement: output expression: column not specified for basic type: &int`,
 	}, {
 		query:       "SELECT * AS &string FROM t",
 		prepareArgs: []any{},
-		err:         `cannot prepare statement: output expression: column not specified for primitive type: * AS &string`,
+		err:         `cannot prepare statement: output expression: column not specified for basic type: * AS &string`,
 	}, {
 		query:       "SELECT * AS &string.* FROM t",
 		prepareArgs: []any{},
-		err:         `cannot prepare statement: output expression: column not specified for primitive type: * AS &string.*`,
+		err:         `cannot prepare statement: output expression: column not specified for basic type: * AS &string.*`,
 	}, {
 		query:       "SELECT name AS &string.* FROM t",
 		prepareArgs: []any{},
-		err:         `cannot prepare statement: output expression: cannot use star with primitive type "string" in expression: name AS &string.*`,
+		err:         `cannot prepare statement: output expression: cannot use star with basic type "string" in expression: name AS &string.*`,
 	}, {
 		query:       "SELECT name AS &string.name FROM t",
 		prepareArgs: []any{},
-		err:         `cannot prepare statement: output expression: cannot specify member of primitive type "string": name AS &string.name`,
+		err:         `cannot prepare statement: output expression: cannot specify member of basic type "string": name AS &string.name`,
 	}, {
 		query:       "SELECT name AS &string, address AS &string FROM t",
 		prepareArgs: []any{},
@@ -603,7 +603,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}, {
 		query:       "SELECT foo FROM t WHERE x = $string.name",
 		prepareArgs: []any{},
-		err:         `cannot prepare statement: input expression: cannot specify member of primitive type "string": $string.name`,
+		err:         `cannot prepare statement: input expression: cannot specify member of basic type "string": $string.name`,
 	}, {
 		query:       "SELECT foo FROM t WHERE x = $S",
 		prepareArgs: []any{},

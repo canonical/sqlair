@@ -527,7 +527,7 @@ func (s *PackageSuite) TestValidGet(c *C) {
 		outputs:  []any{sqlair.M{}},
 		expected: []any{sqlair.M{"name": "Fred"}},
 	}, {
-		summary:  "primitive types",
+		summary:  "basic types",
 		query:    "SELECT name AS &string, id AS &int FROM person WHERE name = $string AND id = $int",
 		types:    []any{},
 		inputs:   []any{"Fred", 30},
@@ -685,7 +685,7 @@ func (s *PackageSuite) TestValidGetAll(c *C) {
 		slices:   []any{&[]sqlair.M{}, &[]CustomMap{}},
 		expected: []any{&[]sqlair.M{{"name": "Mark"}}, &[]CustomMap{{"id": int64(20)}}},
 	}, {
-		summary:  "primitive types",
+		summary:  "basic types",
 		query:    "SELECT name AS &string, id AS &int FROM person WHERE name = $string AND id = $int",
 		types:    []any{},
 		inputs:   []any{"Fred", 30},
@@ -1378,7 +1378,7 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 	}
 }
 
-func (s *PackageSuite) TestPrimitiveTypes(c *C) {
+func (s *PackageSuite) TestBasicTypes(c *C) {
 	tables, sqldb, err := personAndAddressDB()
 	if err != nil {
 		c.Fatal(err)

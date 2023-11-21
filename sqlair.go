@@ -433,12 +433,12 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 			switch elemKind := elemType.Kind(); {
 			case elemKind == reflect.Pointer:
 				k := elemType.Elem().Kind()
-				if k != reflect.Struct && !expr.IsPrimitiveKind(k) {
+				if k != reflect.Struct && !expr.IsBasicKind(k) {
 					iter.Close()
 					return fmt.Errorf("need slice of valid types, got slice of pointer to %s", elemType.Elem().Kind())
 				}
 				outputArg = reflect.New(elemType.Elem())
-			case elemKind == reflect.Struct || expr.IsPrimitiveKind(elemKind):
+			case elemKind == reflect.Struct || expr.IsBasicKind(elemKind):
 				outputArg = reflect.New(elemType)
 			case elemKind == reflect.Map:
 				outputArg = reflect.MakeMap(elemType)
@@ -456,7 +456,7 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 			switch k := sliceVals[i].Type().Elem().Kind(); {
 			case k == reflect.Pointer || k == reflect.Map:
 				sliceVals[i] = reflect.Append(sliceVals[i], reflect.ValueOf(outputArg))
-			case k == reflect.Struct || expr.IsPrimitiveKind(k):
+			case k == reflect.Struct || expr.IsBasicKind(k):
 				sliceVals[i] = reflect.Append(sliceVals[i], reflect.ValueOf(outputArg).Elem())
 			default:
 				iter.Close()

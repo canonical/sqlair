@@ -127,8 +127,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnAccessor, 
 			if !ok {
 				return nil, nil, typeMissingError(t.typeName, getKeys(ti))
 			}
-			if _, ok := info.(*primitiveTypeInfo); ok {
-				return nil, nil, fmt.Errorf(`column not specified for primitive type`)
+			if _, ok := info.(*basicTypeInfo); ok {
+				return nil, nil, fmt.Errorf(`column not specified for basic type`)
 			}
 			if t.memberName == "*" {
 				// Generate asterisk columns.
@@ -161,8 +161,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnAccessor, 
 		if !ok {
 			return nil, nil, typeMissingError(p.targetTypes[0].typeName, getKeys(ti))
 		}
-		if _, ok := info.(*primitiveTypeInfo); ok {
-			return nil, nil, fmt.Errorf(`cannot use star with primitive type %q in expression`, info.typ().Name())
+		if _, ok := info.(*basicTypeInfo); ok {
+			return nil, nil, fmt.Errorf(`cannot use star with basic type %q in expression`, info.typ().Name())
 		}
 		for _, c := range p.sourceColumns {
 			tm, err := info.typeMember(c.columnName)
@@ -221,7 +221,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 		}
 		t := reflect.TypeOf(arg)
 		switch kind := t.Kind(); {
-		case kind == reflect.Struct || kind == reflect.Map || IsPrimitiveKind(kind):
+		case kind == reflect.Struct || kind == reflect.Map || IsBasicKind(kind):
 			if t.Name() == "" {
 				return nil, fmt.Errorf("cannot use anonymous %s", t.Kind())
 			}
@@ -275,7 +275,7 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 					switch tm.(type) {
 					case structField, mapKey:
 						return nil, fmt.Errorf("member %q of type %q appears more than once in output expressions", tm.memberName(), tm.outerType().Name())
-					case primitiveType:
+					case basicType:
 						return nil, fmt.Errorf("type %q appears more than once in output expressions", tm.outerType().Name())
 					default:
 						return nil, fmt.Errorf(`internal error: unknown type: %T`, tm)
