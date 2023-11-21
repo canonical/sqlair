@@ -12,7 +12,7 @@ type expression interface {
 	String() string
 
 	// marker method
-	expression()
+	expr()
 }
 
 // valueAccessor stores information for accessing a Go value. It consists of a
@@ -49,7 +49,7 @@ func (p *inputExpr) String() string {
 	return fmt.Sprintf("Input[%+v]", p.sourceType)
 }
 
-func (p *inputExpr) expression() {}
+func (p *inputExpr) expr() {}
 
 // outputExpr represents a named target output variable in the SQL expression,
 // as well as the source table and column where it will be read from.
@@ -63,7 +63,7 @@ func (p *outputExpr) String() string {
 	return fmt.Sprintf("Output[%+v %+v]", p.sourceColumns, p.targetTypes)
 }
 
-func (p *outputExpr) expression() {}
+func (p *outputExpr) expr() {}
 
 // bypass represents part of the expression that we want to pass to the backend
 // database verbatim.
@@ -75,7 +75,7 @@ func (p *bypass) String() string {
 	return "Bypass[" + p.chunk + "]"
 }
 
-func (p *bypass) expression() {}
+func (p *bypass) expr() {}
 
 type Parser struct {
 	input string
