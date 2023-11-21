@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
-	"strconv"
 	"strings"
 )
 
@@ -27,71 +26,6 @@ func (pq *PrimedQuery) Params() []any {
 // expression.
 func (pq *PrimedQuery) HasOutputs() bool {
 	return len(pq.outputs) > 0
-}
-
-// BindInputs takes the SQLair input arguments and returns the PrimedQuery ready
-// for use with the database.
-func (te *TypedExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
-	defer func() {
-		if err != nil {
-			err = fmt.Errorf("invalid input parameter: %s", err)
-		}
-	}()
-
-	var inQuery = make(map[reflect.Type]bool)
-	for _, typeMember := range te.inputs {
-		inQuery[typeMember.outerType()] = true
-	}
-
-	var typeValue = make(map[reflect.Type]reflect.Value)
-	var typeNames []string
-	for _, arg := range args {
-		v := reflect.ValueOf(arg)
-		if v.Kind() == reflect.Invalid || (v.Kind() == reflect.Pointer && v.IsNil()) {
-			return nil, fmt.Errorf("need struct or map, got nil")
-		}
-		v = reflect.Indirect(v)
-		t := v.Type()
-		if v.Kind() != reflect.Struct && v.Kind() != reflect.Map {
-			return nil, fmt.Errorf("need struct or map, got %s", t.Kind())
-		}
-		if _, ok := typeValue[t]; ok {
-			return nil, fmt.Errorf("type %q provided more than once", t.Name())
-		}
-		typeValue[t] = v
-		typeNames = append(typeNames, t.Name())
-		if !inQuery[t] {
-			// Check if we have a type with the same name from a different package.
-			for _, typeMember := range te.inputs {
-				if t.Name() == typeMember.outerType().Name() {
-					return nil, fmt.Errorf("parameter with type %q missing, have type with same name: %q", typeMember.outerType().String(), t.String())
-				}
-			}
-			return nil, fmt.Errorf("%s not referenced in query", t.Name())
-		}
-	}
-
-	// Query parameters.
-	params := []any{}
-	for i, typeMember := range te.inputs {
-		outerType := typeMember.outerType()
-		v, ok := typeValue[outerType]
-		if !ok {
-			return nil, typeMissingError(outerType.Name(), typeNames)
-		}
-		var val reflect.Value
-		switch tm := typeMember.(type) {
-		case *structField:
-			val = v.Field(tm.index)
-		case *mapKey:
-			val = v.MapIndex(reflect.ValueOf(tm.name))
-			if val.Kind() == reflect.Invalid {
-				return nil, fmt.Errorf(`map %q does not contain key %q`, outerType.Name(), tm.name)
-			}
-		}
-		params = append(params, sql.Named("sqlair_"+strconv.Itoa(i), val.Interface()))
-	}
-	return &PrimedQuery{outputs: te.outputs, sql: te.sql, params: params}, nil
 }
 
 var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
