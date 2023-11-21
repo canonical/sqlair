@@ -1525,7 +1525,6 @@ func (s *PackageSuite) TestRaceConditionFinalizer(c *C) {
 	// Assert that sql.Stmt was not closed early.
 	c.Assert(q.Run(), IsNil)
 }
-
 func (s *PackageSuite) TestRaceConditionFinalizerTX(c *C) {
 	var q *sqlair.Query
 	// Drop all the values except the query itself.
