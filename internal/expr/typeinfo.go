@@ -153,7 +153,7 @@ func (pti *primitiveTypeInfo) typeMember(member string) (typeMember, error) {
 }
 
 func (pti *primitiveTypeInfo) getAllMembers() ([]typeMember, error) {
-	return nil, fmt.Errorf(`primitive type used in invalid context`)
+	return nil, fmt.Errorf(`internal error: primitive type used in invalid context`)
 }
 
 var _ typeInfo = &primitiveTypeInfo{}

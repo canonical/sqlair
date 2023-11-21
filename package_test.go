@@ -105,6 +105,10 @@ CREATE TABLE address (
 	return []string{"person", "address"}, db, nil
 }
 
+func ptr[T any](val T) *T {
+	return &val
+}
+
 func (s *PackageSuite) TestValidIterGet(c *C) {
 	type StringMap map[string]string
 	type lowerCaseMap map[string]any
@@ -417,11 +421,6 @@ func (s *PackageSuite) TestNulls(c *C) {
 		Fullname   ScannerString `db:"name"`
 		PostalCode ScannerInt    `db:"address_id"`
 	}
-	var scannerString ScannerString
-	var scannerInt ScannerInt
-	scannerIntExpected := (ScannerInt)(666)
-	scannerStringExpected := (ScannerString)("ScannerString scanned well!")
-
 	var tests = []struct {
 		summary  string
 		query    string
@@ -462,8 +461,8 @@ func (s *PackageSuite) TestNulls(c *C) {
 		query:    `SELECT name AS &ScannerString, id AS &ScannerInt FROM person WHERE name = "Nully"`,
 		types:    []any{(ScannerString)(""), (ScannerInt)(0)},
 		inputs:   []any{},
-		outputs:  []any{&scannerInt, &scannerString},
-		expected: []any{&scannerIntExpected, &scannerStringExpected},
+		outputs:  []any{ptr(ScannerInt(0)), ptr(ScannerString(""))},
+		expected: []any{ptr(ScannerInt(666)), ptr(ScannerString("ScannerString scanned well!"))},
 	}}
 
 	tables, sqldb, err := personAndAddressDB()
@@ -499,10 +498,6 @@ func (s *PackageSuite) TestNulls(c *C) {
 }
 
 func (s *PackageSuite) TestValidGet(c *C) {
-	stringVar := ""
-	intVar := 0
-	stringExpected := "Fred"
-	intExpected := 30
 	var tests = []struct {
 		summary  string
 		query    string
@@ -536,8 +531,8 @@ func (s *PackageSuite) TestValidGet(c *C) {
 		query:    "SELECT name AS &string, id AS &int FROM person WHERE name = $string AND id = $int",
 		types:    []any{},
 		inputs:   []any{"Fred", 30},
-		outputs:  []any{&stringVar, &intVar},
-		expected: []any{&stringExpected, &intExpected},
+		outputs:  []any{ptr(""), ptr(0)},
+		expected: []any{ptr("Fred"), ptr(30)},
 	}}
 
 	tables, sqldb, err := personAndAddressDB()
@@ -640,7 +635,6 @@ func (s *PackageSuite) TestErrNoRows(c *C) {
 }
 
 func (s *PackageSuite) TestValidGetAll(c *C) {
-	var intExpected = 30
 	var tests = []struct {
 		summary  string
 		query    string
@@ -696,7 +690,7 @@ func (s *PackageSuite) TestValidGetAll(c *C) {
 		types:    []any{},
 		inputs:   []any{"Fred", 30},
 		slices:   []any{&[]string{}, &[]*int{}},
-		expected: []any{&[]string{"Fred"}, &[]*int{&intExpected}},
+		expected: []any{&[]string{"Fred"}, &[]*int{ptr(30)}},
 	}}
 
 	tables, sqldb, err := personAndAddressDB()
