@@ -6,13 +6,13 @@ import (
 	"strings"
 )
 
-// expr represents a parsed node of the SQLair query's AST.
-type expr interface {
+// expression represents a parsed node of the SQLair query's AST.
+type expression interface {
 	// String returns a text representation for debugging and testing purposes.
 	String() string
 
 	// marker method
-	expr()
+	expression()
 }
 
 // valueAccessor stores information for accessing a Go value. It consists of a
@@ -49,7 +49,7 @@ func (p *inputExpr) String() string {
 	return fmt.Sprintf("Input[%+v]", p.sourceType)
 }
 
-func (p *inputExpr) expr() {}
+func (p *inputExpr) expression() {}
 
 // outputExpr represents a named target output variable in the SQL expression,
 // as well as the source table and column where it will be read from.
@@ -63,10 +63,10 @@ func (p *outputExpr) String() string {
 	return fmt.Sprintf("Output[%+v %+v]", p.sourceColumns, p.targetTypes)
 }
 
-func (p *outputExpr) expr() {}
+func (p *outputExpr) expression() {}
 
-// bypass represents expr of the expression that we want to pass to the
-// backend database verbatim.
+// bypass represents part of the expression that we want to pass to the backend
+// database verbatim.
 type bypass struct {
 	chunk string
 }
@@ -75,21 +75,22 @@ func (p *bypass) String() string {
 	return "Bypass[" + p.chunk + "]"
 }
 
-func (p *bypass) expr() {}
+func (p *bypass) expression() {}
 
 type Parser struct {
 	input string
 	pos   int
-	// prevExprEnd is the value of pos when we last finished parsing a expr.
+	// prevExprEnd is the value of pos when we last finished parsing a
+	// expression.
 	prevExprEnd int
-	// currentExprStart is the value of pos just before we started parsing the expr
-	// under pos. We maintain currentExprStart >= prevExprEnd.
+	// currentExprStart is the value of pos just before we started parsing the
+	// expression under pos. We maintain currentExprStart >= prevExprEnd.
 	currentExprStart int
-	exprs            []expr
+	exprs            []expression
 	// lineNum is the number of the current line of the input.
 	lineNum int
-	// lineStart is the position of the first byte of the current line in
-	// the input.
+	// lineStart is the position of the first byte of the current line in the
+	// input.
 	lineStart int
 }
 
@@ -103,7 +104,7 @@ func (p *Parser) init(input string) {
 	p.pos = 0
 	p.prevExprEnd = 0
 	p.currentExprStart = 0
-	p.exprs = []expr{}
+	p.exprs = []expression{}
 	p.lineNum = 1
 	p.lineStart = 0
 }
@@ -135,15 +136,15 @@ func errorAt(err error, line int, column int, input string) error {
 	}
 }
 
-// A checkpoint struct for saving parser state to restore later. We only use
-// a checkpoint within an attempted parsing of an expr, not at a higher level
-// since we don't keep track of the exprs in the checkpoint.
+// A checkpoint struct for saving parser state to restore later. We only use a
+// checkpoint within an attempted parsing of an expression, not at a higher
+// level since we don't keep track of the expressions in the checkpoint.
 type checkpoint struct {
 	parser           *Parser
 	pos              int
 	prevExprEnd      int
 	currentExprStart int
-	exprs            []expr
+	exprs            []expression
 	lineNum          int
 	lineStart        int
 }
@@ -176,7 +177,7 @@ func (cp *checkpoint) restore() {
 // ParsedExpr is the AST representation of SQLair query. It contains only
 // information encoded in the SQLair query string.
 type ParsedExpr struct {
-	exprs []expr
+	exprs []expression
 }
 
 // String returns a textual representation of the AST contained in the
@@ -194,11 +195,11 @@ func (pe *ParsedExpr) String() string {
 	return out.String()
 }
 
-// add pushes the parsed expr to the list of exprs along with the bypass chunk
-// that stretches from the end of the previous expr to the beginning of this
-// expr.
-func (p *Parser) add(expr expr) {
-	// Add the string between the previous I/O expr and the current expr.
+// add pushes the parsed expression to the list of expressions along with the
+// bypass chunk that stretches from the end of the previous expression to the
+// beginning of this expression.
+func (p *Parser) add(expr expression) {
+	// Add the string between the previous I/O expression and the current expression.
 	if p.prevExprEnd != p.currentExprStart {
 		p.exprs = append(p.exprs,
 			&bypass{p.input[p.prevExprEnd:p.currentExprStart]})
@@ -208,14 +209,14 @@ func (p *Parser) add(expr expr) {
 		p.exprs = append(p.exprs, expr)
 	}
 
-	// Save this position at the end of the expr.
+	// Save this position at the end of the expression.
 	p.prevExprEnd = p.pos
 	// Ensure that currentExprStart >= prevExprEnd.
 	p.currentExprStart = p.pos
 }
 
-// skipComment jumps over comments as defined by the SQLite spec.
-// If no comment is found the parser state is left unchanged.
+// skipComment jumps over comments as defined by the SQLite spec. If no comment
+// is found the parser state is left unchanged.
 func (p *Parser) skipComment() bool {
 	cp := p.save()
 	if p.skipByte('-') || p.skipByte('/') {
@@ -349,7 +350,8 @@ func (p *Parser) skipStringLiteral() (bool, error) {
 	return false, nil
 }
 
-// peekByte returns true if the current byte equals the one passed as parameter.
+// peekByte returns true if the current byte equals the one passed as
+// parameter.
 func (p *Parser) peekByte(b byte) bool {
 	return p.pos < len(p.input) && p.input[p.pos] == b
 }
