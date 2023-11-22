@@ -340,8 +340,8 @@ func (s *ExprSuite) TestExpr(c *C) {
 	parser := expr.NewParser()
 	for i, t := range tests {
 		var (
-			parsedExpr  *expr.ParsedExpr
-			typedExpr   *expr.TypedExpr
+			parsedExpr  *expr.ParsedExprs
+			typedExpr   *expr.TypedExprs
 			primedQuery *expr.PrimedQuery
 			err         error
 		)

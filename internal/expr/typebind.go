@@ -29,9 +29,9 @@ func markerIndex(s string) (int, bool) {
 	return 0, false
 }
 
-// TypedExpr represents a SQLair query bound to concrete Go types. It contains
+// TypedExprs represents a SQLair query bound to concrete Go types. It contains
 // all the type information needed by SQLair.
-type TypedExpr []typedExpression
+type TypedExprs []typedExpression
 
 // typedExpr represents a part of a valid SQLair statement. It contains
 // information to generate the SQL for the part and to access Go types
@@ -42,7 +42,7 @@ type typedExpression interface {
 
 // BindInputs takes the SQLair input arguments and returns the PrimedQuery ready
 // for use with the database.
-func (te *TypedExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
+func (tes *TypedExprs) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("invalid input parameter: %s", err)
@@ -69,20 +69,22 @@ func (te *TypedExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 	// Generate SQL and query parameters.
 	params := []any{}
 	outputs := []typeinfo.Member{}
-	typeUsed := map[reflect.Type]bool{}
+	argTypeUsed := map[reflect.Type]bool{}
 	inCount := 0
 	outCount := 0
 	sqlStr := bytes.Buffer{}
-	for _, typedExpr := range *te {
-		switch typedExpr := typedExpr.(type) {
+	for _, te := range *tes {
+		switch te := te.(type) {
 		case *typedInputExpr:
-			typeMember := typedExpr.input
+			typeMember := te.input
 			outerType := typeMember.OuterType()
+
 			v, ok := typeToValue[outerType]
 			if !ok {
 				return nil, missingInputError(outerType, typeToValue)
 			}
-			typeUsed[outerType] = true
+
+			argTypeUsed[outerType] = true
 
 			val, err := typeMember.ValueFromOuter(v)
 			if err != nil {
@@ -90,27 +92,26 @@ func (te *TypedExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 			}
 			params = append(params, sql.Named("sqlair_"+strconv.Itoa(inCount), val.Interface()))
 
-			// Generate input SQL.
 			sqlStr.WriteString("@sqlair_" + strconv.Itoa(inCount))
 			inCount++
 		case *typedOutputExpr:
-			for i, oc := range typedExpr.outputColumns {
+			for i, oc := range te.outputColumns {
 				sqlStr.WriteString(oc.sql)
 				sqlStr.WriteString(" AS ")
 				sqlStr.WriteString(markerName(outCount))
-				if i != len(typedExpr.outputColumns)-1 {
+				if i != len(te.outputColumns)-1 {
 					sqlStr.WriteString(", ")
 				}
 				outCount++
 				outputs = append(outputs, oc.tm)
 			}
 		case *bypass:
-			sqlStr.WriteString(typedExpr.chunk)
+			sqlStr.WriteString(te.chunk)
 		}
 	}
 
 	for argType := range typeToValue {
-		if !typeUsed[argType] {
+		if !argTypeUsed[argType] {
 			return nil, fmt.Errorf("%s not referenced in query", argType.Name())
 		}
 	}
@@ -323,7 +324,7 @@ type typeNameToInfo map[string]typeinfo.Info
 // BindTypes takes samples of all types mentioned in the SQLair expressions of
 // the query. The expressions are checked for validity and required information
 // is generated from the types.
-func (pe *ParsedExpr) BindTypes(args ...any) (te *TypedExpr, err error) {
+func (pe *ParsedExprs) BindTypes(args ...any) (te *TypedExprs, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("cannot prepare statement: %s", err)
@@ -393,6 +394,6 @@ func (pe *ParsedExpr) BindTypes(args ...any) (te *TypedExpr, err error) {
 			return nil, fmt.Errorf("internal error: unknown query expr type %T", expr)
 		}
 	}
-	typedExpr := TypedExpr(typedExprs)
+	typedExpr := TypedExprs(typedExprs)
 	return &typedExpr, nil
 }

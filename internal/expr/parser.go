@@ -178,13 +178,13 @@ func (cp *checkpoint) restore() {
 	cp.parser.lineStart = cp.lineStart
 }
 
-// ParsedExpr is the AST representation of SQLair query. It contains only
+// ParsedExprs is the AST representation of SQLair query. It contains only
 // information encoded in the SQLair query string.
-type ParsedExpr []expression
+type ParsedExprs []expression
 
 // String returns a textual representation of the AST contained in the
-// ParsedExpr for debugging and testing purposes.
-func (pe *ParsedExpr) String() string {
+// ParsedExprs for debugging and testing purposes.
+func (pe *ParsedExprs) String() string {
 	var out bytes.Buffer
 	out.WriteString("[")
 	for i, p := range *pe {
@@ -252,8 +252,8 @@ func (p *Parser) skipComment() bool {
 	return false
 }
 
-// Parse takes an SQLair query string and returns a ParsedExpr.
-func (p *Parser) Parse(input string) (pe *ParsedExpr, err error) {
+// Parse takes an SQLair query string and returns a ParsedExprs.
+func (p *Parser) Parse(input string) (pe *ParsedExprs, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("cannot parse expression: %s", err)
@@ -291,8 +291,8 @@ func (p *Parser) Parse(input string) (pe *ParsedExpr, err error) {
 
 	// Add any remaining unparsed string input to the parser.
 	p.add(nil)
-	parsedExpr := ParsedExpr(p.exprs)
-	return &parsedExpr, nil
+	parsedExprs := ParsedExprs(p.exprs)
+	return &parsedExprs, nil
 }
 
 // advance increments p.pos until it reaches content that might preceed a token

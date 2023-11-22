@@ -1,7 +1,6 @@
 package expr
 
 import (
-	"database/sql"
 	"fmt"
 	"reflect"
 	"strings"
@@ -34,12 +33,10 @@ func (pq *PrimedQuery) SQL() string {
 	return pq.sql
 }
 
-var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
-
 // ScanArgs produces a list of pointers to be passed to rows.Scan. After a
 // successful call, the onSuccess function must be invoked. The outputArgs will
-// be populated with the query results. All the structs/maps/slices mentioned in
-// the query must be in outputArgs.
+// be populated with the query results. All the structs/maps/slices mentioned
+// in the query must be in outputArgs.
 func (pq *PrimedQuery) ScanArgs(columnNames []string, outputArgs []any) (scanArgs []any, onSuccess func(), err error) {
 	var typesInQuery []string
 	var inQuery = make(map[reflect.Type]bool)

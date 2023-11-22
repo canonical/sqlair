@@ -53,7 +53,7 @@ type Statement struct {
 	// te is the type bound SQLair query. It contains information used to
 	// generate query values from the input arguments when the Statement is run
 	// on a database.
-	te *expr.TypedExpr
+	te *expr.TypedExprs
 }
 
 // stmtFinalizer removes a Statement from the statement caches and closes it.
