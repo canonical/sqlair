@@ -1,7 +1,6 @@
 package expr
 
 import (
-	"bytes"
 	"fmt"
 	"strings"
 )
@@ -172,27 +171,6 @@ func (cp *checkpoint) restore() {
 	cp.parser.exprs = cp.exprs
 	cp.parser.lineNum = cp.lineNum
 	cp.parser.lineStart = cp.lineStart
-}
-
-// ParsedExpr is the AST representation of SQLair query. It contains only
-// information encoded in the SQLair query string.
-type ParsedExpr struct {
-	exprs []expression
-}
-
-// String returns a textual representation of the AST contained in the
-// ParsedExpr for debugging and testing purposes.
-func (pe *ParsedExpr) String() string {
-	var out bytes.Buffer
-	out.WriteString("[")
-	for i, p := range pe.exprs {
-		if i > 0 {
-			out.WriteString(" ")
-		}
-		out.WriteString(p.String())
-	}
-	out.WriteString("]")
-	return out.String()
 }
 
 // add pushes the parsed expression to the list of expressions along with the
