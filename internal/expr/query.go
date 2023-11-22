@@ -1,167 +1,47 @@
 package expr
 
 import (
-	"bytes"
 	"database/sql"
 	"fmt"
 	"reflect"
-	"strconv"
 	"strings"
 )
 
-func (qe *QueryExpr) QueryArgs() []any {
-	return qe.args
-}
-
-func (qe *QueryExpr) SQL() string {
-	return qe.sql
-}
-
-func (qe *QueryExpr) HasOutputs() bool {
-	return len(qe.outputs) > 0
-}
-
-// QueryExpr represents a complete SQLair query, ready for execution on a
+// PrimedQuery contains all concrete values needed to run a SQLair query on a
 // database.
-type QueryExpr struct {
-	sql     string
-	args    []any
+type PrimedQuery struct {
+	sql string
+	// params are the query parameters to pass to the database.
+	params []any
+	// outputs specifies where to scan the query results.
 	outputs []typeMember
 }
 
-const markerPrefix = "_sqlair_"
-
-func markerName(n int) string {
-	return markerPrefix + strconv.Itoa(n)
+// Params returns the query parameters to pass with the SQL to a database.
+func (pq *PrimedQuery) Params() []any {
+	return pq.params
 }
 
-// markerIndex returns the int X from the string "_sqlair_X".
-func markerIndex(s string) (int, bool) {
-	if strings.HasPrefix(s, markerPrefix) {
-		n, err := strconv.Atoi(s[len(markerPrefix):])
-		if err == nil {
-			return n, true
-		}
-	}
-	return 0, false
+// HasOutputs returns true if the SQLair query contains at least one output
+// expression.
+func (pq *PrimedQuery) HasOutputs() bool {
+	return len(pq.outputs) > 0
 }
 
-// Query returns a query expression ready for execution on a database. Query
-// generates the SQL and extracts the query parameters from the provided
-// arguments.
-func (pe *PreparedExpr) Query(args ...any) (qe *QueryExpr, err error) {
-	defer func() {
-		if err != nil {
-			err = fmt.Errorf("invalid input parameter: %s", err)
-		}
-	}()
-
-	var typeValue = make(map[reflect.Type]reflect.Value)
-	var typeNames []string
-	for _, arg := range args {
-		v := reflect.ValueOf(arg)
-		if v.Kind() == reflect.Invalid || (v.Kind() == reflect.Pointer && v.IsNil()) {
-			return nil, fmt.Errorf("need struct or map, got nil")
-		}
-		v = reflect.Indirect(v)
-		t := v.Type()
-		if v.Kind() != reflect.Struct && v.Kind() != reflect.Map {
-			return nil, fmt.Errorf("need struct or map, got %s", t.Kind())
-		}
-		if _, ok := typeValue[t]; ok {
-			return nil, fmt.Errorf("type %q provided more than once", t.Name())
-		}
-		typeValue[t] = v
-		typeNames = append(typeNames, t.Name())
-	}
-
-	// Generate SQL and query parameters.
-	qargs := make([]any, 0)
-	outputs := make([]typeMember, 0)
-	typeUsed := make(map[reflect.Type]bool)
-	inCount := 0
-	outCount := 0
-	sqlStr := bytes.Buffer{}
-	for _, pp := range *pe {
-		switch pp := pp.(type) {
-		case *preparedInput:
-			// Find arg associated with input.
-			typeMember := pp.input
-			outerType := typeMember.outerType()
-			v, ok := typeValue[outerType]
-			if !ok {
-				// Get the types of all args for checkShadowType.
-				argTypes := make([]reflect.Type, 0, len(typeValue))
-				for argType := range typeValue {
-					argTypes = append(argTypes, argType)
-				}
-				if err := checkShadowedType(outerType, argTypes); err != nil {
-					return nil, err
-				}
-				return nil, typeMissingError(outerType.Name(), typeNames)
-			}
-			typeUsed[outerType] = true
-
-			// Retrieve query parameter.
-			var val reflect.Value
-			switch tm := typeMember.(type) {
-			case *structField:
-				val = v.Field(tm.index)
-			case *mapKey:
-				val = v.MapIndex(reflect.ValueOf(tm.name))
-				if val.Kind() == reflect.Invalid {
-					return nil, fmt.Errorf(`map %q does not contain key %q`, outerType.Name(), tm.name)
-				}
-			}
-			qargs = append(qargs, sql.Named("sqlair_"+strconv.Itoa(inCount), val.Interface()))
-
-			// Generate input SQL.
-			sqlStr.WriteString("@sqlair_" + strconv.Itoa(inCount))
-			inCount++
-		case *preparedOutput:
-			for i, oc := range pp.outputColumns {
-				sqlStr.WriteString(oc.sql)
-				sqlStr.WriteString(" AS ")
-				sqlStr.WriteString(markerName(outCount))
-				if i != len(pp.outputColumns)-1 {
-					sqlStr.WriteString(", ")
-				}
-				outCount++
-				outputs = append(outputs, oc.tm)
-			}
-		case *preparedBypass:
-			sqlStr.WriteString(pp.chunk)
-		}
-	}
-
-	for argType := range typeValue {
-		if !typeUsed[argType] {
-			return nil, fmt.Errorf("%s not referenced in query", argType.Name())
-		}
-	}
-
-	return &QueryExpr{outputs: outputs, sql: sqlStr.String(), args: qargs}, nil
-}
-
-// checkShadowedType returns an error if a query type and some argument type
-// have the same name but are from a different package.
-func checkShadowedType(queryType reflect.Type, argTypes []reflect.Type) error {
-	for _, argType := range argTypes {
-		if argType.Name() == queryType.Name() {
-			return fmt.Errorf("parameter with type %q missing, have type with same name: %q", queryType.String(), argType.String())
-		}
-	}
-	return nil
+func (pq *PrimedQuery) SQL() string {
+	return pq.sql
 }
 
 var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
 
-// ScanArgs returns list of pointers to the struct fields that are listed in qe.outputs.
-// All the structs and maps mentioned in the query must be in outputArgs.
-func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []any, onSuccess func(), err error) {
+// ScanArgs produces a list of pointers to be passed to rows.Scan. After a
+// successful call, the onSuccess function must be invoked. The outputArgs will
+// be populated with the query results. All the structs/maps/slices mentioned in
+// the query must be in outputArgs.
+func (pq *PrimedQuery) ScanArgs(columnNames []string, outputArgs []any) (scanArgs []any, onSuccess func(), err error) {
 	var typesInQuery = []string{}
 	var inQuery = make(map[reflect.Type]bool)
-	for _, typeMember := range qe.outputs {
+	for _, typeMember := range pq.outputs {
 		outerType := typeMember.outerType()
 		if ok := inQuery[outerType]; !ok {
 			inQuery[outerType] = true
@@ -209,7 +89,8 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 
 	// Generate the pointers.
 	var ptrs = []any{}
-	for _, column := range columns {
+	var columnInResult = make([]bool, len(columnNames))
+	for _, column := range columnNames {
 		idx, ok := markerIndex(column)
 		if !ok {
 			// Columns not mentioned in output expressions are scanned into x.
@@ -217,10 +98,11 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 			ptrs = append(ptrs, &x)
 			continue
 		}
-		if idx >= len(qe.outputs) {
-			return nil, nil, fmt.Errorf("internal error: sqlair column not in outputs (%d>=%d)", idx, len(qe.outputs))
+		if idx >= len(pq.outputs) {
+			return nil, nil, fmt.Errorf("internal error: sqlair column not in outputs (%d>=%d)", idx, len(pq.outputs))
 		}
-		typeMember := qe.outputs[idx]
+		columnInResult[idx] = true
+		typeMember := pq.outputs[idx]
 		outputVal, ok := typeDest[typeMember.outerType()]
 		if !ok {
 			return nil, nil, fmt.Errorf("type %q found in query but not passed to get", typeMember.outerType().Name())
@@ -246,6 +128,12 @@ func (qe *QueryExpr) ScanArgs(columns []string, outputArgs []any) (scanArgs []an
 			scanVal := reflect.New(tm.mapType.Elem()).Elem()
 			ptrs = append(ptrs, scanVal.Addr().Interface())
 			scanProxies = append(scanProxies, scanProxy{original: outputVal, scan: scanVal, key: reflect.ValueOf(tm.name)})
+		}
+	}
+
+	for i := 0; i < len(pq.outputs); i++ {
+		if !columnInResult[i] {
+			return nil, nil, fmt.Errorf(`query uses "&%s" outside of result context`, pq.outputs[i].outerType().Name())
 		}
 	}
 
