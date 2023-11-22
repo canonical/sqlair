@@ -2,6 +2,7 @@ package expr
 
 import (
 	"bytes"
+	"database/sql"
 	"fmt"
 	"reflect"
 	"sort"
@@ -9,16 +10,82 @@ import (
 	"strings"
 )
 
-// PreparedExpr contains an SQL expression that is ready for execution.
-type PreparedExpr struct {
+// TypedExpr represents a SQLair query bound to concrete Go types. It contains
+// all the type information needed by SQLair.
+type TypedExpr struct {
 	outputs []typeMember
 	inputs  []typeMember
 	sql     string
 }
 
 // SQL returns the SQL ready for execution.
-func (pe *PreparedExpr) SQL() string {
-	return pe.sql
+func (te *TypedExpr) SQL() string {
+	return te.sql
+}
+
+// BindInputs takes the SQLair input arguments and returns the PrimedQuery ready
+// for use with the database.
+func (te *TypedExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("invalid input parameter: %s", err)
+		}
+	}()
+
+	var inQuery = make(map[reflect.Type]bool)
+	for _, typeMember := range te.inputs {
+		inQuery[typeMember.outerType()] = true
+	}
+
+	var typeValue = make(map[reflect.Type]reflect.Value)
+	var typeNames []string
+	for _, arg := range args {
+		v := reflect.ValueOf(arg)
+		if v.Kind() == reflect.Invalid || (v.Kind() == reflect.Pointer && v.IsNil()) {
+			return nil, fmt.Errorf("need struct or map, got nil")
+		}
+		v = reflect.Indirect(v)
+		t := v.Type()
+		if v.Kind() != reflect.Struct && v.Kind() != reflect.Map {
+			return nil, fmt.Errorf("need struct or map, got %s", t.Kind())
+		}
+		if _, ok := typeValue[t]; ok {
+			return nil, fmt.Errorf("type %q provided more than once", t.Name())
+		}
+		typeValue[t] = v
+		typeNames = append(typeNames, t.Name())
+		if !inQuery[t] {
+			// Check if we have a type with the same name from a different package.
+			for _, typeMember := range te.inputs {
+				if t.Name() == typeMember.outerType().Name() {
+					return nil, fmt.Errorf("parameter with type %q missing, have type with same name: %q", typeMember.outerType().String(), t.String())
+				}
+			}
+			return nil, fmt.Errorf("%s not referenced in query", t.Name())
+		}
+	}
+
+	// Query parameters.
+	params := []any{}
+	for i, typeMember := range te.inputs {
+		outerType := typeMember.outerType()
+		v, ok := typeValue[outerType]
+		if !ok {
+			return nil, typeMissingError(outerType.Name(), typeNames)
+		}
+		var val reflect.Value
+		switch tm := typeMember.(type) {
+		case *structField:
+			val = v.Field(tm.index)
+		case *mapKey:
+			val = v.MapIndex(reflect.ValueOf(tm.name))
+			if val.Kind() == reflect.Invalid {
+				return nil, fmt.Errorf(`map %q does not contain key %q`, outerType.Name(), tm.name)
+			}
+		}
+		params = append(params, sql.Named("sqlair_"+strconv.Itoa(i), val.Interface()))
+	}
+	return &PrimedQuery{outputs: te.outputs, sql: te.sql, params: params}, nil
 }
 
 const markerPrefix = "_sqlair_"
@@ -80,49 +147,51 @@ func typeMissingError(missingType string, existingTypes []string) error {
 	return fmt.Errorf(`parameter with type %q missing (have "%s")`, missingType, strings.Join(existingTypes, `", "`))
 }
 
-// prepareInput checks that the input expression corresponds to a known type.
-func prepareInput(ti typeNameToInfo, p *inputPart) (tm typeMember, err error) {
+// bindInputTypes binds the input expression to a type and returns the
+// typeMember represented by the expression.
+func bindInputTypes(ti typeNameToInfo, e *inputExpr) (tm typeMember, err error) {
 	defer func() {
 		if err != nil {
-			err = fmt.Errorf("input expression: %s: %s", err, p.raw)
+			err = fmt.Errorf("input expression: %s: %s", err, e.raw)
 		}
 	}()
 
-	info, ok := ti[p.sourceType.typeName]
+	info, ok := ti[e.sourceType.typeName]
 	if !ok {
-		return nil, typeMissingError(p.sourceType.typeName, getKeys(ti))
+		return nil, typeMissingError(e.sourceType.typeName, getKeys(ti))
 	}
 
-	tm, err = info.typeMember(p.sourceType.memberName)
+	tm, err = info.typeMember(e.sourceType.memberName)
 	if err != nil {
 		return nil, err
 	}
 	return tm, nil
 }
 
-// prepareOutput checks that the output expressions correspond to known types.
-// It then checks they are formatted correctly and finally generates the columns for the query.
-func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnAccessor, typeMembers []typeMember, err error) {
+// bindOutputTypes binds the output expression to concrete types. It then checks
+// the expression is formatted correctly and generates the columns for the query
+// and the typeMembers the columns correspond to.
+func bindOutputTypes(ti typeNameToInfo, e *outputExpr) (outCols []columnAccessor, typeMembers []typeMember, err error) {
 	defer func() {
 		if err != nil {
-			err = fmt.Errorf("output expression: %s: %s", err, p.raw)
+			err = fmt.Errorf("output expression: %s: %s", err, e.raw)
 		}
 	}()
 
-	numTypes := len(p.targetTypes)
-	numColumns := len(p.sourceColumns)
-	starTypes := starCountTypes(p.targetTypes)
-	starColumns := starCountColumns(p.sourceColumns)
+	numTypes := len(e.targetTypes)
+	numColumns := len(e.sourceColumns)
+	starTypes := starCountTypes(e.targetTypes)
+	starColumns := starCountColumns(e.sourceColumns)
 
 	// Case 1: Generated columns e.g. "* AS (&P.*, &A.id)" or "&P.*".
 	if numColumns == 0 || (numColumns == 1 && starColumns == 1) {
 		pref := ""
 		// Prepend table name. E.g. "t" in "t.* AS &P.*".
 		if numColumns > 0 {
-			pref = p.sourceColumns[0].tableName
+			pref = e.sourceColumns[0].tableName
 		}
 
-		for _, t := range p.targetTypes {
+		for _, t := range e.targetTypes {
 			info, ok := ti[t.typeName]
 			if !ok {
 				return nil, nil, typeMissingError(t.typeName, getKeys(ti))
@@ -154,11 +223,11 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnAccessor, 
 
 	// Case 2: Explicit columns, single asterisk type e.g. "(col1, t.col2) AS &P.*".
 	if starTypes == 1 && numTypes == 1 {
-		info, ok := ti[p.targetTypes[0].typeName]
+		info, ok := ti[e.targetTypes[0].typeName]
 		if !ok {
-			return nil, nil, typeMissingError(p.targetTypes[0].typeName, getKeys(ti))
+			return nil, nil, typeMissingError(e.targetTypes[0].typeName, getKeys(ti))
 		}
-		for _, c := range p.sourceColumns {
+		for _, c := range e.sourceColumns {
 			tm, err := info.typeMember(c.columnName)
 			if err != nil {
 				return nil, nil, err
@@ -173,8 +242,8 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnAccessor, 
 
 	// Case 3: Explicit columns and types e.g. "(col1, col2) AS (&P.name, &P.id)".
 	if numColumns == numTypes {
-		for i, c := range p.sourceColumns {
-			t := p.targetTypes[i]
+		for i, c := range e.sourceColumns {
+			t := e.targetTypes[i]
 			info, ok := ti[t.typeName]
 			if !ok {
 				return nil, nil, typeMissingError(t.typeName, getKeys(ti))
@@ -195,11 +264,10 @@ func prepareOutput(ti typeNameToInfo, p *outputPart) (outCols []columnAccessor, 
 
 type typeNameToInfo map[string]typeInfo
 
-// Prepare takes a parsed expression and struct instantiations of all the types
-// mentioned in it.
-// The IO parts of the statement are checked for validity against the types
-// and expanded if necessary.
-func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
+// BindTypes takes samples of all types mentioned in the SQLair expressions of
+// the query. The expressions are checked for validity and required information
+// is generated from the types.
+func (pe *ParsedExpr) BindTypes(args ...any) (te *TypedExpr, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("cannot prepare statement: %s", err)
@@ -247,19 +315,19 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 
 	var typeMemberPresent = make(map[typeMember]bool)
 
-	// Check and expand each query part.
-	for _, part := range pe.queryParts {
-		switch p := part.(type) {
-		case *inputPart:
-			inLoc, err := prepareInput(ti, p)
+	// Check and expand each query expr.
+	for _, expr := range pe.exprs {
+		switch e := expr.(type) {
+		case *inputExpr:
+			inLoc, err := bindInputTypes(ti, e)
 			if err != nil {
 				return nil, err
 			}
 			sql.WriteString("@sqlair_" + strconv.Itoa(inCount))
 			inCount++
 			inputs = append(inputs, inLoc)
-		case *outputPart:
-			outCols, typeMembers, err := prepareOutput(ti, p)
+		case *outputExpr:
+			outCols, typeMembers, err := bindOutputTypes(ti, e)
 			if err != nil {
 				return nil, err
 			}
@@ -281,12 +349,12 @@ func (pe *ParsedExpr) Prepare(args ...any) (expr *PreparedExpr, err error) {
 				outCount++
 			}
 			outputs = append(outputs, typeMembers...)
-		case *bypassPart:
-			sql.WriteString(p.chunk)
+		case *bypass:
+			sql.WriteString(e.chunk)
 		default:
-			return nil, fmt.Errorf("internal error: unknown query part type %T", part)
+			return nil, fmt.Errorf("internal error: unknown query expr type %T", expr)
 		}
 	}
 
-	return &PreparedExpr{inputs: inputs, outputs: outputs, sql: sql.String()}, nil
+	return &TypedExpr{inputs: inputs, outputs: outputs, sql: sql.String()}, nil
 }
