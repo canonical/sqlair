@@ -33,10 +33,11 @@ func markerIndex(s string) (int, bool) {
 // all the type information needed by SQLair.
 type TypedExprs []typedExpression
 
-// typedExpr represents a part of a valid SQLair statement. It contains
+// typedExpression represents a expression bound to a type. It contains
 // information to generate the SQL for the part and to access Go types
 // referenced in the part.
 type typedExpression interface {
+	// typedExpr is a marker method.
 	typedExpr()
 }
 
@@ -78,12 +79,10 @@ func (tes *TypedExprs) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 		case *typedInputExpr:
 			typeMember := te.input
 			outerType := typeMember.OuterType()
-
 			v, ok := typeToValue[outerType]
 			if !ok {
 				return nil, missingInputError(outerType, typeToValue)
 			}
-
 			argTypeUsed[outerType] = true
 
 			val, err := typeMember.ValueFromOuter(v)
