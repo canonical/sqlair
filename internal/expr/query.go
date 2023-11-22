@@ -1,10 +1,11 @@
 package expr
 
 import (
-	"database/sql"
 	"fmt"
 	"reflect"
 	"strings"
+
+	"github.com/canonical/sqlair/internal/typeinfo"
 )
 
 // PrimedQuery contains all concrete values needed to run a SQLair query on a
@@ -14,7 +15,7 @@ type PrimedQuery struct {
 	// params are the query parameters to pass to the database.
 	params []any
 	// outputs specifies where to scan the query results.
-	outputs []typeMember
+	outputs []typeinfo.Member
 }
 
 // Params returns the query parameters to pass with the SQL to a database.
@@ -28,32 +29,23 @@ func (pq *PrimedQuery) HasOutputs() bool {
 	return len(pq.outputs) > 0
 }
 
-var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
-
 // ScanArgs produces a list of pointers to be passed to rows.Scan. After a
 // successful call, the onSuccess function must be invoked. The outputArgs will
 // be populated with the query results. All the structs/maps/slices mentioned in
 // the query must be in outputArgs.
 func (pq *PrimedQuery) ScanArgs(columnNames []string, outputArgs []any) (scanArgs []any, onSuccess func(), err error) {
-	var typesInQuery = []string{}
+	var typesInQuery []string
 	var inQuery = make(map[reflect.Type]bool)
 	for _, typeMember := range pq.outputs {
-		outerType := typeMember.outerType()
+		outerType := typeMember.OuterType()
 		if ok := inQuery[outerType]; !ok {
 			inQuery[outerType] = true
 			typesInQuery = append(typesInQuery, outerType.Name())
 		}
 	}
 
-	type scanProxy struct {
-		original reflect.Value
-		scan     reflect.Value
-		key      reflect.Value
-	}
-	var scanProxies []scanProxy
-
 	var typeDest = make(map[reflect.Type]reflect.Value)
-	outputVals := []reflect.Value{}
+	var outputVals []reflect.Value
 	for _, outputArg := range outputArgs {
 		if outputArg == nil {
 			return nil, nil, fmt.Errorf("need map or pointer to struct, got nil")
@@ -84,7 +76,8 @@ func (pq *PrimedQuery) ScanArgs(columnNames []string, outputArgs []any) (scanArg
 	}
 
 	// Generate the pointers.
-	var ptrs = []any{}
+	var ptrs []any
+	var scanProxies []typeinfo.ScanProxy
 	var columnInResult = make([]bool, len(columnNames))
 	for _, column := range columnNames {
 		idx, ok := markerIndex(column)
@@ -99,53 +92,31 @@ func (pq *PrimedQuery) ScanArgs(columnNames []string, outputArgs []any) (scanArg
 		}
 		columnInResult[idx] = true
 		typeMember := pq.outputs[idx]
-		outputVal, ok := typeDest[typeMember.outerType()]
+		outputVal, ok := typeDest[typeMember.OuterType()]
 		if !ok {
-			return nil, nil, fmt.Errorf("type %q found in query but not passed to get", typeMember.outerType().Name())
+			return nil, nil, fmt.Errorf("type %q found in query but not passed to get", typeMember.OuterType().Name())
 		}
-		switch tm := typeMember.(type) {
-		case *structField:
-			val := outputVal.Field(tm.index)
-			if !val.CanSet() {
-				return nil, nil, fmt.Errorf("internal error: cannot set field %s of struct %s", tm.name, tm.structType.Name())
-			}
-			pt := reflect.PointerTo(val.Type())
-			if val.Type().Kind() != reflect.Pointer && !pt.Implements(scannerInterface) {
-				// Rows.Scan will return an error if it tries to scan NULL into a type that cannot be set to nil.
-				// For types that are not a pointer and do not implement sql.Scanner a pointer to them is generated
-				// and passed to Rows.Scan. If Scan has set this pointer to nil the value is zeroed.
-				scanVal := reflect.New(pt).Elem()
-				ptrs = append(ptrs, scanVal.Addr().Interface())
-				scanProxies = append(scanProxies, scanProxy{original: val, scan: scanVal})
-			} else {
-				ptrs = append(ptrs, val.Addr().Interface())
-			}
-		case *mapKey:
-			scanVal := reflect.New(tm.mapType.Elem()).Elem()
-			ptrs = append(ptrs, scanVal.Addr().Interface())
-			scanProxies = append(scanProxies, scanProxy{original: outputVal, scan: scanVal, key: reflect.ValueOf(tm.name)})
+
+		ptr, scanProxy, err := typeMember.GetScanTarget(outputVal)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		ptrs = append(ptrs, ptr)
+		if scanProxy != nil {
+			scanProxies = append(scanProxies, *scanProxy)
 		}
 	}
 
 	for i := 0; i < len(pq.outputs); i++ {
 		if !columnInResult[i] {
-			return nil, nil, fmt.Errorf(`query uses "&%s" outside of result context`, pq.outputs[i].outerType().Name())
+			return nil, nil, fmt.Errorf(`query uses "&%s" outside of result context`, pq.outputs[i].OuterType().Name())
 		}
 	}
 
 	onSuccess = func() {
 		for _, sp := range scanProxies {
-			if sp.key.IsValid() {
-				sp.original.SetMapIndex(sp.key, sp.scan)
-			} else {
-				var val reflect.Value
-				if !sp.scan.IsNil() {
-					val = sp.scan.Elem()
-				} else {
-					val = reflect.Zero(sp.original.Type())
-				}
-				sp.original.Set(val)
-			}
+			sp.OnSuccess()
 		}
 	}
 
