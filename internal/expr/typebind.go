@@ -12,6 +12,18 @@ import (
 	"github.com/canonical/sqlair/internal/typeinfo"
 )
 
+// TypedExprs represents a SQLair query bound to concrete Go types. It contains
+// all the type information needed by SQLair.
+type TypedExprs []typedExpression
+
+// typedExpression represents a expression bound to a type. It contains
+// information to generate the SQL for the part and to access Go types
+// referenced in the part.
+type typedExpression interface {
+	// typedExpr is a marker method.
+	typedExpr()
+}
+
 const markerPrefix = "_sqlair_"
 
 func markerName(n int) string {
@@ -27,18 +39,6 @@ func markerIndex(s string) (int, bool) {
 		}
 	}
 	return 0, false
-}
-
-// TypedExprs represents a SQLair query bound to concrete Go types. It contains
-// all the type information needed by SQLair.
-type TypedExprs []typedExpression
-
-// typedExpression represents a expression bound to a type. It contains
-// information to generate the SQL for the part and to access Go types
-// referenced in the part.
-type typedExpression interface {
-	// typedExpr is a marker method.
-	typedExpr()
 }
 
 // BindInputs takes the SQLair input arguments and returns the PrimedQuery ready
