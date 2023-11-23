@@ -72,8 +72,8 @@ func (pe *ParsedExprs) BindTypes(args ...any) (te *TypedExprs, err error) {
 		}
 	}
 
-	typeMemberPresent := make(map[typeinfo.Member]bool)
-	typedExprs := make([]typedExpression, 0)
+	outputMemberUsed := map[typeinfo.Member]bool{}
+	typedExprs := []typedExpression{}
 
 	// Check and expand each query expr.
 	for _, expr := range *pe {
@@ -92,10 +92,10 @@ func (pe *ParsedExprs) BindTypes(args ...any) (te *TypedExprs, err error) {
 
 			for _, oc := range toe.outputColumns {
 				tm := oc.tm
-				if ok := typeMemberPresent[tm]; ok {
+				if ok := outputMemberUsed[tm]; ok {
 					return nil, fmt.Errorf("member %q of type %q appears more than once in output expressions", tm.MemberName(), tm.OuterType().Name())
 				}
-				typeMemberPresent[tm] = true
+				outputMemberUsed[tm] = true
 			}
 			typedExprs = append(typedExprs, toe)
 		case *bypass:
