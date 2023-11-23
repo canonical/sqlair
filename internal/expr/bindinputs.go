@@ -23,31 +23,6 @@ func (te *TypedExpr) SQL() string {
 	return te.sql
 }
 
-const markerPrefix = "_sqlair_"
-
-func markerName(n int) string {
-	return markerPrefix + strconv.Itoa(n)
-}
-
-// markerIndex returns the int X from the string "_sqlair_X".
-func markerIndex(s string) (int, bool) {
-	if strings.HasPrefix(s, markerPrefix) {
-		n, err := strconv.Atoi(s[len(markerPrefix):])
-		if err == nil {
-			return n, true
-		}
-	}
-	return 0, false
-}
-
-func typeMissingError(missingType string, existingTypes []string) error {
-	if len(existingTypes) == 0 {
-		return fmt.Errorf(`parameter with type %q missing`, missingType)
-	}
-	// "%s" is used instead of %q to correctly print double quotes within the joined string.
-	return fmt.Errorf(`parameter with type %q missing (have "%s")`, missingType, strings.Join(existingTypes, `", "`))
-}
-
 // BindInputs takes the SQLair input arguments and returns the PrimedQuery ready
 // for use with the database.
 func (te *TypedExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
@@ -107,4 +82,21 @@ func (te *TypedExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 		params = append(params, sql.Named("sqlair_"+strconv.Itoa(i), val.Interface()))
 	}
 	return &PrimedQuery{outputs: te.outputs, sql: te.sql, params: params}, nil
+}
+
+const markerPrefix = "_sqlair_"
+
+func markerName(n int) string {
+	return markerPrefix + strconv.Itoa(n)
+}
+
+// markerIndex returns the int X from the string "_sqlair_X".
+func markerIndex(s string) (int, bool) {
+	if strings.HasPrefix(s, markerPrefix) {
+		n, err := strconv.Atoi(s[len(markerPrefix):])
+		if err == nil {
+			return n, true
+		}
+	}
+	return 0, false
 }

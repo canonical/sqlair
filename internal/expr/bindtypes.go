@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/canonical/sqlair/internal/typeinfo"
 )
@@ -31,38 +32,101 @@ func (pe *ParsedExpr) String() string {
 	return out.String()
 }
 
-// getKeys returns the keys of a string map in a deterministic order.
-func getKeys[T any](m map[string]T) []string {
-	i := 0
-	keys := make([]string, len(m))
-	for k := range m {
-		keys[i] = k
-		i++
-	}
-	sort.Strings(keys)
-	return keys
-}
+type typeNameToInfo map[string]typeinfo.Info
 
-// starCountColumns counts the number of asterisks in a list of columns.
-func starCountColumns(cs []columnAccessor) int {
-	s := 0
-	for _, c := range cs {
-		if c.columnName == "*" {
-			s++
+// BindTypes takes samples of all types mentioned in the SQLair expressions of
+// the query. The expressions are checked for validity and required information
+// is generated from the types.
+func (pe *ParsedExpr) BindTypes(args ...any) (te *TypedExpr, err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("cannot prepare statement: %s", err)
+		}
+	}()
+
+	var ti = make(typeNameToInfo)
+
+	// Generate and save reflection info.
+	for _, arg := range args {
+		if arg == nil {
+			return nil, fmt.Errorf("need struct or map, got nil")
+		}
+		t := reflect.TypeOf(arg)
+		switch t.Kind() {
+		case reflect.Struct, reflect.Map:
+			if t.Name() == "" {
+				return nil, fmt.Errorf("cannot use anonymous %s", t.Kind())
+			}
+			info, err := typeinfo.GetTypeInfo(arg)
+			if err != nil {
+				return nil, err
+			}
+			if dupeInfo, ok := ti[t.Name()]; ok {
+				if dupeInfo.Typ() == t {
+					return nil, fmt.Errorf("found multiple instances of type %q", t.Name())
+				}
+				return nil, fmt.Errorf("two types found with name %q: %q and %q", t.Name(), dupeInfo.Typ().String(), t.String())
+			}
+			ti[t.Name()] = info
+		case reflect.Pointer:
+			return nil, fmt.Errorf("need struct or map, got pointer to %s", t.Elem().Kind())
+		default:
+			return nil, fmt.Errorf("need struct or map, got %s", t.Kind())
 		}
 	}
-	return s
-}
 
-// starCountTypes counts the number of asterisks in a list of types.
-func starCountTypes(vs []valueAccessor) int {
-	s := 0
-	for _, v := range vs {
-		if v.memberName == "*" {
-			s++
+	var sql bytes.Buffer
+
+	var inCount int
+	var outCount int
+
+	var outputs = make([]typeinfo.Member, 0)
+	var inputs = make([]typeinfo.Member, 0)
+
+	var typeMemberPresent = make(map[typeinfo.Member]bool)
+
+	// Check and expand each query expr.
+	for _, expr := range pe.exprs {
+		switch e := expr.(type) {
+		case *inputExpr:
+			inLoc, err := bindInputTypes(ti, e)
+			if err != nil {
+				return nil, err
+			}
+			sql.WriteString("@sqlair_" + strconv.Itoa(inCount))
+			inCount++
+			inputs = append(inputs, inLoc)
+		case *outputExpr:
+			outCols, typeMembers, err := bindOutputTypes(ti, e)
+			if err != nil {
+				return nil, err
+			}
+
+			for _, tm := range typeMembers {
+				if ok := typeMemberPresent[tm]; ok {
+					return nil, fmt.Errorf("member %q of type %q appears more than once in output expressions", tm.MemberName(), tm.OuterType().Name())
+				}
+				typeMemberPresent[tm] = true
+			}
+
+			for i, c := range outCols {
+				sql.WriteString(c.String())
+				sql.WriteString(" AS ")
+				sql.WriteString(markerName(outCount))
+				if i != len(outCols)-1 {
+					sql.WriteString(", ")
+				}
+				outCount++
+			}
+			outputs = append(outputs, typeMembers...)
+		case *bypass:
+			sql.WriteString(e.chunk)
+		default:
+			return nil, fmt.Errorf("internal error: unknown query expr type %T", expr)
 		}
 	}
-	return s
+
+	return &TypedExpr{inputs: inputs, outputs: outputs, sql: sql.String()}, nil
 }
 
 // bindInputTypes binds the input expression to a type and returns the
@@ -180,99 +244,44 @@ func bindOutputTypes(ti typeNameToInfo, e *outputExpr) (outCols []columnAccessor
 	return outCols, typeMembers, nil
 }
 
-type typeNameToInfo map[string]typeinfo.Info
+// getKeys returns the keys of a string map in a deterministic order.
+func getKeys[T any](m map[string]T) []string {
+	i := 0
+	keys := make([]string, len(m))
+	for k := range m {
+		keys[i] = k
+		i++
+	}
+	sort.Strings(keys)
+	return keys
+}
 
-// BindTypes takes samples of all types mentioned in the SQLair expressions of
-// the query. The expressions are checked for validity and required information
-// is generated from the types.
-func (pe *ParsedExpr) BindTypes(args ...any) (te *TypedExpr, err error) {
-	defer func() {
-		if err != nil {
-			err = fmt.Errorf("cannot prepare statement: %s", err)
-		}
-	}()
-
-	var ti = make(typeNameToInfo)
-
-	// Generate and save reflection info.
-	for _, arg := range args {
-		if arg == nil {
-			return nil, fmt.Errorf("need struct or map, got nil")
-		}
-		t := reflect.TypeOf(arg)
-		switch t.Kind() {
-		case reflect.Struct, reflect.Map:
-			if t.Name() == "" {
-				return nil, fmt.Errorf("cannot use anonymous %s", t.Kind())
-			}
-			info, err := typeinfo.GetTypeInfo(arg)
-			if err != nil {
-				return nil, err
-			}
-			if dupeInfo, ok := ti[t.Name()]; ok {
-				if dupeInfo.Typ() == t {
-					return nil, fmt.Errorf("found multiple instances of type %q", t.Name())
-				}
-				return nil, fmt.Errorf("two types found with name %q: %q and %q", t.Name(), dupeInfo.Typ().String(), t.String())
-			}
-			ti[t.Name()] = info
-		case reflect.Pointer:
-			return nil, fmt.Errorf("need struct or map, got pointer to %s", t.Elem().Kind())
-		default:
-			return nil, fmt.Errorf("need struct or map, got %s", t.Kind())
+// starCountColumns counts the number of asterisks in a list of columns.
+func starCountColumns(cs []columnAccessor) int {
+	s := 0
+	for _, c := range cs {
+		if c.columnName == "*" {
+			s++
 		}
 	}
+	return s
+}
 
-	var sql bytes.Buffer
-
-	var inCount int
-	var outCount int
-
-	var outputs = make([]typeinfo.Member, 0)
-	var inputs = make([]typeinfo.Member, 0)
-
-	var typeMemberPresent = make(map[typeinfo.Member]bool)
-
-	// Check and expand each query expr.
-	for _, expr := range pe.exprs {
-		switch e := expr.(type) {
-		case *inputExpr:
-			inLoc, err := bindInputTypes(ti, e)
-			if err != nil {
-				return nil, err
-			}
-			sql.WriteString("@sqlair_" + strconv.Itoa(inCount))
-			inCount++
-			inputs = append(inputs, inLoc)
-		case *outputExpr:
-			outCols, typeMembers, err := bindOutputTypes(ti, e)
-			if err != nil {
-				return nil, err
-			}
-
-			for _, tm := range typeMembers {
-				if ok := typeMemberPresent[tm]; ok {
-					return nil, fmt.Errorf("member %q of type %q appears more than once in output expressions", tm.MemberName(), tm.OuterType().Name())
-				}
-				typeMemberPresent[tm] = true
-			}
-
-			for i, c := range outCols {
-				sql.WriteString(c.String())
-				sql.WriteString(" AS ")
-				sql.WriteString(markerName(outCount))
-				if i != len(outCols)-1 {
-					sql.WriteString(", ")
-				}
-				outCount++
-			}
-			outputs = append(outputs, typeMembers...)
-		case *bypass:
-			sql.WriteString(e.chunk)
-		default:
-			return nil, fmt.Errorf("internal error: unknown query expr type %T", expr)
+// starCountTypes counts the number of asterisks in a list of types.
+func starCountTypes(vs []valueAccessor) int {
+	s := 0
+	for _, v := range vs {
+		if v.memberName == "*" {
+			s++
 		}
 	}
+	return s
+}
 
-	return &TypedExpr{inputs: inputs, outputs: outputs, sql: sql.String()}, nil
+func typeMissingError(missingType string, existingTypes []string) error {
+	if len(existingTypes) == 0 {
+		return fmt.Errorf(`parameter with type %q missing`, missingType)
+	}
+	// "%s" is used instead of %q to correctly print double quotes within the joined string.
+	return fmt.Errorf(`parameter with type %q missing (have "%s")`, missingType, strings.Join(existingTypes, `", "`))
 }
