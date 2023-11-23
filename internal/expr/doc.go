@@ -27,11 +27,11 @@ This stage only processes information contained in types. The query should not
 be specialised at this stage to a strict subset of well typed input arguments
 (for example, be only valid for slices arguments of length n).
 
-# Query stage
+# Input Binding and Query stage
 
-The query stage generates the concrete values needed to run the SQLair query on
-a database. This includes the SQL, the query arguments and info for scanning the
-results into SQLair output arguments.
+The Input Binding and Query stage generates the concrete values needed to run
+the SQLair query on a database. This includes the SQL, the query arguments and
+info for scanning the results into SQLair output arguments.
 
 This stage does not analyse the arguments types beyond validating they match
 those seen in the Type Binding stage. Neither does it interact with the actual
