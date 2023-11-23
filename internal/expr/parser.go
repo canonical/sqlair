@@ -1,10 +1,73 @@
 package expr
 
 import (
-	"bytes"
 	"fmt"
 	"strings"
 )
+
+func NewParser() *Parser {
+	return &Parser{}
+}
+
+type Parser struct {
+	input string
+	pos   int
+	// prevExprEnd is the value of pos when we last finished parsing a
+	// expression.
+	prevExprEnd int
+	// currentExprStart is the value of pos just before we started parsing the
+	// expression under pos. We maintain currentExprStart >= prevExprEnd.
+	currentExprStart int
+	exprs            []expression
+	// lineNum is the number of the current line of the input.
+	lineNum int
+	// lineStart is the position of the first byte of the current line in the
+	// input.
+	lineStart int
+}
+
+// Parse takes an SQLair query string and returns a ParsedExprs.
+func (p *Parser) Parse(input string) (pe *ParsedExprs, err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("cannot parse expression: %s", err)
+		}
+	}()
+
+	p.init(input)
+
+	for {
+		// Advance the parser to the start of the next expression.
+		if err := p.advance(); err != nil {
+			return nil, err
+		}
+
+		p.currentExprStart = p.pos
+
+		if p.pos == len(p.input) {
+			break
+		}
+
+		if out, ok, err := p.parseOutputExpr(); err != nil {
+			return nil, err
+		} else if ok {
+			p.add(out)
+			continue
+		}
+
+		if in, ok, err := p.parseInputExpr(); err != nil {
+			return nil, err
+		} else if ok {
+			p.add(in)
+			continue
+		}
+	}
+
+	// Add any remaining unparsed string input to the parser.
+	p.add(nil)
+	parsedExprs := ParsedExprs(p.exprs)
+	return &parsedExprs, nil
+}
 
 // expression represents a parsed node of the SQLair query's AST.
 type expression interface {
@@ -80,27 +143,6 @@ func (p *bypass) String() string {
 }
 
 func (p *bypass) expr() {}
-
-type Parser struct {
-	input string
-	pos   int
-	// prevExprEnd is the value of pos when we last finished parsing a
-	// expression.
-	prevExprEnd int
-	// currentExprStart is the value of pos just before we started parsing the
-	// expression under pos. We maintain currentExprStart >= prevExprEnd.
-	currentExprStart int
-	exprs            []expression
-	// lineNum is the number of the current line of the input.
-	lineNum int
-	// lineStart is the position of the first byte of the current line in the
-	// input.
-	lineStart int
-}
-
-func NewParser() *Parser {
-	return &Parser{}
-}
 
 // init resets the state of the parser and sets the input string.
 func (p *Parser) init(input string) {
@@ -178,25 +220,6 @@ func (cp *checkpoint) restore() {
 	cp.parser.lineStart = cp.lineStart
 }
 
-// ParsedExprs is the AST representation of SQLair query. It contains only
-// information encoded in the SQLair query string.
-type ParsedExprs []expression
-
-// String returns a textual representation of the AST contained in the
-// ParsedExprs for debugging and testing purposes.
-func (pe *ParsedExprs) String() string {
-	var out bytes.Buffer
-	out.WriteString("[")
-	for i, p := range *pe {
-		if i > 0 {
-			out.WriteString(" ")
-		}
-		out.WriteString(p.String())
-	}
-	out.WriteString("]")
-	return out.String()
-}
-
 // add pushes the parsed expression to the list of expressions along with the
 // bypass chunk that stretches from the end of the previous expression to the
 // beginning of this expression.
@@ -250,49 +273,6 @@ func (p *Parser) skipComment() bool {
 		return false
 	}
 	return false
-}
-
-// Parse takes an SQLair query string and returns a ParsedExprs.
-func (p *Parser) Parse(input string) (pe *ParsedExprs, err error) {
-	defer func() {
-		if err != nil {
-			err = fmt.Errorf("cannot parse expression: %s", err)
-		}
-	}()
-
-	p.init(input)
-
-	for {
-		// Advance the parser to the start of the next expression.
-		if err := p.advance(); err != nil {
-			return nil, err
-		}
-
-		p.currentExprStart = p.pos
-
-		if p.pos == len(p.input) {
-			break
-		}
-
-		if out, ok, err := p.parseOutputExpr(); err != nil {
-			return nil, err
-		} else if ok {
-			p.add(out)
-			continue
-		}
-
-		if in, ok, err := p.parseInputExpr(); err != nil {
-			return nil, err
-		} else if ok {
-			p.add(in)
-			continue
-		}
-	}
-
-	// Add any remaining unparsed string input to the parser.
-	p.add(nil)
-	parsedExprs := ParsedExprs(p.exprs)
-	return &parsedExprs, nil
 }
 
 // advance increments p.pos until it reaches content that might preceed a token
