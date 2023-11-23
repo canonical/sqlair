@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strings"
 
 	"github.com/canonical/sqlair/internal/typeinfo"
 )
@@ -283,4 +284,12 @@ func starCountTypes(vs []valueAccessor) int {
 		}
 	}
 	return s
+}
+
+func typeMissingError(missingType string, existingTypes []string) error {
+	if len(existingTypes) == 0 {
+		return fmt.Errorf(`parameter with type %q missing`, missingType)
+	}
+	// "%s" is used instead of %q to correctly print double quotes within the joined string.
+	return fmt.Errorf(`parameter with type %q missing (have "%s")`, missingType, strings.Join(existingTypes, `", "`))
 }

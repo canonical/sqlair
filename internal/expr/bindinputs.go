@@ -130,11 +130,3 @@ func inputMissingError(missingType reflect.Type, typeToValue map[reflect.Type]re
 	}
 	return typeMissingError(missingType.Name(), typeNames)
 }
-
-func typeMissingError(missingType string, existingTypes []string) error {
-	if len(existingTypes) == 0 {
-		return fmt.Errorf(`parameter with type %q missing`, missingType)
-	}
-	// "%s" is used instead of %q to correctly print double quotes within the joined string.
-	return fmt.Errorf(`parameter with type %q missing (have "%s")`, missingType, strings.Join(existingTypes, `", "`))
-}
