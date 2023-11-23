@@ -1,4 +1,4 @@
-package expr
+package typeinfo
 
 import (
 	"fmt"
@@ -9,68 +9,19 @@ import (
 	"sync"
 )
 
-type typeMember interface {
-	outerType() reflect.Type
-	memberName() string
-	accessor() string
-}
+// This expression should be aligned with the bytes we allow in isNameByte in
+// the parser.
+var validColNameRx = regexp.MustCompile(`^([a-zA-Z_])+([a-zA-Z_0-9])*$`)
 
-type mapKey struct {
-	name    string
-	mapType reflect.Type
-}
+// Info exposes useful information about types used in SQLair queries.
+type Info interface {
+	Typ() reflect.Type
 
-func (mk *mapKey) outerType() reflect.Type {
-	return mk.mapType
-}
+	// TypeMember returns the type member associated with a given column name.
+	TypeMember(member string) (Member, error)
 
-func (mk *mapKey) memberName() string {
-	return mk.name
-}
-
-func (mk *mapKey) accessor() string {
-	return mk.mapType.Name() + "." + mk.memberName()
-}
-
-// structField represents reflection information about a field from some struct type.
-type structField struct {
-	name string
-
-	// The type of the containing struct.
-	structType reflect.Type
-
-	// Index for Type.Field.
-	index int
-
-	// The tag assosiated with this field
-	tag string
-
-	// OmitEmpty is true when "omitempty" is
-	// a property of the field's "db" tag.
-	omitEmpty bool
-}
-
-func (f *structField) outerType() reflect.Type {
-	return f.structType
-}
-
-func (f *structField) memberName() string {
-	return f.tag
-}
-
-func (f *structField) accessor() string {
-	return f.structType.Name() + "." + f.memberName()
-}
-
-// typeInfo exposes useful information about types used in SQLair queries.
-type typeInfo interface {
-	typ() reflect.Type
-
-	// typeMember returns the type member associated with a given column name.
-	typeMember(member string) (typeMember, error)
-
-	// getAllMembers returns all members a type associated with column names.
-	getAllMembers() ([]typeMember, error)
+	// GetAllMembers returns all members a type associated with column names.
+	GetAllMembers() ([]Member, error)
 }
 
 type structInfo struct {
@@ -82,11 +33,11 @@ type structInfo struct {
 	tagToField map[string]*structField
 }
 
-func (si *structInfo) typ() reflect.Type {
+func (si *structInfo) Typ() reflect.Type {
 	return si.structType
 }
 
-func (si *structInfo) typeMember(member string) (typeMember, error) {
+func (si *structInfo) TypeMember(member string) (Member, error) {
 	tm, ok := si.tagToField[member]
 	if !ok {
 		return nil, fmt.Errorf(`type %q has no %q db tag`, si.structType.Name(), member)
@@ -94,44 +45,40 @@ func (si *structInfo) typeMember(member string) (typeMember, error) {
 	return tm, nil
 }
 
-func (si *structInfo) getAllMembers() ([]typeMember, error) {
+func (si *structInfo) GetAllMembers() ([]Member, error) {
 	if len(si.tags) == 0 {
 		return nil, fmt.Errorf(`no "db" tags found in struct %q`, si.structType.Name())
 	}
 
-	tms := []typeMember{}
+	var tms []Member
 	for _, tag := range si.tags {
 		tms = append(tms, si.tagToField[tag])
 	}
 	return tms, nil
 }
 
-var _ typeInfo = &structInfo{}
-
 type mapInfo struct {
 	mapType reflect.Type
 }
 
-func (mi *mapInfo) typ() reflect.Type {
+func (mi *mapInfo) Typ() reflect.Type {
 	return mi.mapType
 }
 
-func (mi *mapInfo) typeMember(member string) (typeMember, error) {
+func (mi *mapInfo) TypeMember(member string) (Member, error) {
 	return &mapKey{name: member, mapType: mi.mapType}, nil
 }
 
-func (mi *mapInfo) getAllMembers() ([]typeMember, error) {
+func (mi *mapInfo) GetAllMembers() ([]Member, error) {
 	return nil, fmt.Errorf(`columns must be specified for map with star`)
 }
 
-var _ typeInfo = &mapInfo{}
-
 var cacheMutex sync.RWMutex
-var cache = make(map[reflect.Type]typeInfo)
+var cache = make(map[reflect.Type]Info)
 
 // Reflect will return the typeInfo of a given type,
 // generating and caching as required.
-func getTypeInfo(value any) (typeInfo, error) {
+func GetTypeInfo(value any) (Info, error) {
 	if value == (any)(nil) {
 		return nil, fmt.Errorf("cannot reflect nil value")
 	}
@@ -159,7 +106,7 @@ func getTypeInfo(value any) (typeInfo, error) {
 
 // generate produces and returns reflection information for the input
 // reflect.Value that is specifically required for SQLair operation.
-func generateTypeInfo(t reflect.Type) (typeInfo, error) {
+func generateTypeInfo(t reflect.Type) (Info, error) {
 	switch t.Kind() {
 	case reflect.Map:
 		if t.Key().Kind() != reflect.String {
@@ -203,13 +150,9 @@ func generateTypeInfo(t reflect.Type) (typeInfo, error) {
 
 		return &info, nil
 	default:
-		return nil, fmt.Errorf("internal error: cannot obtain type information for type that is not map or struct: %s.", t)
+		return nil, fmt.Errorf("internal error: cannot obtain type information for type that is not map or struct: %s", t)
 	}
 }
-
-// This expression should be aligned with the bytes we allow in isNameByte in
-// the parser.
-var validColNameRx = regexp.MustCompile(`^([a-zA-Z_])+([a-zA-Z_0-9])*$`)
 
 // parseTag parses the input tag string and returns its
 // name and whether it contains the "omitempty" option.
