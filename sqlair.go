@@ -50,7 +50,10 @@ var cacheMutex sync.RWMutex
 // It is ready to be run on a SQLair DB.
 type Statement struct {
 	cacheID stmtID
-	pe      *expr.PreparedExpr
+	// te is the type bound SQLair query. It contains information used to
+	// generate query values from the input arguments when the Statement is run
+	// on a database.
+	te *expr.TypedExpr
 }
 
 // stmtFinalizer removes a Statement from the statement caches and closes it.
@@ -75,7 +78,7 @@ func Prepare(query string, typeSamples ...any) (*Statement, error) {
 	if err != nil {
 		return nil, err
 	}
-	preparedExpr, err := parsedExpr.Prepare(typeSamples...)
+	typedExpr, err := parsedExpr.BindTypes(typeSamples...)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +87,7 @@ func Prepare(query string, typeSamples ...any) (*Statement, error) {
 	cacheMutex.Lock()
 	defer cacheMutex.Unlock()
 	stmtDBCache[cacheID] = make(map[dbID]*sql.Stmt)
-	var s = &Statement{pe: preparedExpr, cacheID: cacheID}
+	var s = &Statement{te: typedExpr, cacheID: cacheID}
 	runtime.SetFinalizer(s, stmtFinalizer)
 	return s, nil
 }
@@ -136,16 +139,19 @@ func (db *DB) PlainDB() *sql.DB {
 
 // Query holds the results of a database query.
 type Query struct {
-	qe      *expr.QueryExpr
+	pq      *expr.PrimedQuery
 	sqlstmt *sql.Stmt
 	ctx     context.Context
 	err     error
 	tx      *TX // tx is only set for queries in transactions.
+	// Persist statement and db so the sql.Stmt is not closed until the Query is dropped.
+	stmt *Statement
+	db   *DB
 }
 
 // Iterator is used to iterate over the results of the query.
 type Iterator struct {
-	qe      *expr.QueryExpr
+	pq      *expr.PrimedQuery
 	rows    *sql.Rows
 	cols    []string
 	err     error
@@ -166,12 +172,12 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: err}
 	}
 
-	qe, err := s.pe.Query(inputArgs...)
+	pq, err := s.te.BindInputs(inputArgs...)
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
 
-	return &Query{sqlstmt: sqlstmt, qe: qe, ctx: ctx, err: nil}
+	return &Query{sqlstmt: sqlstmt, stmt: s, db: db, pq: pq, ctx: ctx, err: nil}
 }
 
 // prepareSubstrate is an object that queries can be prepared on, e.g. a sql.DB
@@ -192,7 +198,7 @@ func (db *DB) prepareStmt(ctx context.Context, ps prepareSubstrate, s *Statement
 	sqlstmt, ok := stmtDBCache[s.cacheID][db.cacheID]
 	cacheMutex.RUnlock()
 	if !ok {
-		sqlstmt, err = ps.PrepareContext(ctx, s.pe.SQL())
+		sqlstmt, err = ps.PrepareContext(ctx, s.te.SQL())
 		if err != nil {
 			return nil, err
 		}
@@ -231,7 +237,7 @@ func (q *Query) Get(outputArgs ...any) error {
 			outputArgs = outputArgs[1:]
 		}
 	}
-	if !q.qe.HasOutputs() && len(outputArgs) > 0 {
+	if !q.pq.HasOutputs() && len(outputArgs) > 0 {
 		return fmt.Errorf("cannot get results: output variables provided but not referenced in query")
 	}
 
@@ -242,7 +248,7 @@ func (q *Query) Get(outputArgs ...any) error {
 	}
 	if err == nil && !iter.Next() {
 		err = iter.Close()
-		if err == nil && q.qe.HasOutputs() {
+		if err == nil && q.pq.HasOutputs() {
 			err = ErrNoRows
 		}
 		return err
@@ -275,22 +281,22 @@ func (q *Query) Iter() *Iterator {
 		sqlstmt = q.tx.sqltx.Stmt(q.sqlstmt)
 		close = sqlstmt.Close
 	}
-	if q.qe.HasOutputs() {
-		rows, err = sqlstmt.QueryContext(q.ctx, q.qe.QueryArgs()...)
+	if q.pq.HasOutputs() {
+		rows, err = sqlstmt.QueryContext(q.ctx, q.pq.Params()...)
 		if err == nil { // if err IS nil
 			cols, err = rows.Columns()
 		}
 	} else {
-		result, err = sqlstmt.ExecContext(q.ctx, q.qe.QueryArgs()...)
+		result, err = sqlstmt.ExecContext(q.ctx, q.pq.Params()...)
 	}
 	if err != nil {
 		if close != nil {
 			close()
 		}
-		return &Iterator{qe: q.qe, err: err}
+		return &Iterator{pq: q.pq, err: err}
 	}
 
-	return &Iterator{qe: q.qe, rows: rows, cols: cols, err: err, result: result, close: close}
+	return &Iterator{pq: q.pq, rows: rows, cols: cols, err: err, result: result, close: close}
 }
 
 // Next prepares the next row for Get.
@@ -337,7 +343,7 @@ func (iter *Iterator) Get(outputArgs ...any) (err error) {
 		return fmt.Errorf("iteration ended")
 	}
 
-	ptrs, onSuccess, err := iter.qe.ScanArgs(iter.cols, outputArgs)
+	ptrs, onSuccess, err := iter.pq.ScanArgs(iter.cols, outputArgs)
 	if err != nil {
 		return err
 	}
@@ -399,7 +405,7 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 			sliceArgs = sliceArgs[1:]
 		}
 	}
-	if !q.qe.HasOutputs() && len(sliceArgs) > 0 {
+	if !q.pq.HasOutputs() && len(sliceArgs) > 0 {
 		return fmt.Errorf("output variables provided but not referenced in query")
 	}
 	// Check slice inputs
@@ -560,10 +566,10 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: err}
 	}
 
-	qe, err := s.pe.Query(inputArgs...)
+	pq, err := s.te.BindInputs(inputArgs...)
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
 
-	return &Query{sqlstmt: sqlstmt, qe: qe, tx: tx, ctx: ctx, err: nil}
+	return &Query{sqlstmt: sqlstmt, stmt: s, db: tx.db, pq: pq, tx: tx, ctx: ctx, err: nil}
 }

@@ -313,9 +313,9 @@ func (s *ExprSuite) TestExpr(c *C) {
 	parser := expr.NewParser()
 	for i, t := range tests {
 		var (
-			parsedExpr   *expr.ParsedExpr
-			preparedExpr *expr.PreparedExpr
-			err          error
+			parsedExpr *expr.ParsedExpr
+			typedExpr  *expr.TypedExpr
+			err        error
 		)
 		if parsedExpr, err = parser.Parse(t.query); err != nil {
 			c.Errorf("test %d failed (Parse):\nsummary: %s\nquery: %s\nexpected: %s\nerr: %s\n", i, t.summary, t.query, t.expectedParsed, err)
@@ -323,11 +323,11 @@ func (s *ExprSuite) TestExpr(c *C) {
 			c.Errorf("test %d failed (Parse):\nsummary: %s\nquery: %s\nexpected: %s\nactual:   %s\n", i, t.summary, t.query, t.expectedParsed, parsedExpr.String())
 		}
 
-		if preparedExpr, err = parsedExpr.Prepare(t.prepareArgs...); err != nil {
-			c.Errorf("test %d failed (Prepare):\nsummary: %s\nquery: %s\nexpected: %s\nerr: %s\n", i, t.summary, t.query, t.expectedSQL, err)
+		if typedExpr, err = parsedExpr.BindTypes(t.prepareArgs...); err != nil {
+			c.Errorf("test %d failed (BindTypes):\nsummary: %s\nquery: %s\nexpected: %s\nerr: %s\n", i, t.summary, t.query, t.expectedSQL, err)
 		} else {
-			c.Check(preparedExpr.SQL(), Equals, t.expectedSQL,
-				Commentf("test %d failed (Prepare):\nsummary: %s\nquery: %s\nexpected: %s\nactual:   %s\n", i, t.summary, t.query, t.expectedSQL, preparedExpr.SQL()))
+			c.Check(typedExpr.SQL(), Equals, t.expectedSQL,
+				Commentf("test %d failed (BindTypes):\nsummary: %s\nquery: %s\nexpected: %s\nactual:   %s\n", i, t.summary, t.query, t.expectedSQL, typedExpr.SQL()))
 		}
 	}
 }
@@ -437,7 +437,7 @@ func FuzzParser(f *testing.F) {
 	})
 }
 
-func (s *ExprSuite) TestPrepareErrors(c *C) {
+func (s *ExprSuite) TestBindTypesErrors(c *C) {
 	type NoTags struct {
 		S string
 	}
@@ -545,7 +545,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 		if err != nil {
 			c.Fatal(err)
 		}
-		_, err = parsedExpr.Prepare(test.prepareArgs...)
+		_, err = parsedExpr.BindTypes(test.prepareArgs...)
 		if err != nil {
 			c.Assert(err.Error(), Equals, test.err,
 				Commentf("test %d failed:\nquery: %q\nprepareArgs:'%+v'", i, test.query, test.prepareArgs))
@@ -555,7 +555,7 @@ func (s *ExprSuite) TestPrepareErrors(c *C) {
 	}
 }
 
-func (s *ExprSuite) TestPrepareMapError(c *C) {
+func (s *ExprSuite) TestMapError(c *C) {
 	type InvalidMap map[int]any
 	type CustomMap map[string]int
 	type M struct {
@@ -599,12 +599,12 @@ func (s *ExprSuite) TestPrepareMapError(c *C) {
 		if err != nil {
 			c.Fatal(err)
 		}
-		_, err = parsedExpr.Prepare(test.args...)
+		_, err = parsedExpr.BindTypes(test.args...)
 		c.Assert(err.Error(), Equals, test.expect)
 	}
 }
 
-func (s *ExprSuite) TestValidQuery(c *C) {
+func (s *ExprSuite) TestValidBindInputs(c *C) {
 	tests := []struct {
 		query       string
 		prepareArgs []any
@@ -653,21 +653,21 @@ func (s *ExprSuite) TestValidQuery(c *C) {
 			c.Fatal(err)
 		}
 
-		preparedExpr, err := parsedExpr.Prepare(t.prepareArgs...)
+		typedExpr, err := parsedExpr.BindTypes(t.prepareArgs...)
 		if err != nil {
 			c.Fatal(err)
 		}
 
-		query, err := preparedExpr.Query(t.queryArgs...)
+		query, err := typedExpr.BindInputs(t.queryArgs...)
 		if err != nil {
 			c.Fatal(err)
 		}
 
-		c.Assert(query.QueryArgs(), DeepEquals, t.queryValues)
+		c.Assert(query.Params(), DeepEquals, t.queryValues)
 	}
 }
 
-func (s *ExprSuite) TestQueryError(c *C) {
+func (s *ExprSuite) TestBindInputsError(c *C) {
 	tests := []struct {
 		query       string
 		prepareArgs []any
@@ -755,12 +755,12 @@ func (s *ExprSuite) TestQueryError(c *C) {
 			c.Fatal(err)
 		}
 
-		preparedExpr, err := parsedExpr.Prepare(t.prepareArgs...)
+		typedExpr, err := parsedExpr.BindTypes(t.prepareArgs...)
 		if err != nil {
 			c.Fatal(err)
 		}
 
-		_, err = preparedExpr.Query(t.queryArgs...)
+		_, err = typedExpr.BindInputs(t.queryArgs...)
 		if err != nil {
 			c.Assert(err.Error(), Equals, t.err,
 				Commentf("test %d failed:\nquery: %s", i, t.query))
