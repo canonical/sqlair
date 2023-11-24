@@ -8,8 +8,8 @@ import (
 	. "gopkg.in/check.v1"
 )
 
-var _ Info = &structInfo{}
-var _ Info = &mapInfo{}
+var _ ArgWithMembers = &structInfo{}
+var _ ArgWithMembers = &mapInfo{}
 
 func TestTypeInfo(t *testing.T) { TestingT(t) }
 
@@ -30,7 +30,7 @@ func (e *typeInfoSuite) TestReflectStruct(c *C) {
 		NotInDB: "doesn't matter",
 	}
 
-	info, err := GetTypeInfo(s)
+	info, err := GetArgInfo(s)
 	c.Assert(err, IsNil)
 
 	switch info := info.(type) {
@@ -57,7 +57,7 @@ func (s *typeInfoSuite) TestReflectSimpleConcurrent(c *C) {
 
 	// Get the type info of a struct sequentially.
 	var seqSt myStruct
-	seqInfo, err := GetTypeInfo(seqSt)
+	seqInfo, err := GetArgInfo(seqSt)
 	c.Assert(err, IsNil)
 
 	// Get some type info concurrently.
@@ -68,13 +68,13 @@ func (s *typeInfoSuite) TestReflectSimpleConcurrent(c *C) {
 	for i := 0; i < 5; i++ {
 		wg.Add(1)
 		go func() {
-			_, _ = GetTypeInfo(concSt)
+			_, _ = GetArgInfo(concSt)
 			wg.Done()
 		}()
 	}
 
 	// Get type info alongside concurrent access.
-	concInfo, err := GetTypeInfo(concSt)
+	concInfo, err := GetArgInfo(concSt)
 	c.Assert(err, IsNil)
 
 	c.Assert(seqInfo, Equals, concInfo)
@@ -89,7 +89,7 @@ func (s *typeInfoSuite) TestReflectNonStructType(c *C) {
 	}
 
 	for _, value := range nonStructs {
-		i, err := GetTypeInfo(value)
+		i, err := GetArgInfo(value)
 		c.Assert(err, ErrorMatches, "internal error: cannot obtain type information for type that is not map or struct: .*")
 		c.Assert(i, IsNil)
 	}
@@ -140,15 +140,15 @@ func (s *typeInfoSuite) TestReflectBadTagError(c *C) {
 	}
 
 	for _, value := range unsupportedFlag {
-		_, err := GetTypeInfo(value)
+		_, err := GetArgInfo(value)
 		c.Assert(err, ErrorMatches, "cannot parse tag for field .ID: unsupported flag .*")
 	}
 	for _, value := range tagEmpty {
-		_, err := GetTypeInfo(value)
+		_, err := GetArgInfo(value)
 		c.Assert(err, ErrorMatches, "cannot parse tag for field .ID: .*")
 	}
 	for _, value := range invalidColumn {
-		_, err := GetTypeInfo(value)
+		_, err := GetArgInfo(value)
 		c.Assert(err, ErrorMatches, "cannot parse tag for field .ID: invalid column name in 'db' tag: .*")
 	}
 }
@@ -173,7 +173,7 @@ func (s *typeInfoSuite) TestReflectValidTag(c *C) {
 	}
 
 	for _, value := range validTags {
-		_, err := GetTypeInfo(value)
+		_, err := GetArgInfo(value)
 		c.Assert(err, IsNil)
 	}
 }
@@ -194,7 +194,7 @@ func (s *typeInfoSuite) TestUnexportedField(c *C) {
 	}
 
 	for _, value := range unexportedFields {
-		_, err := GetTypeInfo(value)
+		_, err := GetArgInfo(value)
 		c.Assert(err, ErrorMatches, `field "unexp" of struct  not exported`)
 	}
 }

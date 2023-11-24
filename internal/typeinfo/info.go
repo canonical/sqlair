@@ -13,15 +13,49 @@ import (
 // the parser.
 var validColNameRx = regexp.MustCompile(`^([a-zA-Z_])+([a-zA-Z_0-9])*$`)
 
-// Info exposes useful information about types used in SQLair queries.
-type Info interface {
+type ArgInfos map[string]Arg
+
+func (ais ArgInfos) GetArgWithMembers(name string) (ArgWithMembers, error) {
+	argInfo, ok := ais[name]
+	if !ok {
+		argNames := []string{}
+		for argName := range ais {
+			argNames = append(argNames, argName)
+		}
+		// Sort for consistant error messages.
+		sort.Strings(argNames)
+		return nil, typeMissingError(name, argNames)
+	}
+	argWMInfo, ok := argInfo.(ArgWithMembers)
+	if !ok {
+		return nil, fmt.Errorf("internal error: type %s does not have members", argInfo.Typ().Name())
+	}
+	return argWMInfo, nil
+}
+
+// Arg exposes useful information about SQLair input/output argument types.
+type Arg interface {
 	Typ() reflect.Type
+}
 
-	// TypeMember returns the type member associated with a given column name.
-	TypeMember(member string) (Member, error)
+// ArgWithMembers represents a struct or a map argument.
+type ArgWithMembers interface {
+	// OutputMember returns the member of the arg associated with a given
+	// column name.
+	OutputMember(string) (Output, error)
 
-	// GetAllMembers returns all members a type associated with column names.
-	GetAllMembers() ([]Member, error)
+	// InputMember returns the member of the arg associated with a given
+	// column name.
+	InputMember(string) (Input, error)
+
+	// AllOutputMembers returns all members a type associated with column names.
+	AllOutputMembers() ([]Output, error)
+	AllMemberNames() ([]string, error)
+	Arg
+}
+
+type SliceArg interface {
+	GetRange()
 }
 
 type structInfo struct {
@@ -37,7 +71,15 @@ func (si *structInfo) Typ() reflect.Type {
 	return si.structType
 }
 
-func (si *structInfo) TypeMember(member string) (Member, error) {
+func (si *structInfo) InputMember(name string) (Input, error) {
+	return si.member(name)
+}
+
+func (si *structInfo) OutputMember(name string) (Output, error) {
+	return si.member(name)
+}
+
+func (si *structInfo) member(member string) (*structField, error) {
 	tm, ok := si.tagToField[member]
 	if !ok {
 		return nil, fmt.Errorf(`type %q has no %q db tag`, si.structType.Name(), member)
@@ -45,16 +87,20 @@ func (si *structInfo) TypeMember(member string) (Member, error) {
 	return tm, nil
 }
 
-func (si *structInfo) GetAllMembers() ([]Member, error) {
+func (si *structInfo) AllOutputMembers() ([]Output, error) {
 	if len(si.tags) == 0 {
 		return nil, fmt.Errorf(`no "db" tags found in struct %q`, si.structType.Name())
 	}
 
-	var tms []Member
+	var os []Output
 	for _, tag := range si.tags {
-		tms = append(tms, si.tagToField[tag])
+		os = append(os, si.tagToField[tag])
 	}
-	return tms, nil
+	return os, nil
+}
+
+func (si *structInfo) AllMemberNames() ([]string, error) {
+	return si.tags, nil
 }
 
 type mapInfo struct {
@@ -65,20 +111,32 @@ func (mi *mapInfo) Typ() reflect.Type {
 	return mi.mapType
 }
 
-func (mi *mapInfo) TypeMember(member string) (Member, error) {
-	return &mapKey{name: member, mapType: mi.mapType}, nil
+func (mi *mapInfo) InputMember(name string) (Input, error) {
+	return mi.member(name)
 }
 
-func (mi *mapInfo) GetAllMembers() ([]Member, error) {
+func (mi *mapInfo) OutputMember(name string) (Output, error) {
+	return mi.member(name)
+}
+
+func (mi *mapInfo) member(name string) (*mapKey, error) {
+	return &mapKey{name: name, mapType: mi.mapType}, nil
+}
+
+func (mi *mapInfo) AllOutputMembers() ([]Output, error) {
+	return nil, fmt.Errorf(`columns must be specified for map with star`)
+}
+
+func (mi *mapInfo) AllMemberNames() ([]string, error) {
 	return nil, fmt.Errorf(`columns must be specified for map with star`)
 }
 
 var cacheMutex sync.RWMutex
-var cache = make(map[reflect.Type]Info)
+var cache = make(map[reflect.Type]Arg)
 
-// Reflect will return the typeInfo of a given type,
-// generating and caching as required.
-func GetTypeInfo(value any) (Info, error) {
+// GetArgInfo will return information useful for SQLair from a sample
+// instantiation of an argument type.
+func GetArgInfo(value any) (Arg, error) {
 	if value == (any)(nil) {
 		return nil, fmt.Errorf("cannot reflect nil value")
 	}
@@ -106,7 +164,7 @@ func GetTypeInfo(value any) (Info, error) {
 
 // generate produces and returns reflection information for the input
 // reflect.Value that is specifically required for SQLair operation.
-func generateTypeInfo(t reflect.Type) (Info, error) {
+func generateTypeInfo(t reflect.Type) (Arg, error) {
 	switch t.Kind() {
 	case reflect.Map:
 		if t.Key().Kind() != reflect.String {
@@ -180,4 +238,12 @@ func parseTag(tag string) (string, bool, error) {
 	}
 
 	return name, omitEmpty, nil
+}
+
+func typeMissingError(missingType string, existingTypes []string) error {
+	if len(existingTypes) == 0 {
+		return fmt.Errorf(`parameter with type %q missing`, missingType)
+	}
+	// "%s" is used instead of %q to correctly print double quotes within the joined string.
+	return fmt.Errorf(`parameter with type %q missing (have "%s")`, missingType, strings.Join(existingTypes, `", "`))
 }

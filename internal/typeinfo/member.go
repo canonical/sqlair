@@ -8,23 +8,24 @@ import (
 
 var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
 
-// Member describes a type that is a child
-// of some other encapsulating type.
-type Member interface {
-	// OuterType returns the outer type in which this member is present.
-	OuterType() reflect.Type
+type Input interface {
+	// GetParams returns the query parameters represented
+	// by this Input from the assosiated input argument.
+	LocateParam(map[reflect.Type]reflect.Value) (reflect.Value, error)
+	ValueLocator
+}
 
-	// MemberName returns this member's name.
-	MemberName() string
-
-	// ValueFromOuter returns the value represented by this
-	// type member within the input outer value.
-	ValueFromOuter(reflect.Value) (reflect.Value, error)
-
+type Output interface {
 	// GetScanTarget returns a pointer for the target of rows.Scan, and a
 	// ScanProxy reference in the event that we need to coerce that pointer
 	// into a struct field or map key.
-	GetScanTarget(reflect.Value) (any, *ScanProxy, error)
+	LocateScanTarget(map[reflect.Type]reflect.Value) (any, *ScanProxy, error)
+	ValueLocator
+}
+
+type ValueLocator interface {
+	ArgType() reflect.Type
+	String() string
 }
 
 type mapKey struct {
@@ -34,8 +35,39 @@ type mapKey struct {
 
 // OuterType returns the reflected type of the map
 // for which this Member implementation is a key.
-func (mk *mapKey) OuterType() reflect.Type {
+func (mk *mapKey) ArgType() reflect.Type {
 	return mk.mapType
+}
+
+func locateValue(typeToValue map[reflect.Type]reflect.Value, typ reflect.Type) (reflect.Value, error) {
+	v, ok := typeToValue[typ]
+	if !ok {
+		argNames := []string{}
+		for argType := range typeToValue {
+			argNames = append(argNames, argType.Name())
+		}
+		return reflect.Value{}, typeMissingError(typ.Name(), argNames)
+	}
+	return v, nil
+}
+
+// ValueFromOuter returns the value for this map key in the input reflected map.
+// An error is returned if the map does not contain this key.
+func (mk *mapKey) LocateParam(typeToValue map[reflect.Type]reflect.Value) (reflect.Value, error) {
+	m, err := locateValue(typeToValue, mk.mapType)
+	if err != nil {
+		return reflect.Value{}, err
+	}
+	v := m.MapIndex(reflect.ValueOf(mk.name))
+	if v.Kind() == reflect.Invalid {
+		return reflect.Value{}, fmt.Errorf("map %q does not contain key %q", mk.mapType.Name(), mk.name)
+	}
+	return v, nil
+}
+
+// MemberName returns the map key.
+func (mk *mapKey) String() string {
+	return "key \"" + mk.name + "\" of map \"" + mk.mapType.Name() + "\""
 }
 
 // MemberName returns the map key.
@@ -43,21 +75,15 @@ func (mk *mapKey) MemberName() string {
 	return mk.name
 }
 
-// ValueFromOuter returns the value for this map key in the input reflected map.
-// An error is returned if the map does not contain this key.
-func (mk *mapKey) ValueFromOuter(v reflect.Value) (reflect.Value, error) {
-	val := v.MapIndex(reflect.ValueOf(mk.name))
-	if val.Kind() == reflect.Invalid {
-		return val, fmt.Errorf("map %q does not contain key %q", mk.OuterType().Name(), mk.name)
-	}
-	return val, nil
-}
-
 // GetScanTarget returns a pointer for the target of rows.Scan, and a ScanProxy
 // reference for setting that target as the value for this map key.
-func (mk *mapKey) GetScanTarget(outVal reflect.Value) (any, *ScanProxy, error) {
+func (mk *mapKey) LocateScanTarget(typeToValue map[reflect.Type]reflect.Value) (any, *ScanProxy, error) {
+	m, err := locateValue(typeToValue, mk.mapType)
+	if err != nil {
+		return nil, nil, err
+	}
 	scanVal := reflect.New(mk.mapType.Elem()).Elem()
-	return scanVal.Addr().Interface(), &ScanProxy{original: outVal, scan: scanVal, key: reflect.ValueOf(mk.name)}, nil
+	return scanVal.Addr().Interface(), &ScanProxy{original: m, scan: scanVal, key: reflect.ValueOf(mk.name)}, nil
 }
 
 // structField represents reflection information about a field from some struct type.
@@ -81,18 +107,26 @@ type structField struct {
 
 // OuterType returns the reflected type of struct in
 // which this Member implementation is a field.
-func (f *structField) OuterType() reflect.Type {
+func (f *structField) ArgType() reflect.Type {
 	return f.structType
+}
+
+// ValueFromOuter returns the value of this field in the input reflected struct.
+func (f *structField) LocateParam(typeToValue map[reflect.Type]reflect.Value) (reflect.Value, error) {
+	s, err := locateValue(typeToValue, f.structType)
+	if err != nil {
+		return reflect.Value{}, err
+	}
+	return s.Field(f.index), nil
+}
+
+func (f *structField) String() string {
+	return "tag \"" + f.tag + "\" of struct \"" + f.structType.Name() + "\""
 }
 
 // MemberName returns the name of this struct field.
 func (f *structField) MemberName() string {
 	return f.tag
-}
-
-// ValueFromOuter returns the value of this field in the input reflected struct.
-func (f *structField) ValueFromOuter(v reflect.Value) (reflect.Value, error) {
-	return v.Field(f.index), nil
 }
 
 // GetScanTarget returns a pointer for the target of rows.Scan, and a ScanProxy
@@ -103,8 +137,12 @@ func (f *structField) ValueFromOuter(v reflect.Value) (reflect.Value, error) {
 // implement sql.Scanner, a pointer to them is generated and passed to
 // Rows.Scan. If Scan has set this pointer to nil the value is zeroed by
 // ScanProxy.OnSuccess.
-func (f *structField) GetScanTarget(outVal reflect.Value) (any, *ScanProxy, error) {
-	val := outVal.Field(f.index)
+func (f *structField) LocateScanTarget(typeToValue map[reflect.Type]reflect.Value) (any, *ScanProxy, error) {
+	s, err := locateValue(typeToValue, f.structType)
+	if err != nil {
+		return nil, nil, err
+	}
+	val := s.Field(f.index)
 	if !val.CanSet() {
 		return nil, nil, fmt.Errorf("internal error: cannot set field %s of struct %s", f.name, f.structType.Name())
 	}
