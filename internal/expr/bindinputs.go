@@ -100,6 +100,46 @@ type typedExpression interface {
 	typedExpr()
 }
 
+// outputColumn stores the name of a column to fetch from the database and the
+// type member to scan the result into.
+type outputColumn struct {
+	sql string
+	tm  typeinfo.Member
+}
+
+// typedOutputExpr contains the columns to fetch from the database and
+// information about the Go values to read the query results into.
+type typedOutputExpr struct {
+	outputColumns []outputColumn
+}
+
+// typedExpr is a marker method.
+func (*typedOutputExpr) typedExpr() {}
+
+// checkUsed checks if the members in the typed output expression have already
+// been used in the query. It updates the memberUsed map with its own members.
+func (toe *typedOutputExpr) checkUsed(memberUsed map[typeinfo.Member]bool) error {
+	for _, oc := range toe.outputColumns {
+		tm := oc.tm
+		if ok := memberUsed[tm]; ok {
+			return fmt.Errorf("member %q of type %q appears more than once in output expressions", tm.MemberName(), tm.OuterType().Name())
+		}
+		memberUsed[tm] = true
+	}
+	return nil
+}
+
+// typedInputExpr stores information about a Go value to use as a query input.
+type typedInputExpr struct {
+	input typeinfo.Member
+}
+
+// typedExpr is a marker method.
+func (*typedInputExpr) typedExpr() {}
+
+// typedExpr is a marker method.
+func (*bypass) typedExpr() {}
+
 const markerPrefix = "_sqlair_"
 
 func markerName(n int) string {

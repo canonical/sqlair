@@ -72,72 +72,67 @@ func (pe *ParsedExprs) BindTypes(args ...any) (te *TypedExprs, err error) {
 		}
 	}
 
-	outputMemberUsed := map[typeinfo.Member]bool{}
-	typedExprs := []typedExpression{}
-
 	// Check and expand each query expr.
+	typedExprs := []typedExpression{}
+	outputMemberUsed := map[typeinfo.Member]bool{}
 	for _, expr := range *pe {
-		switch e := expr.(type) {
-		case *inputExpr:
-			tie, err := bindInputTypes(ti, e)
-			if err != nil {
-				return nil, err
-			}
-			typedExprs = append(typedExprs, tie)
-		case *outputExpr:
-			toe, err := bindOutputTypes(ti, e)
-			if err != nil {
-				return nil, err
-			}
-
-			for _, oc := range toe.outputColumns {
-				tm := oc.tm
-				if ok := outputMemberUsed[tm]; ok {
-					return nil, fmt.Errorf("member %q of type %q appears more than once in output expressions", tm.MemberName(), tm.OuterType().Name())
-				}
-				outputMemberUsed[tm] = true
-			}
-			typedExprs = append(typedExprs, toe)
-		case *bypass:
-			typedExprs = append(typedExprs, e)
-		default:
-			return nil, fmt.Errorf("internal error: unknown query expr type %T", expr)
+		te, err := expr.bindTypes(ti)
+		if err != nil {
+			return nil, err
 		}
+
+		if toe, ok := te.(*typedOutputExpr); ok {
+			err = toe.checkUsed(outputMemberUsed)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		typedExprs = append(typedExprs, te)
 	}
+
 	typedExpr := TypedExprs(typedExprs)
 	return &typedExpr, nil
 }
 
-// outputColumn stores the name of a column to fetch from the database and the
-// type member to scan the result into.
-type outputColumn struct {
-	sql string
-	tm  typeinfo.Member
+// expression represents a parsed node of the SQLair query's AST.
+type expression interface {
+	// String returns a text representation for debugging and testing purposes.
+	String() string
+
+	bindTypes(typeNameToInfo) (typedExpression, error)
 }
 
-// typedOutputExpr contains the columns to fetch from the database and
-// information about the Go values to read the query results into.
-type typedOutputExpr struct {
-	outputColumns []outputColumn
+// bypass represents part of the expression that we want to pass to the backend
+// database verbatim.
+type bypass struct {
+	chunk string
 }
 
-// typedExpr is a marker method.
-func (*typedOutputExpr) typedExpr() {}
-
-// typedInputExpr stores information about a Go value to use as a query input.
-type typedInputExpr struct {
-	input typeinfo.Member
+func (e *bypass) String() string {
+	return "Bypass[" + e.chunk + "]"
 }
 
-// typedExpr is a marker method.
-func (*typedInputExpr) typedExpr() {}
+func (e *bypass) bindTypes(typeNameToInfo) (typedExpression, error) {
+	return e, nil
+}
 
-// typedExpr is a marker method.
-func (*bypass) typedExpr() {}
+// inputExpr represents a named parameter that will be sent to the database
+// while performing the query.
+type inputExpr struct {
+	sourceType valueAccessor
+	raw        string
+}
 
-// bindInputTypes binds the input expression to a type and returns the
-// typeMember represented by the expression.
-func bindInputTypes(ti typeNameToInfo, e *inputExpr) (tie *typedInputExpr, err error) {
+func (e *inputExpr) String() string {
+	return fmt.Sprintf("Input[%+v]", e.sourceType)
+}
+
+func (e *inputExpr) expr() {}
+
+// bindTypes binds the input expression to a type and
+// returns the typeMember represented by the expression.
+func (e *inputExpr) bindTypes(ti typeNameToInfo) (te typedExpression, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("input expression: %s: %s", err, e.raw)
@@ -156,10 +151,24 @@ func bindInputTypes(ti typeNameToInfo, e *inputExpr) (tie *typedInputExpr, err e
 	return &typedInputExpr{tm}, nil
 }
 
-// bindOutputTypes binds the output expression to concrete types. It then checks
-// the expression is formatted correctly and generates the columns for the query
+// outputExpr represents a named target output variable in the SQL expression,
+// as well as the source table and column where it will be read from.
+type outputExpr struct {
+	sourceColumns []columnAccessor
+	targetTypes   []valueAccessor
+	raw           string
+}
+
+func (e *outputExpr) String() string {
+	return fmt.Sprintf("Output[%+v %+v]", e.sourceColumns, e.targetTypes)
+}
+
+func (e *outputExpr) expr() {}
+
+// bindTypes binds the output expression to concrete types. It then checks the
+// expression is formatted correctly and generates the columns for the query
 // and the typeMembers the columns correspond to.
-func bindOutputTypes(ti typeNameToInfo, e *outputExpr) (toe *typedOutputExpr, err error) {
+func (e *outputExpr) bindTypes(ti typeNameToInfo) (te typedExpression, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("output expression: %s: %s", err, e.raw)
@@ -171,7 +180,7 @@ func bindOutputTypes(ti typeNameToInfo, e *outputExpr) (toe *typedOutputExpr, er
 	starTypes := starCountTypes(e.targetTypes)
 	starColumns := starCountColumns(e.sourceColumns)
 
-	toe = &typedOutputExpr{}
+	toe := &typedOutputExpr{}
 
 	// Case 1: Generated columns e.g. "* AS (&P.*, &A.id)" or "&P.*".
 	if numColumns == 0 || (numColumns == 1 && starColumns == 1) {
