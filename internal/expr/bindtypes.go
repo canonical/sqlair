@@ -72,7 +72,7 @@ func (pe *ParsedExprs) BindTypes(args ...any) (te *TypedExprs, err error) {
 		}
 	}
 
-	// Check and expand each query expr.
+	// Bind types to each expression.
 	typedExprs := []typedExpression{}
 	outputMemberUsed := map[typeinfo.Member]bool{}
 	for _, expr := range *pe {
@@ -100,6 +100,7 @@ type expression interface {
 	// String returns a text representation for debugging and testing purposes.
 	String() string
 
+	// bindTypes generates a typed expression from the query type information.
 	bindTypes(typeNameToInfo) (typedExpression, error)
 }
 
@@ -113,6 +114,8 @@ func (e *bypass) String() string {
 	return "Bypass[" + e.chunk + "]"
 }
 
+// bindTypes is part of the expression interface. bypass expressions have no
+// types so the same expression is returned.
 func (e *bypass) bindTypes(typeNameToInfo) (typedExpression, error) {
 	return e, nil
 }
@@ -128,10 +131,8 @@ func (e *inputExpr) String() string {
 	return fmt.Sprintf("Input[%+v]", e.sourceType)
 }
 
-func (e *inputExpr) expr() {}
-
-// bindTypes binds the input expression to a type and
-// returns the typeMember represented by the expression.
+// bindTypes binds the input expression to a query type and
+// returns a typed input expression.
 func (e *inputExpr) bindTypes(ti typeNameToInfo) (te typedExpression, err error) {
 	defer func() {
 		if err != nil {
@@ -163,11 +164,8 @@ func (e *outputExpr) String() string {
 	return fmt.Sprintf("Output[%+v %+v]", e.sourceColumns, e.targetTypes)
 }
 
-func (e *outputExpr) expr() {}
-
 // bindTypes binds the output expression to concrete types. It then checks the
-// expression is formatted correctly and generates the columns for the query
-// and the typeMembers the columns correspond to.
+// expression is formatted correctly and generates a typed output expression.
 func (e *outputExpr) bindTypes(ti typeNameToInfo) (te typedExpression, err error) {
 	defer func() {
 		if err != nil {
