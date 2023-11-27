@@ -278,64 +278,72 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		query   string
 		types   []any
 		inputs  []any
-		outputs [][]any
+		outputs []any
 		err     string
 	}{{
 		summary: "nil parameter",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
-		outputs: [][]any{{nil}},
+		outputs: []any{nil},
 		err:     "cannot get result: need map or pointer to struct, got nil",
 	}, {
 		summary: "nil pointer parameter",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
-		outputs: [][]any{{(*Person)(nil)}},
+		outputs: []any{(*Person)(nil)},
 		err:     "cannot get result: got nil pointer",
 	}, {
 		summary: "non pointer parameter",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
-		outputs: [][]any{{Person{}}},
+		outputs: []any{Person{}},
 		err:     "cannot get result: need map or pointer to struct, got struct",
 	}, {
 		summary: "wrong struct",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
-		outputs: [][]any{{&Address{}}},
+		outputs: []any{&Address{}},
 		err:     `cannot get result: type "Address" does not appear in query, have: Person`,
 	}, {
 		summary: "not a struct",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
-		outputs: [][]any{{&[]any{}}},
+		outputs: []any{&[]any{}},
 		err:     "cannot get result: need map or pointer to struct, got pointer to slice",
 	}, {
 		summary: "missing get value",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
-		outputs: [][]any{{}},
+		outputs: []any{},
 		err:     `cannot get result: type "Person" found in query but not passed to get`,
 	}, {
 		summary: "multiple of the same type",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
-		outputs: [][]any{{&Person{}, &Person{}}},
+		outputs: []any{&Person{}, &Person{}},
 		err:     `cannot get result: type "Person" provided more than once, rename one of them`,
 	}, {
 		summary: "multiple of the same type",
 		query:   "SELECT name AS &M.* FROM person",
 		types:   []any{sqlair.M{}},
 		inputs:  []any{},
-		outputs: [][]any{{&sqlair.M{}, sqlair.M{}}},
+		outputs: []any{&sqlair.M{}, sqlair.M{}},
 		err:     `cannot get result: type "M" provided more than once, rename one of them`,
+	}, {
+		summary: "output expr in a with clause",
+		query: `WITH averageID(avgid) AS (SELECT &Person.id FROM person)
+		        SELECT id FROM person, averageID WHERE id > averageID.avgid LIMIT 1`,
+		types:   []any{Person{}},
+		inputs:  []any{},
+		outputs: []any{&Person{}},
+		err:     `cannot get result: query uses "&Person" outside of result context`,
 	}}
 
 	tables, sqldb, err := personAndAddressDB()
@@ -355,20 +363,12 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 
 		iter := db.Query(nil, stmt, t.inputs...).Iter()
 		defer iter.Close()
-		i := 0
-		for iter.Next() {
-			if i >= len(t.outputs) {
-				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d > %d)\n", t.summary, t.query, i+1, len(t.outputs))
-				break
-			}
-			if err := iter.Get(t.outputs[i]...); err != nil {
-				c.Assert(err, ErrorMatches, t.err,
-					Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
-				iter.Close()
-				break
-			}
-			i++
+		if !iter.Next() {
+			c.Fatalf("\ntest %q failed (Get):\ninput: %s\nerr: no rows returned\n", t.summary, t.query)
 		}
+		err = iter.Get(t.outputs...)
+		c.Assert(err, ErrorMatches, t.err,
+			Commentf("\ntest %q failed:\ninput: %s\noutputs: %s\n", t.summary, t.query, t.outputs))
 		err = iter.Close()
 		if err != nil {
 			c.Errorf("\ntest %q failed (Close):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
@@ -1356,4 +1356,54 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 			c.Errorf("\ntest %q failed (Close):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
 		}
 	}
+}
+
+// Because the Query struct did not contain references to either Statement or
+// DB, if either of those would go out of scope the underlying sql.Stmt would
+// be closed.
+func (s *PackageSuite) TestRaceConditionFinalizer(c *C) {
+	var q *sqlair.Query
+	// Drop all the values except the query itself.
+	func() {
+		sqldb, err := setupDB()
+		c.Assert(err, IsNil)
+
+		db := sqlair.NewDB(sqldb)
+
+		selectStmt := sqlair.MustPrepare(`SELECT 'hello'`)
+		q = db.Query(nil, selectStmt)
+	}()
+
+	// Try to run their finalizers by calling GC several times.
+	for i := 0; i <= 10; i++ {
+		runtime.GC()
+		time.Sleep(0)
+	}
+
+	// Assert that sql.Stmt was not closed early.
+	c.Assert(q.Run(), IsNil)
+}
+func (s *PackageSuite) TestRaceConditionFinalizerTX(c *C) {
+	var q *sqlair.Query
+	// Drop all the values except the query itself.
+	func() {
+		sqldb, err := setupDB()
+		c.Assert(err, IsNil)
+
+		db := sqlair.NewDB(sqldb)
+
+		selectStmt := sqlair.MustPrepare(`SELECT 'hello'`)
+		tx, err := db.Begin(nil, nil)
+		c.Assert(err, IsNil)
+		q = tx.Query(nil, selectStmt)
+	}()
+
+	// Try to run their finalizers by calling GC several times.
+	for i := 0; i <= 10; i++ {
+		runtime.GC()
+		time.Sleep(0)
+	}
+
+	// Assert that sql.Stmt was not closed early.
+	c.Assert(q.Run(), IsNil)
 }

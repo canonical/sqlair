@@ -4,6 +4,10 @@ import (
 	. "gopkg.in/check.v1"
 )
 
+type parseSuite struct{}
+
+var _ = Suite(&parseSuite{})
+
 type parseHelperTest struct {
 	bytef    func(byte) bool
 	stringf  func(string) bool
@@ -13,7 +17,7 @@ type parseHelperTest struct {
 	data     []string
 }
 
-func (s *ExprInternalSuite) TestRunTable(c *C) {
+func (s parseSuite) TestRunTable(c *C) {
 	var p = NewParser()
 	var parseTests = []parseHelperTest{
 
@@ -76,7 +80,7 @@ func (s *ExprInternalSuite) TestRunTable(c *C) {
 	}
 }
 
-func (s *ExprInternalSuite) TestValidQuotes(c *C) {
+func (s parseSuite) TestValidQuotes(c *C) {
 	var p = NewParser()
 
 	validQuotes := []string{
@@ -100,7 +104,7 @@ func (s *ExprInternalSuite) TestValidQuotes(c *C) {
 	}
 }
 
-func (s *ExprInternalSuite) TestInvalidQuote(c *C) {
+func (s parseSuite) TestInvalidQuote(c *C) {
 	var p = NewParser()
 
 	invalidQuote := []string{
@@ -117,7 +121,7 @@ func (s *ExprInternalSuite) TestInvalidQuote(c *C) {
 	}
 }
 
-func (s *ExprInternalSuite) TestUnfinishedQuote(c *C) {
+func (s parseSuite) TestUnfinishedQuote(c *C) {
 	var p = NewParser()
 
 	unfinishedQuotes := []string{
@@ -139,7 +143,7 @@ func (s *ExprInternalSuite) TestUnfinishedQuote(c *C) {
 	}
 }
 
-func (s *ExprInternalSuite) TestRemoveComments(c *C) {
+func (s parseSuite) TestRemoveComments(c *C) {
 	validComments := []string{
 		`-- Single line comment`,
 		`-- Single line comment with line break
@@ -176,7 +180,7 @@ func (s *ExprInternalSuite) TestRemoveComments(c *C) {
 	}
 }
 
-func (s *ExprInternalSuite) TestParseSliceRange(c *C) {
+func (s parseSuite) TestParseSliceRange(c *C) {
 	numToPtr := func(n uint64) *uint64 {
 		m := n
 		return &m
