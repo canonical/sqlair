@@ -117,8 +117,8 @@ type expression interface {
 	bindTypes(typeNameToInfo) (typedExpression, error)
 }
 
-// bypass represents part of the expression that we want to pass to the backend
-// database verbatim.
+// bypass is an expression representing a chunk of SQL that we want to pass to
+// the backend database verbatim.
 type bypass struct {
 	chunk string
 }
@@ -133,8 +133,7 @@ func (e *bypass) bindTypes(typeNameToInfo) (typedExpression, error) {
 	return e, nil
 }
 
-// inputExpr represents a named parameter that will be sent to the database
-// while performing the query.
+// inputExpr is an expression that specifies a SQLair input argument.
 type inputExpr struct {
 	sourceType valueAccessor
 	raw        string
@@ -144,8 +143,8 @@ func (e *inputExpr) String() string {
 	return fmt.Sprintf("Input[%+v]", e.sourceType)
 }
 
-// bindTypes binds the input expression to a query type and
-// returns a typed input expression.
+// bindTypes binds the input expression to a query type and returns a typed
+// input expression.
 func (e *inputExpr) bindTypes(ti typeNameToInfo) (te typedExpression, err error) {
 	defer func() {
 		if err != nil {
@@ -165,8 +164,8 @@ func (e *inputExpr) bindTypes(ti typeNameToInfo) (te typedExpression, err error)
 	return &typedInputExpr{tm}, nil
 }
 
-// outputExpr represents a named target output variable in the SQL expression,
-// as well as the source table and column where it will be read from.
+// outputExpr is an expression that specifies SQLair output arguments and the
+// columns that will be scanned into them.
 type outputExpr struct {
 	sourceColumns []columnAccessor
 	targetTypes   []valueAccessor
@@ -178,7 +177,8 @@ func (e *outputExpr) String() string {
 }
 
 // bindTypes binds the output expression to concrete types. It then checks the
-// expression is formatted correctly and generates a typed output expression.
+// expression valid with respect to its bound types and generates a typed output
+// expression.
 func (e *outputExpr) bindTypes(ti typeNameToInfo) (te typedExpression, err error) {
 	defer func() {
 		if err != nil {
