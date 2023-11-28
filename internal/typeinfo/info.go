@@ -17,14 +17,14 @@ type ArgInfo map[string]arg
 
 // GenerateArgInfo returns type information useful for SQLair from sample
 // instantiations of an argument type.
-func GenerateArgInfo(args ...any) (ArgInfo, error) {
+func GenerateArgInfo(typeSamples ...any) (ArgInfo, error) {
 	argInfo := map[string]arg{}
 	// Generate and save reflection info.
-	for _, arg := range args {
-		if arg == nil {
+	for _, typeSample := range typeSamples {
+		if typeSample == nil {
 			return nil, fmt.Errorf("need struct or map, got nil")
 		}
-		t := reflect.TypeOf(arg)
+		t := reflect.TypeOf(typeSample)
 		switch t.Kind() {
 		case reflect.Struct, reflect.Map:
 			if t.Name() == "" {
@@ -57,7 +57,7 @@ func (argInfo ArgInfo) InputMember(typeName string, member string) (Input, error
 	}
 	input, ok := vl.(Input)
 	if !ok {
-		return nil, fmt.Errorf("not an input")
+		return nil, fmt.Errorf("internal error: %s cannot be used as input", vl.ArgType().Kind())
 	}
 	return input, nil
 }
@@ -69,7 +69,7 @@ func (argInfo ArgInfo) OutputMember(typeName string, member string) (Output, err
 	}
 	output, ok := vl.(Output)
 	if !ok {
-		return nil, fmt.Errorf("not an output")
+		return nil, fmt.Errorf("internal error: %s cannot be used as output", vl.ArgType().Kind())
 	}
 	return output, nil
 }
@@ -81,7 +81,7 @@ func (argInfo ArgInfo) AllOutputMembers(typeName string) ([]Output, []string, er
 	}
 	si, ok := arg.(*structInfo)
 	if !ok {
-		fmt.Errorf("cant use asterisk with not a struct error")
+		return nil, nil, fmt.Errorf("columns must be specified for map with star")
 	}
 	return si.allOutputMembers()
 }
