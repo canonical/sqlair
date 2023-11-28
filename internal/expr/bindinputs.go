@@ -24,7 +24,7 @@ func (tes *TypedExprs) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 		}
 	}()
 
-	var typeToValue = make(map[reflect.Type]reflect.Value)
+	typeToValue := map[reflect.Type]reflect.Value{}
 	for _, arg := range args {
 		v := reflect.ValueOf(arg)
 		if v.Kind() == reflect.Invalid || (v.Kind() == reflect.Pointer && v.IsNil()) {
