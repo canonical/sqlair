@@ -82,7 +82,7 @@ type expression interface {
 // by index, by key, or by slice syntax.
 type valueAccessor interface {
 	getTypeName() string
-    fmt.Stringer
+	fmt.Stringer
 }
 
 // memberAcessor stores information for accessing a keyed Go value. It consists
@@ -139,8 +139,8 @@ func (st sliceRangeAccessor) String() string {
 // sliceIndexAccessor stores information for accessing an item of a slice using
 // the expression "typeName[index]".
 type sliceIndexAccessor struct {
-	typeName   string
-	index uint64
+	typeName string
+	index    uint64
 }
 
 func (st sliceIndexAccessor) getTypeName() string {
@@ -167,11 +167,11 @@ func (p *inputExpr) expr() {}
 // outputExpr represents a named target output variable in the SQL expression,
 // as well as the source table and column where it will be read from.
 type outputExpr struct {
-    // sourceColumns specify the source table and column in the DB.
+	// sourceColumns specify the source table and column in the DB.
 	sourceColumns []columnAccessor
-    // targetTypes specify how to map the query results to Go values.
-	targetTypes   []memberAcessor
-	raw           string
+	// targetTypes specify how to map the query results to Go values.
+	targetTypes []memberAcessor
+	raw         string
 }
 
 func (p *outputExpr) String() string {
