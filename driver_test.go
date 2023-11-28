@@ -16,10 +16,10 @@ import (
 // references to said statements. We can later use that information to check
 // for statement leaks.
 
-// The stmt registry keeps the pointers for the open and closed statements to
-// detect resource leaks. It uses unsafe pointers instead of references to the
-// object because if we stored a reference the runtime.Finalizer would not be
-// able to run.
+// The maps below store the pointers to the created/closed statements indexed
+// by test case. We use unsafe pointers instead of references to the objects
+// because if we stored a reference the runtime.Finalizer would not be able to
+// run.
 var openedStmts = map[string]map[uintptr]string{}
 var closedStmts = map[string]map[uintptr]bool{}
 var stmtRegistryMutex sync.RWMutex
@@ -72,13 +72,15 @@ func (c *Conn) Prepare(query string) (driver.Stmt, error) {
 	return c.PrepareContext(context.Background(), query)
 }
 
-const testNameTag = "testName"
+const TestNameTag = "testName"
 
+// Open expects the DSN to contain the test name using the testNameTag
+// attribute.
 func (d *Driver) Open(name string) (driver.Conn, error) {
 	var testName string
 	parameters := strings.Split(name, "?")[1]
 	for _, p := range strings.Split(parameters, "&") {
-		if strings.HasPrefix(p, testNameTag) {
+		if strings.HasPrefix(p, TestNameTag) {
 			testName = strings.Split(p, "=")[1]
 		}
 	}

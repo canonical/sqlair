@@ -37,8 +37,13 @@ func (s *PackageSuite) TearDownTest(c *C) {
 		c.Check(closedStmts[c.TestName()][sPtr], Equals, true,
 			Commentf("%s: failed to close statement: %s", c.TestName(), query))
 	}
+}
 
-	// Reset state for next test.
+func (s *PackageSuite) TearDownSuite(c *C) {
+	stmtRegistryMutex.Lock()
+	defer stmtRegistryMutex.Unlock()
+
+	// Reset state of stmt registry.
 	closedStmts = map[string]map[uintptr]bool{}
 	openedStmts = map[string]map[uintptr]string{}
 }
