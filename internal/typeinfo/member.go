@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
+	"strconv"
 )
 
 var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
@@ -11,7 +12,7 @@ var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
 type Input interface {
 	// GetParams returns the query parameters represented
 	// by this Input from the assosiated input argument.
-	LocateParam(map[reflect.Type]reflect.Value) (reflect.Value, error)
+	LocateParams(map[reflect.Type]reflect.Value) ([]reflect.Value, error)
 	ValueLocator
 }
 
@@ -53,26 +54,21 @@ func locateValue(typeToValue map[reflect.Type]reflect.Value, typ reflect.Type) (
 
 // ValueFromOuter returns the value for this map key in the input reflected map.
 // An error is returned if the map does not contain this key.
-func (mk *mapKey) LocateParam(typeToValue map[reflect.Type]reflect.Value) (reflect.Value, error) {
+func (mk *mapKey) LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]reflect.Value, error) {
 	m, err := locateValue(typeToValue, mk.mapType)
 	if err != nil {
-		return reflect.Value{}, err
+		return nil, err
 	}
 	v := m.MapIndex(reflect.ValueOf(mk.name))
 	if v.Kind() == reflect.Invalid {
-		return reflect.Value{}, fmt.Errorf("map %q does not contain key %q", mk.mapType.Name(), mk.name)
+		return nil, fmt.Errorf("map %q does not contain key %q", mk.mapType.Name(), mk.name)
 	}
-	return v, nil
+	return []reflect.Value{v}, nil
 }
 
 // MemberName returns the map key.
 func (mk *mapKey) String() string {
 	return "key \"" + mk.name + "\" of map \"" + mk.mapType.Name() + "\""
-}
-
-// MemberName returns the map key.
-func (mk *mapKey) MemberName() string {
-	return mk.name
 }
 
 // GetScanTarget returns a pointer for the target of rows.Scan, and a ScanProxy
@@ -112,21 +108,16 @@ func (f *structField) ArgType() reflect.Type {
 }
 
 // ValueFromOuter returns the value of this field in the input reflected struct.
-func (f *structField) LocateParam(typeToValue map[reflect.Type]reflect.Value) (reflect.Value, error) {
+func (f *structField) LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]reflect.Value, error) {
 	s, err := locateValue(typeToValue, f.structType)
 	if err != nil {
-		return reflect.Value{}, err
+		return nil, err
 	}
-	return s.Field(f.index), nil
+	return []reflect.Value{s.Field(f.index)}, nil
 }
 
 func (f *structField) String() string {
 	return "tag \"" + f.tag + "\" of struct \"" + f.structType.Name() + "\""
-}
-
-// MemberName returns the name of this struct field.
-func (f *structField) MemberName() string {
-	return f.tag
 }
 
 // GetScanTarget returns a pointer for the target of rows.Scan, and a ScanProxy
@@ -153,4 +144,79 @@ func (f *structField) LocateScanTarget(typeToValue map[reflect.Type]reflect.Valu
 		return scanVal.Addr().Interface(), &ScanProxy{original: val, scan: scanVal}, nil
 	}
 	return val.Addr().Interface(), nil, nil
+}
+
+type sliceRange struct {
+	sliceType reflect.Type
+	low       *uint64
+	high      *uint64
+}
+
+func (sr *sliceRange) ArgType() reflect.Type {
+	return sr.sliceType
+}
+
+func (sr *sliceRange) String() string {
+	low := ""
+	if sr.low != nil {
+		low = strconv.Itoa(int(*sr.low))
+	}
+	high := ""
+	if sr.high != nil {
+		high = strconv.Itoa(int(*sr.high))
+	}
+	return sr.sliceType.Name() + "[" + low + ":" + high + "]"
+}
+
+func (sr *sliceRange) LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]reflect.Value, error) {
+	s, err := locateValue(typeToValue, sr.sliceType)
+	if err != nil {
+		return nil, err
+	}
+
+	high := s.Len()
+	if sr.high != nil {
+		if int(*sr.high) > s.Len() {
+			return nil, fmt.Errorf("slice range out of bounds")
+		}
+		high = int(*sr.high)
+	}
+
+	low := 0
+	if sr.low != nil {
+		if low > high {
+			return nil, fmt.Errorf("slice range out of bounds")
+		}
+		low = int(*sr.low)
+	}
+
+	params := []reflect.Value{}
+	for i := low; i < high; i++ {
+		params = append(params, s.Index(i))
+	}
+	return params, nil
+}
+
+type sliceIndex struct {
+	sliceType reflect.Type
+	index     uint64
+}
+
+func (si *sliceIndex) ArgType() reflect.Type {
+	return si.sliceType
+}
+
+func (si *sliceIndex) String() string {
+	return si.sliceType.Name() + "[" + strconv.Itoa(int(si.index)) + "]"
+}
+
+func (si *sliceIndex) LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]reflect.Value, error) {
+	s, err := locateValue(typeToValue, si.sliceType)
+	if err != nil {
+		return nil, err
+	}
+	if int(si.index) >= s.Len() {
+		return nil, fmt.Errorf("index out of range")
+	}
+	return []reflect.Value{s.Index(int(si.index))}, nil
 }

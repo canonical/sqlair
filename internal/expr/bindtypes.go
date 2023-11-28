@@ -3,7 +3,6 @@ package expr
 import (
 	"bytes"
 	"fmt"
-	"reflect"
 	"strconv"
 
 	"github.com/canonical/sqlair/internal/typeinfo"
@@ -40,35 +39,9 @@ func (pe *ParsedExpr) BindTypes(args ...any) (te *TypedExpr, err error) {
 		}
 	}()
 
-	var argInfos = make(typeinfo.ArgInfos)
-
-	// Generate and save reflection info.
-	for _, arg := range args {
-		if arg == nil {
-			return nil, fmt.Errorf("need struct or map, got nil")
-		}
-		t := reflect.TypeOf(arg)
-		switch t.Kind() {
-		case reflect.Struct, reflect.Map:
-			if t.Name() == "" {
-				return nil, fmt.Errorf("cannot use anonymous %s", t.Kind())
-			}
-			info, err := typeinfo.GetArgInfo(arg)
-			if err != nil {
-				return nil, err
-			}
-			if dupeInfo, ok := argInfos[t.Name()]; ok {
-				if dupeInfo.Typ() == t {
-					return nil, fmt.Errorf("found multiple instances of type %q", t.Name())
-				}
-				return nil, fmt.Errorf("two types found with name %q: %q and %q", t.Name(), dupeInfo.Typ().String(), t.String())
-			}
-			argInfos[t.Name()] = info
-		case reflect.Pointer:
-			return nil, fmt.Errorf("need struct or map, got pointer to %s", t.Elem().Kind())
-		default:
-			return nil, fmt.Errorf("need struct or map, got %s", t.Kind())
-		}
+	argInfo, err := typeinfo.GenerateArgInfo(args...)
+	if err != nil {
+		return nil, err
 	}
 
 	var sql bytes.Buffer
@@ -85,7 +58,7 @@ func (pe *ParsedExpr) BindTypes(args ...any) (te *TypedExpr, err error) {
 	for _, expr := range pe.exprs {
 		switch e := expr.(type) {
 		case *inputExpr:
-			inLoc, err := bindInputTypes(argInfos, e)
+			inLoc, err := bindInputTypes(argInfo, e)
 			if err != nil {
 				return nil, err
 			}
@@ -93,7 +66,7 @@ func (pe *ParsedExpr) BindTypes(args ...any) (te *TypedExpr, err error) {
 			inCount++
 			inputs = append(inputs, inLoc)
 		case *outputExpr:
-			outCols, os, err := bindOutputTypes(argInfos, e)
+			outCols, os, err := bindOutputTypes(argInfo, e)
 			if err != nil {
 				return nil, err
 			}
@@ -127,19 +100,14 @@ func (pe *ParsedExpr) BindTypes(args ...any) (te *TypedExpr, err error) {
 
 // bindInputTypes binds the input expression to a type and returns the
 // typeMember represented by the expression.
-func bindInputTypes(argInfos typeinfo.ArgInfos, e *inputExpr) (vl typeinfo.Input, err error) {
+func bindInputTypes(argInfo typeinfo.ArgInfo, e *inputExpr) (vl typeinfo.Input, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("input expression: %s: %s", err, e.raw)
 		}
 	}()
 
-	info, err := argInfos.GetArgWithMembers(e.sourceType.typeName)
-	if err != nil {
-		return nil, err
-	}
-
-	m, err := info.InputMember(e.sourceType.memberName)
+	m, err := argInfo.InputMember(e.sourceType.typeName, e.sourceType.memberName)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +117,7 @@ func bindInputTypes(argInfos typeinfo.ArgInfos, e *inputExpr) (vl typeinfo.Input
 // bindOutputTypes binds the output expression to concrete types. It then checks
 // the expression is formatted correctly and generates the columns for the query
 // and the typeMembers the columns correspond to.
-func bindOutputTypes(argInfos typeinfo.ArgInfos, e *outputExpr) (outCols []columnAccessor, outputs []typeinfo.Output, err error) {
+func bindOutputTypes(argInfo typeinfo.ArgInfo, e *outputExpr) (outCols []columnAccessor, outputs []typeinfo.Output, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("output expression: %s: %s", err, e.raw)
@@ -170,32 +138,23 @@ func bindOutputTypes(argInfos typeinfo.ArgInfos, e *outputExpr) (outCols []colum
 		}
 
 		for _, t := range e.targetTypes {
-
-			info, err := argInfos.GetArgWithMembers(t.typeName)
-			if err != nil {
-				return nil, nil, err
-			}
 			if t.memberName == "*" {
 				// Generate asterisk columns.
-				allMembers, err := info.AllOutputMembers()
+				mls, memberNames, err := argInfo.AllOutputMembers(t.typeName)
 				if err != nil {
 					return nil, nil, err
 				}
-				outputs = append(outputs, allMembers...)
-				memberNames, err := info.AllMemberNames()
-				if err != nil {
-					return nil, nil, err
-				}
+				outputs = append(outputs, mls...)
 				for _, memberName := range memberNames {
 					outCols = append(outCols, columnAccessor{pref, memberName})
 				}
 			} else {
 				// Generate explicit columns.
-				tm, err := info.OutputMember(t.memberName)
+				ml, err := argInfo.OutputMember(t.typeName, t.memberName)
 				if err != nil {
 					return nil, nil, err
 				}
-				outputs = append(outputs, tm)
+				outputs = append(outputs, ml)
 				outCols = append(outCols, columnAccessor{pref, t.memberName})
 			}
 		}
@@ -206,16 +165,12 @@ func bindOutputTypes(argInfos typeinfo.ArgInfos, e *outputExpr) (outCols []colum
 
 	// Case 2: Explicit columns, single asterisk type e.g. "(col1, t.col2) AS &P.*".
 	if starTypes == 1 && numTypes == 1 {
-		info, err := argInfos.GetArgWithMembers(e.targetTypes[0].typeName)
-		if err != nil {
-			return nil, nil, err
-		}
 		for _, c := range e.sourceColumns {
-			tm, err := info.OutputMember(c.columnName)
+			ml, err := argInfo.OutputMember(e.targetTypes[0].typeName, c.columnName)
 			if err != nil {
 				return nil, nil, err
 			}
-			outputs = append(outputs, tm)
+			outputs = append(outputs, ml)
 			outCols = append(outCols, c)
 		}
 		return outCols, outputs, nil
@@ -227,15 +182,11 @@ func bindOutputTypes(argInfos typeinfo.ArgInfos, e *outputExpr) (outCols []colum
 	if numColumns == numTypes {
 		for i, c := range e.sourceColumns {
 			t := e.targetTypes[i]
-			info, err := argInfos.GetArgWithMembers(t.typeName)
+			ml, err := argInfo.OutputMember(t.typeName, t.memberName)
 			if err != nil {
 				return nil, nil, err
 			}
-			tm, err := info.OutputMember(t.memberName)
-			if err != nil {
-				return nil, nil, err
-			}
-			outputs = append(outputs, tm)
+			outputs = append(outputs, ml)
 			outCols = append(outCols, c)
 		}
 	} else {

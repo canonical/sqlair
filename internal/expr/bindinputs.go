@@ -64,14 +64,17 @@ func (te *TypedExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 	}
 
 	// Query parameters.
-	var params []any
-	for i, input := range te.inputs {
-		val, err := input.LocateParam(typeToValue)
+	params := []any{}
+	inCount := 0
+	for _, input := range te.inputs {
+		vals, err := input.LocateParams(typeToValue)
 		if err != nil {
 			return nil, err
 		}
-
-		params = append(params, sql.Named("sqlair_"+strconv.Itoa(i), val.Interface()))
+		for _, val := range vals {
+			params = append(params, sql.Named("sqlair_"+strconv.Itoa(inCount), val.Interface()))
+			inCount++
+		}
 	}
 	return &PrimedQuery{outputs: te.outputs, sql: te.sql, params: params}, nil
 }

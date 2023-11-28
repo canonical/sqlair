@@ -8,8 +8,9 @@ import (
 	. "gopkg.in/check.v1"
 )
 
-var _ ArgWithMembers = &structInfo{}
-var _ ArgWithMembers = &mapInfo{}
+var _ arg = &structInfo{}
+var _ arg = &mapInfo{}
+var _ arg = &sliceInfo{}
 
 func TestTypeInfo(t *testing.T) { TestingT(t) }
 
@@ -17,7 +18,7 @@ type typeInfoSuite struct{}
 
 var _ = Suite(&typeInfoSuite{})
 
-func (e *typeInfoSuite) TestReflectStruct(c *C) {
+func (e *typeInfoSuite) TestGetArgInfo(c *C) {
 	type something struct {
 		ID      int64  `db:"id"`
 		Name    string `db:"name,omitempty"`
@@ -52,7 +53,7 @@ func (e *typeInfoSuite) TestReflectStruct(c *C) {
 	}
 }
 
-func (s *typeInfoSuite) TestReflectSimpleConcurrent(c *C) {
+func (s *typeInfoSuite) TestConcurrentGetArgInfo(c *C) {
 	type myStruct struct{}
 
 	// Get the type info of a struct sequentially.
@@ -82,7 +83,7 @@ func (s *typeInfoSuite) TestReflectSimpleConcurrent(c *C) {
 	wg.Wait()
 }
 
-func (s *typeInfoSuite) TestReflectNonStructType(c *C) {
+func (s *typeInfoSuite) TestGetArgInfoInvalidTypeError(c *C) {
 	var nonStructs = []any{
 		int(0),
 		string(""),
@@ -95,7 +96,7 @@ func (s *typeInfoSuite) TestReflectNonStructType(c *C) {
 	}
 }
 
-func (s *typeInfoSuite) TestReflectBadTagError(c *C) {
+func (s *typeInfoSuite) TestGetArgInfoBadTagError(c *C) {
 
 	var unsupportedFlag = []any{
 		struct {
@@ -153,7 +154,7 @@ func (s *typeInfoSuite) TestReflectBadTagError(c *C) {
 	}
 }
 
-func (s *typeInfoSuite) TestReflectValidTag(c *C) {
+func (s *typeInfoSuite) TestGetArgInfoValidTags(c *C) {
 	var validTags = []any{
 		struct {
 			ID int64 `db:"id_"`
@@ -178,7 +179,7 @@ func (s *typeInfoSuite) TestReflectValidTag(c *C) {
 	}
 }
 
-func (s *typeInfoSuite) TestUnexportedField(c *C) {
+func (s *typeInfoSuite) TestGetArgInfoUnexportedField(c *C) {
 	var unexportedFields = []any{
 		struct {
 			ID    int64 `db:"id"`

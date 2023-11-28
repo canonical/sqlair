@@ -13,49 +13,140 @@ import (
 // the parser.
 var validColNameRx = regexp.MustCompile(`^([a-zA-Z_])+([a-zA-Z_0-9])*$`)
 
-type ArgInfos map[string]Arg
+type ArgInfo map[string]arg
 
-func (ais ArgInfos) GetArgWithMembers(name string) (ArgWithMembers, error) {
-	argInfo, ok := ais[name]
+// GenerateArgInfo returns type information useful for SQLair from sample
+// instantiations of an argument type.
+func GenerateArgInfo(args ...any) (ArgInfo, error) {
+	argInfo := map[string]arg{}
+	// Generate and save reflection info.
+	for _, arg := range args {
+		if arg == nil {
+			return nil, fmt.Errorf("need struct or map, got nil")
+		}
+		t := reflect.TypeOf(arg)
+		switch t.Kind() {
+		case reflect.Struct, reflect.Map:
+			if t.Name() == "" {
+				return nil, fmt.Errorf("cannot use anonymous %s", t.Kind())
+			}
+			info, err := getArgInfo(t)
+			if err != nil {
+				return nil, err
+			}
+			if dupeInfo, ok := argInfo[t.Name()]; ok {
+				if dupeInfo.typ() == t {
+					return nil, fmt.Errorf("found multiple instances of type %q", t.Name())
+				}
+				return nil, fmt.Errorf("two types found with name %q: %q and %q", t.Name(), dupeInfo.typ().String(), t.String())
+			}
+			argInfo[t.Name()] = info
+		case reflect.Pointer:
+			return nil, fmt.Errorf("need struct or map, got pointer to %s", t.Elem().Kind())
+		default:
+			return nil, fmt.Errorf("need struct or map, got %s", t.Kind())
+		}
+	}
+	return argInfo, nil
+}
+
+func (argInfo ArgInfo) InputMember(typeName string, member string) (Input, error) {
+	vl, err := argInfo.getMember(typeName, member)
+	if err != nil {
+		return nil, err
+	}
+	input, ok := vl.(Input)
+	if !ok {
+		return nil, fmt.Errorf("not an input")
+	}
+	return input, nil
+}
+
+func (argInfo ArgInfo) OutputMember(typeName string, member string) (Output, error) {
+	vl, err := argInfo.getMember(typeName, member)
+	if err != nil {
+		return nil, err
+	}
+	output, ok := vl.(Output)
+	if !ok {
+		return nil, fmt.Errorf("not an output")
+	}
+	return output, nil
+}
+
+func (argInfo ArgInfo) AllOutputMembers(typeName string) ([]Output, []string, error) {
+	arg, err := argInfo.getArg(typeName)
+	if err != nil {
+		return nil, nil, err
+	}
+	si, ok := arg.(*structInfo)
+	if !ok {
+		fmt.Errorf("cant use asterisk with not a struct error")
+	}
+	return si.allOutputMembers()
+}
+
+func (argInfo ArgInfo) InputSliceRange(typeName string, low *uint64, high *uint64) (Input, error) {
+	arg, err := argInfo.getArg(typeName)
+	if err != nil {
+		return nil, err
+	}
+	si, ok := arg.(*sliceInfo)
+	if !ok {
+		fmt.Errorf("cant use a range without a slice error")
+	}
+	return si.getRange(low, high), nil
+}
+
+func (argInfo ArgInfo) InputSliceIndex(typeName string, index uint64) (Input, error) {
+	arg, err := argInfo.getArg(typeName)
+	if err != nil {
+		return nil, err
+	}
+	si, ok := arg.(*sliceInfo)
+	if !ok {
+		fmt.Errorf("cant use a range without a slice error")
+	}
+	return si.getIndex(index), nil
+}
+
+func (argInfo ArgInfo) getMember(typeName string, member string) (ValueLocator, error) {
+	arg, err := argInfo.getArg(typeName)
+	if err != nil {
+		return nil, err
+	}
+	var vl ValueLocator
+	switch arg := arg.(type) {
+	case *structInfo:
+		vl, err = arg.member(member)
+	case *mapInfo:
+		vl, err = arg.member(member)
+	default:
+		return nil, fmt.Errorf("")
+	}
+	if err != nil {
+		return nil, err
+	}
+	return vl, nil
+}
+
+func (argInfo ArgInfo) getArg(typeName string) (arg, error) {
+	arg, ok := argInfo[typeName]
 	if !ok {
 		argNames := []string{}
-		for argName := range ais {
+		for argName := range argInfo {
 			argNames = append(argNames, argName)
 		}
 		// Sort for consistant error messages.
 		sort.Strings(argNames)
-		return nil, typeMissingError(name, argNames)
+		return nil, typeMissingError(typeName, argNames)
 	}
-	argWMInfo, ok := argInfo.(ArgWithMembers)
-	if !ok {
-		return nil, fmt.Errorf("internal error: type %s does not have members", argInfo.Typ().Name())
-	}
-	return argWMInfo, nil
+	return arg, nil
 }
 
-// Arg exposes useful information about SQLair input/output argument types.
-type Arg interface {
-	Typ() reflect.Type
-}
-
-// ArgWithMembers represents a struct or a map argument.
-type ArgWithMembers interface {
-	// OutputMember returns the member of the arg associated with a given
-	// column name.
-	OutputMember(string) (Output, error)
-
-	// InputMember returns the member of the arg associated with a given
-	// column name.
-	InputMember(string) (Input, error)
-
-	// AllOutputMembers returns all members a type associated with column names.
-	AllOutputMembers() ([]Output, error)
-	AllMemberNames() ([]string, error)
-	Arg
-}
-
-type SliceArg interface {
-	GetRange()
+// arg exposes useful information about SQLair input/output argument types.
+type arg interface {
+	typ() reflect.Type
 }
 
 type structInfo struct {
@@ -67,82 +158,64 @@ type structInfo struct {
 	tagToField map[string]*structField
 }
 
-func (si *structInfo) Typ() reflect.Type {
+func (si *structInfo) typ() reflect.Type {
 	return si.structType
 }
 
-func (si *structInfo) InputMember(name string) (Input, error) {
-	return si.member(name)
-}
-
-func (si *structInfo) OutputMember(name string) (Output, error) {
-	return si.member(name)
-}
-
-func (si *structInfo) member(member string) (*structField, error) {
-	tm, ok := si.tagToField[member]
+func (si *structInfo) member(name string) (*structField, error) {
+	tm, ok := si.tagToField[name]
 	if !ok {
-		return nil, fmt.Errorf(`type %q has no %q db tag`, si.structType.Name(), member)
+		return nil, fmt.Errorf(`type %q has no %q db tag`, si.structType.Name(), name)
 	}
 	return tm, nil
 }
 
-func (si *structInfo) AllOutputMembers() ([]Output, error) {
+func (si *structInfo) allOutputMembers() ([]Output, []string, error) {
 	if len(si.tags) == 0 {
-		return nil, fmt.Errorf(`no "db" tags found in struct %q`, si.structType.Name())
+		return nil, nil, fmt.Errorf(`no "db" tags found in struct %q`, si.structType.Name())
 	}
 
 	var os []Output
 	for _, tag := range si.tags {
 		os = append(os, si.tagToField[tag])
 	}
-	return os, nil
-}
-
-func (si *structInfo) AllMemberNames() ([]string, error) {
-	return si.tags, nil
+	return os, si.tags, nil
 }
 
 type mapInfo struct {
 	mapType reflect.Type
 }
 
-func (mi *mapInfo) Typ() reflect.Type {
+func (mi *mapInfo) typ() reflect.Type {
 	return mi.mapType
-}
-
-func (mi *mapInfo) InputMember(name string) (Input, error) {
-	return mi.member(name)
-}
-
-func (mi *mapInfo) OutputMember(name string) (Output, error) {
-	return mi.member(name)
 }
 
 func (mi *mapInfo) member(name string) (*mapKey, error) {
 	return &mapKey{name: name, mapType: mi.mapType}, nil
 }
 
-func (mi *mapInfo) AllOutputMembers() ([]Output, error) {
-	return nil, fmt.Errorf(`columns must be specified for map with star`)
+type sliceInfo struct {
+	sliceType reflect.Type
 }
 
-func (mi *mapInfo) AllMemberNames() ([]string, error) {
-	return nil, fmt.Errorf(`columns must be specified for map with star`)
+func (si *sliceInfo) typ() reflect.Type {
+	return si.sliceType
+}
+
+func (si *sliceInfo) getRange(low *uint64, high *uint64) *sliceRange {
+	return &sliceRange{sliceType: si.sliceType, low: low, high: high}
+}
+
+func (si *sliceInfo) getIndex(index uint64) *sliceIndex {
+	return &sliceIndex{sliceType: si.sliceType, index: index}
 }
 
 var cacheMutex sync.RWMutex
-var cache = make(map[reflect.Type]Arg)
+var cache = make(map[reflect.Type]arg)
 
-// GetArgInfo will return information useful for SQLair from a sample
+// getArgInfo will return information useful for SQLair from a sample
 // instantiation of an argument type.
-func GetArgInfo(value any) (Arg, error) {
-	if value == (any)(nil) {
-		return nil, fmt.Errorf("cannot reflect nil value")
-	}
-
-	t := reflect.TypeOf(value)
-
+func getArgInfo(t reflect.Type) (arg, error) {
 	cacheMutex.RLock()
 	typeInfo, found := cache[t]
 	cacheMutex.RUnlock()
@@ -164,7 +237,7 @@ func GetArgInfo(value any) (Arg, error) {
 
 // generate produces and returns reflection information for the input
 // reflect.Value that is specifically required for SQLair operation.
-func generateTypeInfo(t reflect.Type) (Arg, error) {
+func generateTypeInfo(t reflect.Type) (arg, error) {
 	switch t.Kind() {
 	case reflect.Map:
 		if t.Key().Kind() != reflect.String {
