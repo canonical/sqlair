@@ -565,10 +565,9 @@ func (p *Parser) parseUNumber() (uint64, bool) {
 	if !p.skipUNumber() {
 		return 0, false
 	}
-	n, err := strconv.ParseUint(p.input[mark:p.pos], 10, 64)
-	if err != nil {
-		panic("internal error: skipUNumber did not skip a valid number")
-	}
+	// We ignore the error because skipUNumber already validated that the input
+	// has the correct format.
+	n, _ := strconv.ParseUint(p.input[mark:p.pos], 10, 64)
 	return n, true
 }
 
