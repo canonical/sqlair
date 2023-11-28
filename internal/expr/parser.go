@@ -26,8 +26,8 @@ type Parser struct {
 	lineStart int
 }
 
-// Parse takes an SQLair query string and returns a ParsedExprs.
-func (p *Parser) Parse(input string) (pe *ParsedExprs, err error) {
+// Parse takes an SQLair query string and returns a ParsedExpr.
+func (p *Parser) Parse(input string) (pe *ParsedExpr, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("cannot parse expression: %s", err)
@@ -65,7 +65,7 @@ func (p *Parser) Parse(input string) (pe *ParsedExprs, err error) {
 
 	// Add any remaining unparsed string input to the parser.
 	p.add(nil)
-	parsedExprs := ParsedExprs(p.exprs)
+	parsedExprs := ParsedExpr(p.exprs)
 	return &parsedExprs, nil
 }
 

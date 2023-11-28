@@ -11,13 +11,13 @@ import (
 	"github.com/canonical/sqlair/internal/typeinfo"
 )
 
-// TypedExprs represents a SQLair query bound to concrete Go types. It contains
+// TypeBoundExpr represents a SQLair query bound to concrete Go types. It contains
 // all the type information needed by SQLair.
-type TypedExprs []typedExpression
+type TypeBoundExpr []typedExpression
 
 // BindInputs takes the SQLair input arguments and returns the PrimedQuery ready
 // for use with the database.
-func (tes *TypedExprs) BindInputs(args ...any) (pq *PrimedQuery, err error) {
+func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("invalid input parameter: %s", err)
@@ -48,7 +48,7 @@ func (tes *TypedExprs) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 	inCount := 0
 	outCount := 0
 	sqlStr := bytes.Buffer{}
-	for _, te := range *tes {
+	for _, te := range *tbe {
 		switch te := te.(type) {
 		case *typedInputExpr:
 			typeMember := te.input

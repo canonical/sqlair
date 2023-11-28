@@ -10,13 +10,13 @@ import (
 	"github.com/canonical/sqlair/internal/typeinfo"
 )
 
-// ParsedExprs is the AST representation of SQLair query. It contains only
+// ParsedExpr is the AST representation of SQLair query. It contains only
 // information encoded in the SQLair query string.
-type ParsedExprs []expression
+type ParsedExpr []expression
 
 // String returns a textual representation of the AST contained in the
-// ParsedExprs for debugging and testing purposes.
-func (pe *ParsedExprs) String() string {
+// ParsedExpr for debugging and testing purposes.
+func (pe *ParsedExpr) String() string {
 	var out bytes.Buffer
 	out.WriteString("[")
 	for i, p := range *pe {
@@ -34,7 +34,7 @@ type typeNameToInfo map[string]typeinfo.Info
 // BindTypes takes samples of all types mentioned in the SQLair expressions of
 // the query. The expressions are checked for validity and required information
 // is generated from the types.
-func (pe *ParsedExprs) BindTypes(args ...any) (te *TypedExprs, err error) {
+func (pe *ParsedExpr) BindTypes(args ...any) (te *TypeBoundExpr, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("cannot prepare statement: %s", err)
@@ -91,7 +91,7 @@ func (pe *ParsedExprs) BindTypes(args ...any) (te *TypedExprs, err error) {
 		typedExprs = append(typedExprs, te)
 	}
 
-	typedExpr := TypedExprs(typedExprs)
+	typedExpr := TypeBoundExpr(typedExprs)
 	return &typedExpr, nil
 }
 
