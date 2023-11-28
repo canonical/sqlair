@@ -189,14 +189,14 @@ func (s parseSuite) TestParseSliceRange(c *C) {
 		input  string
 		output valueAccessor
 	}{
-		{"mySlice[:]", sliceRangeAccessor{typ: "mySlice", low: nil, high: nil}},
-		{"mySlice[ : ]", sliceRangeAccessor{typ: "mySlice", low: nil, high: nil}},
-		{"mySlice[1020:]", sliceRangeAccessor{typ: "mySlice", low: numToPtr(1020), high: nil}},
-		{"mySlice[:33]", sliceRangeAccessor{typ: "mySlice", low: nil, high: numToPtr(33)}},
-		{"mySlice[12:34]", sliceRangeAccessor{typ: "mySlice", low: numToPtr(12), high: numToPtr(34)}},
-		{"mySlice[ 12  : 34   ]", sliceRangeAccessor{typ: "mySlice", low: numToPtr(12), high: numToPtr(34)}},
-		{"mySlice[1234]", sliceIndexAccessor{typ: "mySlice", index: 1234}},
-		{"mySlice[ 0 ]", sliceIndexAccessor{typ: "mySlice", index: 0}},
+		{"mySlice[:]", sliceRangeAccessor{typeName: "mySlice", low: nil, high: nil}},
+		{"mySlice[ : ]", sliceRangeAccessor{typeName: "mySlice", low: nil, high: nil}},
+		{"mySlice[1020:]", sliceRangeAccessor{typeName: "mySlice", low: numToPtr(1020), high: nil}},
+		{"mySlice[:33]", sliceRangeAccessor{typeName: "mySlice", low: nil, high: numToPtr(33)}},
+		{"mySlice[12:34]", sliceRangeAccessor{typeName: "mySlice", low: numToPtr(12), high: numToPtr(34)}},
+		{"mySlice[ 12  : 34   ]", sliceRangeAccessor{typeName: "mySlice", low: numToPtr(12), high: numToPtr(34)}},
+		{"mySlice[1234]", sliceIndexAccessor{typeName: "mySlice", index: 1234}},
+		{"mySlice[ 0 ]", sliceIndexAccessor{typeName: "mySlice", index: 0}},
 	}
 	// invalidSliceRanges contains ranges that are invalid but that do not
 	// result in an error.

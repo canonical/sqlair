@@ -82,9 +82,7 @@ type expression interface {
 // by index, by key, or by slice syntax.
 type valueAccessor interface {
 	getTypeName() string
-
-	// accessor is a marker method.
-	accessor()
+    fmt.Stringer
 }
 
 // memberAcessor stores information for accessing a keyed Go value. It consists
@@ -94,15 +92,13 @@ type memberAcessor struct {
 	typeName, memberName string
 }
 
-func (va memberAcessor) String() string {
-	return va.typeName + "." + va.memberName
+func (ma memberAcessor) String() string {
+	return ma.typeName + "." + ma.memberName
 }
 
 func (ma memberAcessor) getTypeName() string {
 	return ma.typeName
 }
-
-func (ma memberAcessor) accessor() {}
 
 // columnAccessor stores a SQL column name and optionally its table name.
 type columnAccessor struct {
@@ -119,13 +115,13 @@ func (ca columnAccessor) String() string {
 // sliceRangeAccessor stores information for accessing a slice using the
 // expression "typeName[low:high]".
 type sliceRangeAccessor struct {
-	typ string
+	typeName string
 	// Using pointers to represent that the both low and high are optional.
 	low, high *uint64
 }
 
 func (st sliceRangeAccessor) getTypeName() string {
-	return st.typ
+	return st.typeName
 }
 
 func (st sliceRangeAccessor) String() string {
@@ -137,27 +133,23 @@ func (st sliceRangeAccessor) String() string {
 	if st.high != nil {
 		strHigh = strconv.FormatUint(*st.high, 10)
 	}
-	return fmt.Sprintf("%s[%s:%s]", st.typ, strLow, strHigh)
+	return fmt.Sprintf("%s[%s:%s]", st.typeName, strLow, strHigh)
 }
-
-func (st sliceRangeAccessor) accessor() {}
 
 // sliceIndexAccessor stores information for accessing an item of a slice using
 // the expression "typeName[index]".
 type sliceIndexAccessor struct {
-	typ   string
+	typeName   string
 	index uint64
 }
 
 func (st sliceIndexAccessor) getTypeName() string {
-	return st.typ
+	return st.typeName
 }
 
 func (st sliceIndexAccessor) String() string {
-	return fmt.Sprintf("%s[%d]", st.typ, st.index)
+	return fmt.Sprintf("%s[%d]", st.typeName, st.index)
 }
-
-func (st sliceIndexAccessor) accessor() {}
 
 // inputExpr represents a named parameter that will be sent to the database
 // while performing the query.
@@ -175,7 +167,9 @@ func (p *inputExpr) expr() {}
 // outputExpr represents a named target output variable in the SQL expression,
 // as well as the source table and column where it will be read from.
 type outputExpr struct {
+    // sourceColumns specify the source table and column in the DB.
 	sourceColumns []columnAccessor
+    // targetTypes specify how to map the query results to Go values.
 	targetTypes   []memberAcessor
 	raw           string
 }
@@ -604,7 +598,7 @@ func (p *Parser) parseSliceAccessor() (va valueAccessor, ok bool, err error) {
 			return nil, false, errorAt(fmt.Errorf("invalid slice: expected index or colon"), p.lineNum, p.colNum(), p.input)
 		}
 		if p.skipByte(']') {
-			return sliceIndexAccessor{typ: id, index: *lowP}, true, nil
+			return sliceIndexAccessor{typeName: id, index: *lowP}, true, nil
 		}
 		return nil, false, errorAt(fmt.Errorf("invalid slice: expected ] or colon"), p.lineNum, p.colNum(), p.input)
 	}
@@ -623,7 +617,7 @@ func (p *Parser) parseSliceAccessor() (va valueAccessor, ok bool, err error) {
 			return nil, false, errorAt(fmt.Errorf("invalid slice: invalid indexes: %d <= %d", *highP, *lowP), cp.lineNum, cp.colNum(), p.input)
 		}
 	}
-	return sliceRangeAccessor{typ: id, low: lowP, high: highP}, true, nil
+	return sliceRangeAccessor{typeName: id, low: lowP, high: highP}, true, nil
 }
 
 // parseTypeName parses a Go type name qualified by a tag name (or asterisk)

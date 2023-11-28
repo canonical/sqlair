@@ -151,6 +151,8 @@ func bindInputTypes(ti typeNameToInfo, e *inputExpr) (tm typeinfo.Member, err er
 		}
 	case sliceRangeAccessor:
 		return nil, fmt.Errorf("slice support not implemented")
+	case sliceIndexAccessor:
+		return nil, fmt.Errorf("slice support not implemented")
 	}
 
 	return tm, nil
