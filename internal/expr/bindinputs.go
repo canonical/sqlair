@@ -55,7 +55,7 @@ func (tes *TypedExprs) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 			outerType := typeMember.OuterType()
 			v, ok := typeToValue[outerType]
 			if !ok {
-				return nil, inputMissingError(outerType, typeToValue)
+				return nil, missingInputArgError(outerType, typeToValue)
 			}
 			argTypeUsed[outerType] = true
 
@@ -157,8 +157,9 @@ func markerIndex(s string) (int, bool) {
 	return 0, false
 }
 
-// inputMissingError returns an error message for a missing input type.
-func inputMissingError(missingType reflect.Type, typeToValue map[reflect.Type]reflect.Value) error {
+// missingInputArgError is used when no matching input argument can be found
+// for a type in a type bound expression of the query.
+func missingInputArgError(missingType reflect.Type, typeToValue map[reflect.Type]reflect.Value) error {
 	// check if the missing type and some argument type have the same name but
 	// are from different packages.
 	typeNames := []string{}
