@@ -11,8 +11,9 @@ import (
 	"github.com/canonical/sqlair/internal/typeinfo"
 )
 
-// TypeBoundExpr represents a SQLair query bound to concrete Go types. It contains
-// all the type information needed by SQLair.
+// TypeBoundExpr represents a SQLair query bound to concrete Go types. It
+// contains information used to generate the underlying SQL query and map it to
+// the SQLair query.
 type TypeBoundExpr []typedExpression
 
 // BindInputs takes the SQLair input arguments and returns the PrimedQuery ready
@@ -93,16 +94,15 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 	return &PrimedQuery{outputs: outputs, sql: sqlStr.String(), params: params}, nil
 }
 
-// typedExpression represents a expression bound to a type. It contains
-// information to generate the SQL for the part and to access Go types
-// referenced in the part.
+// typedExpression represents a expression with the type names bound to Go
+// types.
 type typedExpression interface {
 	// typedExpr is a marker method.
 	typedExpr()
 }
 
 // outputColumn stores the name of a column to fetch from the database and the
-// type member to scan the result into.
+// type to scan the result into.
 type outputColumn struct {
 	sql string
 	tm  typeinfo.Member
@@ -116,19 +116,6 @@ type typedOutputExpr struct {
 
 // typedExpr is a marker method.
 func (*typedOutputExpr) typedExpr() {}
-
-// checkUsed checks if the members in the typed output expression have already
-// been used in the query. It updates the memberUsed map with its own members.
-func (toe *typedOutputExpr) checkUsed(memberUsed map[typeinfo.Member]bool) error {
-	for _, oc := range toe.outputColumns {
-		tm := oc.tm
-		if ok := memberUsed[tm]; ok {
-			return fmt.Errorf("member %q of type %q appears more than once in output expressions", tm.MemberName(), tm.OuterType().Name())
-		}
-		memberUsed[tm] = true
-	}
-	return nil
-}
 
 // typedInputExpr stores information about a Go value to use as a query input.
 type typedInputExpr struct {

@@ -74,17 +74,20 @@ func (pe *ParsedExpr) BindTypes(args ...any) (te *TypeBoundExpr, err error) {
 
 	// Bind types to each expression.
 	typedExprs := []typedExpression{}
-	outputMemberUsed := map[typeinfo.Member]bool{}
+	outputUsed := map[typeinfo.Member]bool{}
 	for _, expr := range *pe {
 		te, err := expr.bindTypes(ti)
 		if err != nil {
 			return nil, err
 		}
-
+		// Check if the outputs in the typedOutputExpr have already been used
+		// in the query and update outputUsed.
 		if toe, ok := te.(*typedOutputExpr); ok {
-			err = toe.checkUsed(outputMemberUsed)
-			if err != nil {
-				return nil, err
+			for _, oc := range toe.outputColumns {
+				if ok := outputUsed[oc.tm]; ok {
+					return fmt.Errorf("member %q of type %q appears more than once in output expressions", oc.tm.MemberName(), oc.tm.OuterType().Name())
+				}
+				outputUsed[oc.tm] = true
 			}
 		}
 
@@ -93,6 +96,10 @@ func (pe *ParsedExpr) BindTypes(args ...any) (te *TypeBoundExpr, err error) {
 
 	typedExpr := TypeBoundExpr(typedExprs)
 	return &typedExpr, nil
+}
+
+func (toe *typedOutputExpr) checkUsed(memberUsed map[typeinfo.Member]bool) error {
+	return nil
 }
 
 // expression represents a parsed node of the SQLair query's AST.
