@@ -43,7 +43,7 @@ func (s *PackageSuite) TearDownSuite(c *C) {
 	stmtRegistryMutex.Lock()
 	defer stmtRegistryMutex.Unlock()
 
-	// Reset state of stmt registry.
+	// Reset state.
 	closedStmts = map[string]map[uintptr]bool{}
 	openedStmts = map[string]map[uintptr]string{}
 }
