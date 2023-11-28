@@ -86,30 +86,6 @@ func (argInfo ArgInfo) AllOutputMembers(typeName string) ([]Output, []string, er
 	return si.allOutputMembers()
 }
 
-func (argInfo ArgInfo) InputSliceRange(typeName string, low *uint64, high *uint64) (Input, error) {
-	arg, err := argInfo.getArg(typeName)
-	if err != nil {
-		return nil, err
-	}
-	si, ok := arg.(*sliceInfo)
-	if !ok {
-		fmt.Errorf("cant use a range without a slice error")
-	}
-	return si.getRange(low, high), nil
-}
-
-func (argInfo ArgInfo) InputSliceIndex(typeName string, index uint64) (Input, error) {
-	arg, err := argInfo.getArg(typeName)
-	if err != nil {
-		return nil, err
-	}
-	si, ok := arg.(*sliceInfo)
-	if !ok {
-		fmt.Errorf("cant use a range without a slice error")
-	}
-	return si.getIndex(index), nil
-}
-
 func (argInfo ArgInfo) getMember(typeName string, member string) (ValueLocator, error) {
 	arg, err := argInfo.getArg(typeName)
 	if err != nil {
@@ -192,22 +168,6 @@ func (mi *mapInfo) typ() reflect.Type {
 
 func (mi *mapInfo) member(name string) (*mapKey, error) {
 	return &mapKey{name: name, mapType: mi.mapType}, nil
-}
-
-type sliceInfo struct {
-	sliceType reflect.Type
-}
-
-func (si *sliceInfo) typ() reflect.Type {
-	return si.sliceType
-}
-
-func (si *sliceInfo) getRange(low *uint64, high *uint64) *sliceRange {
-	return &sliceRange{sliceType: si.sliceType, low: low, high: high}
-}
-
-func (si *sliceInfo) getIndex(index uint64) *sliceIndex {
-	return &sliceIndex{sliceType: si.sliceType, index: index}
 }
 
 var cacheMutex sync.RWMutex

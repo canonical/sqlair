@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
-	"strconv"
 )
 
 var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
@@ -144,79 +143,4 @@ func (f *structField) LocateScanTarget(typeToValue map[reflect.Type]reflect.Valu
 		return scanVal.Addr().Interface(), &ScanProxy{original: val, scan: scanVal}, nil
 	}
 	return val.Addr().Interface(), nil, nil
-}
-
-type sliceRange struct {
-	sliceType reflect.Type
-	low       *uint64
-	high      *uint64
-}
-
-func (sr *sliceRange) ArgType() reflect.Type {
-	return sr.sliceType
-}
-
-func (sr *sliceRange) String() string {
-	low := ""
-	if sr.low != nil {
-		low = strconv.Itoa(int(*sr.low))
-	}
-	high := ""
-	if sr.high != nil {
-		high = strconv.Itoa(int(*sr.high))
-	}
-	return sr.sliceType.Name() + "[" + low + ":" + high + "]"
-}
-
-func (sr *sliceRange) LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]reflect.Value, error) {
-	s, err := locateValue(typeToValue, sr.sliceType)
-	if err != nil {
-		return nil, err
-	}
-
-	high := s.Len()
-	if sr.high != nil {
-		if int(*sr.high) > s.Len() {
-			return nil, fmt.Errorf("slice range out of bounds")
-		}
-		high = int(*sr.high)
-	}
-
-	low := 0
-	if sr.low != nil {
-		if low > high {
-			return nil, fmt.Errorf("slice range out of bounds")
-		}
-		low = int(*sr.low)
-	}
-
-	params := []reflect.Value{}
-	for i := low; i < high; i++ {
-		params = append(params, s.Index(i))
-	}
-	return params, nil
-}
-
-type sliceIndex struct {
-	sliceType reflect.Type
-	index     uint64
-}
-
-func (si *sliceIndex) ArgType() reflect.Type {
-	return si.sliceType
-}
-
-func (si *sliceIndex) String() string {
-	return si.sliceType.Name() + "[" + strconv.Itoa(int(si.index)) + "]"
-}
-
-func (si *sliceIndex) LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]reflect.Value, error) {
-	s, err := locateValue(typeToValue, si.sliceType)
-	if err != nil {
-		return nil, err
-	}
-	if int(si.index) >= s.Len() {
-		return nil, fmt.Errorf("index out of range")
-	}
-	return []reflect.Value{s.Index(int(si.index))}, nil
 }

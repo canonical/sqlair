@@ -9,7 +9,6 @@ import (
 
 var _ arg = &structInfo{}
 var _ arg = &mapInfo{}
-var _ arg = &sliceInfo{}
 
 func TestTypeInfo(t *testing.T) { TestingT(t) }
 
