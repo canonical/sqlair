@@ -148,7 +148,7 @@ func markerIndex(s string) (int, bool) {
 // missingInputArgError is used when no matching input argument can be found
 // for a type in a type bound expression of the query.
 func missingInputArgError(missingType reflect.Type, typeToValue map[reflect.Type]reflect.Value) error {
-	// check if the missing type and some argument type have the same name but
+	// Check if the missing type and some argument type have the same name but
 	// are from different packages.
 	typeNames := []string{}
 	for argType := range typeToValue {

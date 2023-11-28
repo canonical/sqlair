@@ -80,14 +80,11 @@ func (pe *ParsedExpr) BindTypes(args ...any) (te *TypeBoundExpr, err error) {
 		if err != nil {
 			return nil, err
 		}
-		// Check if the outputs in the typedOutputExpr have already been used
-		// in the query and update outputUsed.
+
 		if toe, ok := te.(*typedOutputExpr); ok {
-			for _, oc := range toe.outputColumns {
-				if ok := outputUsed[oc.tm]; ok {
-					return fmt.Errorf("member %q of type %q appears more than once in output expressions", oc.tm.MemberName(), oc.tm.OuterType().Name())
-				}
-				outputUsed[oc.tm] = true
+			err = trackUsedOutputs(outputUsed, toe)
+			if err != nil {
+				return nil, err
 			}
 		}
 
@@ -98,7 +95,16 @@ func (pe *ParsedExpr) BindTypes(args ...any) (te *TypeBoundExpr, err error) {
 	return &typedExpr, nil
 }
 
-func (toe *typedOutputExpr) checkUsed(memberUsed map[typeinfo.Member]bool) error {
+// trackUsedOutputs tracks the outputs used already and returns an error if an
+// output has been used twice. It updates outputUsed with the outputs from the
+// typedOutputExpr.
+func trackUsedOutputs(outputUsed map[typeinfo.Member]bool, toe *typedOutputExpr) error {
+	for _, oc := range toe.outputColumns {
+		if ok := outputUsed[oc.tm]; ok {
+			return fmt.Errorf("member %q of type %q appears more than once in output expressions", oc.tm.MemberName(), oc.tm.OuterType().Name())
+		}
+		outputUsed[oc.tm] = true
+	}
 	return nil
 }
 
