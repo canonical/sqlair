@@ -108,6 +108,16 @@ type outputColumn struct {
 	tm  typeinfo.Member
 }
 
+// typedInputExpr stores information about a Go value to use as a query input.
+type typedInputExpr struct {
+	input typeinfo.Member
+}
+
+// typedExpr is a marker method.
+func (*typedInputExpr) typedExpr() {}
+
+var _ typedExpression = (*typedInputExpr)(nil)
+
 // typedOutputExpr contains the columns to fetch from the database and
 // information about the Go values to read the query results into.
 type typedOutputExpr struct {
@@ -117,16 +127,12 @@ type typedOutputExpr struct {
 // typedExpr is a marker method.
 func (*typedOutputExpr) typedExpr() {}
 
-// typedInputExpr stores information about a Go value to use as a query input.
-type typedInputExpr struct {
-	input typeinfo.Member
-}
-
-// typedExpr is a marker method.
-func (*typedInputExpr) typedExpr() {}
+var _ typedExpression = (*typedOutputExpr)(nil)
 
 // typedExpr is a marker method.
 func (*bypass) typedExpr() {}
+
+var _ typedExpression = (*bypass)(nil)
 
 const markerPrefix = "_sqlair_"
 

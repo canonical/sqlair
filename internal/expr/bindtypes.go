@@ -133,6 +133,8 @@ func (e *bypass) bindTypes(typeNameToInfo) (typedExpression, error) {
 	return e, nil
 }
 
+var _ expression = (*bypass)(nil)
+
 // inputExpr is an expression that specifies a SQLair input argument.
 type inputExpr struct {
 	sourceType valueAccessor
@@ -163,6 +165,8 @@ func (e *inputExpr) bindTypes(ti typeNameToInfo) (te typedExpression, err error)
 	}
 	return &typedInputExpr{tm}, nil
 }
+
+var _ expression = (*inputExpr)(nil)
 
 // outputExpr is an expression that specifies SQLair output arguments and the
 // columns that will be scanned into them.
@@ -271,6 +275,8 @@ func (e *outputExpr) bindTypes(ti typeNameToInfo) (te typedExpression, err error
 
 	return toe, nil
 }
+
+var _ expression = (*outputExpr)(nil)
 
 // getKeys returns the keys of a string map in a deterministic order.
 func getKeys[T any](m map[string]T) []string {
