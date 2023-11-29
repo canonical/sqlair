@@ -16,7 +16,7 @@ type typeInfoSuite struct{}
 
 var _ = Suite(&typeInfoSuite{})
 
-func (e *typeInfoSuite) TestArgInfoStruct(c *C) {
+func (s *typeInfoSuite) TestArgInfoStruct(c *C) {
 	type myStruct struct {
 		ID        int    `db:"id"`
 		Name      string `db:"name,omitempty"`
@@ -84,7 +84,7 @@ func (e *typeInfoSuite) TestArgInfoStruct(c *C) {
 	}
 }
 
-func (e *typeInfoSuite) TestArgInfoMap(c *C) {
+func (s *typeInfoSuite) TestArgInfoMap(c *C) {
 	type myMap map[string]any
 
 	argInfo, err := GenerateArgInfo(myMap{})
@@ -102,12 +102,12 @@ func (e *typeInfoSuite) TestArgInfoMap(c *C) {
 }
 
 // This struct is used to test shadowed types in TestGenerateArgInfoInvalidTypeErrors
-type S struct{ foo int }
+type T struct{ foo int }
 
-var s = S{}
+var t = T{}
 
-func (e *typeInfoSuite) TestGenerateArgInfoInvalidTypeErrors(c *C) {
-	type S struct{ foo int }
+func (s *typeInfoSuite) TestGenerateArgInfoInvalidTypeErrors(c *C) {
+	type T struct{ foo int }
 	type M map[string]any
 
 	_, err := GenerateArgInfo(nil)
@@ -119,10 +119,10 @@ func (e *typeInfoSuite) TestGenerateArgInfoInvalidTypeErrors(c *C) {
 	_, err = GenerateArgInfo(map[string]any{})
 	c.Assert(err, ErrorMatches, "cannot use anonymous map")
 
-	_, err = GenerateArgInfo(S{}, S{})
-	c.Assert(err, ErrorMatches, `found multiple instances of type "S"`)
+	_, err = GenerateArgInfo(T{}, T{})
+	c.Assert(err, ErrorMatches, `found multiple instances of type "T"`)
 
-	_, err = GenerateArgInfo((*S)(nil))
+	_, err = GenerateArgInfo((*T)(nil))
 	c.Assert(err, ErrorMatches, "need struct or map, got pointer to struct")
 
 	_, err = GenerateArgInfo((*M)(nil))
@@ -137,8 +137,8 @@ func (e *typeInfoSuite) TestGenerateArgInfoInvalidTypeErrors(c *C) {
 	_, err = GenerateArgInfo([10]int{})
 	c.Assert(err, ErrorMatches, "need struct or map, got array")
 
-	_, err = GenerateArgInfo(s, S{})
-	c.Assert(err, ErrorMatches, `two types found with name "S": "typeinfo.S" and "typeinfo.S"`)
+	_, err = GenerateArgInfo(t, T{})
+	c.Assert(err, ErrorMatches, `two types found with name "T": "typeinfo.T" and "typeinfo.T"`)
 }
 
 func (s *typeInfoSuite) TestGenerateArgInfoStructError(c *C) {
