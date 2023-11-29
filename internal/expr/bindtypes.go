@@ -107,7 +107,7 @@ func bindInputTypes(argInfo typeinfo.ArgInfo, e *inputExpr) (input typeinfo.Inpu
 		}
 	}()
 
-	input, err := argInfo.InputMember(e.sourceType.typeName, e.sourceType.memberName)
+	input, err = argInfo.InputMember(e.sourceType.typeName, e.sourceType.memberName)
 	if err != nil {
 		return nil, err
 	}

@@ -13,14 +13,14 @@ import (
 // the parser.
 var validColNameRx = regexp.MustCompile(`^([a-zA-Z_])+([a-zA-Z_0-9])*$`)
 
-// ArgInfo contains type information useful for SQLair. It should only be
-// accessed using it methods, not used directly as a map.
+// ArgInfo is used to access type information useful for SQLair. It should only
+// be accessed using it methods, not used directly as a map.
 type ArgInfo map[string]arg
 
 // GenerateArgInfo returns type information useful for SQLair from sample
 // instantiations of an argument type.
 func GenerateArgInfo(typeSamples ...any) (ArgInfo, error) {
-	argInfo := map[string]arg{}
+	argInfo := ArgInfo{}
 	// Generate and save reflection info.
 	for _, typeSample := range typeSamples {
 		if typeSample == nil {
@@ -36,11 +36,11 @@ func GenerateArgInfo(typeSamples ...any) (ArgInfo, error) {
 			if err != nil {
 				return nil, err
 			}
-			if dupeInfo, ok := argInfo[t.Name()]; ok {
-				if dupeInfo.typ() == t {
+			if dupeArg, ok := argInfo[t.Name()]; ok {
+				if dupeArg.typ() == t {
 					return nil, fmt.Errorf("found multiple instances of type %q", t.Name())
 				}
-				return nil, fmt.Errorf("two types found with name %q: %q and %q", t.Name(), dupeInfo.typ().String(), t.String())
+				return nil, fmt.Errorf("two types found with name %q: %q and %q", t.Name(), dupeArg.typ().String(), t.String())
 			}
 			argInfo[t.Name()] = info
 		case reflect.Pointer:
