@@ -92,6 +92,8 @@ func (argInfo ArgInfo) AllOutputMembers(typeName string) ([]Output, []string, er
 	return si.allOutputMembers()
 }
 
+// getMember finds a type and a member on it and returns a locator for the
+// member. If the type does not have members it returns an error.
 func (argInfo ArgInfo) getMember(typeName string, member string) (ValueLocator, error) {
 	arg, err := argInfo.getArg(typeName)
 	if err != nil {
@@ -112,6 +114,7 @@ func (argInfo ArgInfo) getMember(typeName string, member string) (ValueLocator, 
 	return vl, nil
 }
 
+// getArg finds information about a named arg type in argInfo.
 func (argInfo ArgInfo) getArg(typeName string) (arg, error) {
 	arg, ok := argInfo[typeName]
 	if !ok {
@@ -131,6 +134,7 @@ type arg interface {
 	typ() reflect.Type
 }
 
+// structInfo stores information useful for SQLair about struct types.
 type structInfo struct {
 	structType reflect.Type
 
