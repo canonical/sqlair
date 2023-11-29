@@ -17,11 +17,10 @@ var validColNameRx = regexp.MustCompile(`^([a-zA-Z_])+([a-zA-Z_0-9])*$`)
 // be accessed using it methods, not used directly as a map.
 type ArgInfo map[string]arg
 
-// GenerateArgInfo returns type information useful for SQLair from sample
-// instantiations of an argument type.
+// GenerateArgInfo returns type information useful for SQLair by reflecting on
+// sample instantiations of argument types.
 func GenerateArgInfo(typeSamples ...any) (ArgInfo, error) {
 	argInfo := ArgInfo{}
-	// Generate and save reflection info.
 	for _, typeSample := range typeSamples {
 		if typeSample == nil {
 			return nil, fmt.Errorf("need struct or map, got nil")
@@ -79,7 +78,7 @@ func (argInfo ArgInfo) OutputMember(typeName string, memberName string) (Output,
 }
 
 // AllOutputMembers returns a list of output locators that locate every member
-// of the named type.
+// of the named type. If the type is not a struct an error is returned.
 func (argInfo ArgInfo) AllOutputMembers(typeName string) ([]Output, []string, error) {
 	arg, err := argInfo.getArg(typeName)
 	if err != nil {
@@ -92,7 +91,7 @@ func (argInfo ArgInfo) AllOutputMembers(typeName string) ([]Output, []string, er
 	return si.allOutputMembers()
 }
 
-// getMember finds a type and a member on it and returns a locator for the
+// getMember finds a type and a member of it and returns a locator for the
 // member. If the type does not have members it returns an error.
 func (argInfo ArgInfo) getMember(typeName string, member string) (ValueLocator, error) {
 	arg, err := argInfo.getArg(typeName)
@@ -282,6 +281,8 @@ func parseTag(tag string) (string, bool, error) {
 	return name, omitEmpty, nil
 }
 
+// typeMissingError returns an error specificing the missing type and types
+// that are present.
 func typeMissingError(missingType string, existingTypes []string) error {
 	if len(existingTypes) == 0 {
 		return fmt.Errorf(`parameter with type %q missing`, missingType)
