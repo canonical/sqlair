@@ -336,7 +336,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	expectedSQL:    "INSERT INTO arr VALUES (ARRAY[[1,2],[@sqlair_0,4]], ARRAY[[5,6],[@sqlair_1,8]]);",
 }}
 
-func (s *ExprSuite) TestExpr(c *C) {
+func (s *ExprSuite) TestExprPkg(c *C) {
 	parser := expr.NewParser()
 	for i, t := range tests {
 		var (
