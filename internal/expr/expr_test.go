@@ -47,23 +47,23 @@ var tests = []struct {
 	summary        string
 	query          string
 	expectedParsed string
-	prepareArgs    []any
+	typeSamples    []any
 	expectedSQL    string
 }{{
-	"star table as output",
-	"SELECT p.* AS &Person.*",
-	"[Bypass[SELECT ] Output[[p.*] [Person.*]]]",
-	[]any{Person{}},
-	"SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2",
+	summary:        "star table as output",
+	query:          "SELECT p.* AS &Person.*",
+	expectedParsed: "[Bypass[SELECT ] Output[[p.*] [Person.*]]]",
+	typeSamples:    []any{Person{}},
+	expectedSQL:    "SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2",
 }, {
-	"spaces and tabs",
-	"SELECT p.* 	AS 		   &Person.*",
-	"[Bypass[SELECT ] Output[[p.*] [Person.*]]]",
-	[]any{Person{}},
-	"SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2",
+	summary: "spaces and tabs",
+	query: "SELECT p.* 	AS 		   &Person.*",
+	expectedParsed: "[Bypass[SELECT ] Output[[p.*] [Person.*]]]",
+	typeSamples:    []any{Person{}},
+	expectedSQL:    "SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2",
 }, {
-	"new lines",
-	`SELECT
+	summary: "new lines",
+	query: `SELECT
 		p.* AS &Person.*,
 		foo
 	 FROM t
@@ -71,7 +71,7 @@ var tests = []struct {
 		foo = bar
 		and
 		x = y`,
-	`[Bypass[SELECT
+	expectedParsed: `[Bypass[SELECT
 		] Output[[p.*] [Person.*]] Bypass[,
 		foo
 	 FROM t
@@ -79,8 +79,8 @@ var tests = []struct {
 		foo = bar
 		and
 		x = y]]`,
-	[]any{Person{}},
-	`SELECT
+	typeSamples: []any{Person{}},
+	expectedSQL: `SELECT
 		p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2,
 		foo
 	 FROM t
@@ -89,23 +89,23 @@ var tests = []struct {
 		and
 		x = y`,
 }, {
-	"comments",
-	`SELECT &Person.* -- The line with &Person.* on it
+	summary: "comments",
+	query: `SELECT &Person.* -- The line with &Person.* on it
 FROM person /* The start of a multi line comment
 It keeps going here with some weird chars /-*"/
 And now it stops */ WHERE "x" = /-*'' -- The "WHERE" line
 AND y =/* And now we have " */ "-- /* */" /* " some comments strings */
 AND z = $Person.id -- The line with $Person.id on it
 `,
-	`[Bypass[SELECT ] Output[[] [Person.*]] Bypass[ -- The line with &Person.* on it
+	expectedParsed: `[Bypass[SELECT ] Output[[] [Person.*]] Bypass[ -- The line with &Person.* on it
 FROM person /* The start of a multi line comment
 It keeps going here with some weird chars /-*"/
 And now it stops */ WHERE "x" = /-*'' -- The "WHERE" line
 AND y =/* And now we have " */ "-- /* */" /* " some comments strings */
 AND z = ] Input[Person.id] Bypass[ -- The line with $Person.id on it
 ]]`,
-	[]any{Person{}},
-	`SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 -- The line with &Person.* on it
+	typeSamples: []any{Person{}},
+	expectedSQL: `SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 -- The line with &Person.* on it
 FROM person /* The start of a multi line comment
 It keeps going here with some weird chars /-*"/
 And now it stops */ WHERE "x" = /-*'' -- The "WHERE" line
@@ -113,200 +113,200 @@ AND y =/* And now we have " */ "-- /* */" /* " some comments strings */
 AND z = @sqlair_0 -- The line with $Person.id on it
 `,
 }, {
-	"comments v2",
-	`SELECT (*) AS (&Person.name, /* ... */ &Person.id), (*) AS (&Address.id /* ... */, &Address.street) FROM p -- End of the line`,
-	`[Bypass[SELECT ] Output[[*] [Person.name Person.id]] Bypass[, ] Output[[*] [Address.id Address.street]] Bypass[ FROM p -- End of the line]]`,
-	[]any{Person{}, Address{}},
-	`SELECT name AS _sqlair_0, id AS _sqlair_1, id AS _sqlair_2, street AS _sqlair_3 FROM p -- End of the line`,
+	summary:        "comments v2",
+	query:          `SELECT (*) AS (&Person.name, /* ... */ &Person.id), (*) AS (&Address.id /* ... */, &Address.street) FROM p -- End of the line`,
+	expectedParsed: `[Bypass[SELECT ] Output[[*] [Person.name Person.id]] Bypass[, ] Output[[*] [Address.id Address.street]] Bypass[ FROM p -- End of the line]]`,
+	typeSamples:    []any{Person{}, Address{}},
+	expectedSQL:    `SELECT name AS _sqlair_0, id AS _sqlair_1, id AS _sqlair_2, street AS _sqlair_3 FROM p -- End of the line`,
 }, {
-	"quoted io expressions",
-	`SELECT "&notAnOutput.Expression" '&notAnotherOutputExpresion.*' AS literal FROM t WHERE bar = '$NotAn.Input' AND baz = "$NotAnother.Input"`,
-	`[Bypass[SELECT "&notAnOutput.Expression" '&notAnotherOutputExpresion.*' AS literal FROM t WHERE bar = '$NotAn.Input' AND baz = "$NotAnother.Input"]]`,
-	[]any{},
-	`SELECT "&notAnOutput.Expression" '&notAnotherOutputExpresion.*' AS literal FROM t WHERE bar = '$NotAn.Input' AND baz = "$NotAnother.Input"`,
+	summary:        "quoted io expressions",
+	query:          `SELECT "&notAnOutput.Expression" '&notAnotherOutputExpresion.*' AS literal FROM t WHERE bar = '$NotAn.Input' AND baz = "$NotAnother.Input"`,
+	expectedParsed: `[Bypass[SELECT "&notAnOutput.Expression" '&notAnotherOutputExpresion.*' AS literal FROM t WHERE bar = '$NotAn.Input' AND baz = "$NotAnother.Input"]]`,
+	typeSamples:    []any{},
+	expectedSQL:    `SELECT "&notAnOutput.Expression" '&notAnotherOutputExpresion.*' AS literal FROM t WHERE bar = '$NotAn.Input' AND baz = "$NotAnother.Input"`,
 }, {
-	"star as output",
-	"SELECT * AS &Person.* FROM t",
-	"[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM t]]",
-	[]any{Person{}},
-	"SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM t",
+	summary:        "star as output",
+	query:          "SELECT * AS &Person.* FROM t",
+	expectedParsed: "[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM t]]",
+	typeSamples:    []any{Person{}},
+	expectedSQL:    "SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM t",
 }, {
-	"star as output multitype",
-	"SELECT (*) AS (&Person.*, &Address.*) FROM t",
-	"[Bypass[SELECT ] Output[[*] [Person.* Address.*]] Bypass[ FROM t]]",
-	[]any{Person{}, Address{}},
-	"SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2, district AS _sqlair_3, id AS _sqlair_4, street AS _sqlair_5 FROM t",
+	summary:        "star as output multitype",
+	query:          "SELECT (*) AS (&Person.*, &Address.*) FROM t",
+	expectedParsed: "[Bypass[SELECT ] Output[[*] [Person.* Address.*]] Bypass[ FROM t]]",
+	typeSamples:    []any{Person{}, Address{}},
+	expectedSQL:    "SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2, district AS _sqlair_3, id AS _sqlair_4, street AS _sqlair_5 FROM t",
 }, {
-	"multiple multitype",
-	"SELECT (t.*) AS (&Person.*, &M.uid), (district, street, postcode) AS (&Address.district, &Address.street, &M.postcode) FROM t",
-	"[Bypass[SELECT ] Output[[t.*] [Person.* M.uid]] Bypass[, ] Output[[district street postcode] [Address.district Address.street M.postcode]] Bypass[ FROM t]]",
-	[]any{Person{}, Address{}, sqlair.M{}},
-	"SELECT t.address_id AS _sqlair_0, t.id AS _sqlair_1, t.name AS _sqlair_2, t.uid AS _sqlair_3, district AS _sqlair_4, street AS _sqlair_5, postcode AS _sqlair_6 FROM t",
+	summary:        "multiple multitype",
+	query:          "SELECT (t.*) AS (&Person.*, &M.uid), (district, street, postcode) AS (&Address.district, &Address.street, &M.postcode) FROM t",
+	expectedParsed: "[Bypass[SELECT ] Output[[t.*] [Person.* M.uid]] Bypass[, ] Output[[district street postcode] [Address.district Address.street M.postcode]] Bypass[ FROM t]]",
+	typeSamples:    []any{Person{}, Address{}, sqlair.M{}},
+	expectedSQL:    "SELECT t.address_id AS _sqlair_0, t.id AS _sqlair_1, t.name AS _sqlair_2, t.uid AS _sqlair_3, district AS _sqlair_4, street AS _sqlair_5, postcode AS _sqlair_6 FROM t",
 }, {
-	"input",
-	"SELECT p.*, a.district FROM person AS p JOIN address AS a ON p.address_id=$Address.id WHERE p.name = $Person.name",
-	"[Bypass[SELECT p.*, a.district FROM person AS p JOIN address AS a ON p.address_id=] Input[Address.id] Bypass[ WHERE p.name = ] Input[Person.name]]",
-	[]any{Person{}, Address{}},
-	`SELECT p.*, a.district FROM person AS p JOIN address AS a ON p.address_id=@sqlair_0 WHERE p.name = @sqlair_1`,
+	summary:        "input",
+	query:          "SELECT p.*, a.district FROM person AS p JOIN address AS a ON p.address_id=$Address.id WHERE p.name = $Person.name",
+	expectedParsed: "[Bypass[SELECT p.*, a.district FROM person AS p JOIN address AS a ON p.address_id=] Input[Address.id] Bypass[ WHERE p.name = ] Input[Person.name]]",
+	typeSamples:    []any{Person{}, Address{}},
+	expectedSQL:    `SELECT p.*, a.district FROM person AS p JOIN address AS a ON p.address_id=@sqlair_0 WHERE p.name = @sqlair_1`,
 }, {
-	"output and input",
-	"SELECT &Person.* FROM table WHERE foo = $Address.id",
-	"[Bypass[SELECT ] Output[[] [Person.*]] Bypass[ FROM table WHERE foo = ] Input[Address.id]]",
-	[]any{Person{}, Address{}},
-	`SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM table WHERE foo = @sqlair_0`,
+	summary:        "output and input",
+	query:          "SELECT &Person.* FROM table WHERE foo = $Address.id",
+	expectedParsed: "[Bypass[SELECT ] Output[[] [Person.*]] Bypass[ FROM table WHERE foo = ] Input[Address.id]]",
+	typeSamples:    []any{Person{}, Address{}},
+	expectedSQL:    `SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM table WHERE foo = @sqlair_0`,
 }, {
-	"outputs and quote",
-	"SELECT foo, &Person.id, bar, baz, &Manager.name FROM table WHERE foo = 'xx'",
-	"[Bypass[SELECT foo, ] Output[[] [Person.id]] Bypass[, bar, baz, ] Output[[] [Manager.name]] Bypass[ FROM table WHERE foo = 'xx']]",
-	[]any{Person{}, Manager{}},
-	"SELECT foo, id AS _sqlair_0, bar, baz, name AS _sqlair_1 FROM table WHERE foo = 'xx'",
+	summary:        "outputs and quote",
+	query:          "SELECT foo, &Person.id, bar, baz, &Manager.name FROM table WHERE foo = 'xx'",
+	expectedParsed: "[Bypass[SELECT foo, ] Output[[] [Person.id]] Bypass[, bar, baz, ] Output[[] [Manager.name]] Bypass[ FROM table WHERE foo = 'xx']]",
+	typeSamples:    []any{Person{}, Manager{}},
+	expectedSQL:    "SELECT foo, id AS _sqlair_0, bar, baz, name AS _sqlair_1 FROM table WHERE foo = 'xx'",
 }, {
-	"star output and quote",
-	"SELECT * AS &Person.* FROM person WHERE name = 'Fred'",
-	"[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE name = 'Fred']]",
-	[]any{Person{}},
-	"SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM person WHERE name = 'Fred'",
+	summary:        "star output and quote",
+	query:          "SELECT * AS &Person.* FROM person WHERE name = 'Fred'",
+	expectedParsed: "[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE name = 'Fred']]",
+	typeSamples:    []any{Person{}},
+	expectedSQL:    "SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM person WHERE name = 'Fred'",
 }, {
-	"two star outputs and quote",
-	"SELECT &Person.*, a.* AS &Address.* FROM person, address a WHERE name = 'Fred'",
-	"[Bypass[SELECT ] Output[[] [Person.*]] Bypass[, ] Output[[a.*] [Address.*]] Bypass[ FROM person, address a WHERE name = 'Fred']]",
-	[]any{Person{}, Address{}},
-	"SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2, a.district AS _sqlair_3, a.id AS _sqlair_4, a.street AS _sqlair_5 FROM person, address a WHERE name = 'Fred'",
+	summary:        "two star outputs and quote",
+	query:          "SELECT &Person.*, a.* AS &Address.* FROM person, address a WHERE name = 'Fred'",
+	expectedParsed: "[Bypass[SELECT ] Output[[] [Person.*]] Bypass[, ] Output[[a.*] [Address.*]] Bypass[ FROM person, address a WHERE name = 'Fred']]",
+	typeSamples:    []any{Person{}, Address{}},
+	expectedSQL:    "SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2, a.district AS _sqlair_3, a.id AS _sqlair_4, a.street AS _sqlair_5 FROM person, address a WHERE name = 'Fred'",
 }, {
-	"map input and output",
-	"SELECT (p.name, a.id) AS (&M.*), street AS &StringMap.*, &IntMap.id FROM person, address a WHERE name = $M.name",
-	"[Bypass[SELECT ] Output[[p.name a.id] [M.*]] Bypass[, ] Output[[street] [StringMap.*]] Bypass[, ] Output[[] [IntMap.id]] Bypass[ FROM person, address a WHERE name = ] Input[M.name]]",
-	[]any{sqlair.M{}, IntMap{}, StringMap{}},
-	"SELECT p.name AS _sqlair_0, a.id AS _sqlair_1, street AS _sqlair_2, id AS _sqlair_3 FROM person, address a WHERE name = @sqlair_0",
+	summary:        "map input and output",
+	query:          "SELECT (p.name, a.id) AS (&M.*), street AS &StringMap.*, &IntMap.id FROM person, address a WHERE name = $M.name",
+	expectedParsed: "[Bypass[SELECT ] Output[[p.name a.id] [M.*]] Bypass[, ] Output[[street] [StringMap.*]] Bypass[, ] Output[[] [IntMap.id]] Bypass[ FROM person, address a WHERE name = ] Input[M.name]]",
+	typeSamples:    []any{sqlair.M{}, IntMap{}, StringMap{}},
+	expectedSQL:    "SELECT p.name AS _sqlair_0, a.id AS _sqlair_1, street AS _sqlair_2, id AS _sqlair_3 FROM person, address a WHERE name = @sqlair_0",
 }, {
-	"multicolumn output v1",
-	"SELECT (a.district, a.street) AS (&Address.district, &Address.street), a.id AS &Person.id FROM address AS a",
-	"[Bypass[SELECT ] Output[[a.district a.street] [Address.district Address.street]] Bypass[, ] Output[[a.id] [Person.id]] Bypass[ FROM address AS a]]",
-	[]any{Person{}, Address{}},
-	"SELECT a.district AS _sqlair_0, a.street AS _sqlair_1, a.id AS _sqlair_2 FROM address AS a",
+	summary:        "multicolumn output v1",
+	query:          "SELECT (a.district, a.street) AS (&Address.district, &Address.street), a.id AS &Person.id FROM address AS a",
+	expectedParsed: "[Bypass[SELECT ] Output[[a.district a.street] [Address.district Address.street]] Bypass[, ] Output[[a.id] [Person.id]] Bypass[ FROM address AS a]]",
+	typeSamples:    []any{Person{}, Address{}},
+	expectedSQL:    "SELECT a.district AS _sqlair_0, a.street AS _sqlair_1, a.id AS _sqlair_2 FROM address AS a",
 }, {
-	"multicolumn output v2",
-	"SELECT (a.district, a.id) AS (&Address.district, &Person.address_id) FROM address AS a",
-	"[Bypass[SELECT ] Output[[a.district a.id] [Address.district Person.address_id]] Bypass[ FROM address AS a]]",
-	[]any{Person{}, Address{}},
-	"SELECT a.district AS _sqlair_0, a.id AS _sqlair_1 FROM address AS a",
+	summary:        "multicolumn output v2",
+	query:          "SELECT (a.district, a.id) AS (&Address.district, &Person.address_id) FROM address AS a",
+	expectedParsed: "[Bypass[SELECT ] Output[[a.district a.id] [Address.district Person.address_id]] Bypass[ FROM address AS a]]",
+	typeSamples:    []any{Person{}, Address{}},
+	expectedSQL:    "SELECT a.district AS _sqlair_0, a.id AS _sqlair_1 FROM address AS a",
 }, {
-	"multicolumn output v3",
-	"SELECT (*) AS (&Person.address_id, &Address.*, &Manager.id) FROM address AS a",
-	"[Bypass[SELECT ] Output[[*] [Person.address_id Address.* Manager.id]] Bypass[ FROM address AS a]]",
-	[]any{Person{}, Address{}, Manager{}},
-	"SELECT address_id AS _sqlair_0, district AS _sqlair_1, id AS _sqlair_2, street AS _sqlair_3, id AS _sqlair_4 FROM address AS a",
+	summary:        "multicolumn output v3",
+	query:          "SELECT (*) AS (&Person.address_id, &Address.*, &Manager.id) FROM address AS a",
+	expectedParsed: "[Bypass[SELECT ] Output[[*] [Person.address_id Address.* Manager.id]] Bypass[ FROM address AS a]]",
+	typeSamples:    []any{Person{}, Address{}, Manager{}},
+	expectedSQL:    "SELECT address_id AS _sqlair_0, district AS _sqlair_1, id AS _sqlair_2, street AS _sqlair_3, id AS _sqlair_4 FROM address AS a",
 }, {
-	"multicolumn output v4",
-	"SELECT (a.district, a.street) AS (&Address.*) FROM address AS a WHERE p.name = 'Fred'",
-	"[Bypass[SELECT ] Output[[a.district a.street] [Address.*]] Bypass[ FROM address AS a WHERE p.name = 'Fred']]",
-	[]any{Address{}},
-	"SELECT a.district AS _sqlair_0, a.street AS _sqlair_1 FROM address AS a WHERE p.name = 'Fred'",
+	summary:        "multicolumn output v4",
+	query:          "SELECT (a.district, a.street) AS (&Address.*) FROM address AS a WHERE p.name = 'Fred'",
+	expectedParsed: "[Bypass[SELECT ] Output[[a.district a.street] [Address.*]] Bypass[ FROM address AS a WHERE p.name = 'Fred']]",
+	typeSamples:    []any{Address{}},
+	expectedSQL:    "SELECT a.district AS _sqlair_0, a.street AS _sqlair_1 FROM address AS a WHERE p.name = 'Fred'",
 }, {
-	"multicolumn output v5",
-	"SELECT (&Address.street, &Person.id) FROM address AS a WHERE p.name = 'Fred'",
-	"[Bypass[SELECT (] Output[[] [Address.street]] Bypass[, ] Output[[] [Person.id]] Bypass[) FROM address AS a WHERE p.name = 'Fred']]",
-	[]any{Address{}, Person{}},
-	"SELECT (street AS _sqlair_0, id AS _sqlair_1) FROM address AS a WHERE p.name = 'Fred'",
+	summary:        "multicolumn output v5",
+	query:          "SELECT (&Address.street, &Person.id) FROM address AS a WHERE p.name = 'Fred'",
+	expectedParsed: "[Bypass[SELECT (] Output[[] [Address.street]] Bypass[, ] Output[[] [Person.id]] Bypass[) FROM address AS a WHERE p.name = 'Fred']]",
+	typeSamples:    []any{Address{}, Person{}},
+	expectedSQL:    "SELECT (street AS _sqlair_0, id AS _sqlair_1) FROM address AS a WHERE p.name = 'Fred'",
 }, {
-	"complex query v1",
-	"SELECT p.* AS &Person.*, (a.district, a.street) AS (&Address.*), (5+7), (col1 * col2) AS calculated_value FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = 'Fred'",
-	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district a.street] [Address.*]] Bypass[, (5+7), (col1 * col2) AS calculated_value FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = 'Fred']]",
-	[]any{Person{}, Address{}},
-	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, a.district AS _sqlair_3, a.street AS _sqlair_4, (5+7), (col1 * col2) AS calculated_value FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = 'Fred'`,
+	summary:        "complex query v1",
+	query:          "SELECT p.* AS &Person.*, (a.district, a.street) AS (&Address.*), (5+7), (col1 * col2) AS calculated_value FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = 'Fred'",
+	expectedParsed: "[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district a.street] [Address.*]] Bypass[, (5+7), (col1 * col2) AS calculated_value FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = 'Fred']]",
+	typeSamples:    []any{Person{}, Address{}},
+	expectedSQL:    `SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, a.district AS _sqlair_3, a.street AS _sqlair_4, (5+7), (col1 * col2) AS calculated_value FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = 'Fred'`,
 }, {
-	"complex query v2",
-	"SELECT p.* AS &Person.*, (a.district, a.street) AS (&Address.*) FROM person AS p JOIN address AS a ON p .address_id = a.id WHERE p.name = 'Fred'",
-	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district a.street] [Address.*]] Bypass[ FROM person AS p JOIN address AS a ON p .address_id = a.id WHERE p.name = 'Fred']]",
-	[]any{Person{}, Address{}},
-	"SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, a.district AS _sqlair_3, a.street AS _sqlair_4 FROM person AS p JOIN address AS a ON p .address_id = a.id WHERE p.name = 'Fred'",
+	summary:        "complex query v2",
+	query:          "SELECT p.* AS &Person.*, (a.district, a.street) AS (&Address.*) FROM person AS p JOIN address AS a ON p .address_id = a.id WHERE p.name = 'Fred'",
+	expectedParsed: "[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district a.street] [Address.*]] Bypass[ FROM person AS p JOIN address AS a ON p .address_id = a.id WHERE p.name = 'Fred']]",
+	typeSamples:    []any{Person{}, Address{}},
+	expectedSQL:    "SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, a.district AS _sqlair_3, a.street AS _sqlair_4 FROM person AS p JOIN address AS a ON p .address_id = a.id WHERE p.name = 'Fred'",
 }, {
-	"complex query v3",
-	"SELECT p.* AS &Person.*, (a.district, a.street) AS (&Address.*) FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name)",
-	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district a.street] [Address.*]] Bypass[ FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name IN (SELECT name FROM table WHERE table.n = ] Input[Person.name] Bypass[)]]",
-	[]any{Person{}, Address{}},
-	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, a.district AS _sqlair_3, a.street AS _sqlair_4 FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name IN (SELECT name FROM table WHERE table.n = @sqlair_0)`,
+	summary:        "complex query v3",
+	query:          "SELECT p.* AS &Person.*, (a.district, a.street) AS (&Address.*) FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name)",
+	expectedParsed: "[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[a.district a.street] [Address.*]] Bypass[ FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name IN (SELECT name FROM table WHERE table.n = ] Input[Person.name] Bypass[)]]",
+	typeSamples:    []any{Person{}, Address{}},
+	expectedSQL:    `SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, a.district AS _sqlair_3, a.street AS _sqlair_4 FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name IN (SELECT name FROM table WHERE table.n = @sqlair_0)`,
 }, {
-	"complex query v4",
-	"SELECT p.* AS &Person.* FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name) UNION SELECT (a.district, a.street) AS (&Address.*) FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name)",
-	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[ FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = ] Input[Person.name] Bypass[) UNION SELECT ] Output[[a.district a.street] [Address.*]] Bypass[ FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = ] Input[Person.name] Bypass[)]]",
-	[]any{Person{}, Address{}},
-	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2 FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = @sqlair_0) UNION SELECT a.district AS _sqlair_3, a.street AS _sqlair_4 FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = @sqlair_1)`,
+	summary:        "complex query v4",
+	query:          "SELECT p.* AS &Person.* FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name) UNION SELECT (a.district, a.street) AS (&Address.*) FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name)",
+	expectedParsed: "[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[ FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = ] Input[Person.name] Bypass[) UNION SELECT ] Output[[a.district a.street] [Address.*]] Bypass[ FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = ] Input[Person.name] Bypass[)]]",
+	typeSamples:    []any{Person{}, Address{}},
+	expectedSQL:    `SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2 FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = @sqlair_0) UNION SELECT a.district AS _sqlair_3, a.street AS _sqlair_4 FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = @sqlair_1)`,
 }, {
-	"complex query v5",
-	"SELECT p.* AS &Person.* FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
-	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[ FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] Input[Person.name] Bypass[ AND p.address_id = ] Input[Person.address_id]]",
-	[]any{Person{}},
-	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2 FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = @sqlair_0 AND p.address_id = @sqlair_1`,
+	summary:        "complex query v5",
+	query:          "SELECT p.* AS &Person.* FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
+	expectedParsed: "[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[ FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = ] Input[Person.name] Bypass[ AND p.address_id = ] Input[Person.address_id]]",
+	typeSamples:    []any{Person{}},
+	expectedSQL:    `SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2 FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = @sqlair_0 AND p.address_id = @sqlair_1`,
 }, {
-	"complex query v6",
-	"SELECT p.* AS &Person.*, FROM person AS p INNER JOIN address AS a ON p.address_id = $Address.id WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
-	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, FROM person AS p INNER JOIN address AS a ON p.address_id = ] Input[Address.id] Bypass[ WHERE p.name = ] Input[Person.name] Bypass[ AND p.address_id = ] Input[Person.address_id]]",
-	[]any{Person{}, Address{}},
-	`SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, FROM person AS p INNER JOIN address AS a ON p.address_id = @sqlair_0 WHERE p.name = @sqlair_1 AND p.address_id = @sqlair_2`,
+	summary:        "complex query v6",
+	query:          "SELECT p.* AS &Person.*, FROM person AS p INNER JOIN address AS a ON p.address_id = $Address.id WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
+	expectedParsed: "[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, FROM person AS p INNER JOIN address AS a ON p.address_id = ] Input[Address.id] Bypass[ WHERE p.name = ] Input[Person.name] Bypass[ AND p.address_id = ] Input[Person.address_id]]",
+	typeSamples:    []any{Person{}, Address{}},
+	expectedSQL:    `SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, FROM person AS p INNER JOIN address AS a ON p.address_id = @sqlair_0 WHERE p.name = @sqlair_1 AND p.address_id = @sqlair_2`,
 }, {
-	"join v1",
-	"SELECT p.* AS &Person.*, m.* AS &Manager.* FROM person AS p JOIN person AS m ON p.id = m.id WHERE p.name = 'Fred'",
-	"[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[m.*] [Manager.*]] Bypass[ FROM person AS p JOIN person AS m ON p.id = m.id WHERE p.name = 'Fred']]",
-	[]any{Person{}, Manager{}},
-	"SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, m.address_id AS _sqlair_3, m.id AS _sqlair_4, m.name AS _sqlair_5 FROM person AS p JOIN person AS m ON p.id = m.id WHERE p.name = 'Fred'",
+	summary:        "join v1",
+	query:          "SELECT p.* AS &Person.*, m.* AS &Manager.* FROM person AS p JOIN person AS m ON p.id = m.id WHERE p.name = 'Fred'",
+	expectedParsed: "[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[, ] Output[[m.*] [Manager.*]] Bypass[ FROM person AS p JOIN person AS m ON p.id = m.id WHERE p.name = 'Fred']]",
+	typeSamples:    []any{Person{}, Manager{}},
+	expectedSQL:    "SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, m.address_id AS _sqlair_3, m.id AS _sqlair_4, m.name AS _sqlair_5 FROM person AS p JOIN person AS m ON p.id = m.id WHERE p.name = 'Fred'",
 }, {
-	"join v2",
-	"SELECT person.*, address.district FROM person JOIN address ON person.address_id = address.id WHERE person.name = 'Fred'",
-	"[Bypass[SELECT person.*, address.district FROM person JOIN address ON person.address_id = address.id WHERE person.name = 'Fred']]",
-	[]any{},
-	"SELECT person.*, address.district FROM person JOIN address ON person.address_id = address.id WHERE person.name = 'Fred'",
+	summary:        "join v2",
+	query:          "SELECT person.*, address.district FROM person JOIN address ON person.address_id = address.id WHERE person.name = 'Fred'",
+	expectedParsed: "[Bypass[SELECT person.*, address.district FROM person JOIN address ON person.address_id = address.id WHERE person.name = 'Fred']]",
+	typeSamples:    []any{},
+	expectedSQL:    "SELECT person.*, address.district FROM person JOIN address ON person.address_id = address.id WHERE person.name = 'Fred'",
 }, {
-	"insert",
-	"INSERT INTO person (name) VALUES $Person.name",
-	"[Bypass[INSERT INTO person (name) VALUES ] Input[Person.name]]",
-	[]any{Person{}},
-	`INSERT INTO person (name) VALUES @sqlair_0`,
+	summary:        "insert",
+	query:          "INSERT INTO person (name) VALUES $Person.name",
+	expectedParsed: "[Bypass[INSERT INTO person (name) VALUES ] Input[Person.name]]",
+	typeSamples:    []any{Person{}},
+	expectedSQL:    `INSERT INTO person (name) VALUES @sqlair_0`,
 }, {
-	"ignore dollar",
-	"SELECT $, dollerrow$ FROM moneytable$",
-	"[Bypass[SELECT $, dollerrow$ FROM moneytable$]]",
-	[]any{},
-	"SELECT $, dollerrow$ FROM moneytable$",
+	summary:        "ignore dollar",
+	query:          "SELECT $, dollerrow$ FROM moneytable$",
+	expectedParsed: "[Bypass[SELECT $, dollerrow$ FROM moneytable$]]",
+	typeSamples:    []any{},
+	expectedSQL:    "SELECT $, dollerrow$ FROM moneytable$",
 }, {
-	"escaped double quote",
-	`SELECT foo FROM t WHERE t.p = "Jimmy ""Quickfingers"" Jones"`,
-	`[Bypass[SELECT foo FROM t WHERE t.p = "Jimmy ""Quickfingers"" Jones"]]`,
-	[]any{},
-	`SELECT foo FROM t WHERE t.p = "Jimmy ""Quickfingers"" Jones"`,
+	summary:        "escaped double quote",
+	query:          `SELECT foo FROM t WHERE t.p = "Jimmy ""Quickfingers"" Jones"`,
+	expectedParsed: `[Bypass[SELECT foo FROM t WHERE t.p = "Jimmy ""Quickfingers"" Jones"]]`,
+	typeSamples:    []any{},
+	expectedSQL:    `SELECT foo FROM t WHERE t.p = "Jimmy ""Quickfingers"" Jones"`,
 }, {
-	"escaped single quote",
-	`SELECT foo FROM t WHERE t.p = 'Olly O''Flanagan'`,
-	`[Bypass[SELECT foo FROM t WHERE t.p = 'Olly O''Flanagan']]`,
-	[]any{},
-	`SELECT foo FROM t WHERE t.p = 'Olly O''Flanagan'`,
+	summary:        "escaped single quote",
+	query:          `SELECT foo FROM t WHERE t.p = 'Olly O''Flanagan'`,
+	expectedParsed: `[Bypass[SELECT foo FROM t WHERE t.p = 'Olly O''Flanagan']]`,
+	typeSamples:    []any{},
+	expectedSQL:    `SELECT foo FROM t WHERE t.p = 'Olly O''Flanagan'`,
 }, {
-	"complex escaped quotes",
-	`SELECT * AS &Person.* FROM person WHERE name IN ('Lorn', 'Onos T''oolan', '', ''' ''');`,
-	`[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE name IN ('Lorn', 'Onos T''oolan', '', ''' ''');]]`,
-	[]any{Person{}},
-	`SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM person WHERE name IN ('Lorn', 'Onos T''oolan', '', ''' ''');`,
+	summary:        "complex escaped quotes",
+	query:          `SELECT * AS &Person.* FROM person WHERE name IN ('Lorn', 'Onos T''oolan', '', ''' ''');`,
+	expectedParsed: `[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE name IN ('Lorn', 'Onos T''oolan', '', ''' ''');]]`,
+	typeSamples:    []any{Person{}},
+	expectedSQL:    `SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM person WHERE name IN ('Lorn', 'Onos T''oolan', '', ''' ''');`,
 }, {
-	"update",
-	"UPDATE person SET person.address_id = $Address.id WHERE person.id = $Person.id",
-	"[Bypass[UPDATE person SET person.address_id = ] Input[Address.id] Bypass[ WHERE person.id = ] Input[Person.id]]",
-	[]any{Person{}, Address{}},
-	`UPDATE person SET person.address_id = @sqlair_0 WHERE person.id = @sqlair_1`,
+	summary:        "update",
+	query:          "UPDATE person SET person.address_id = $Address.id WHERE person.id = $Person.id",
+	expectedParsed: "[Bypass[UPDATE person SET person.address_id = ] Input[Address.id] Bypass[ WHERE person.id = ] Input[Person.id]]",
+	typeSamples:    []any{Person{}, Address{}},
+	expectedSQL:    `UPDATE person SET person.address_id = @sqlair_0 WHERE person.id = @sqlair_1`,
 }, {
-	"mathmatical operations",
-	`SELECT name FROM person WHERE id =$HardMaths.x+$HardMaths.y/$HardMaths.z-
+	summary: "mathmatical operations",
+	query: `SELECT name FROM person WHERE id =$HardMaths.x+$HardMaths.y/$HardMaths.z-
 	($HardMaths.coef%$HardMaths.x)-$HardMaths.y|$HardMaths.z<$HardMaths.z<>$HardMaths.x`,
-	`[Bypass[SELECT name FROM person WHERE id =] Input[HardMaths.x] Bypass[+] Input[HardMaths.y] Bypass[/] Input[HardMaths.z] Bypass[-
+	expectedParsed: `[Bypass[SELECT name FROM person WHERE id =] Input[HardMaths.x] Bypass[+] Input[HardMaths.y] Bypass[/] Input[HardMaths.z] Bypass[-
 	(] Input[HardMaths.coef] Bypass[%] Input[HardMaths.x] Bypass[)-] Input[HardMaths.y] Bypass[|] Input[HardMaths.z] Bypass[<] Input[HardMaths.z] Bypass[<>] Input[HardMaths.x]]`,
-	[]any{HardMaths{}},
-	`SELECT name FROM person WHERE id =@sqlair_0+@sqlair_1/@sqlair_2-
+	typeSamples: []any{HardMaths{}},
+	expectedSQL: `SELECT name FROM person WHERE id =@sqlair_0+@sqlair_1/@sqlair_2-
 	(@sqlair_3%@sqlair_4)-@sqlair_5|@sqlair_6<@sqlair_7<>@sqlair_8`,
 }, {
-	"insert array",
-	"INSERT INTO arr VALUES (ARRAY[[1,2],[$HardMaths.x,4]], ARRAY[[5,6],[$HardMaths.y,8]]);",
-	"[Bypass[INSERT INTO arr VALUES (ARRAY[[1,2],[] Input[HardMaths.x] Bypass[,4]], ARRAY[[5,6],[] Input[HardMaths.y] Bypass[,8]]);]]",
-	[]any{HardMaths{}},
-	"INSERT INTO arr VALUES (ARRAY[[1,2],[@sqlair_0,4]], ARRAY[[5,6],[@sqlair_1,8]]);",
+	summary:        "insert array",
+	query:          "INSERT INTO arr VALUES (ARRAY[[1,2],[$HardMaths.x,4]], ARRAY[[5,6],[$HardMaths.y,8]]);",
+	expectedParsed: "[Bypass[INSERT INTO arr VALUES (ARRAY[[1,2],[] Input[HardMaths.x] Bypass[,4]], ARRAY[[5,6],[] Input[HardMaths.y] Bypass[,8]]);]]",
+	typeSamples:    []any{HardMaths{}},
+	expectedSQL:    "INSERT INTO arr VALUES (ARRAY[[1,2],[@sqlair_0,4]], ARRAY[[5,6],[@sqlair_1,8]]);",
 }}
 
 func (s *ExprSuite) TestExpr(c *C) {
@@ -323,7 +323,7 @@ func (s *ExprSuite) TestExpr(c *C) {
 			c.Errorf("test %d failed (Parse):\nsummary: %s\nquery: %s\nexpected: %s\nactual:   %s\n", i, t.summary, t.query, t.expectedParsed, parsedExpr.String())
 		}
 
-		if typedExpr, err = parsedExpr.BindTypes(t.prepareArgs...); err != nil {
+		if typedExpr, err = parsedExpr.BindTypes(t.typeSamples...); err != nil {
 			c.Errorf("test %d failed (BindTypes):\nsummary: %s\nquery: %s\nexpected: %s\nerr: %s\n", i, t.summary, t.query, t.expectedSQL, err)
 		} else {
 			c.Check(typedExpr.SQL(), Equals, t.expectedSQL,
@@ -443,99 +443,99 @@ func (s *ExprSuite) TestBindTypesErrors(c *C) {
 	}
 	tests := []struct {
 		query       string
-		prepareArgs []any
+		typeSamples []any
 		err         string
 	}{{
 		query:       "SELECT (p.name, t.id) AS (&Address.id) FROM t",
-		prepareArgs: []any{Address{}},
+		typeSamples: []any{Address{}},
 		err:         "cannot prepare statement: output expression: mismatched number of columns and target types: (p.name, t.id) AS (&Address.id)",
 	}, {
 		query:       "SELECT (p.name) AS (&Address.district, &Address.street) FROM t",
-		prepareArgs: []any{Address{}},
+		typeSamples: []any{Address{}},
 		err:         "cannot prepare statement: output expression: mismatched number of columns and target types: (p.name) AS (&Address.district, &Address.street)",
 	}, {
 		query:       "SELECT (&Address.*, &Address.id) FROM t",
-		prepareArgs: []any{Address{}, Person{}},
+		typeSamples: []any{Address{}, Person{}},
 		err:         `cannot prepare statement: member "id" of type "Address" appears more than once in output expressions`,
 	}, {
 		query:       "SELECT (p.*, t.name) AS (&Address.*) FROM t",
-		prepareArgs: []any{Address{}},
+		typeSamples: []any{Address{}},
 		err:         "cannot prepare statement: output expression: invalid asterisk in columns: (p.*, t.name) AS (&Address.*)",
 	}, {
 		query:       "SELECT (name, p.*) AS (&Person.id, &Person.*) FROM t",
-		prepareArgs: []any{Address{}, Person{}},
+		typeSamples: []any{Address{}, Person{}},
 		err:         "cannot prepare statement: output expression: invalid asterisk in columns: (name, p.*) AS (&Person.id, &Person.*)",
 	}, {
 		query:       "SELECT (&Person.*, &Person.*) FROM t",
-		prepareArgs: []any{Address{}, Person{}},
+		typeSamples: []any{Address{}, Person{}},
 		err:         `cannot prepare statement: member "address_id" of type "Person" appears more than once in output expressions`,
 	}, {
 		query:       "SELECT (p.*, t.*) AS (&Address.*) FROM t",
-		prepareArgs: []any{Address{}},
+		typeSamples: []any{Address{}},
 		err:         "cannot prepare statement: output expression: invalid asterisk in columns: (p.*, t.*) AS (&Address.*)",
 	}, {
 		query:       "SELECT (id, name) AS (&Person.id, &Address.*) FROM t",
-		prepareArgs: []any{Address{}, Person{}},
+		typeSamples: []any{Address{}, Person{}},
 		err:         "cannot prepare statement: output expression: invalid asterisk in types: (id, name) AS (&Person.id, &Address.*)",
 	}, {
 		query:       "SELECT (name, id) AS (&Person.*, &Address.id) FROM t",
-		prepareArgs: []any{Address{}, Person{}},
+		typeSamples: []any{Address{}, Person{}},
 		err:         "cannot prepare statement: output expression: invalid asterisk in types: (name, id) AS (&Person.*, &Address.id)",
 	}, {
 		query:       "SELECT (name, id) AS (&Person.*, &Address.*) FROM t",
-		prepareArgs: []any{Address{}, Person{}},
+		typeSamples: []any{Address{}, Person{}},
 		err:         "cannot prepare statement: output expression: invalid asterisk in types: (name, id) AS (&Person.*, &Address.*)",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.number",
-		prepareArgs: []any{Address{}},
+		typeSamples: []any{Address{}},
 		err:         `cannot prepare statement: input expression: type "Address" has no "number" db tag: $Address.number`,
 	}, {
 		query:       "SELECT (street, road) AS (&Address.*) FROM t",
-		prepareArgs: []any{Address{}},
+		typeSamples: []any{Address{}},
 		err:         `cannot prepare statement: output expression: type "Address" has no "road" db tag: (street, road) AS (&Address.*)`,
 	}, {
 		query:       "SELECT &Address.road FROM t",
-		prepareArgs: []any{Address{}},
+		typeSamples: []any{Address{}},
 		err:         `cannot prepare statement: output expression: type "Address" has no "road" db tag: &Address.road`,
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
-		prepareArgs: []any{Person{}, Manager{}},
+		typeSamples: []any{Person{}, Manager{}},
 		err:         `cannot prepare statement: input expression: parameter with type "Address" missing (have "Manager", "Person"): $Address.street`,
 	}, {
 		query:       "SELECT street AS &Address.street FROM t",
-		prepareArgs: []any{},
+		typeSamples: []any{},
 		err:         `cannot prepare statement: output expression: parameter with type "Address" missing: street AS &Address.street`,
 	}, {
 		query:       "SELECT street AS &Address.id FROM t",
-		prepareArgs: []any{Person{}},
+		typeSamples: []any{Person{}},
 		err:         `cannot prepare statement: output expression: parameter with type "Address" missing (have "Person"): street AS &Address.id`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
-		prepareArgs: []any{[]any{Person{}}},
+		typeSamples: []any{[]any{Person{}}},
 		err:         `cannot prepare statement: need struct or map, got slice`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
-		prepareArgs: []any{&Person{}},
+		typeSamples: []any{&Person{}},
 		err:         `cannot prepare statement: need struct or map, got pointer to struct`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
-		prepareArgs: []any{(*Person)(nil)},
+		typeSamples: []any{(*Person)(nil)},
 		err:         `cannot prepare statement: need struct or map, got pointer to struct`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
-		prepareArgs: []any{map[string]any{}},
+		typeSamples: []any{map[string]any{}},
 		err:         `cannot prepare statement: cannot use anonymous map`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
-		prepareArgs: []any{nil},
+		typeSamples: []any{nil},
 		err:         `cannot prepare statement: need struct or map, got nil`,
 	}, {
 		query:       "SELECT * AS &.* FROM t",
-		prepareArgs: []any{struct{ f int }{f: 1}},
+		typeSamples: []any{struct{ f int }{f: 1}},
 		err:         `cannot prepare statement: cannot use anonymous struct`,
 	}, {
 		query:       "SELECT &NoTags.* FROM t",
-		prepareArgs: []any{NoTags{}},
+		typeSamples: []any{NoTags{}},
 		err:         `cannot prepare statement: output expression: no "db" tags found in struct "NoTags": &NoTags.*`,
 	}}
 
@@ -545,12 +545,12 @@ func (s *ExprSuite) TestBindTypesErrors(c *C) {
 		if err != nil {
 			c.Fatal(err)
 		}
-		_, err = parsedExpr.BindTypes(test.prepareArgs...)
+		_, err = parsedExpr.BindTypes(test.typeSamples...)
 		if err != nil {
 			c.Assert(err.Error(), Equals, test.err,
-				Commentf("test %d failed:\nquery: %q\nprepareArgs:'%+v'", i, test.query, test.prepareArgs))
+				Commentf("test %d failed:\nquery: %q\ntypeSamples:'%+v'", i, test.query, test.typeSamples))
 		} else {
-			c.Errorf("test %d failed:\nexpected err: %q but got nil\nquery: %q\nprepareArgs:'%+v'", i, test.err, test.query, test.prepareArgs)
+			c.Errorf("test %d failed:\nexpected err: %q but got nil\nquery: %q\ntypeSamples:'%+v'", i, test.err, test.query, test.typeSamples)
 		}
 	}
 }
@@ -607,8 +607,8 @@ func (s *ExprSuite) TestMapError(c *C) {
 func (s *ExprSuite) TestValidBindInputs(c *C) {
 	tests := []struct {
 		query       string
-		prepareArgs []any
-		queryArgs   []any
+		typeSamples []any
+		inputArgs   []any
 		queryValues []any
 	}{{
 		"SELECT * AS &Address.* FROM t WHERE x = $Person.name",
@@ -653,12 +653,12 @@ func (s *ExprSuite) TestValidBindInputs(c *C) {
 			c.Fatal(err)
 		}
 
-		typedExpr, err := parsedExpr.BindTypes(t.prepareArgs...)
+		typedExpr, err := parsedExpr.BindTypes(t.typeSamples...)
 		if err != nil {
 			c.Fatal(err)
 		}
 
-		query, err := typedExpr.BindInputs(t.queryArgs...)
+		query, err := typedExpr.BindInputs(t.inputArgs...)
 		if err != nil {
 			c.Fatal(err)
 		}
@@ -670,58 +670,58 @@ func (s *ExprSuite) TestValidBindInputs(c *C) {
 func (s *ExprSuite) TestBindInputsError(c *C) {
 	tests := []struct {
 		query       string
-		prepareArgs []any
-		queryArgs   []any
+		typeSamples []any
+		inputArgs   []any
 		err         string
 	}{{
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
-		prepareArgs: []any{Address{}, Person{}},
-		queryArgs:   []any{Address{Street: "Dead end road"}},
+		typeSamples: []any{Address{}, Person{}},
+		inputArgs:   []any{Address{Street: "Dead end road"}},
 		err:         `invalid input parameter: parameter with type "Person" missing (have "Address")`,
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
-		prepareArgs: []any{Address{}, Person{}},
-		queryArgs:   []any{nil, Person{Fullname: "Monty Bingles"}},
+		typeSamples: []any{Address{}, Person{}},
+		inputArgs:   []any{nil, Person{Fullname: "Monty Bingles"}},
 		err:         "invalid input parameter: need struct or map, got nil",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
-		prepareArgs: []any{Address{}, Person{}},
-		queryArgs:   []any{(*Person)(nil)},
+		typeSamples: []any{Address{}, Person{}},
+		inputArgs:   []any{(*Person)(nil)},
 		err:         "invalid input parameter: need struct or map, got nil",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
-		prepareArgs: []any{Address{}},
-		queryArgs:   []any{8},
+		typeSamples: []any{Address{}},
+		inputArgs:   []any{8},
 		err:         "invalid input parameter: need struct or map, got int",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
-		prepareArgs: []any{Address{}},
-		queryArgs:   []any{[]any{}},
+		typeSamples: []any{Address{}},
+		inputArgs:   []any{[]any{}},
 		err:         "invalid input parameter: need struct or map, got slice",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
-		prepareArgs: []any{Address{}},
-		queryArgs:   []any{Address{}, Person{}},
+		typeSamples: []any{Address{}},
+		inputArgs:   []any{Address{}, Person{}},
 		err:         "invalid input parameter: Person not referenced in query",
 	}, {
 		query:       "SELECT * AS &Address.* FROM t WHERE x = $M.Fullname",
-		prepareArgs: []any{Address{}, sqlair.M{}},
-		queryArgs:   []any{sqlair.M{"fullname": "Jimany Johnson"}},
+		typeSamples: []any{Address{}, sqlair.M{}},
+		inputArgs:   []any{sqlair.M{"fullname": "Jimany Johnson"}},
 		err:         `invalid input parameter: map "M" does not contain key "Fullname"`,
 	}, {
 		query:       "SELECT foo FROM t WHERE x = $M.street, y = $Person.id",
-		prepareArgs: []any{Person{}, sqlair.M{}},
-		queryArgs:   []any{Person{ID: 666}, sqlair.M{"Street": "Highway to Hell"}},
+		typeSamples: []any{Person{}, sqlair.M{}},
+		inputArgs:   []any{Person{ID: 666}, sqlair.M{"Street": "Highway to Hell"}},
 		err:         `invalid input parameter: map "M" does not contain key "street"`,
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
-		prepareArgs: []any{Address{}, Person{}},
-		queryArgs:   []any{},
+		typeSamples: []any{Address{}, Person{}},
+		inputArgs:   []any{},
 		err:         `invalid input parameter: parameter with type "Address" missing`,
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Person.id, y = $Person.name",
-		prepareArgs: []any{Person{}},
-		queryArgs:   []any{Person{}, Person{}},
+		typeSamples: []any{Person{}},
+		inputArgs:   []any{Person{}, Person{}},
 		err:         `invalid input parameter: type "Person" provided more than once`,
 	}}
 
@@ -736,13 +736,13 @@ func (s *ExprSuite) TestBindInputsError(c *C) {
 
 	testsShadowed := []struct {
 		query       string
-		prepareArgs []any
-		queryArgs   []any
+		typeSamples []any
+		inputArgs   []any
 		err         string
 	}{{
 		query:       "SELECT street FROM t WHERE y = $Person.name",
-		prepareArgs: []any{outerP},
-		queryArgs:   []any{shadowedP},
+		typeSamples: []any{outerP},
+		inputArgs:   []any{shadowedP},
 		err:         `invalid input parameter: parameter with type "expr_test.Person" missing, have type with same name: "expr_test.Person"`,
 	}}
 
@@ -755,12 +755,12 @@ func (s *ExprSuite) TestBindInputsError(c *C) {
 			c.Fatal(err)
 		}
 
-		typedExpr, err := parsedExpr.BindTypes(t.prepareArgs...)
+		typedExpr, err := parsedExpr.BindTypes(t.typeSamples...)
 		if err != nil {
 			c.Fatal(err)
 		}
 
-		_, err = typedExpr.BindInputs(t.queryArgs...)
+		_, err = typedExpr.BindInputs(t.inputArgs...)
 		if err != nil {
 			c.Assert(err.Error(), Equals, t.err,
 				Commentf("test %d failed:\nquery: %s", i, t.query))
