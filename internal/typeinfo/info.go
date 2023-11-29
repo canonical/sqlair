@@ -180,44 +180,32 @@ func (mi *mapInfo) typ() reflect.Type {
 	return mi.mapType
 }
 
+// member returns a locator for a mapKey with a given name.
 func (mi *mapInfo) member(name string) (*mapKey, error) {
 	return &mapKey{name: name, mapType: mi.mapType}, nil
 }
 
-var cacheMutex sync.RWMutex
-var cache = make(map[reflect.Type]arg)
+// argInfoCache caches type reflection information across queries.
+var argInfoCacheMutex sync.RWMutex
+var argInfoCache = make(map[reflect.Type]arg)
 
-// getArgInfo will return information useful for SQLair from a sample
+// getArgInfo returns type information useful for SQLair from a sample
 // instantiation of an argument type.
 func getArgInfo(t reflect.Type) (arg, error) {
-	cacheMutex.RLock()
-	typeInfo, found := cache[t]
-	cacheMutex.RUnlock()
+	// Check cache for type
+	argInfoCacheMutex.RLock()
+	typeInfo, found := argInfoCache[t]
+	argInfoCacheMutex.RUnlock()
 	if found {
 		return typeInfo, nil
 	}
 
-	typeInfo, err := generateTypeInfo(t)
-	if err != nil {
-		return nil, err
-	}
-
-	cacheMutex.Lock()
-	cache[t] = typeInfo
-	cacheMutex.Unlock()
-
-	return typeInfo, nil
-}
-
-// generate produces and returns reflection information for the input
-// reflect.Value that is specifically required for SQLair operation.
-func generateTypeInfo(t reflect.Type) (arg, error) {
 	switch t.Kind() {
 	case reflect.Map:
 		if t.Key().Kind() != reflect.String {
 			return nil, fmt.Errorf(`map type %s must have key type string, found type %s`, t.Name(), t.Key().Kind())
 		}
-		return &mapInfo{mapType: t}, nil
+		typeInfo = &mapInfo{mapType: t}
 	case reflect.Struct:
 		info := structInfo{
 			tagToField: make(map[string]*structField),
@@ -253,10 +241,17 @@ func generateTypeInfo(t reflect.Type) (arg, error) {
 		sort.Strings(tags)
 		info.tags = tags
 
-		return &info, nil
+		typeInfo = &info
 	default:
 		return nil, fmt.Errorf("internal error: cannot obtain type information for type that is not map or struct: %s", t)
 	}
+
+	// Put type in cache.
+	argInfoCacheMutex.Lock()
+	argInfoCache[t] = typeInfo
+	argInfoCacheMutex.Unlock()
+
+	return typeInfo, nil
 }
 
 // parseTag parses the input tag string and returns its
