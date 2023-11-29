@@ -47,8 +47,8 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 	outputs := []typeinfo.Member{}
 	// argTypeUsed records the types of the input arguments used in the query.
 	argTypeUsed := map[reflect.Type]bool{}
-	inCount := 0
-	outCount := 0
+	inputCount := 0
+	outputCount := 0
 	sqlStr := bytes.Buffer{}
 	for _, te := range *tbe {
 		switch te := te.(type) {
@@ -65,17 +65,17 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 			if err != nil {
 				return nil, err
 			}
-			params = append(params, sql.Named("sqlair_"+strconv.Itoa(inCount), val.Interface()))
+			params = append(params, sql.Named("sqlair_"+strconv.Itoa(inputCount), val.Interface()))
 
-			sqlStr.WriteString("@sqlair_" + strconv.Itoa(inCount))
-			inCount++
+			sqlStr.WriteString("@sqlair_" + strconv.Itoa(inputCount))
+			inputCount++
 		case *typedOutputExpr:
 			for i, oc := range te.outputColumns {
-				sqlStr.WriteString(oc.sql(outCount))
+				sqlStr.WriteString(oc.sql(outputCount))
 				if i != len(te.outputColumns)-1 {
 					sqlStr.WriteString(", ")
 				}
-				outCount++
+				outputCount++
 				outputs = append(outputs, oc.member)
 			}
 		case *bypass:
