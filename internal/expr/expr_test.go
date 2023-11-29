@@ -278,8 +278,8 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 }, {
 	summary:        "insert",
 	query:          "INSERT INTO person (name) VALUES $Person.name",
-	typeSamples:    []any{Person{}},
 	expectedParsed: "[Bypass[INSERT INTO person (name) VALUES ] Input[Person.name]]",
+	typeSamples:    []any{Person{}},
 	inputArgs:      []any{Person{Fullname: "Foo"}},
 	expectedParams: []any{"Foo"},
 	expectedSQL:    `INSERT INTO person (name) VALUES @sqlair_0`,
