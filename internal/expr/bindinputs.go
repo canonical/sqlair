@@ -71,9 +71,7 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 			inCount++
 		case *typedOutputExpr:
 			for i, oc := range te.outputColumns {
-				sqlStr.WriteString(oc.sql)
-				sqlStr.WriteString(" AS ")
-				sqlStr.WriteString(markerName(outCount))
+				sqlStr.WriteString(oc.sql(outCount))
 				if i != len(te.outputColumns)-1 {
 					sqlStr.WriteString(", ")
 				}
@@ -104,15 +102,19 @@ type typedExpression interface {
 // outputColumn stores the name of a column to fetch from the database and the
 // type to scan the result into.
 type outputColumn struct {
-	sql    string
+	column string
 	member typeinfo.Member
 }
 
-func newOutputColumn(table string, column string, member typeinfo.Member) outputColumn {
-	if table == "" {
-		return outputColumn{sql: column, member: member}
+func (oc *outputColumn) sql(outputCount int) string {
+	return oc.column + " AS " + markerName(outputCount)
+}
+
+func newOutputColumn(tableName string, columnName string, member typeinfo.Member) outputColumn {
+	if tableName == "" {
+		return outputColumn{column: columnName, member: member}
 	}
-	return outputColumn{sql: table + "." + column, member: member}
+	return outputColumn{column: tableName + "." + columnName, member: member}
 }
 
 // typedInputExpr stores information about a Go value to use as a query input.
