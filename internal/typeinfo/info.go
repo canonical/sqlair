@@ -53,8 +53,8 @@ func GenerateArgInfo(typeSamples ...any) (ArgInfo, error) {
 }
 
 // InputMember returns an input locator for a member of a struct or map.
-func (argInfo ArgInfo) InputMember(typeName string, member string) (Input, error) {
-	vl, err := argInfo.getMember(typeName, member)
+func (argInfo ArgInfo) InputMember(typeName string, memberName string) (Input, error) {
+	vl, err := argInfo.getMember(typeName, memberName)
 	if err != nil {
 		return nil, err
 	}
@@ -66,8 +66,8 @@ func (argInfo ArgInfo) InputMember(typeName string, member string) (Input, error
 }
 
 // OutputMember returns an output locator for a member of a struct or map.
-func (argInfo ArgInfo) OutputMember(typeName string, member string) (Output, error) {
-	vl, err := argInfo.getMember(typeName, member)
+func (argInfo ArgInfo) OutputMember(typeName string, memberName string) (Output, error) {
+	vl, err := argInfo.getMember(typeName, memberName)
 	if err != nil {
 		return nil, err
 	}
@@ -144,26 +144,30 @@ func (si *structInfo) typ() reflect.Type {
 	return si.structType
 }
 
-func (si *structInfo) member(name string) (*structField, error) {
-	tm, ok := si.tagToField[name]
+// member returns a struct field assosiated with the given tag.
+func (si *structInfo) member(tag string) (*structField, error) {
+	f, ok := si.tagToField[tag]
 	if !ok {
-		return nil, fmt.Errorf(`type %q has no %q db tag`, si.structType.Name(), name)
+		return nil, fmt.Errorf(`type %q has no %q db tag`, si.structType.Name(), tag)
 	}
-	return tm, nil
+	return f, nil
 }
 
+// allOutputMembers returns all tagged fields on the struct as Output
+// interfaces.
 func (si *structInfo) allOutputMembers() ([]Output, []string, error) {
 	if len(si.tags) == 0 {
 		return nil, nil, fmt.Errorf(`no "db" tags found in struct %q`, si.structType.Name())
 	}
 
-	var os []Output
+	var outputs []Output
 	for _, tag := range si.tags {
-		os = append(os, si.tagToField[tag])
+		outputs = append(outputs, si.tagToField[tag])
 	}
-	return os, si.tags, nil
+	return outputs, si.tags, nil
 }
 
+// mapInfo stores a map type.
 type mapInfo struct {
 	mapType reflect.Type
 }
