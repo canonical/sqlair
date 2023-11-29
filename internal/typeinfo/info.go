@@ -106,7 +106,7 @@ func (argInfo ArgInfo) getMember(typeName string, member string) (ValueLocator, 
 	case *mapInfo:
 		vl, err = arg.member(member)
 	default:
-		return nil, fmt.Errorf("")
+		return nil, fmt.Errorf("internal error: unknown arg type %T", arg)
 	}
 	if err != nil {
 		return nil, err
