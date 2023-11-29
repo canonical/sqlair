@@ -100,18 +100,18 @@ func (pe *ParsedExpr) BindTypes(args ...any) (te *TypedExpr, err error) {
 
 // bindInputTypes binds the input expression to a type and returns the
 // typeMember represented by the expression.
-func bindInputTypes(argInfo typeinfo.ArgInfo, e *inputExpr) (vl typeinfo.Input, err error) {
+func bindInputTypes(argInfo typeinfo.ArgInfo, e *inputExpr) (input typeinfo.Input, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("input expression: %s: %s", err, e.raw)
 		}
 	}()
 
-	m, err := argInfo.InputMember(e.sourceType.typeName, e.sourceType.memberName)
+	input, err := argInfo.InputMember(e.sourceType.typeName, e.sourceType.memberName)
 	if err != nil {
 		return nil, err
 	}
-	return m, nil
+	return input, nil
 }
 
 // bindOutputTypes binds the output expression to concrete types. It then checks
@@ -140,21 +140,21 @@ func bindOutputTypes(argInfo typeinfo.ArgInfo, e *outputExpr) (outCols []columnA
 		for _, t := range e.targetTypes {
 			if t.memberName == "*" {
 				// Generate asterisk columns.
-				mls, memberNames, err := argInfo.AllOutputMembers(t.typeName)
+				members, memberNames, err := argInfo.AllOutputMembers(t.typeName)
 				if err != nil {
 					return nil, nil, err
 				}
-				outputs = append(outputs, mls...)
+				outputs = append(outputs, members...)
 				for _, memberName := range memberNames {
 					outCols = append(outCols, columnAccessor{pref, memberName})
 				}
 			} else {
 				// Generate explicit columns.
-				ml, err := argInfo.OutputMember(t.typeName, t.memberName)
+				member, err := argInfo.OutputMember(t.typeName, t.memberName)
 				if err != nil {
 					return nil, nil, err
 				}
-				outputs = append(outputs, ml)
+				outputs = append(outputs, member)
 				outCols = append(outCols, columnAccessor{pref, t.memberName})
 			}
 		}
