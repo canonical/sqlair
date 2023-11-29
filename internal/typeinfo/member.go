@@ -8,6 +8,7 @@ import (
 
 var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
 
+// Input is a locator for a SQL query parameter from SQLair input arguments.
 type Input interface {
 	// GetParams returns the query parameters represented
 	// by this Input from the assosiated input argument.
@@ -15,6 +16,8 @@ type Input interface {
 	ValueLocator
 }
 
+// Output is a locator for a target to scan results to in the SQLair output
+// arguments.
 type Output interface {
 	// GetScanTarget returns a pointer for the target of rows.Scan, and a
 	// ScanProxy reference in the event that we need to coerce that pointer
@@ -23,36 +26,27 @@ type Output interface {
 	ValueLocator
 }
 
+// ValueLocator specifies how to locate a value in a SQLair argument type.
 type ValueLocator interface {
 	ArgType() reflect.Type
 	String() string
 }
 
+// mapKey stores information about where to find a key of a particular map.
 type mapKey struct {
 	name    string
 	mapType reflect.Type
 }
 
-// OuterType returns the reflected type of the map
-// for which this Member implementation is a key.
+// ArgType returns the type of the map the key is located in.
 func (mk *mapKey) ArgType() reflect.Type {
 	return mk.mapType
 }
 
-func locateValue(typeToValue map[reflect.Type]reflect.Value, typ reflect.Type) (reflect.Value, error) {
-	v, ok := typeToValue[typ]
-	if !ok {
-		argNames := []string{}
-		for argType := range typeToValue {
-			argNames = append(argNames, argType.Name())
-		}
-		return reflect.Value{}, typeMissingError(typ.Name(), argNames)
-	}
-	return v, nil
-}
-
-// ValueFromOuter returns the value for this map key in the input reflected map.
-// An error is returned if the map does not contain this key.
+// LocateParams locates the map and then the value of the key specified in
+// mapKey from the provided typeToValue map. An error is returned if the map
+// does not contain this key. A slice with a single entry is returned to fit
+// the Input interface.
 func (mk *mapKey) LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]reflect.Value, error) {
 	m, err := locateValue(typeToValue, mk.mapType)
 	if err != nil {
@@ -65,13 +59,16 @@ func (mk *mapKey) LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]re
 	return []reflect.Value{v}, nil
 }
 
-// MemberName returns the map key.
+// String returns a natural language description of the mapKey for use in error
+// messages.
 func (mk *mapKey) String() string {
 	return "key \"" + mk.name + "\" of map \"" + mk.mapType.Name() + "\""
 }
 
-// GetScanTarget returns a pointer for the target of rows.Scan, and a ScanProxy
-// reference for setting that target as the value for this map key.
+// LocateScanTarget locates the map specified in mapKey from the provided
+// typeToValue map. It returns a pointer for to pass to rows.Scan, and a
+// ScanProxy reference for setting the key value in the map once the pointer
+// has been scanned into.
 func (mk *mapKey) LocateScanTarget(typeToValue map[reflect.Type]reflect.Value) (any, *ScanProxy, error) {
 	m, err := locateValue(typeToValue, mk.mapType)
 	if err != nil {
@@ -81,7 +78,8 @@ func (mk *mapKey) LocateScanTarget(typeToValue map[reflect.Type]reflect.Value) (
 	return scanVal.Addr().Interface(), &ScanProxy{original: m, scan: scanVal, key: reflect.ValueOf(mk.name)}, nil
 }
 
-// structField represents reflection information about a field from some struct type.
+// structField represents reflection information about a field of a particular
+// struct type.
 type structField struct {
 	// name is the member name within the struct.
 	name string
@@ -100,13 +98,14 @@ type structField struct {
 	omitEmpty bool
 }
 
-// OuterType returns the reflected type of struct in
-// which this Member implementation is a field.
+// ArgType returns the type of struct in this field is located in.
 func (f *structField) ArgType() reflect.Type {
 	return f.structType
 }
 
-// ValueFromOuter returns the value of this field in the input reflected struct.
+// LocateParams locates the struct the field is located in from the typeToValue
+// map. It returns the value of this field. A slice with a single entry is
+// returned to fit the Input interface.
 func (f *structField) LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]reflect.Value, error) {
 	s, err := locateValue(typeToValue, f.structType)
 	if err != nil {
@@ -115,14 +114,17 @@ func (f *structField) LocateParams(typeToValue map[reflect.Type]reflect.Value) (
 	return []reflect.Value{s.Field(f.index)}, nil
 }
 
+// String returns a natural language description of the struct field for use in
+// error messages.
 func (f *structField) String() string {
 	return "tag \"" + f.tag + "\" of struct \"" + f.structType.Name() + "\""
 }
 
-// GetScanTarget returns a pointer for the target of rows.Scan, and a ScanProxy
-// reference in the event that we need to coerce that pointer into a struct
-// field.
-// Rows.Scan will return an error if it tries to scan NULL into a type that
+// LocateScanTarget locates the struct specified in structField from the
+// provided typeToValue map. It returns a pointer for the target of rows.Scan,
+// and a ScanProxy reference in the event that we need to coerce that pointer
+// into a struct field.
+// rows.Scan will return an error if it tries to scan NULL into a type that
 // cannot be set to nil, so for types that are not a pointer and do not
 // implement sql.Scanner, a pointer to them is generated and passed to
 // Rows.Scan. If Scan has set this pointer to nil the value is zeroed by
@@ -143,4 +145,18 @@ func (f *structField) LocateScanTarget(typeToValue map[reflect.Type]reflect.Valu
 		return scanVal.Addr().Interface(), &ScanProxy{original: val, scan: scanVal}, nil
 	}
 	return val.Addr().Interface(), nil, nil
+}
+
+// locateValue locates the value corresponding to the given type in the
+// typeToValueMap and returns an error message if it cannot be found.
+func locateValue(typeToValue map[reflect.Type]reflect.Value, typ reflect.Type) (reflect.Value, error) {
+	v, ok := typeToValue[typ]
+	if !ok {
+		argNames := []string{}
+		for argType := range typeToValue {
+			argNames = append(argNames, argType.Name())
+		}
+		return reflect.Value{}, typeMissingError(typ.Name(), argNames)
+	}
+	return v, nil
 }
