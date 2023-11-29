@@ -86,14 +86,10 @@ type columnAccessor struct {
 }
 
 func (ca columnAccessor) String() string {
-	return colString(ca.tableName, ca.columnName)
-}
-
-func colString(tableName string, columnName string) string {
-	if tableName == "" {
-		return columnName
+	if ca.tableName == "" {
+		return ca.columnName
 	}
-	return tableName + "." + columnName
+	return ca.tableName + "." + ca.columnName
 }
 
 // init resets the state of the parser and sets the input string.

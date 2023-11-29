@@ -100,10 +100,10 @@ func (pe *ParsedExpr) BindTypes(args ...any) (te *TypeBoundExpr, err error) {
 // typedOutputExpr.
 func trackUsedOutputs(outputUsed map[typeinfo.Member]bool, toe *typedOutputExpr) error {
 	for _, oc := range toe.outputColumns {
-		if ok := outputUsed[oc.tm]; ok {
-			return fmt.Errorf("member %q of type %q appears more than once in output expressions", oc.tm.MemberName(), oc.tm.OuterType().Name())
+		if ok := outputUsed[oc.member]; ok {
+			return fmt.Errorf("member %q of type %q appears more than once in output expressions", oc.member.MemberName(), oc.member.OuterType().Name())
 		}
-		outputUsed[oc.tm] = true
+		outputUsed[oc.member] = true
 	}
 	return nil
 }
@@ -217,7 +217,7 @@ func (e *outputExpr) bindTypes(ti typeNameToInfo) (te typedExpression, err error
 					return nil, err
 				}
 				for _, tm := range allMembers {
-					oc := outputColumn{sql: colString(pref, tm.MemberName()), tm: tm}
+					oc := newOutputColumn(pref, tm.MemberName(), tm)
 					toe.outputColumns = append(toe.outputColumns, oc)
 				}
 			} else {
@@ -226,7 +226,7 @@ func (e *outputExpr) bindTypes(ti typeNameToInfo) (te typedExpression, err error
 				if err != nil {
 					return nil, err
 				}
-				oc := outputColumn{sql: colString(pref, t.memberName), tm: tm}
+				oc := newOutputColumn(pref, t.memberName, tm)
 				toe.outputColumns = append(toe.outputColumns, oc)
 			}
 		}
@@ -246,7 +246,7 @@ func (e *outputExpr) bindTypes(ti typeNameToInfo) (te typedExpression, err error
 			if err != nil {
 				return nil, err
 			}
-			oc := outputColumn{sql: c.String(), tm: tm}
+			oc := newOutputColumn(c.tableName, c.columnName, tm)
 			toe.outputColumns = append(toe.outputColumns, oc)
 		}
 		return toe, nil
@@ -266,7 +266,7 @@ func (e *outputExpr) bindTypes(ti typeNameToInfo) (te typedExpression, err error
 			if err != nil {
 				return nil, err
 			}
-			oc := outputColumn{sql: c.String(), tm: tm}
+			oc := newOutputColumn(c.tableName, c.columnName, tm)
 			toe.outputColumns = append(toe.outputColumns, oc)
 		}
 	} else {

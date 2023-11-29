@@ -78,7 +78,7 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 					sqlStr.WriteString(", ")
 				}
 				outCount++
-				outputs = append(outputs, oc.tm)
+				outputs = append(outputs, oc.member)
 			}
 		case *bypass:
 			sqlStr.WriteString(te.chunk)
@@ -104,8 +104,15 @@ type typedExpression interface {
 // outputColumn stores the name of a column to fetch from the database and the
 // type to scan the result into.
 type outputColumn struct {
-	sql string
-	tm  typeinfo.Member
+	sql    string
+	member typeinfo.Member
+}
+
+func newOutputColumn(table string, column string, member typeinfo.Member) outputColumn {
+	if table == "" {
+		return outputColumn{sql: column, member: member}
+	}
+	return outputColumn{sql: table + "." + column, member: member}
 }
 
 // typedInputExpr stores information about a Go value to use as a query input.
