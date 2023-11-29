@@ -13,6 +13,8 @@ import (
 // the parser.
 var validColNameRx = regexp.MustCompile(`^([a-zA-Z_])+([a-zA-Z_0-9])*$`)
 
+// ArgInfo contains type information useful for SQLair. It should only be
+// accessed using it methods, not used directly as a map.
 type ArgInfo map[string]arg
 
 // GenerateArgInfo returns type information useful for SQLair from sample
@@ -50,6 +52,7 @@ func GenerateArgInfo(typeSamples ...any) (ArgInfo, error) {
 	return argInfo, nil
 }
 
+// InputMember returns an input locator for a member of a struct or map.
 func (argInfo ArgInfo) InputMember(typeName string, member string) (Input, error) {
 	vl, err := argInfo.getMember(typeName, member)
 	if err != nil {
@@ -62,6 +65,7 @@ func (argInfo ArgInfo) InputMember(typeName string, member string) (Input, error
 	return input, nil
 }
 
+// OutputMember returns an output locator for a member of a struct or map.
 func (argInfo ArgInfo) OutputMember(typeName string, member string) (Output, error) {
 	vl, err := argInfo.getMember(typeName, member)
 	if err != nil {
@@ -74,6 +78,8 @@ func (argInfo ArgInfo) OutputMember(typeName string, member string) (Output, err
 	return output, nil
 }
 
+// AllOutputMembers returns a list of output locators that locate every member
+// of the named type.
 func (argInfo ArgInfo) AllOutputMembers(typeName string) ([]Output, []string, error) {
 	arg, err := argInfo.getArg(typeName)
 	if err != nil {
