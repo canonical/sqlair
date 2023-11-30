@@ -95,22 +95,22 @@ func (argInfo ArgInfo) AllStructOutputs(typeName string) ([]Output, []string, er
 	return si.allOutputMembers()
 }
 
+type hasMembers interface {
+	member(memberName string) (member ValueLocator, err error)
+}
+
 // getMember finds a type and a member of it and returns a locator for the
 // member. If the type does not have members it returns an error.
-func (argInfo ArgInfo) getMember(typeName string, member string) (ValueLocator, error) {
+func (argInfo ArgInfo) getMember(typeName string, memberName string) (ValueLocator, error) {
 	arg, err := argInfo.getArg(typeName)
 	if err != nil {
 		return nil, err
 	}
-	var vl ValueLocator
-	switch arg := arg.(type) {
-	case *structInfo:
-		vl, err = arg.member(member)
-	case *mapInfo:
-		vl, err = arg.member(member)
-	default:
-		return nil, fmt.Errorf("internal error: unknown arg type %T", arg)
+	argWM, ok := arg.(hasMembers)
+	if !ok {
+		return nil, fmt.Errorf("internal error: arg type %T does not implement argWithMembers", arg)
 	}
+	vl, err := argWM.member(memberName)
 	if err != nil {
 		return nil, err
 	}
@@ -151,8 +151,8 @@ func (si *structInfo) typ() reflect.Type {
 	return si.structType
 }
 
-// member returns a struct field assosiated with the given tag.
-func (si *structInfo) member(tag string) (*structField, error) {
+// member returns a locator for the structField assosiated with the given tag.
+func (si *structInfo) member(tag string) (ValueLocator, error) {
 	f, ok := si.tagToField[tag]
 	if !ok {
 		return nil, fmt.Errorf(`type %q has no %q db tag`, si.structType.Name(), tag)
@@ -184,7 +184,7 @@ func (mi *mapInfo) typ() reflect.Type {
 }
 
 // member returns a locator for a mapKey with a given name.
-func (mi *mapInfo) member(name string) (*mapKey, error) {
+func (mi *mapInfo) member(name string) (ValueLocator, error) {
 	return &mapKey{name: name, mapType: mi.mapType}, nil
 }
 
