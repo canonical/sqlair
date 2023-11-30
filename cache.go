@@ -10,26 +10,23 @@ import (
 	"github.com/canonical/sqlair/internal/expr"
 )
 
-// A SQLair Statement is prepared on a database when a Query method is run on a
-// DB/TX. The prepared statement is then stored in the stmtDBCache and a flag
-// is set in dbStmtCache.
-// A finalizer function is set on the Statement when it is placed in the cache.
-// On garbage collection, the finalizer cycles through the open databases in
-// the cache and closes each matching sql.Stmt. The finalizer then removes the
-// stmtID from stmtDBCache and dbStmtCache.
-// Similarly, a finalizer is set on the SQLair DB which closes all statements
-// prepared on the DB and then the sql.DB itself. It removes the dbID from
-// dbStmtCache and stmtDBCache.
+// stmtIDCount and dbIDCount are global variables to used to generate unique
+// IDs.
 var stmtIDCount int64
 var dbIDCount int64
 
 type dbID = int64
 type stmtID = int64
 
-// statementCache caches the sql.Stmt values assosiated with each
-// sqlair.Statement. sqlair.Statement values can correspond to multiple
-// sql.Stmt values on different databases. The cache is indexed by the
-// sqlair.Statement ID and the sqlair.DB ID.
+// statementCache caches the sql.Stmt objects associated with each
+// sqlair.Statement. A sqlair.Statement can correspond to multiple sql.Stmt
+// values on different databases. The cache is indexed by the sqlair.Statement
+// ID and the sqlair.DB ID.
+//
+// The cache closes sql.Stmt objects with a finalizer on the sqlair.Statement.
+// Similarly a finalizer is set on sqlair.DB objects to close all statements
+// prepared on the DB, close the DB, and remove references to the DB from the
+// cache.
 //
 // The mutex must be locked when accessing either the stmtDBCache or the
 // dbStmtCache.
@@ -39,18 +36,24 @@ type statementCache struct {
 	mutex       sync.RWMutex
 }
 
+var once sync.Once
+var singleStmtCache *statementCache
+
+// newStatementCache returns the single instance of the statement cache.
 func newStatementCache() *statementCache {
-	//Once something
-	return &statementCache{
-		stmtDBCache: map[stmtID]map[dbID]*sql.Stmt{},
-		dbStmtCache: map[dbID]map[stmtID]bool{},
-	}
+	once.Do(func() {
+		singleStmtCache = &statementCache{
+			stmtDBCache: map[stmtID]map[dbID]*sql.Stmt{},
+			dbStmtCache: map[dbID]map[stmtID]bool{},
+		}
+	})
+	return singleStmtCache
 }
 
 // newStatement returns a new sqlair.Statement and allocates it in the cache. A
 // finalizer is set on the sqlair.Statement to remove all sql.Stmt values
-// assosiated with it from the cache and then run Close on the sql.Stmt values.
-// The finalizer is run after the sqlair.Statment is garbage collected.
+// associated with it from the cache and then run Close on the sql.Stmt values.
+// The finalizer is run after the sqlair.Statement is garbage collected.
 func (sc *statementCache) newStatement(te *expr.TypedExpr) *Statement {
 	cacheID := atomic.AddInt64(&stmtIDCount, 1)
 	s := &Statement{te: te, cacheID: cacheID}
@@ -83,7 +86,7 @@ type prepareSubstrate interface {
 
 // prepareStmt prepares a Statement on a prepareSubstrate. It first checks in
 // the cache to see if it has already been prepared on the DB.
-// The prepareSubstrate must be assosiated with the same DB that prepareStmt is
+// The prepareSubstrate must be associated with the same DB that prepareStmt is
 // a method of.
 func (sc *statementCache) prepareStmt(ctx context.Context, dbID dbID, ps prepareSubstrate, s *Statement) (*sql.Stmt, error) {
 	var err error

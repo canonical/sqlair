@@ -51,7 +51,7 @@ func Prepare(query string, typeSamples ...any) (*Statement, error) {
 		return nil, err
 	}
 
-	s := stmtCache.newStmt(typedExpr)
+	s := stmtCache.newStatement(typedExpr)
 	return s, nil
 }
 
