@@ -8,10 +8,12 @@ import (
 
 var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
 
-// Input is a locator for a SQL query parameter from SQLair input arguments.
+// Input is a locator for a Go value from SQLair input arguments to be used in
+// a SQL query parameter.
 type Input interface {
-	// GetParams returns the query parameters represented
-	// by this Input from the assosiated input argument.
+	// LocateParams locates the input argument associated with this Input and
+	// then the Go value within it that is to be used in a query parameter. An
+	// error is returned if the map does not contain the input argument.
 	LocateParams(map[reflect.Type]reflect.Value) ([]reflect.Value, error)
 	ValueLocator
 }

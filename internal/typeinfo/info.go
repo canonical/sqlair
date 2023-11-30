@@ -13,12 +13,16 @@ import (
 // the parser.
 var validColNameRx = regexp.MustCompile(`^([a-zA-Z_])+([a-zA-Z_0-9])*$`)
 
-// ArgInfo is used to access type information useful for SQLair. It should only
-// be accessed using it methods, not used directly as a map.
+// ArgInfo is used to access type information about SQLair input and output
+// arguments. Methods on ArgInfo can be used to generate input and output value
+// locators.
+//
+// ArgInfo should only be accessed using it methods, not used directly as a
+// map.
 type ArgInfo map[string]arg
 
-// GenerateArgInfo returns type information useful for SQLair by reflecting on
-// sample instantiations of argument types.
+// GenerateArgInfo takes sample instantiations of argument types and uses
+// reflection to generate an ArgInfo containing the types.
 func GenerateArgInfo(typeSamples ...any) (ArgInfo, error) {
 	argInfo := ArgInfo{}
 	for _, typeSample := range typeSamples {
