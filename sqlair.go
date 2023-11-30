@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
-	"runtime"
-	"sync"
 	"sync/atomic"
 
 	"github.com/canonical/sqlair/internal/expr"
@@ -26,25 +24,7 @@ type M map[string]any
 var ErrNoRows = sql.ErrNoRows
 var ErrTXDone = sql.ErrTxDone
 
-var stmtIDCount int64
-var dbIDCount int64
-
-type dbID = int64
-type stmtID = int64
-
-// A SQLair Statement is prepared on a database when a Query method is run on a
-// DB/TX. The prepared statement is then stored in the stmtDBCache and a flag
-// is set in dbStmtCache.
-// A finalizer function is set on the Statement when it is placed in the cache.
-// On garbage collection, the finalizer cycles through the open databases in
-// the cache and closes each matching sql.Stmt. The finalizer then removes the
-// stmtID from stmtDBCache and dbStmtCache.
-// Similarly, a finalizer is set on the SQLair DB which closes all statements
-// prepared on the DB and then the sql.DB itself. It removes the dbID from
-// dbStmtCache and stmtDBCache.
-var stmtDBCache = make(map[stmtID]map[dbID]*sql.Stmt)
-var dbStmtCache = make(map[dbID]map[stmtID]bool)
-var cacheMutex sync.RWMutex
+var stmtCache = newStatementCache()
 
 // Statement represents a SQL statement with valid SQLair expressions.
 // It is ready to be run on a SQLair DB.
@@ -54,18 +34,6 @@ type Statement struct {
 	// generate query values from the input arguments when the Statement is run
 	// on a database.
 	te *expr.TypedExpr
-}
-
-// stmtFinalizer removes a Statement from the statement caches and closes it.
-func stmtFinalizer(s *Statement) {
-	cacheMutex.Lock()
-	defer cacheMutex.Unlock()
-	dbCache := stmtDBCache[s.cacheID]
-	for dbCacheID, sqlstmt := range dbCache {
-		sqlstmt.Close()
-		delete(dbStmtCache[dbCacheID], s.cacheID)
-	}
-	delete(stmtDBCache, s.cacheID)
 }
 
 // Prepare expands the types mentioned in the SQLair expressions and checks
@@ -83,12 +51,7 @@ func Prepare(query string, typeSamples ...any) (*Statement, error) {
 		return nil, err
 	}
 
-	cacheID := atomic.AddInt64(&stmtIDCount, 1)
-	cacheMutex.Lock()
-	defer cacheMutex.Unlock()
-	stmtDBCache[cacheID] = make(map[dbID]*sql.Stmt)
-	var s = &Statement{te: typedExpr, cacheID: cacheID}
-	runtime.SetFinalizer(s, stmtFinalizer)
+	s := stmtCache.newStmt(typedExpr)
 	return s, nil
 }
 
@@ -106,30 +69,9 @@ type DB struct {
 	sqldb   *sql.DB
 }
 
-// dbFinalizer closes and removes from the cache all statements prepared on db.
-// It then closes the associated sql.DB.
-func dbFinalizer(db *DB) {
-	cacheMutex.Lock()
-	defer cacheMutex.Unlock()
-	stmtCache := dbStmtCache[db.cacheID]
-	for stmtCacheID, _ := range stmtCache {
-		dbCache := stmtDBCache[stmtCacheID]
-		dbCache[db.cacheID].Close()
-		delete(dbCache, db.cacheID)
-	}
-	delete(dbStmtCache, db.cacheID)
-	db.sqldb.Close()
-}
-
 // NewDB creates a new SQLair DB from a sql.DB.
 func NewDB(sqldb *sql.DB) *DB {
-	cacheID := atomic.AddInt64(&dbIDCount, 1)
-	cacheMutex.Lock()
-	dbStmtCache[cacheID] = make(map[stmtID]bool)
-	cacheMutex.Unlock()
-	var db = DB{sqldb: sqldb, cacheID: cacheID}
-	runtime.SetFinalizer(&db, dbFinalizer)
-	return &db
+	return stmtCache.newDB(sqldb)
 }
 
 // PlainDB returns the underlying database object.
@@ -167,7 +109,7 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		ctx = context.Background()
 	}
 
-	sqlstmt, err := db.prepareStmt(ctx, db.sqldb, s)
+	sqlstmt, err := stmtCache.prepareStmt(ctx, db.cacheID, db.sqldb, s)
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
@@ -178,44 +120,6 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 	}
 
 	return &Query{sqlstmt: sqlstmt, stmt: s, db: db, pq: pq, ctx: ctx, err: nil}
-}
-
-// prepareSubstrate is an object that queries can be prepared on, e.g. a sql.DB
-// or sql.Conn. It is used in prepareStmt.
-type prepareSubstrate interface {
-	PrepareContext(context.Context, string) (*sql.Stmt, error)
-}
-
-// prepareStmt prepares a Statement on a prepareSubstrate. It first checks in
-// the cache to see if it has already been prepared on the DB.
-// The prepareSubstrate must be assosiated with the same DB that prepareStmt is
-// a method of.
-func (db *DB) prepareStmt(ctx context.Context, ps prepareSubstrate, s *Statement) (*sql.Stmt, error) {
-	var err error
-	cacheMutex.RLock()
-	// The statement ID is only removed from the cache when the finalizer is
-	// run, so it is always in stmtDBCache.
-	sqlstmt, ok := stmtDBCache[s.cacheID][db.cacheID]
-	cacheMutex.RUnlock()
-	if !ok {
-		sqlstmt, err = ps.PrepareContext(ctx, s.te.SQL())
-		if err != nil {
-			return nil, err
-		}
-		cacheMutex.Lock()
-		// Check if a statement has been inserted by someone else since we last
-		// checked.
-		sqlstmtAlt, ok := stmtDBCache[s.cacheID][db.cacheID]
-		if ok {
-			sqlstmt.Close()
-			sqlstmt = sqlstmtAlt
-		} else {
-			stmtDBCache[s.cacheID][db.cacheID] = sqlstmt
-			dbStmtCache[db.cacheID][s.cacheID] = true
-		}
-		cacheMutex.Unlock()
-	}
-	return sqlstmt, nil
 }
 
 // Run is an alias for Get that takes no arguments.
@@ -563,7 +467,7 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: ErrTXDone}
 	}
 
-	sqlstmt, err := tx.db.prepareStmt(ctx, tx.sqlconn, s)
+	sqlstmt, err := stmtCache.prepareStmt(ctx, tx.db.cacheID, tx.sqlconn, s)
 	if err != nil {
 		return &Query{ctx: ctx, err: err}
 	}
