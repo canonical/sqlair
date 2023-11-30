@@ -1023,7 +1023,7 @@ func (s *PackageSuite) TestTransactions(c *C) {
 // Test that when preparing a statement inside a transaction it can still be prepared on the db directly and that it is
 // not closed along with the transaction.
 func (s *PackageSuite) TestStatementTXReuse(c *C) {
-	sqldb, err := setupDB()
+	sqldb, err := setupDB(c.TestName())
 	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
