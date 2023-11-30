@@ -895,6 +895,11 @@ func (s *PackageSuite) TestOutcome(c *C) {
 	err = q2.GetAll(&outcome, &jims)
 	c.Assert(err, IsNil)
 	c.Assert(outcome.Result(), IsNil)
+	// Test Iter.Get with zero args and without Outcome
+	selectStmt = sqlair.MustPrepare(`SELECT 'hello'`)
+	iter = db.Query(nil, selectStmt).Iter()
+	err = iter.Get()
+	c.Assert(err, ErrorMatches, "cannot get result: cannot call Get before Next unless getting outcome")
 }
 
 func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
