@@ -20,8 +20,8 @@ type stmtID = int64
 
 // statementCache caches the sql.Stmt objects associated with each
 // sqlair.Statement. A sqlair.Statement can correspond to multiple sql.Stmt
-// values on different databases. The cache is indexed by the sqlair.Statement
-// ID and the sqlair.DB ID.
+// objects prepared on different databases. Entries in the cache are therefore
+// indexed by the sqlair.Statement ID and the sqlair.DB ID.
 //
 // The cache closes sql.Stmt objects with a finalizer on the sqlair.Statement.
 // Similarly a finalizer is set on sqlair.DB objects to close all statements
@@ -50,10 +50,10 @@ func newStatementCache() *statementCache {
 	return singleStmtCache
 }
 
-// newStatement returns a new sqlair.Statement and allocates it in the cache. A
-// finalizer is set on the sqlair.Statement to remove all sql.Stmt values
-// associated with it from the cache and then run Close on the sql.Stmt values.
-// The finalizer is run after the sqlair.Statement is garbage collected.
+// newStatement returns a new sqlair.Statement and adds it to the cache. A
+// finalizer is set on the sqlair.Statement to remove from the cache and close
+// all associated sql.Stmt values. This finalizer is run after the
+// sqlair.Statement is garbage collected.
 func (sc *statementCache) newStatement(te *expr.TypedExpr) *Statement {
 	cacheID := atomic.AddInt64(&stmtIDCount, 1)
 	s := &Statement{te: te, cacheID: cacheID}
@@ -64,10 +64,10 @@ func (sc *statementCache) newStatement(te *expr.TypedExpr) *Statement {
 	return s
 }
 
-// newDB returns a new sqlair.DB and allocates it in the cache. A finalizer is
-// set on the sqlair.DB which removes it from the cache, closes all sql.Stmt
-// values prepared upon it and then closes the DB. The finalizer is run after
-// the sqlair.DB is garbage collected.
+// newDB returns a new sqlair.DB and allocates a cache for it in the
+// statementCache. A finalizer is set on the sqlair.DB to remove references to
+// it from the cache, close all sql.Stmt values on it, and close the sql.DB
+// This finalizer is run after the sqlair.DB is garbage collected.
 func (sc *statementCache) newDB(sqldb *sql.DB) *DB {
 	cacheID := atomic.AddInt64(&dbIDCount, 1)
 	sc.mutex.Lock()
