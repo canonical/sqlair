@@ -30,7 +30,7 @@ func (s *typeInfoSuite) TestArgInfoStruct(c *C) {
 
 	// The struct fields in this list are ordered according to how sort.Strings
 	// orders the tag names. This matches the order of the Output values from
-	// AllOutputMembers.
+	// AllStructOutputs.
 	structFields := []struct {
 		fieldName string
 		index     int
@@ -58,7 +58,7 @@ func (s *typeInfoSuite) TestArgInfoStruct(c *C) {
 		tag:       "name",
 	}}
 
-	allOutputs, names, err := argInfo.AllOutputMembers("myStruct")
+	allOutputs, names, err := argInfo.AllStructOutputs("myStruct")
 	c.Assert(err, IsNil)
 	c.Assert(allOutputs, HasLen, len(structFields))
 
@@ -187,7 +187,7 @@ func (s *typeInfoSuite) TestArgInfoStructError(c *C) {
 	c.Assert(err.Error(), Equals, `parameter with type "wrongStruct" missing`)
 	_, err = argInfo.InputMember("wrongStruct", "foo")
 	c.Assert(err.Error(), Equals, `parameter with type "wrongStruct" missing`)
-	_, _, err = argInfo.AllOutputMembers("wrongStruct")
+	_, _, err = argInfo.AllStructOutputs("wrongStruct")
 	c.Assert(err.Error(), Equals, `parameter with type "wrongStruct" missing`)
 
 	type myStruct struct {
@@ -203,7 +203,7 @@ func (s *typeInfoSuite) TestArgInfoStructError(c *C) {
 	c.Assert(err.Error(), Equals, `parameter with type "wrongStruct" missing (have "myOtherStruct", "myStruct")`)
 	_, err = argInfo.InputMember("wrongStruct", "foo")
 	c.Assert(err.Error(), Equals, `parameter with type "wrongStruct" missing (have "myOtherStruct", "myStruct")`)
-	_, _, err = argInfo.AllOutputMembers("wrongStruct")
+	_, _, err = argInfo.AllStructOutputs("wrongStruct")
 	c.Assert(err.Error(), Equals, `parameter with type "wrongStruct" missing (have "myOtherStruct", "myStruct")`)
 
 	_, err = argInfo.OutputMember("myStruct", "bar")
@@ -221,7 +221,7 @@ func (s *typeInfoSuite) TestGenerateArgInfoMapError(c *C) {
 	argInfo, err = GenerateArgInfo(myMap{})
 	c.Assert(err, IsNil)
 
-	_, _, err = argInfo.AllOutputMembers("myMap")
+	_, _, err = argInfo.AllStructOutputs("myMap")
 	c.Assert(err, Not(IsNil))
-	c.Assert(err.Error(), Equals, "columns must be specified for map with star")
+	c.Assert(err.Error(), Equals, "cannot generate columns for non-struct type")
 }

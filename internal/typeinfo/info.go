@@ -77,16 +77,16 @@ func (argInfo ArgInfo) OutputMember(typeName string, memberName string) (Output,
 	return output, nil
 }
 
-// AllOutputMembers returns a list of output locators that locate every member
+// AllStructOutputMembers returns a list of output locators that locate every member
 // of the named type. If the type is not a struct an error is returned.
-func (argInfo ArgInfo) AllOutputMembers(typeName string) ([]Output, []string, error) {
+func (argInfo ArgInfo) AllStructOutputs(typeName string) ([]Output, []string, error) {
 	arg, err := argInfo.getArg(typeName)
 	if err != nil {
 		return nil, nil, err
 	}
 	si, ok := arg.(*structInfo)
 	if !ok {
-		return nil, nil, fmt.Errorf("columns must be specified for map with star")
+		return nil, nil, fmt.Errorf("cannot generate columns for non-struct type")
 	}
 	return si.allOutputMembers()
 }

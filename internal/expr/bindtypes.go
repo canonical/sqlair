@@ -140,7 +140,7 @@ func bindOutputTypes(argInfo typeinfo.ArgInfo, e *outputExpr) (outCols []columnA
 		for _, t := range e.targetTypes {
 			if t.memberName == "*" {
 				// Generate asterisk columns.
-				members, memberNames, err := argInfo.AllOutputMembers(t.typeName)
+				members, memberNames, err := argInfo.AllStructOutputs(t.typeName)
 				if err != nil {
 					return nil, nil, err
 				}
