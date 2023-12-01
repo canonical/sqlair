@@ -8,7 +8,7 @@ import (
 
 func (s *typeInfoSuite) TestLocateScanTargetMap(c *C) {
 	type M map[string]any
-	argInfo, err := GenerateArgInfo(M{})
+	argInfo, err := GenerateArgInfo([]any{M{}})
 	c.Assert(err, IsNil)
 
 	output, err := argInfo.OutputMember("M", "foo")
@@ -45,7 +45,7 @@ func (s *typeInfoSuite) TestLocateScanTargetStruct(c *C) {
 		Bar *string `db:"bar"`
 	}
 
-	argInfo, err := GenerateArgInfo(T{})
+	argInfo, err := GenerateArgInfo([]any{T{}})
 	c.Assert(err, IsNil)
 
 	t := T{}
@@ -90,7 +90,7 @@ func (s *typeInfoSuite) TestLocateScanTargetStruct(c *C) {
 func (s *typeInfoSuite) TestLocateParamsMap(c *C) {
 	type M map[string]any
 
-	argInfo, err := GenerateArgInfo(M{})
+	argInfo, err := GenerateArgInfo([]any{M{}})
 	c.Assert(err, IsNil)
 
 	m := M{"foo": "bar"}
@@ -114,7 +114,7 @@ func (s *typeInfoSuite) TestLocateParamsStruct(c *C) {
 		Foo string `db:"foo"`
 	}
 
-	argInfo, err := GenerateArgInfo(T{})
+	argInfo, err := GenerateArgInfo([]any{T{}})
 	c.Assert(err, IsNil)
 
 	t := T{Foo: "bar"}
@@ -136,7 +136,7 @@ func (s *typeInfoSuite) TestLocateParamsStruct(c *C) {
 func (s *typeInfoSuite) TestLocateParamsMapError(c *C) {
 	type M map[string]any
 
-	argInfo, err := GenerateArgInfo(M{})
+	argInfo, err := GenerateArgInfo([]any{M{}})
 	c.Assert(err, IsNil)
 
 	m := M{"foo": "bar"}

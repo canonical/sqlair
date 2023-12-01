@@ -25,7 +25,7 @@ func (s *typeInfoSuite) TestArgInfoStruct(c *C) {
 		NotInDB   string
 	}
 
-	argInfo, err := GenerateArgInfo(myStruct{})
+	argInfo, err := GenerateArgInfo([]any{myStruct{}})
 	c.Assert(err, IsNil)
 
 	// The struct fields in this list are ordered according to how sort.Strings
@@ -87,7 +87,7 @@ func (s *typeInfoSuite) TestArgInfoStruct(c *C) {
 func (s *typeInfoSuite) TestArgInfoMap(c *C) {
 	type myMap map[string]any
 
-	argInfo, err := GenerateArgInfo(myMap{})
+	argInfo, err := GenerateArgInfo([]any{myMap{}})
 	c.Assert(err, IsNil)
 
 	expectedMapKey := &mapKey{mapType: reflect.TypeOf(myMap{}), name: "key"}
@@ -110,34 +110,34 @@ func (s *typeInfoSuite) TestGenerateArgInfoInvalidTypeErrors(c *C) {
 	type T struct{ foo int }
 	type M map[string]any
 
-	_, err := GenerateArgInfo(nil)
+	_, err := GenerateArgInfo([]any{nil})
 	c.Assert(err, ErrorMatches, "need struct or map, got nil")
 
-	_, err = GenerateArgInfo(struct{ foo int }{})
+	_, err = GenerateArgInfo([]any{struct{ foo int }{}})
 	c.Assert(err, ErrorMatches, "cannot use anonymous struct")
 
-	_, err = GenerateArgInfo(map[string]any{})
+	_, err = GenerateArgInfo([]any{map[string]any{}})
 	c.Assert(err, ErrorMatches, "cannot use anonymous map")
 
-	_, err = GenerateArgInfo(T{}, T{})
+	_, err = GenerateArgInfo([]any{T{}, T{}})
 	c.Assert(err, ErrorMatches, `found multiple instances of type "T"`)
 
-	_, err = GenerateArgInfo((*T)(nil))
+	_, err = GenerateArgInfo([]any{(*T)(nil)})
 	c.Assert(err, ErrorMatches, "need struct or map, got pointer to struct")
 
-	_, err = GenerateArgInfo((*M)(nil))
+	_, err = GenerateArgInfo([]any{(*M)(nil)})
 	c.Assert(err, ErrorMatches, "need struct or map, got pointer to map")
 
-	_, err = GenerateArgInfo("")
+	_, err = GenerateArgInfo([]any{""})
 	c.Assert(err, ErrorMatches, "need struct or map, got string")
 
-	_, err = GenerateArgInfo(0)
+	_, err = GenerateArgInfo([]any{0})
 	c.Assert(err, ErrorMatches, "need struct or map, got int")
 
-	_, err = GenerateArgInfo([10]int{})
+	_, err = GenerateArgInfo([]any{[10]int{}})
 	c.Assert(err, ErrorMatches, "need struct or map, got array")
 
-	_, err = GenerateArgInfo(t, T{})
+	_, err = GenerateArgInfo([]any{t, T{}})
 	c.Assert(err, ErrorMatches, `two types found with name "T": "typeinfo.T" and "typeinfo.T"`)
 }
 
@@ -145,42 +145,42 @@ func (s *typeInfoSuite) TestGenerateArgInfoStructError(c *C) {
 	type S1 struct {
 		unexp int `db:"unexp"`
 	}
-	_, err := GenerateArgInfo(S1{})
+	_, err := GenerateArgInfo([]any{S1{}})
 	c.Assert(err, ErrorMatches, `field "unexp" of struct S1 not exported`)
 
 	type S2 struct {
 		Foo int `db:"id,bad-juju"`
 	}
-	_, err = GenerateArgInfo(S2{})
+	_, err = GenerateArgInfo([]any{S2{}})
 	c.Assert(err, ErrorMatches, `cannot parse tag for field S2.Foo: unsupported flag "bad-juju" in tag "id,bad-juju"`)
 
 	type S3 struct {
 		Foo int `db:",omitempty"`
 	}
-	_, err = GenerateArgInfo(S3{})
+	_, err = GenerateArgInfo([]any{S3{}})
 	c.Assert(err, ErrorMatches, `cannot parse tag for field S3.Foo: empty db tag`)
 
 	type S4 struct {
 		Foo int `db:"5id"`
 	}
-	_, err = GenerateArgInfo(S4{})
+	_, err = GenerateArgInfo([]any{S4{}})
 	c.Assert(err, ErrorMatches, `cannot parse tag for field S4.Foo: invalid column name in 'db' tag: "5id"`)
 
 	type S5 struct {
 		Foo int `db:"+id"`
 	}
-	_, err = GenerateArgInfo(S5{})
+	_, err = GenerateArgInfo([]any{S5{}})
 	c.Assert(err.Error(), Equals, `cannot parse tag for field S5.Foo: invalid column name in 'db' tag: "+id"`)
 
 	type S6 struct {
 		Foo int `db:"id$$"`
 	}
-	_, err = GenerateArgInfo(S6{})
+	_, err = GenerateArgInfo([]any{S6{}})
 	c.Assert(err.Error(), Equals, `cannot parse tag for field S6.Foo: invalid column name in 'db' tag: "id$$"`)
 }
 
 func (s *typeInfoSuite) TestArgInfoStructError(c *C) {
-	argInfo, err := GenerateArgInfo()
+	argInfo, err := GenerateArgInfo([]any{})
 	c.Assert(err, IsNil)
 
 	_, err = argInfo.OutputMember("wrongStruct", "foo")
@@ -196,7 +196,7 @@ func (s *typeInfoSuite) TestArgInfoStructError(c *C) {
 	type myOtherStruct struct {
 		Bar int `db:"bar"`
 	}
-	argInfo, err = GenerateArgInfo(myStruct{}, myOtherStruct{})
+	argInfo, err = GenerateArgInfo([]any{myStruct{}, myOtherStruct{}})
 	c.Assert(err, IsNil)
 
 	_, err = argInfo.OutputMember("wrongStruct", "foo")
@@ -214,11 +214,11 @@ func (s *typeInfoSuite) TestArgInfoStructError(c *C) {
 
 func (s *typeInfoSuite) TestGenerateArgInfoMapError(c *C) {
 	type badMap map[int]any
-	argInfo, err := GenerateArgInfo(badMap{})
+	argInfo, err := GenerateArgInfo([]any{badMap{}})
 	c.Assert(err, ErrorMatches, "map type badMap must have key type string, found type int")
 
 	type myMap map[string]any
-	argInfo, err = GenerateArgInfo(myMap{})
+	argInfo, err = GenerateArgInfo([]any{myMap{}})
 	c.Assert(err, IsNil)
 
 	_, _, err = argInfo.AllStructOutputs("myMap")
