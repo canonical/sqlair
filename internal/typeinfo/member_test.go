@@ -20,7 +20,7 @@ func (s *typeInfoSuite) TestLocateScanTargetMap(c *C) {
 		reflect.TypeOf(m): valOfM,
 	}
 	// Values in maps cannot be set directly. A proxy is set by rows.Scan then
-	// we set it withe OnSuccess function in our map.
+	// we set it with the OnSuccess function in our map.
 	ptr, scanProxy, err := output.LocateScanTarget(typeToValue)
 	c.Assert(err, IsNil)
 
@@ -65,7 +65,7 @@ func (s *typeInfoSuite) TestLocateScanTargetStruct(c *C) {
 	// Check scanProxy has the expected values.
 	c.Assert(scanProxy.original, Equals, valOfT.FieldByName("Foo"))
 	c.Assert(scanProxy.key, Equals, reflect.Value{})
-	c.Assert(scanProxy.scan, FitsTypeOf, reflect.ValueOf((*int)(nil)))
+	c.Assert(scanProxy.scan.Interface(), Equals, (*string)(nil))
 
 	// Simulate rows.Scan
 	ptrVal := reflect.ValueOf(&ptr).Elem()
@@ -133,6 +133,22 @@ func (s *typeInfoSuite) TestLocateParamsStruct(c *C) {
 	c.Assert(vals[0].Interface(), Equals, "bar")
 }
 
+func (s *typeInfoSuite) TestLocateParamsStructError(c *C) {
+	type T struct {
+		Foo string `db:"foo"`
+	}
+
+	argInfo, err := GenerateArgInfo([]any{T{}})
+	c.Assert(err, IsNil)
+
+	input, err := argInfo.InputMember("T", "foo")
+	c.Assert(err, IsNil)
+
+	// Check missing type error.
+	_, err = input.LocateParams(map[reflect.Type]reflect.Value{})
+	c.Assert(err, ErrorMatches, `parameter with type "T" missing`)
+}
+
 func (s *typeInfoSuite) TestLocateParamsMapError(c *C) {
 	type M map[string]any
 
@@ -148,6 +164,11 @@ func (s *typeInfoSuite) TestLocateParamsMapError(c *C) {
 	input, err := argInfo.InputMember("M", "baz")
 	c.Assert(err, IsNil)
 
+	// Check missing key error.
 	_, err = input.LocateParams(typeToValue)
 	c.Assert(err, ErrorMatches, `map "M" does not contain key "baz"`)
+
+	// Check missing type error.
+	_, err = input.LocateParams(map[reflect.Type]reflect.Value{})
+	c.Assert(err, ErrorMatches, `parameter with type "M" missing`)
 }

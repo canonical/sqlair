@@ -114,7 +114,7 @@ func (f *structField) ArgType() reflect.Type {
 	return f.structType
 }
 
-// LocateParams locates the struct the field is located in from the typeToValue
+// LocateParams locates the struct that contains the field in the typeToValue
 // map. It returns the value of this field. A slice with a single entry is
 // returned to fit the Input interface.
 func (f *structField) LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]reflect.Value, error) {
