@@ -23,7 +23,7 @@ type ArgInfo map[string]arg
 
 // GenerateArgInfo takes sample instantiations of argument types and uses
 // reflection to generate an ArgInfo containing the types.
-func GenerateArgInfo(typeSamples ...any) (ArgInfo, error) {
+func GenerateArgInfo(typeSamples []any) (ArgInfo, error) {
 	argInfo := ArgInfo{}
 	for _, typeSample := range typeSamples {
 		if typeSample == nil {

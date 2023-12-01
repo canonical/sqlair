@@ -32,7 +32,7 @@ func (te *TypedExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 		}
 	}()
 
-	inQuery = map[reflect.Type]bool{}
+	inQuery := map[reflect.Type]bool{}
 	for _, input := range te.inputs {
 		inQuery[input.ArgType()] = true
 	}

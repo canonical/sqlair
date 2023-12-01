@@ -39,7 +39,7 @@ func (pe *ParsedExpr) BindTypes(args ...any) (te *TypedExpr, err error) {
 		}
 	}()
 
-	argInfo, err := typeinfo.GenerateArgInfo(args...)
+	argInfo, err := typeinfo.GenerateArgInfo(args)
 	if err != nil {
 		return nil, err
 	}
