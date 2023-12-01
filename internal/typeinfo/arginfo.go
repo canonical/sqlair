@@ -87,7 +87,7 @@ func (argInfo ArgInfo) AllStructOutputs(typeName string) ([]Output, []string, er
 	}
 	si, ok := arg.(*structInfo)
 	if !ok {
-		return nil, nil, fmt.Errorf("cannot generate columns for non-struct type")
+		return nil, nil, fmt.Errorf("columns must be specified for non-struct type")
 	}
 	if len(si.tags) == 0 {
 		return nil, nil, fmt.Errorf(`no "db" tags found in struct %q`, si.structType.Name())

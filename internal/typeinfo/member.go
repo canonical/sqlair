@@ -70,9 +70,9 @@ func (mk *mapKey) String() string {
 }
 
 // LocateScanTarget locates the map specified in mapKey from the provided
-// typeToValue map. It returns a pointer for to pass to rows.Scan, and a
-// ScanProxy reference for setting the key value in the map once the pointer
-// has been scanned into.
+// typeToValue map. It returns a pointer to pass to rows.Scan, and a ScanProxy
+// reference for setting the key value in the map once the pointer has been
+// scanned into.
 func (mk *mapKey) LocateScanTarget(typeToValue map[reflect.Type]reflect.Value) (any, *ScanProxy, error) {
 	m, err := locateValue(typeToValue, mk.mapType)
 	if err != nil {

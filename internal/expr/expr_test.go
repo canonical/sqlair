@@ -570,17 +570,17 @@ func (s *ExprSuite) TestMapError(c *C) {
 		"all output into map star",
 		"SELECT &M.* FROM person WHERE name = 'Fred'",
 		[]any{sqlair.M{}},
-		"cannot prepare statement: output expression: cannot generate columns for non-struct type: &M.*",
+		"cannot prepare statement: output expression: columns must be specified for non-struct type: &M.*",
 	}, {
 		"all output into map star from table star",
 		"SELECT p.* AS &M.* FROM person WHERE name = 'Fred'",
 		[]any{sqlair.M{}},
-		"cannot prepare statement: output expression: cannot generate columns for non-struct type: p.* AS &M.*",
+		"cannot prepare statement: output expression: columns must be specified for non-struct type: p.* AS &M.*",
 	}, {
 		"all output into map star from lone star",
 		"SELECT * AS &CustomMap.* FROM person WHERE name = 'Fred'",
 		[]any{CustomMap{}},
-		"cannot prepare statement: output expression: cannot generate columns for non-struct type: * AS &CustomMap.*",
+		"cannot prepare statement: output expression: columns must be specified for non-struct type: * AS &CustomMap.*",
 	}, {
 		"invalid map",
 		"SELECT * AS &InvalidMap.* FROM person WHERE name = 'Fred'",

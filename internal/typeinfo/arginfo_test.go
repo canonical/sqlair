@@ -223,5 +223,5 @@ func (s *typeInfoSuite) TestGenerateArgInfoMapError(c *C) {
 
 	_, _, err = argInfo.AllStructOutputs("myMap")
 	c.Assert(err, Not(IsNil))
-	c.Assert(err.Error(), Equals, "cannot generate columns for non-struct type")
+	c.Assert(err.Error(), Equals, "columns must be specified for non-struct type")
 }
