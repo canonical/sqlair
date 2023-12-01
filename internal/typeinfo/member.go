@@ -21,7 +21,7 @@ type Input interface {
 	ValueLocator
 	// LocateParams locates the input argument associated with this Input in
 	// the typeToValue map and then returns the Go values within the input
-	// argument that are to be used in a query parameter. An error is returned
+	// argument that are to be used in query parameters. An error is returned
 	// if typeToValue does not contain the input argument.
 	LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]reflect.Value, error)
 }
@@ -34,6 +34,12 @@ type Output interface {
 	// typeToValue and returns a pointer to the Go value within the output
 	// argument for rows.Scan, along with a ScanProxy for the cases where the
 	// output argument cannot be scanned into directly.
+	//
+	// rows.Scan will return an error if it tries to scan NULL into a type that
+	// cannot be set to nil, so for types that are not a pointer and do not
+	// implement sql.Scanner, a pointer to them is generated and passed to
+	// Rows.Scan. If Scan has set this pointer to nil the value is zeroed by
+	// ScanProxy.OnSuccess.
 	LocateScanTarget(typeToValue map[reflect.Type]reflect.Value) (any, *ScanProxy, error)
 }
 
@@ -103,7 +109,7 @@ type structField struct {
 	omitEmpty bool
 }
 
-// ArgType returns the type of struct in this field is located in.
+// ArgType returns the type of the struct this field is located in.
 func (f *structField) ArgType() reflect.Type {
 	return f.structType
 }
@@ -129,11 +135,6 @@ func (f *structField) String() string {
 // provided typeToValue map. It returns a pointer for the target of rows.Scan,
 // and a ScanProxy reference in the event that we need to coerce that pointer
 // into a struct field.
-// rows.Scan will return an error if it tries to scan NULL into a type that
-// cannot be set to nil, so for types that are not a pointer and do not
-// implement sql.Scanner, a pointer to them is generated and passed to
-// Rows.Scan. If Scan has set this pointer to nil the value is zeroed by
-// ScanProxy.OnSuccess.
 func (f *structField) LocateScanTarget(typeToValue map[reflect.Type]reflect.Value) (any, *ScanProxy, error) {
 	s, ok := typeToValue[f.structType]
 	if !ok {
