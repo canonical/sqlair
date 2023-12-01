@@ -611,7 +611,7 @@ func (p *Parser) parseTypeAndMember() (memberAccessor, bool, error) {
 }
 
 // parseList takes a parsing function that returns a T and parses a
-// bracketed, comma seperated, list.
+// bracketed, comma separated, list.
 func parseList[T any](p *Parser, parseFn func(p *Parser) (T, bool, error)) ([]T, bool, error) {
 	cp := p.save()
 	if !p.skipByte('(') {

@@ -1125,7 +1125,7 @@ func (s *PackageSuite) TestIterMethodOrder(c *C) {
 	var p = Person{}
 	stmt := sqlair.MustPrepare("SELECT &Person.* FROM person", Person{})
 
-	// Check immidiate Get.
+	// Check immediate Get.
 	iter := db.Query(nil, stmt).Iter()
 	err = iter.Get(&p)
 	c.Assert(err, ErrorMatches, "cannot get result: cannot call Get before Next unless getting outcome")
