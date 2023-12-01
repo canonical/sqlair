@@ -8,32 +8,32 @@ import (
 
 var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
 
+// ValueLocator specifies how to locate a value in a SQLair argument type.
+type ValueLocator interface {
+	ArgType() reflect.Type
+	String() string
+}
+
 // Input is a locator for a Go value from SQLair input arguments to be used in
 // a SQL query parameter.
 type Input interface {
+	ValueLocator
 	// LocateParams locates the input argument associated with this Input in
 	// the typeToValue map and then returns the Go values within the input
 	// argument that are to be used in a query parameter. An error is returned
 	// if typeToValue does not contain the input argument.
 	LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]reflect.Value, error)
-	ValueLocator
 }
 
 // Output is a locator for a target to scan results to in the SQLair output
 // arguments.
 type Output interface {
+	ValueLocator
 	// LocateScanTarget locates the output argument associated this Output in
 	// typeToValue and returns a pointer to the Go value within the output
 	// argument for rows.Scan, along with a ScanProxy for the cases where the
 	// output argument cannot be scanned into directly.
 	LocateScanTarget(typeToValue map[reflect.Type]reflect.Value) (any, *ScanProxy, error)
-	ValueLocator
-}
-
-// ValueLocator specifies how to locate a value in a SQLair argument type.
-type ValueLocator interface {
-	ArgType() reflect.Type
-	String() string
 }
 
 // mapKey stores information about where to find a key of a particular map.
