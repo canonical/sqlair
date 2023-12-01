@@ -9,10 +9,6 @@ import (
 	"sync"
 )
 
-// This expression should be aligned with the bytes we allow in isNameByte in
-// the parser.
-var validColNameRx = regexp.MustCompile(`^([a-zA-Z_])+([a-zA-Z_0-9])*$`)
-
 // ArgInfo is used to access type information about SQLair input and output
 // arguments. Methods on ArgInfo can be used to generate input and output value
 // locators.
@@ -236,6 +232,10 @@ func getArgInfo(t reflect.Type) (arg, error) {
 
 	return typeInfo, nil
 }
+
+// This expression should be aligned with the bytes we allow in isNameByte in
+// the parser.
+var validColNameRx = regexp.MustCompile(`^([a-zA-Z_])+([a-zA-Z_0-9])*$`)
 
 // parseTag parses the input tag string and returns its
 // name and whether it contains the "omitempty" option.
