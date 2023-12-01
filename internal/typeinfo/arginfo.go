@@ -81,9 +81,9 @@ func (argInfo ArgInfo) OutputMember(typeName string, memberName string) (Output,
 // of the named type along with the names of the members. If the type is not a
 // struct an error is returned.
 func (argInfo ArgInfo) AllStructOutputs(typeName string) ([]Output, []string, error) {
-	arg, err := argInfo.getArg(typeName)
-	if err != nil {
-		return nil, nil, err
+	arg, ok := argInfo[typeName]
+	if !ok {
+		return nil, nil, nameNotFoundError(argInfo, typeName)
 	}
 	si, ok := arg.(*structInfo)
 	if !ok {
@@ -100,27 +100,12 @@ func (argInfo ArgInfo) AllStructOutputs(typeName string) ([]Output, []string, er
 	return outputs, si.tags, nil
 }
 
-// getArg finds information about a named arg type in argInfo.
-func (argInfo ArgInfo) getArg(typeName string) (arg, error) {
-	arg, ok := argInfo[typeName]
-	if !ok {
-		argNames := []string{}
-		for argName := range argInfo {
-			argNames = append(argNames, argName)
-		}
-		// Sort for consistant error messages.
-		sort.Strings(argNames)
-		return nil, typeMissingError(typeName, argNames)
-	}
-	return arg, nil
-}
-
 // getMember finds a type and a member of it and returns a locator for the
 // member. If the type does not have members it returns an error.
 func (argInfo ArgInfo) getMember(typeName string, memberName string) (ValueLocator, error) {
-	arg, err := argInfo.getArg(typeName)
-	if err != nil {
-		return nil, err
+	arg, ok := argInfo[typeName]
+	if !ok {
+		return nil, nameNotFoundError(argInfo, typeName)
 	}
 	switch arg := arg.(type) {
 	case *structInfo:
@@ -263,6 +248,18 @@ func parseTag(tag string) (string, bool, error) {
 	}
 
 	return name, omitEmpty, nil
+}
+
+// nameNotFoundError generates the arguments present and returns a typeMissingError
+func nameNotFoundError(argInfo ArgInfo, missingTypeName string) error {
+	// Get names of the arguments we have from the ArgInfo keys.
+	argNames := []string{}
+	for argName := range argInfo {
+		argNames = append(argNames, argName)
+	}
+	// Sort for consistant error messages.
+	sort.Strings(argNames)
+	return typeMissingError(missingTypeName, argNames)
 }
 
 // typeMissingError returns an error specificing the missing type and types

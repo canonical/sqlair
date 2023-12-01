@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
+	"sort"
 )
 
 var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
@@ -52,9 +53,9 @@ func (mk *mapKey) ArgType() reflect.Type {
 // contain this key. A slice with a single entry is returned to fit the Input
 // interface.
 func (mk *mapKey) LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]reflect.Value, error) {
-	m, err := locateValue(typeToValue, mk.mapType)
-	if err != nil {
-		return nil, err
+	m, ok := typeToValue[mk.mapType]
+	if !ok {
+		return nil, typeNotFoundError(typeToValue, mk.mapType.Name())
 	}
 	v := m.MapIndex(reflect.ValueOf(mk.name))
 	if v.Kind() == reflect.Invalid {
@@ -74,9 +75,9 @@ func (mk *mapKey) String() string {
 // reference for setting the key value in the map once the pointer has been
 // scanned into.
 func (mk *mapKey) LocateScanTarget(typeToValue map[reflect.Type]reflect.Value) (any, *ScanProxy, error) {
-	m, err := locateValue(typeToValue, mk.mapType)
-	if err != nil {
-		return nil, nil, err
+	m, ok := typeToValue[mk.mapType]
+	if !ok {
+		return nil, nil, typeNotFoundError(typeToValue, mk.mapType.Name())
 	}
 	scanVal := reflect.New(mk.mapType.Elem()).Elem()
 	return scanVal.Addr().Interface(), &ScanProxy{original: m, scan: scanVal, key: reflect.ValueOf(mk.name)}, nil
@@ -111,9 +112,9 @@ func (f *structField) ArgType() reflect.Type {
 // map. It returns the value of this field. A slice with a single entry is
 // returned to fit the Input interface.
 func (f *structField) LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]reflect.Value, error) {
-	s, err := locateValue(typeToValue, f.structType)
-	if err != nil {
-		return nil, err
+	s, ok := typeToValue[f.structType]
+	if !ok {
+		return nil, typeNotFoundError(typeToValue, f.structType.Name())
 	}
 	return []reflect.Value{s.Field(f.index)}, nil
 }
@@ -134,9 +135,9 @@ func (f *structField) String() string {
 // Rows.Scan. If Scan has set this pointer to nil the value is zeroed by
 // ScanProxy.OnSuccess.
 func (f *structField) LocateScanTarget(typeToValue map[reflect.Type]reflect.Value) (any, *ScanProxy, error) {
-	s, err := locateValue(typeToValue, f.structType)
-	if err != nil {
-		return nil, nil, err
+	s, ok := typeToValue[f.structType]
+	if !ok {
+		return nil, nil, typeNotFoundError(typeToValue, f.structType.Name())
 	}
 	val := s.Field(f.index)
 	if !val.CanSet() {
@@ -156,11 +157,19 @@ func (f *structField) LocateScanTarget(typeToValue map[reflect.Type]reflect.Valu
 func locateValue(typeToValue map[reflect.Type]reflect.Value, typ reflect.Type) (reflect.Value, error) {
 	v, ok := typeToValue[typ]
 	if !ok {
-		argNames := []string{}
-		for argType := range typeToValue {
-			argNames = append(argNames, argType.Name())
-		}
-		return reflect.Value{}, typeMissingError(typ.Name(), argNames)
+
 	}
 	return v, nil
+}
+
+// typeNotFoundError generates the arguments present and returns a typeMissingError
+func typeNotFoundError(typeToValue map[reflect.Type]reflect.Value, missingTypeName string) error {
+	// Get the argument names from typeToValue map.
+	argNames := []string{}
+	for argType := range typeToValue {
+		argNames = append(argNames, argType.Name())
+	}
+	// Sort for consistant error messages.
+	sort.Strings(argNames)
+	return typeMissingError(missingTypeName, argNames)
 }
