@@ -196,20 +196,6 @@ func bindOutputTypes(argInfo typeinfo.ArgInfo, e *outputExpr) (outCols []columnA
 	return outCols, outputs, nil
 }
 
-/*
-// getKeys returns the keys of a string map in a deterministic order.
-func getKeys[T any](m map[string]T) []string {
-	i := 0
-	keys := make([]string, len(m))
-	for k := range m {
-		keys[i] = k
-		i++
-	}
-	sort.Strings(keys)
-	return keys
-}
-*/
-
 // starCountColumns counts the number of asterisks in a list of columns.
 func starCountColumns(cs []columnAccessor) int {
 	s := 0
