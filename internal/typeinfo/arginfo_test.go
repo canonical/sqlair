@@ -62,10 +62,11 @@ func (s *typeInfoSuite) TestArgInfoStruct(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(allOutputs, HasLen, len(structFields))
 
+	structType := reflect.TypeOf(myStruct{})
 	for i, t := range structFields {
 		expectedStructField := &structField{
 			name:       t.fieldName,
-			structType: reflect.TypeOf(myStruct{}),
+			structType: structType,
 			index:      t.index,
 			tag:        t.tag,
 			omitEmpty:  t.omitEmpty,
@@ -110,35 +111,52 @@ func (s *typeInfoSuite) TestGenerateArgInfoInvalidTypeErrors(c *C) {
 	type T struct{ foo int }
 	type M map[string]any
 
-	_, err := GenerateArgInfo([]any{nil})
-	c.Assert(err, ErrorMatches, "need struct or map, got nil")
+	tests := []struct {
+		args []any
+		err  string
+	}{{
 
-	_, err = GenerateArgInfo([]any{struct{ foo int }{}})
-	c.Assert(err, ErrorMatches, "cannot use anonymous struct")
+		args: []any{nil},
+		err:  "need struct or map, got nil",
+	}, {
 
-	_, err = GenerateArgInfo([]any{map[string]any{}})
-	c.Assert(err, ErrorMatches, "cannot use anonymous map")
+		args: []any{struct{ foo int }{}},
+		err:  "cannot use anonymous struct",
+	}, {
 
-	_, err = GenerateArgInfo([]any{T{}, T{}})
-	c.Assert(err, ErrorMatches, `found multiple instances of type "T"`)
+		args: []any{map[string]any{}},
+		err:  "cannot use anonymous map",
+	}, {
+		args: []any{T{}, T{}},
+		err:  `found multiple instances of type "T"`,
+	}, {
 
-	_, err = GenerateArgInfo([]any{(*T)(nil)})
-	c.Assert(err, ErrorMatches, "need struct or map, got pointer to struct")
+		args: []any{(*T)(nil)},
+		err:  "need struct or map, got pointer to struct",
+	}, {
 
-	_, err = GenerateArgInfo([]any{(*M)(nil)})
-	c.Assert(err, ErrorMatches, "need struct or map, got pointer to map")
+		args: []any{(*M)(nil)},
+		err:  "need struct or map, got pointer to map",
+	}, {
 
-	_, err = GenerateArgInfo([]any{""})
-	c.Assert(err, ErrorMatches, "need struct or map, got string")
+		args: []any{""},
+		err:  "need struct or map, got string",
+	}, {
 
-	_, err = GenerateArgInfo([]any{0})
-	c.Assert(err, ErrorMatches, "need struct or map, got int")
+		args: []any{0},
+		err:  "need struct or map, got int",
+	}, {
+		args: []any{[10]int{}},
+		err:  "need struct or map, got array",
+	}, {
+		args: []any{t, T{}},
+		err:  `two types found with name "T": "typeinfo.T" and "typeinfo.T"`,
+	}}
 
-	_, err = GenerateArgInfo([]any{[10]int{}})
-	c.Assert(err, ErrorMatches, "need struct or map, got array")
-
-	_, err = GenerateArgInfo([]any{t, T{}})
-	c.Assert(err, ErrorMatches, `two types found with name "T": "typeinfo.T" and "typeinfo.T"`)
+	for _, t := range tests {
+		_, err := GenerateArgInfo(t.args)
+		c.Assert(err, ErrorMatches, t.err)
+	}
 }
 
 func (s *typeInfoSuite) TestGenerateArgInfoStructError(c *C) {
