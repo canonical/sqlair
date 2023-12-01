@@ -32,12 +32,12 @@ func (te *TypedExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 		}
 	}()
 
-	var inQuery = make(map[reflect.Type]bool)
+	inQuery = map[reflect.Type]bool{}
 	for _, input := range te.inputs {
 		inQuery[input.ArgType()] = true
 	}
 
-	var typeToValue = make(map[reflect.Type]reflect.Value)
+	typeToValue := map[reflect.Type]reflect.Value{}
 	for _, arg := range args {
 		v := reflect.ValueOf(arg)
 		if v.Kind() == reflect.Invalid || (v.Kind() == reflect.Pointer && v.IsNil()) {
@@ -64,7 +64,7 @@ func (te *TypedExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 	}
 
 	// Query parameters.
-	params := []any{}
+	var params []any
 	inputCount := 0
 	for _, input := range te.inputs {
 		vals, err := input.LocateParams(typeToValue)
