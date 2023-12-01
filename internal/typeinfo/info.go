@@ -81,8 +81,9 @@ func (argInfo ArgInfo) OutputMember(typeName string, memberName string) (Output,
 	return output, nil
 }
 
-// AllStructOutputMembers returns a list of output locators that locate every member
-// of the named type. If the type is not a struct an error is returned.
+// AllStructOutputs returns a list of output locators that locate every member
+// of the named type along with the names of the members. If the type is not a
+// struct an error is returned.
 func (argInfo ArgInfo) AllStructOutputs(typeName string) ([]Output, []string, error) {
 	arg, err := argInfo.getArg(typeName)
 	if err != nil {
@@ -92,29 +93,15 @@ func (argInfo ArgInfo) AllStructOutputs(typeName string) ([]Output, []string, er
 	if !ok {
 		return nil, nil, fmt.Errorf("cannot generate columns for non-struct type")
 	}
-	return si.allOutputMembers()
-}
+	if len(si.tags) == 0 {
+		return nil, nil, fmt.Errorf(`no "db" tags found in struct %q`, si.structType.Name())
+	}
 
-type hasMembers interface {
-	member(memberName string) (member ValueLocator, err error)
-}
-
-// getMember finds a type and a member of it and returns a locator for the
-// member. If the type does not have members it returns an error.
-func (argInfo ArgInfo) getMember(typeName string, memberName string) (ValueLocator, error) {
-	arg, err := argInfo.getArg(typeName)
-	if err != nil {
-		return nil, err
+	var outputs []Output
+	for _, tag := range si.tags {
+		outputs = append(outputs, si.tagToField[tag])
 	}
-	argWM, ok := arg.(hasMembers)
-	if !ok {
-		return nil, fmt.Errorf("internal error: arg type %T does not implement argWithMembers", arg)
-	}
-	vl, err := argWM.member(memberName)
-	if err != nil {
-		return nil, err
-	}
-	return vl, nil
+	return outputs, si.tags, nil
 }
 
 // getArg finds information about a named arg type in argInfo.
@@ -130,6 +117,27 @@ func (argInfo ArgInfo) getArg(typeName string) (arg, error) {
 		return nil, typeMissingError(typeName, argNames)
 	}
 	return arg, nil
+}
+
+// getMember finds a type and a member of it and returns a locator for the
+// member. If the type does not have members it returns an error.
+func (argInfo ArgInfo) getMember(typeName string, memberName string) (ValueLocator, error) {
+	arg, err := argInfo.getArg(typeName)
+	if err != nil {
+		return nil, err
+	}
+	switch arg := arg.(type) {
+	case *structInfo:
+		structField, ok := arg.tagToField[memberName]
+		if !ok {
+			return nil, fmt.Errorf(`type %q has no %q db tag`, arg.structType.Name(), memberName)
+		}
+		return structField, nil
+	case *mapInfo:
+		return &mapKey{name: memberName, mapType: arg.mapType}, nil
+	default:
+		return nil, fmt.Errorf("internal error: arg type %T does not have members", arg)
+	}
 }
 
 // arg exposes useful information about SQLair input/output argument types.
@@ -151,29 +159,6 @@ func (si *structInfo) typ() reflect.Type {
 	return si.structType
 }
 
-// member returns a locator for the structField assosiated with the given tag.
-func (si *structInfo) member(tag string) (ValueLocator, error) {
-	f, ok := si.tagToField[tag]
-	if !ok {
-		return nil, fmt.Errorf(`type %q has no %q db tag`, si.structType.Name(), tag)
-	}
-	return f, nil
-}
-
-// allOutputMembers returns all tagged fields on the struct as Output
-// interfaces.
-func (si *structInfo) allOutputMembers() ([]Output, []string, error) {
-	if len(si.tags) == 0 {
-		return nil, nil, fmt.Errorf(`no "db" tags found in struct %q`, si.structType.Name())
-	}
-
-	var outputs []Output
-	for _, tag := range si.tags {
-		outputs = append(outputs, si.tagToField[tag])
-	}
-	return outputs, si.tags, nil
-}
-
 // mapInfo stores a map type.
 type mapInfo struct {
 	mapType reflect.Type
@@ -181,11 +166,6 @@ type mapInfo struct {
 
 func (mi *mapInfo) typ() reflect.Type {
 	return mi.mapType
-}
-
-// member returns a locator for a mapKey with a given name.
-func (mi *mapInfo) member(name string) (ValueLocator, error) {
-	return &mapKey{name: name, mapType: mi.mapType}, nil
 }
 
 // argInfoCache caches type reflection information across queries.
