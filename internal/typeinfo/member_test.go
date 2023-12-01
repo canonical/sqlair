@@ -87,6 +87,30 @@ func (s *typeInfoSuite) TestLocateScanTargetStruct(c *C) {
 	c.Assert(ptr, FitsTypeOf, (**string)(nil))
 }
 
+func (s *typeInfoSuite) TestLocateScanTargetError(c *C) {
+	type T struct {
+		Foo string `db:"foo"`
+	}
+	type M map[string]any
+
+	argInfo, err := GenerateArgInfo([]any{T{}, M{}})
+	c.Assert(err, IsNil)
+
+	output, err := argInfo.OutputMember("T", "foo")
+	c.Assert(err, IsNil)
+
+	// Check missing type error.
+	_, _, err = output.LocateScanTarget(map[reflect.Type]reflect.Value{})
+	c.Assert(err, ErrorMatches, `parameter with type "T" missing`)
+
+	output, err = argInfo.OutputMember("M", "baz")
+	c.Assert(err, IsNil)
+
+	// Check missing type error.
+	_, _, err = output.LocateScanTarget(map[reflect.Type]reflect.Value{})
+	c.Assert(err, ErrorMatches, `parameter with type "M" missing`)
+}
+
 func (s *typeInfoSuite) TestLocateParamsMap(c *C) {
 	type M map[string]any
 
