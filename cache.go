@@ -11,7 +11,7 @@ import (
 )
 
 // stmtIDCount and dbIDCount are global variables to used to generate unique
-// IDs.
+// cache IDs.
 var stmtIDCount int64
 var dbIDCount int64
 
@@ -21,17 +21,21 @@ type stmtID = int64
 // statementCache caches the sql.Stmt objects associated with each
 // sqlair.Statement. A sqlair.Statement can correspond to multiple sql.Stmt
 // objects prepared on different databases. Entries in the cache are therefore
-// indexed by the sqlair.Statement ID and the sqlair.DB ID.
+// indexed by the sqlair.Statement cache ID and the sqlair.DB cache ID.
 //
-// The cache closes sql.Stmt objects with a finalizer on the sqlair.Statement.
-// Similarly a finalizer is set on sqlair.DB objects to close all statements
-// prepared on the DB, close the DB, and remove references to the DB from the
-// cache.
+// A finalizer is set on sqlair.Statement objects to close the assosiated
+// sql.Stmt objects. Similarly a finalizer is set on sqlair.DB objects to close
+// all sql.Stmt objects prepared on the DB, close the DB, and remove the DB
+// cache ID from the cache.
 //
 // The mutex must be locked when accessing either the stmtDBCache or the
 // dbStmtCache.
 type statementCache struct {
+	// stmtDBCache stores sql.Stmt objects addressed via the cache ID of the
+	// sqlair.Statement they built from and the sqlair.DB they are prepared on.
 	stmtDBCache map[stmtID]map[dbID]*sql.Stmt
+
+	// dbStmtCache indicates when a sqlair.Statement has been prepared on a particular sqlair.DB.
 	dbStmtCache map[dbID]map[stmtID]bool
 	mutex       sync.RWMutex
 }
@@ -51,29 +55,29 @@ func newStatementCache() *statementCache {
 }
 
 // newStatement returns a new sqlair.Statement and adds it to the cache. A
-// finalizer is set on the sqlair.Statement to remove from the cache and close
-// all associated sql.Stmt values. This finalizer is run after the
-// sqlair.Statement is garbage collected.
+// finalizer is set on the sqlair.Statement to remove its ID from the cache and
+// close all associated sql.Stmt objects.
 func (sc *statementCache) newStatement(te *expr.TypedExpr) *Statement {
 	cacheID := atomic.AddInt64(&stmtIDCount, 1)
-	s := &Statement{te: te, cacheID: cacheID}
 	sc.mutex.Lock()
 	sc.stmtDBCache[cacheID] = map[dbID]*sql.Stmt{}
 	sc.mutex.Unlock()
+	s := &Statement{te: te, cacheID: cacheID}
+	// This finalizer is run after the Statement is garbage collected.
 	runtime.SetFinalizer(s, sc.getStmtFinalizer(s))
 	return s
 }
 
-// newDB returns a new sqlair.DB and allocates a cache for it in the
+// newDB returns a new sqlair.DB and allocates the necessary resources in the
 // statementCache. A finalizer is set on the sqlair.DB to remove references to
-// it from the cache, close all sql.Stmt values on it, and close the sql.DB
-// This finalizer is run after the sqlair.DB is garbage collected.
+// it from the cache, close all sql.Stmt objects on it, and close the sql.DB
 func (sc *statementCache) newDB(sqldb *sql.DB) *DB {
 	cacheID := atomic.AddInt64(&dbIDCount, 1)
 	sc.mutex.Lock()
 	sc.dbStmtCache[cacheID] = map[stmtID]bool{}
 	sc.mutex.Unlock()
 	db := &DB{sqldb: sqldb, cacheID: cacheID}
+	// This finalizer is run after the DB is garbage collected.
 	runtime.SetFinalizer(db, sc.getDBFinalizer(db))
 	return db
 }
@@ -91,8 +95,9 @@ type prepareSubstrate interface {
 func (sc *statementCache) prepareStmt(ctx context.Context, dbID dbID, ps prepareSubstrate, s *Statement) (*sql.Stmt, error) {
 	var err error
 	sc.mutex.RLock()
-	// The statement ID is only removed from the cache when the finalizer is
-	// run, so it is always in stmtDBCache.
+	// The Statement cache ID is only removed from stmtDBCache when the
+	// finalizer is run. The cache ID must be present as we have a reference to
+	// the Statement.
 	sqlstmt, ok := sc.stmtDBCache[s.cacheID][dbID]
 	sc.mutex.RUnlock()
 	if !ok {
@@ -132,7 +137,7 @@ func (sc *statementCache) getStmtFinalizer(s *Statement) func(*Statement) {
 }
 
 // getDBFinalizer returns a finalizer that closes and removes from the cache
-// all sql.Stmt values prepared on the database, removes the database from then
+// all sql.Stmt objects prepared on the database, removes the database from then
 // cache, then closes the sql.DB.
 func (sc *statementCache) getDBFinalizer(db *DB) func(*DB) {
 	return func(db *DB) {
