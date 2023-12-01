@@ -36,7 +36,7 @@ type Output interface {
 	LocateScanTarget(typeToValue map[reflect.Type]reflect.Value) (any, *ScanProxy, error)
 }
 
-// mapKey stores information about where to find a key of a particular map.
+// mapKey specifies at which key to find a value in a particular map.
 type mapKey struct {
 	name    string
 	mapType reflect.Type
@@ -47,10 +47,10 @@ func (mk *mapKey) ArgType() reflect.Type {
 	return mk.mapType
 }
 
-// LocateParams locates the map and then the value of the key specified in
-// mapKey from the provided typeToValue map. An error is returned if the map
-// does not contain this key. A slice with a single entry is returned to fit
-// the Input interface.
+// LocateParams locates the map in typeToValue and then gets value assosiated
+// with the key specified in mapKey. An error is returned if the map does not
+// contain this key. A slice with a single entry is returned to fit the Input
+// interface.
 func (mk *mapKey) LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]reflect.Value, error) {
 	m, err := locateValue(typeToValue, mk.mapType)
 	if err != nil {
