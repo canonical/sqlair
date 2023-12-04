@@ -1388,6 +1388,11 @@ func (s *PackageSuite) TestRaceConditionFinalizer(c *C) {
 }
 func (s *PackageSuite) TestRaceConditionFinalizerTX(c *C) {
 	var q *sqlair.Query
+	// Because of how the sql internal library works, we have to commit the transaction for the statement to be closed
+	// properly and the test to pass. Reason: the sql library keeps track of what connections are used for transactions
+	// and, when they are, it does not close statements, instead it marks them to be closed only when the connection
+	// itself is closed.
+	var tx *sqlair.TX
 	// Drop all the values except the query itself.
 	func() {
 		sqldb, err := setupDB(c.TestName())
@@ -1396,7 +1401,7 @@ func (s *PackageSuite) TestRaceConditionFinalizerTX(c *C) {
 		db := sqlair.NewDB(sqldb)
 
 		selectStmt := sqlair.MustPrepare(`SELECT 'hello'`)
-		tx, err := db.Begin(nil, nil)
+		tx, err = db.Begin(nil, nil)
 		c.Assert(err, IsNil)
 		q = tx.Query(nil, selectStmt)
 	}()
@@ -1409,4 +1414,5 @@ func (s *PackageSuite) TestRaceConditionFinalizerTX(c *C) {
 
 	// Assert that sql.Stmt was not closed early.
 	c.Assert(q.Run(), IsNil)
+	c.Assert(tx.Commit(), IsNil)
 }
