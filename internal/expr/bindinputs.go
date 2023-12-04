@@ -44,7 +44,7 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 
 	// Generate SQL and query parameters.
 	params := []any{}
-	outputs := []typeinfo.Member{}
+	outputs := []typeinfo.Output{}
 	// argTypeUsed records the types of the input arguments used in the query.
 	argTypeUsed := map[reflect.Type]bool{}
 	inputCount := 0
@@ -53,22 +53,16 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 	for _, te := range *tbe {
 		switch te := te.(type) {
 		case *typedInputExpr:
-			typeMember := te.input
-			outerType := typeMember.OuterType()
-			v, ok := typeToValue[outerType]
-			if !ok {
-				return nil, missingInputArgError(outerType, typeToValue)
-			}
-			argTypeUsed[outerType] = true
-
-			val, err := typeMember.ValueFromOuter(v)
+			vals, err := te.input.LocateParams(typeToValue)
 			if err != nil {
 				return nil, err
 			}
-			params = append(params, sql.Named("sqlair_"+strconv.Itoa(inputCount), val.Interface()))
-
-			sqlStr.WriteString("@sqlair_" + strconv.Itoa(inputCount))
-			inputCount++
+			argTypeUsed[te.input.ArgType()] = true
+			for _, val := range vals {
+				params = append(params, sql.Named("sqlair_"+strconv.Itoa(inputCount), val.Interface()))
+				sqlStr.WriteString("@sqlair_" + strconv.Itoa(inputCount))
+				inputCount++
+			}
 		case *typedOutputExpr:
 			for i, oc := range te.outputColumns {
 				sqlStr.WriteString(oc.sql(outputCount))
@@ -76,7 +70,7 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 					sqlStr.WriteString(", ")
 				}
 				outputCount++
-				outputs = append(outputs, oc.member)
+				outputs = append(outputs, oc.output)
 			}
 		case *bypass:
 			sqlStr.WriteString(te.chunk)
@@ -102,24 +96,24 @@ type typedExpression interface {
 // outputColumn stores the name of a column to fetch from the database and the
 // type to scan the result into.
 type outputColumn struct {
+	output typeinfo.Output
 	column string
-	member typeinfo.Member
 }
 
 func (oc *outputColumn) sql(outputCount int) string {
 	return oc.column + " AS " + markerName(outputCount)
 }
 
-func newOutputColumn(tableName string, columnName string, member typeinfo.Member) outputColumn {
+func newOutputColumn(tableName string, columnName string, output typeinfo.Output) outputColumn {
 	if tableName == "" {
-		return outputColumn{column: columnName, member: member}
+		return outputColumn{column: columnName, output: output}
 	}
-	return outputColumn{column: tableName + "." + columnName, member: member}
+	return outputColumn{column: tableName + "." + columnName, output: output}
 }
 
 // typedInputExpr stores information about a Go value to use as a query input.
 type typedInputExpr struct {
-	input typeinfo.Member
+	input typeinfo.Input
 }
 
 // typedExpr is a marker method.
@@ -158,19 +152,4 @@ func markerIndex(s string) (int, bool) {
 		}
 	}
 	return 0, false
-}
-
-// missingInputArgError is used when no matching input argument can be found
-// for a type in a type bound expression of the query.
-func missingInputArgError(missingType reflect.Type, typeToValue map[reflect.Type]reflect.Value) error {
-	// Check if the missing type and some argument type have the same name but
-	// are from different packages.
-	typeNames := []string{}
-	for argType := range typeToValue {
-		if argType.Name() == missingType.Name() {
-			return fmt.Errorf("parameter with type %q missing, have type with same name: %q", missingType.String(), argType.String())
-		}
-		typeNames = append(typeNames, argType.Name())
-	}
-	return typeMissingError(missingType.Name(), typeNames)
 }

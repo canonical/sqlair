@@ -333,9 +333,11 @@ func (iter *Iterator) Get(outputArgs ...any) (err error) {
 	}()
 
 	if !iter.started {
-		if oc, ok := outputArgs[0].(*Outcome); ok && len(outputArgs) == 1 {
-			oc.result = iter.result
-			return nil
+		if len(outputArgs) == 1 {
+			if oc, ok := outputArgs[0].(*Outcome); ok {
+				oc.result = iter.result
+				return nil
+			}
 		}
 		return fmt.Errorf("cannot call Get before Next unless getting outcome")
 	}

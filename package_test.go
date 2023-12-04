@@ -339,7 +339,7 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: []any{},
-		err:     `cannot get result: type "Person" found in query but not passed to get`,
+		err:     `cannot get result: parameter with type "Person" missing`,
 	}, {
 		summary: "multiple of the same type",
 		query:   "SELECT * AS &Person.* FROM person",
@@ -895,6 +895,11 @@ func (s *PackageSuite) TestOutcome(c *C) {
 	err = q2.GetAll(&outcome, &jims)
 	c.Assert(err, IsNil)
 	c.Assert(outcome.Result(), IsNil)
+	// Test Iter.Get with zero args and without Outcome
+	selectStmt = sqlair.MustPrepare(`SELECT 'hello'`)
+	iter = db.Query(nil, selectStmt).Iter()
+	err = iter.Get()
+	c.Assert(err, ErrorMatches, "cannot get result: cannot call Get before Next unless getting outcome")
 }
 
 func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
