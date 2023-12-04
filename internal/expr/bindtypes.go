@@ -82,7 +82,7 @@ type expression interface {
 	// String returns a text representation for debugging and testing purposes.
 	String() string
 
-	// bindTypes generates a typed expression from the query type information.
+	// bindTypes generates a typed expression from the query argument type information.
 	bindTypes(typeinfo.ArgInfo) (typedExpression, error)
 }
 

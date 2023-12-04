@@ -95,16 +95,19 @@ type typedExpression interface {
 }
 
 // outputColumn stores the name of a column to fetch from the database and the
-// type to scan the result into.
+// type location to scan the result into.
 type outputColumn struct {
 	output typeinfo.Output
 	column string
 }
 
+// sql generates the SQL for a single output column.
 func (oc *outputColumn) sql(outputCount int) string {
 	return oc.column + " AS " + markerName(outputCount)
 }
 
+// newOutputColumn generates an output column with the correct column string to
+// write in the generated query.
 func newOutputColumn(tableName string, columnName string, output typeinfo.Output) outputColumn {
 	if tableName == "" {
 		return outputColumn{column: columnName, output: output}
