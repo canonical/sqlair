@@ -339,7 +339,7 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: []any{},
-		err:     `cannot get result: type "Person" found in query but not passed to get`,
+		err:     `cannot get result: parameter with type "Person" missing`,
 	}, {
 		summary: "multiple of the same type",
 		query:   "SELECT * AS &Person.* FROM person",

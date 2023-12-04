@@ -456,7 +456,7 @@ func (s *ExprSuite) TestBindTypesErrors(c *C) {
 	}, {
 		query:       "SELECT (&Address.*, &Address.id) FROM t",
 		typeSamples: []any{Address{}, Person{}},
-		err:         `cannot prepare statement: member "id" of type "Address" appears more than once in output expressions`,
+		err:         `cannot prepare statement: tag "id" of struct "Address" appears more than once in output expressions`,
 	}, {
 		query:       "SELECT (p.*, t.name) AS (&Address.*) FROM t",
 		typeSamples: []any{Address{}},
@@ -468,7 +468,7 @@ func (s *ExprSuite) TestBindTypesErrors(c *C) {
 	}, {
 		query:       "SELECT (&Person.*, &Person.*) FROM t",
 		typeSamples: []any{Address{}, Person{}},
-		err:         `cannot prepare statement: member "address_id" of type "Person" appears more than once in output expressions`,
+		err:         `cannot prepare statement: tag "address_id" of struct "Person" appears more than once in output expressions`,
 	}, {
 		query:       "SELECT (p.*, t.*) AS (&Address.*) FROM t",
 		typeSamples: []any{Address{}},
@@ -570,17 +570,17 @@ func (s *ExprSuite) TestMapError(c *C) {
 		"all output into map star",
 		"SELECT &M.* FROM person WHERE name = 'Fred'",
 		[]any{sqlair.M{}},
-		"cannot prepare statement: output expression: columns must be specified for map with star: &M.*",
+		"cannot prepare statement: output expression: columns must be specified for non-struct type: &M.*",
 	}, {
 		"all output into map star from table star",
 		"SELECT p.* AS &M.* FROM person WHERE name = 'Fred'",
 		[]any{sqlair.M{}},
-		"cannot prepare statement: output expression: columns must be specified for map with star: p.* AS &M.*",
+		"cannot prepare statement: output expression: columns must be specified for non-struct type: p.* AS &M.*",
 	}, {
 		"all output into map star from lone star",
 		"SELECT * AS &CustomMap.* FROM person WHERE name = 'Fred'",
 		[]any{CustomMap{}},
-		"cannot prepare statement: output expression: columns must be specified for map with star: * AS &CustomMap.*",
+		"cannot prepare statement: output expression: columns must be specified for non-struct type: * AS &CustomMap.*",
 	}, {
 		"invalid map",
 		"SELECT * AS &InvalidMap.* FROM person WHERE name = 'Fred'",

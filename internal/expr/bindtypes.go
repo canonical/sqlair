@@ -3,10 +3,7 @@ package expr
 import (
 	"bytes"
 	"fmt"
-	"reflect"
-	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/canonical/sqlair/internal/typeinfo"
 )
@@ -32,8 +29,6 @@ func (pe *ParsedExpr) String() string {
 	return out.String()
 }
 
-type typeNameToInfo map[string]typeinfo.Info
-
 // BindTypes takes samples of all types mentioned in the SQLair expressions of
 // the query. The expressions are checked for validity and required information
 // is generated from the types.
@@ -44,35 +39,9 @@ func (pe *ParsedExpr) BindTypes(args ...any) (te *TypedExpr, err error) {
 		}
 	}()
 
-	var ti = make(typeNameToInfo)
-
-	// Generate and save reflection info.
-	for _, arg := range args {
-		if arg == nil {
-			return nil, fmt.Errorf("need struct or map, got nil")
-		}
-		t := reflect.TypeOf(arg)
-		switch t.Kind() {
-		case reflect.Struct, reflect.Map:
-			if t.Name() == "" {
-				return nil, fmt.Errorf("cannot use anonymous %s", t.Kind())
-			}
-			info, err := typeinfo.GetTypeInfo(arg)
-			if err != nil {
-				return nil, err
-			}
-			if dupeInfo, ok := ti[t.Name()]; ok {
-				if dupeInfo.Typ() == t {
-					return nil, fmt.Errorf("found multiple instances of type %q", t.Name())
-				}
-				return nil, fmt.Errorf("two types found with name %q: %q and %q", t.Name(), dupeInfo.Typ().String(), t.String())
-			}
-			ti[t.Name()] = info
-		case reflect.Pointer:
-			return nil, fmt.Errorf("need struct or map, got pointer to %s", t.Elem().Kind())
-		default:
-			return nil, fmt.Errorf("need struct or map, got %s", t.Kind())
-		}
+	argInfo, err := typeinfo.GenerateArgInfo(args)
+	if err != nil {
+		return nil, err
 	}
 
 	var sql bytes.Buffer
@@ -80,16 +49,16 @@ func (pe *ParsedExpr) BindTypes(args ...any) (te *TypedExpr, err error) {
 	var inCount int
 	var outCount int
 
-	var outputs = make([]typeinfo.Member, 0)
-	var inputs = make([]typeinfo.Member, 0)
+	var outputs = make([]typeinfo.Output, 0)
+	var inputs = make([]typeinfo.Input, 0)
 
-	var typeMemberPresent = make(map[typeinfo.Member]bool)
+	var outputUsed = make(map[typeinfo.Output]bool)
 
 	// Check and expand each query expr.
 	for _, expr := range pe.exprs {
 		switch e := expr.(type) {
 		case *inputExpr:
-			inLoc, err := bindInputTypes(ti, e)
+			inLoc, err := bindInputTypes(argInfo, e)
 			if err != nil {
 				return nil, err
 			}
@@ -97,16 +66,16 @@ func (pe *ParsedExpr) BindTypes(args ...any) (te *TypedExpr, err error) {
 			inCount++
 			inputs = append(inputs, inLoc)
 		case *outputExpr:
-			outCols, typeMembers, err := bindOutputTypes(ti, e)
+			outCols, os, err := bindOutputTypes(argInfo, e)
 			if err != nil {
 				return nil, err
 			}
 
-			for _, tm := range typeMembers {
-				if ok := typeMemberPresent[tm]; ok {
-					return nil, fmt.Errorf("member %q of type %q appears more than once in output expressions", tm.MemberName(), tm.OuterType().Name())
+			for _, o := range os {
+				if ok := outputUsed[o]; ok {
+					return nil, fmt.Errorf("%s appears more than once in output expressions", o.String())
 				}
-				typeMemberPresent[tm] = true
+				outputUsed[o] = true
 			}
 
 			for i, c := range outCols {
@@ -118,7 +87,7 @@ func (pe *ParsedExpr) BindTypes(args ...any) (te *TypedExpr, err error) {
 				}
 				outCount++
 			}
-			outputs = append(outputs, typeMembers...)
+			outputs = append(outputs, os...)
 		case *bypass:
 			sql.WriteString(e.chunk)
 		default:
@@ -131,29 +100,24 @@ func (pe *ParsedExpr) BindTypes(args ...any) (te *TypedExpr, err error) {
 
 // bindInputTypes binds the input expression to a type and returns the
 // typeMember represented by the expression.
-func bindInputTypes(ti typeNameToInfo, e *inputExpr) (tm typeinfo.Member, err error) {
+func bindInputTypes(argInfo typeinfo.ArgInfo, e *inputExpr) (input typeinfo.Input, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("input expression: %s: %s", err, e.raw)
 		}
 	}()
 
-	info, ok := ti[e.sourceType.typeName]
-	if !ok {
-		return nil, typeMissingError(e.sourceType.typeName, getKeys(ti))
-	}
-
-	tm, err = info.TypeMember(e.sourceType.memberName)
+	input, err = argInfo.InputMember(e.sourceType.typeName, e.sourceType.memberName)
 	if err != nil {
 		return nil, err
 	}
-	return tm, nil
+	return input, nil
 }
 
 // bindOutputTypes binds the output expression to concrete types. It then checks
 // the expression is formatted correctly and generates the columns for the query
 // and the typeMembers the columns correspond to.
-func bindOutputTypes(ti typeNameToInfo, e *outputExpr) (outCols []columnAccessor, typeMembers []typeinfo.Member, err error) {
+func bindOutputTypes(argInfo typeinfo.ArgInfo, e *outputExpr) (outCols []columnAccessor, outputs []typeinfo.Output, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("output expression: %s: %s", err, e.raw)
@@ -174,50 +138,42 @@ func bindOutputTypes(ti typeNameToInfo, e *outputExpr) (outCols []columnAccessor
 		}
 
 		for _, t := range e.targetTypes {
-			info, ok := ti[t.typeName]
-			if !ok {
-				return nil, nil, typeMissingError(t.typeName, getKeys(ti))
-			}
 			if t.memberName == "*" {
 				// Generate asterisk columns.
-				allMembers, err := info.GetAllMembers()
+				members, memberNames, err := argInfo.AllStructOutputs(t.typeName)
 				if err != nil {
 					return nil, nil, err
 				}
-				typeMembers = append(typeMembers, allMembers...)
-				for _, tm := range allMembers {
-					outCols = append(outCols, columnAccessor{pref, tm.MemberName()})
+				outputs = append(outputs, members...)
+				for _, memberName := range memberNames {
+					outCols = append(outCols, columnAccessor{pref, memberName})
 				}
 			} else {
 				// Generate explicit columns.
-				tm, err := info.TypeMember(t.memberName)
+				member, err := argInfo.OutputMember(t.typeName, t.memberName)
 				if err != nil {
 					return nil, nil, err
 				}
-				typeMembers = append(typeMembers, tm)
+				outputs = append(outputs, member)
 				outCols = append(outCols, columnAccessor{pref, t.memberName})
 			}
 		}
-		return outCols, typeMembers, nil
+		return outCols, outputs, nil
 	} else if numColumns > 1 && starColumns > 0 {
 		return nil, nil, fmt.Errorf("invalid asterisk in columns")
 	}
 
 	// Case 2: Explicit columns, single asterisk type e.g. "(col1, t.col2) AS &P.*".
 	if starTypes == 1 && numTypes == 1 {
-		info, ok := ti[e.targetTypes[0].typeName]
-		if !ok {
-			return nil, nil, typeMissingError(e.targetTypes[0].typeName, getKeys(ti))
-		}
 		for _, c := range e.sourceColumns {
-			tm, err := info.TypeMember(c.columnName)
+			ml, err := argInfo.OutputMember(e.targetTypes[0].typeName, c.columnName)
 			if err != nil {
 				return nil, nil, err
 			}
-			typeMembers = append(typeMembers, tm)
+			outputs = append(outputs, ml)
 			outCols = append(outCols, c)
 		}
-		return outCols, typeMembers, nil
+		return outCols, outputs, nil
 	} else if starTypes > 0 && numTypes > 1 {
 		return nil, nil, fmt.Errorf("invalid asterisk in types")
 	}
@@ -226,34 +182,18 @@ func bindOutputTypes(ti typeNameToInfo, e *outputExpr) (outCols []columnAccessor
 	if numColumns == numTypes {
 		for i, c := range e.sourceColumns {
 			t := e.targetTypes[i]
-			info, ok := ti[t.typeName]
-			if !ok {
-				return nil, nil, typeMissingError(t.typeName, getKeys(ti))
-			}
-			tm, err := info.TypeMember(t.memberName)
+			ml, err := argInfo.OutputMember(t.typeName, t.memberName)
 			if err != nil {
 				return nil, nil, err
 			}
-			typeMembers = append(typeMembers, tm)
+			outputs = append(outputs, ml)
 			outCols = append(outCols, c)
 		}
 	} else {
 		return nil, nil, fmt.Errorf("mismatched number of columns and target types")
 	}
 
-	return outCols, typeMembers, nil
-}
-
-// getKeys returns the keys of a string map in a deterministic order.
-func getKeys[T any](m map[string]T) []string {
-	i := 0
-	keys := make([]string, len(m))
-	for k := range m {
-		keys[i] = k
-		i++
-	}
-	sort.Strings(keys)
-	return keys
+	return outCols, outputs, nil
 }
 
 // starCountColumns counts the number of asterisks in a list of columns.
@@ -276,12 +216,4 @@ func starCountTypes(vs []valueAccessor) int {
 		}
 	}
 	return s
-}
-
-func typeMissingError(missingType string, existingTypes []string) error {
-	if len(existingTypes) == 0 {
-		return fmt.Errorf(`parameter with type %q missing`, missingType)
-	}
-	// "%s" is used instead of %q to correctly print double quotes within the joined string.
-	return fmt.Errorf(`parameter with type %q missing (have "%s")`, missingType, strings.Join(existingTypes, `", "`))
 }

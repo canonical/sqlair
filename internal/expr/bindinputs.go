@@ -13,8 +13,8 @@ import (
 // TypedExpr represents a SQLair query bound to concrete Go types. It contains
 // all the type information needed by SQLair.
 type TypedExpr struct {
-	outputs []typeinfo.Member
-	inputs  []typeinfo.Member
+	outputs []typeinfo.Output
+	inputs  []typeinfo.Input
 	sql     string
 }
 
@@ -32,13 +32,12 @@ func (te *TypedExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 		}
 	}()
 
-	var inQuery = make(map[reflect.Type]bool)
-	for _, typeMember := range te.inputs {
-		inQuery[typeMember.OuterType()] = true
+	inQuery := map[reflect.Type]bool{}
+	for _, input := range te.inputs {
+		inQuery[input.ArgType()] = true
 	}
 
-	var typeValue = make(map[reflect.Type]reflect.Value)
-	var typeNames []string
+	typeToValue := map[reflect.Type]reflect.Value{}
 	for _, arg := range args {
 		v := reflect.ValueOf(arg)
 		if v.Kind() == reflect.Invalid || (v.Kind() == reflect.Pointer && v.IsNil()) {
@@ -49,16 +48,15 @@ func (te *TypedExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 		if v.Kind() != reflect.Struct && v.Kind() != reflect.Map {
 			return nil, fmt.Errorf("need struct or map, got %s", t.Kind())
 		}
-		if _, ok := typeValue[t]; ok {
+		if _, ok := typeToValue[t]; ok {
 			return nil, fmt.Errorf("type %q provided more than once", t.Name())
 		}
-		typeValue[t] = v
-		typeNames = append(typeNames, t.Name())
+		typeToValue[t] = v
 		if !inQuery[t] {
 			// Check if we have a type with the same name from a different package.
-			for _, typeMember := range te.inputs {
-				if t.Name() == typeMember.OuterType().Name() {
-					return nil, fmt.Errorf("parameter with type %q missing, have type with same name: %q", typeMember.OuterType().String(), t.String())
+			for _, input := range te.inputs {
+				if t.Name() == input.ArgType().Name() {
+					return nil, fmt.Errorf("parameter with type %q missing, have type with same name: %q", input.ArgType().String(), t.String())
 				}
 			}
 			return nil, fmt.Errorf("%s not referenced in query", t.Name())
@@ -67,19 +65,16 @@ func (te *TypedExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 
 	// Query parameters.
 	var params []any
-	for i, typeMember := range te.inputs {
-		outerType := typeMember.OuterType()
-		v, ok := typeValue[outerType]
-		if !ok {
-			return nil, typeMissingError(outerType.Name(), typeNames)
-		}
-
-		val, err := typeMember.ValueFromOuter(v)
+	inputCount := 0
+	for _, input := range te.inputs {
+		vals, err := input.LocateParams(typeToValue)
 		if err != nil {
 			return nil, err
 		}
-
-		params = append(params, sql.Named("sqlair_"+strconv.Itoa(i), val.Interface()))
+		for _, val := range vals {
+			params = append(params, sql.Named("sqlair_"+strconv.Itoa(inputCount), val.Interface()))
+			inputCount++
+		}
 	}
 	return &PrimedQuery{outputs: te.outputs, sql: te.sql, params: params}, nil
 }
