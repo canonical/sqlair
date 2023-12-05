@@ -51,9 +51,11 @@ func (pe *ParsedExpr) BindTypes(args ...any) (te *TypeBoundExpr, err error) {
 		}
 
 		if toe, ok := te.(*typedOutputExpr); ok {
-			err = trackUsedOutputs(outputUsed, toe)
-			if err != nil {
-				return nil, err
+			for _, oc := range toe.outputColumns {
+				if ok := outputUsed[oc.output]; ok {
+					return nil, fmt.Errorf("%s appears more than once in output expressions", oc.output.String())
+				}
+				outputUsed[oc.output] = true
 			}
 		}
 
@@ -62,19 +64,6 @@ func (pe *ParsedExpr) BindTypes(args ...any) (te *TypeBoundExpr, err error) {
 
 	typedExpr := TypeBoundExpr(typedExprs)
 	return &typedExpr, nil
-}
-
-// trackUsedOutputs tracks the outputs used already and returns an error if an
-// output has been used twice. It updates outputUsed with the outputs from the
-// typedOutputExpr.
-func trackUsedOutputs(outputUsed map[typeinfo.Output]bool, toe *typedOutputExpr) error {
-	for _, oc := range toe.outputColumns {
-		if ok := outputUsed[oc.output]; ok {
-			return fmt.Errorf("%s appears more than once in output expressions", oc.output.String())
-		}
-		outputUsed[oc.output] = true
-	}
-	return nil
 }
 
 // expression represents a parsed node of the SQLair query's AST.
