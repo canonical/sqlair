@@ -11,7 +11,7 @@ import (
 	"github.com/canonical/sqlair/internal/typeinfo"
 )
 
-// TypeBoundExpr represents a SQLair query bound to concrete Go types. It
+// TypeBoundExpr represents a SQLair statement bound to concrete Go types. It
 // contains information used to generate the underlying SQL query and map it to
 // the SQLair query.
 type TypeBoundExpr []typedExpression
@@ -45,7 +45,7 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 	// Generate SQL and query parameters.
 	params := []any{}
 	outputs := []typeinfo.Output{}
-	// argTypeUsed records the types of the input arguments used in the query.
+	// argTypeUsed is used to check that all the query parameters are referenced in the query.
 	argTypeUsed := map[reflect.Type]bool{}
 	inputCount := 0
 	outputCount := 0
