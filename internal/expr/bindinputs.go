@@ -95,7 +95,7 @@ type typedExpression interface {
 }
 
 // outputColumn stores the name of a column to fetch from the database and the
-// type location to scan the result into.
+// output type location specifying the value to scan the result into.
 type outputColumn struct {
 	output typeinfo.Output
 	column string
