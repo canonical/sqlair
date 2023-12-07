@@ -29,7 +29,7 @@ var stmtCache = newStatementCache()
 // Statement represents a SQL statement with valid SQLair expressions.
 // It is ready to be run on a SQLair DB.
 type Statement struct {
-	cacheID stmtID
+	cacheID uint64
 	// te is the type bound SQLair query. It contains information used to
 	// generate query values from the input arguments when the Statement is run
 	// on a database.
@@ -65,7 +65,7 @@ func MustPrepare(query string, typeSamples ...any) *Statement {
 }
 
 type DB struct {
-	cacheID dbID
+	cacheID uint64
 	sqldb   *sql.DB
 }
 
