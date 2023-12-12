@@ -1,7 +1,6 @@
 package sqlair
 
 import (
-	"context"
 	"database/sql"
 	"runtime"
 	"sync"
@@ -80,44 +79,32 @@ func (sc *statementCache) newDB(sqldb *sql.DB) *DB {
 	return db
 }
 
-// prepareSubstrate is an object that queries can be prepared on, e.g. a sql.DB
-// or sql.Conn. It is used in prepareStmt.
-type prepareSubstrate interface {
-	PrepareContext(context.Context, string) (*sql.Stmt, error)
-}
-
-// prepareStmt prepares a Statement on a prepareSubstrate. It first checks in
-// the cache to see if it has already been prepared on the DB.
-// The prepareSubstrate must be associated with the same DB that prepareStmt is
-// a method of.
-func (sc *statementCache) prepareStmt(ctx context.Context, dbID uint64, ps prepareSubstrate, s *Statement) (*sql.Stmt, error) {
-	var err error
-	sc.mutex.RLock()
+// lookupStmt checks if a *sql.Stmt corresponding to s has been prepared on db
+// and stored in the cache.
+func (sc *statementCache) lookupStmt(db *DB, s *Statement) (*sql.Stmt, bool) {
 	// The Statement cache ID is only removed from stmtDBCache when the
 	// finalizer is run. The Statements cache ID must be in the stmtDBCache
 	// since we hold a reference to the Statement. It is therefore safe to
 	// access in it in the map without first checking it exists.
-	sqlstmt, ok := sc.stmtDBCache[s.cacheID][dbID]
+	sc.mutex.RLock()
+	sqlstmt, ok := sc.stmtDBCache[s.cacheID][db.cacheID]
 	sc.mutex.RUnlock()
-	if !ok {
-		sqlstmt, err = ps.PrepareContext(ctx, s.te.SQL())
-		if err != nil {
-			return nil, err
-		}
-		sc.mutex.Lock()
-		// Check if a statement has been inserted by someone else since we last
-		// checked.
-		sqlstmtAlt, ok := sc.stmtDBCache[s.cacheID][dbID]
-		if ok {
-			sqlstmt.Close()
-			sqlstmt = sqlstmtAlt
-		} else {
-			sc.stmtDBCache[s.cacheID][dbID] = sqlstmt
-			sc.dbStmtCache[dbID][s.cacheID] = true
-		}
-		sc.mutex.Unlock()
+	return sqlstmt, ok
+}
+
+// storeStmt stores a prepared *sql.Stmt in the cache.
+func (sc *statementCache) storeStmt(db *DB, s *Statement, sqlstmt *sql.Stmt) {
+	sc.mutex.Lock()
+	// Check if sqlstmt has been inserted by another process else already.
+	sqlstmtAlt, ok := sc.stmtDBCache[s.cacheID][db.cacheID]
+	if ok {
+		sqlstmt.Close()
+		sqlstmt = sqlstmtAlt
+	} else {
+		sc.stmtDBCache[s.cacheID][db.cacheID] = sqlstmt
+		sc.dbStmtCache[db.cacheID][s.cacheID] = true
 	}
-	return sqlstmt, nil
+	sc.mutex.Unlock()
 }
 
 // removeAndCloseStmtFunc returns a function that removes and closes all

@@ -109,9 +109,14 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		ctx = context.Background()
 	}
 
-	sqlstmt, err := stmtCache.prepareStmt(ctx, db.cacheID, db.sqldb, s)
-	if err != nil {
-		return &Query{ctx: ctx, err: err}
+	sqlstmt, ok := stmtCache.lookupStmt(db, s)
+	var err error
+	if !ok {
+		sqlstmt, err = db.sqldb.PrepareContext(ctx, s.te.SQL())
+		if err != nil {
+			return &Query{ctx: ctx, err: err}
+		}
+		stmtCache.storeStmt(db, s, sqlstmt)
 	}
 
 	pq, err := s.te.BindInputs(inputArgs...)
@@ -467,9 +472,14 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: ErrTXDone}
 	}
 
-	sqlstmt, err := stmtCache.prepareStmt(ctx, tx.db.cacheID, tx.sqlconn, s)
-	if err != nil {
-		return &Query{ctx: ctx, err: err}
+	sqlstmt, ok := stmtCache.lookupStmt(tx.db, s)
+	var err error
+	if !ok {
+		sqlstmt, err = tx.sqlconn.PrepareContext(ctx, s.te.SQL())
+		if err != nil {
+			return &Query{ctx: ctx, err: err}
+		}
+		stmtCache.storeStmt(tx.db, s, sqlstmt)
 	}
 
 	pq, err := s.te.BindInputs(inputArgs...)
