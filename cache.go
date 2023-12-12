@@ -30,7 +30,8 @@ type statementCache struct {
 	// dbStmtCache indicates when a sqlair.Statement has been prepared on a particular sqlair.DB.
 	dbStmtCache map[uint64]map[uint64]bool
 
-	// stmtIDCount and dbIDCount used to generate unique cache IDs.
+	// stmtIDCount and dbIDCount are monotonically increasing counters used to
+	// generate unique new cache IDs.
 	stmtIDCount uint64
 	dbIDCount   uint64
 
@@ -93,8 +94,9 @@ func (sc *statementCache) prepareStmt(ctx context.Context, dbID uint64, ps prepa
 	var err error
 	sc.mutex.RLock()
 	// The Statement cache ID is only removed from stmtDBCache when the
-	// finalizer is run. The cache ID must be present as we have a reference to
-	// the Statement.
+	// finalizer is run. The Statements cache ID must be in the stmtDBCache
+	// since we hold a reference to the Statement. It is therefore safe to
+	// access in it in the map without first checking it exists.
 	sqlstmt, ok := sc.stmtDBCache[s.cacheID][dbID]
 	sc.mutex.RUnlock()
 	if !ok {
