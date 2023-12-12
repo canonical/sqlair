@@ -62,7 +62,7 @@ func (sc *statementCache) newStatement(te *expr.TypedExpr) *Statement {
 	sc.mutex.Unlock()
 	s := &Statement{te: te, cacheID: cacheID}
 	// This finalizer is run after the Statement is garbage collected.
-	runtime.SetFinalizer(s, sc.getStmtFinalizer(s))
+	runtime.SetFinalizer(s, sc.removeAndCloseStmtFunc(s))
 	return s
 }
 
@@ -76,7 +76,7 @@ func (sc *statementCache) newDB(sqldb *sql.DB) *DB {
 	sc.mutex.Unlock()
 	db := &DB{sqldb: sqldb, cacheID: cacheID}
 	// This finalizer is run after the DB is garbage collected.
-	runtime.SetFinalizer(db, sc.getDBFinalizer(db))
+	runtime.SetFinalizer(db, sc.removeAndCloseDBFunc(db))
 	return db
 }
 
@@ -120,9 +120,10 @@ func (sc *statementCache) prepareStmt(ctx context.Context, dbID uint64, ps prepa
 	return sqlstmt, nil
 }
 
-// getStmtFinalizer returns a finalizer that removes a Statement from the
-// statement caches and closes it.
-func (sc *statementCache) getStmtFinalizer(s *Statement) func(*Statement) {
+// removeAndCloseStmtFunc returns a function that removes and closes all
+// sql.Stmt objects associated with the argument Statement from the statement
+// caches of each DB.
+func (sc *statementCache) removeAndCloseStmtFunc(s *Statement) func(*Statement) {
 	return func(s *Statement) {
 		sc.mutex.Lock()
 		defer sc.mutex.Unlock()
@@ -135,10 +136,10 @@ func (sc *statementCache) getStmtFinalizer(s *Statement) func(*Statement) {
 	}
 }
 
-// getDBFinalizer returns a finalizer that closes and removes from the cache
+// removeAndCloseDBFunc returns a function that closes and removes from the cache
 // all sql.Stmt objects prepared on the database, removes the database from then
 // cache, then closes the sql.DB.
-func (sc *statementCache) getDBFinalizer(db *DB) func(*DB) {
+func (sc *statementCache) removeAndCloseDBFunc(db *DB) func(*DB) {
 	return func(db *DB) {
 		sc.mutex.Lock()
 		defer sc.mutex.Unlock()
