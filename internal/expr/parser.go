@@ -72,6 +72,7 @@ func (p *Parser) Parse(input string) (pe *ParsedExpr, err error) {
 // by index, by key, or by slice syntax.
 type valueAccessor interface {
 	fmt.Stringer
+	valueAccessorMarker()
 }
 
 // memberAcessor stores information for accessing a keyed Go value. It consists
@@ -85,6 +86,8 @@ func (ma memberAcessor) String() string {
 	return ma.typeName + "." + ma.memberName
 }
 
+func (_ memberAcessor) valueAccessorMarker() {}
+
 // columnAccessor stores a SQL column name and optionally its table name.
 type columnAccessor struct {
 	tableName, columnName string
@@ -97,6 +100,8 @@ func (ca columnAccessor) String() string {
 	return ca.tableName + "." + ca.columnName
 }
 
+func (_ columnAccessor) valueAccessorMarker() {}
+
 // sliceRangeAccessor stores information for accessing a slice using the
 // expression "typeName[:]".
 type sliceRangeAccessor struct {
@@ -106,6 +111,8 @@ type sliceRangeAccessor struct {
 func (st sliceRangeAccessor) String() string {
 	return fmt.Sprintf("%s[:]", st.typeName)
 }
+
+func (_ sliceRangeAccessor) valueAccessorMarker() {}
 
 // init resets the state of the parser and sets the input string.
 func (p *Parser) init(input string) {
