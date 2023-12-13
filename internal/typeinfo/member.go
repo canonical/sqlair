@@ -61,7 +61,7 @@ func (mk *mapKey) ArgType() reflect.Type {
 func (mk *mapKey) LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]reflect.Value, error) {
 	m, ok := typeToValue[mk.mapType]
 	if !ok {
-		return nil, typeNotFoundError(typeToValue, mk.mapType.Name())
+		return nil, valueNotFoundError(typeToValue, mk.mapType)
 	}
 	v := m.MapIndex(reflect.ValueOf(mk.name))
 	if v.Kind() == reflect.Invalid {
@@ -83,7 +83,7 @@ func (mk *mapKey) String() string {
 func (mk *mapKey) LocateScanTarget(typeToValue map[reflect.Type]reflect.Value) (any, *ScanProxy, error) {
 	m, ok := typeToValue[mk.mapType]
 	if !ok {
-		return nil, nil, typeNotFoundError(typeToValue, mk.mapType.Name())
+		return nil, nil, valueNotFoundError(typeToValue, mk.mapType)
 	}
 	scanVal := reflect.New(mk.mapType.Elem()).Elem()
 	return scanVal.Addr().Interface(), &ScanProxy{original: m, scan: scanVal, key: reflect.ValueOf(mk.name)}, nil
@@ -120,7 +120,7 @@ func (f *structField) ArgType() reflect.Type {
 func (f *structField) LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]reflect.Value, error) {
 	s, ok := typeToValue[f.structType]
 	if !ok {
-		return nil, typeNotFoundError(typeToValue, f.structType.Name())
+		return nil, valueNotFoundError(typeToValue, f.structType)
 	}
 	return []reflect.Value{s.Field(f.index)}, nil
 }
@@ -138,7 +138,7 @@ func (f *structField) String() string {
 func (f *structField) LocateScanTarget(typeToValue map[reflect.Type]reflect.Value) (any, *ScanProxy, error) {
 	s, ok := typeToValue[f.structType]
 	if !ok {
-		return nil, nil, typeNotFoundError(typeToValue, f.structType.Name())
+		return nil, nil, valueNotFoundError(typeToValue, f.structType)
 	}
 	val := s.Field(f.index)
 	if !val.CanSet() {
@@ -163,14 +163,17 @@ func locateValue(typeToValue map[reflect.Type]reflect.Value, typ reflect.Type) (
 	return v, nil
 }
 
-// typeNotFoundError generates the arguments present and returns a typeMissingError
-func typeNotFoundError(typeToValue map[reflect.Type]reflect.Value, missingTypeName string) error {
+// valueNotFoundError generates the arguments present and returns a typeMissingError
+func valueNotFoundError(typeToValue map[reflect.Type]reflect.Value, missingType reflect.Type) error {
 	// Get the argument names from typeToValue map.
 	argNames := []string{}
 	for argType := range typeToValue {
+		if argType.Name() == missingType.Name() {
+			return fmt.Errorf("parameter with type %q missing, have type with same name: %q", missingType.String(), argType.String())
+		}
 		argNames = append(argNames, argType.Name())
 	}
 	// Sort for consistant error messages.
 	sort.Strings(argNames)
-	return typeMissingError(missingTypeName, argNames)
+	return typeMissingError(missingType.Name(), argNames)
 }

@@ -109,6 +109,19 @@ func (s *typeInfoSuite) TestLocateScanTargetError(c *C) {
 	// Check missing type error.
 	_, _, err = output.LocateScanTarget(map[reflect.Type]reflect.Value{})
 	c.Assert(err, ErrorMatches, `parameter with type "M" missing`)
+
+	// Check missing type with same name error.
+	//
+	// This error is designed to catch types from different packages with the
+	// same name. Since this requires creating a package just for the test we
+	// instead test it with a shadowed type which still hits this error
+	// message.
+	{
+		type M map[string]any
+		typeToValue := map[reflect.Type]reflect.Value{reflect.TypeOf(M{}): reflect.ValueOf(M{})}
+		_, _, err = output.LocateScanTarget(typeToValue)
+		c.Assert(err, ErrorMatches, `parameter with type "typeinfo.M" missing, have type with same name: "typeinfo.M"`)
+	}
 }
 
 func (s *typeInfoSuite) TestLocateParamsMap(c *C) {

@@ -29,6 +29,11 @@ func (pq *PrimedQuery) HasOutputs() bool {
 	return len(pq.outputs) > 0
 }
 
+// SQL returns the SQL string to send to the database.
+func (pq *PrimedQuery) SQL() string {
+	return pq.sql
+}
+
 // ScanArgs produces a list of pointers to be passed to rows.Scan. After a
 // successful call, the onSuccess function must be invoked. The outputArgs will
 // be populated with the query results. All the structs/maps/slices mentioned in
