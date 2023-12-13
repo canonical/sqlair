@@ -56,8 +56,8 @@ var tests = []struct {
 	typeSamples:    []any{Person{}},
 	expectedSQL:    "SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2",
 }, {
-	summary: "spaces and tabs",
-	query: "SELECT p.* 	AS 		   &Person.*",
+	summary:        "spaces and tabs",
+	query:          "SELECT p.* 	AS 		   &Person.*",
 	expectedParsed: "[Bypass[SELECT ] Output[[p.*] [Person.*]]]",
 	typeSamples:    []any{Person{}},
 	expectedSQL:    "SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2",
@@ -378,7 +378,10 @@ comment */ WHERE x = $Address.&d`,
 		err:   `cannot parse expression: column 38: invalid identifier suffix following "Address"`,
 	}, {
 		query: "SELECT foo FROM t WHERE x = $Address",
-		err:   `cannot parse expression: column 29: unqualified type, expected Address.* or Address.<db tag>`,
+		err:   `cannot parse expression: column 29: unqualified type, expected Address.* or Address.<db tag> or Address[:]`,
+	}, {
+		query: "SELECT foo FROM t WHERE x = $Address [:]",
+		err:   `cannot parse expression: column 29: unqualified type, expected Address.* or Address.<db tag> or Address[:]`,
 	}, {
 		query: "SELECT name AS (&Person.*)",
 		err:   `cannot parse expression: column 16: unexpected parentheses around types after "AS"`,
