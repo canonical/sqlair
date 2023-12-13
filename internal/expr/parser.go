@@ -2,7 +2,6 @@ package expr
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 )
 
@@ -113,11 +112,9 @@ func (ca columnAccessor) String() string {
 }
 
 // sliceRangeAccessor stores information for accessing a slice using the
-// expression "typeName[low:high]".
+// expression "typeName[:]".
 type sliceRangeAccessor struct {
 	typeName string
-	// Using pointers to represent that the both low and high are optional.
-	low, high *uint64
 }
 
 func (st sliceRangeAccessor) getTypeName() string {
@@ -125,30 +122,7 @@ func (st sliceRangeAccessor) getTypeName() string {
 }
 
 func (st sliceRangeAccessor) String() string {
-	strLow := ""
-	if st.low != nil {
-		strLow = strconv.FormatUint(*st.low, 10)
-	}
-	strHigh := ""
-	if st.high != nil {
-		strHigh = strconv.FormatUint(*st.high, 10)
-	}
-	return fmt.Sprintf("%s[%s:%s]", st.typeName, strLow, strHigh)
-}
-
-// sliceIndexAccessor stores information for accessing an item of a slice using
-// the expression "typeName[index]".
-type sliceIndexAccessor struct {
-	typeName string
-	index    uint64
-}
-
-func (st sliceIndexAccessor) getTypeName() string {
-	return st.typeName
-}
-
-func (st sliceIndexAccessor) String() string {
-	return fmt.Sprintf("%s[%d]", st.typeName, st.index)
+	return fmt.Sprintf("%s[:]", st.typeName)
 }
 
 // inputExpr represents a named parameter that will be sent to the database
@@ -449,16 +423,6 @@ func (p *Parser) skipString(s string) bool {
 	return false
 }
 
-// skipUNumber consumes one or more consecutive digits.
-func (p *Parser) skipUNumber() bool {
-	found := false
-	for p.pos < len(p.input) && '0' <= p.input[p.pos] && p.input[p.pos] <= '9' {
-		found = true
-		p.advanceByte()
-	}
-	return found
-}
-
 // isNameByte returns true if the given byte can be part of a name. It returns
 // false otherwise.
 func isNameByte(c byte) bool {
@@ -548,10 +512,10 @@ func (p *Parser) parseTargetType() (memberAcessor, bool, error) {
 	if p.skipByte('&') {
 		// Using a slice as an output is an error, we add the case here to
 		// improve the error message.
-		if st, ok, err := p.parseSliceAccessor(); err != nil {
-			return memberAcessor{}, false, err
-		} else if ok {
+		if st, ok, err := p.parseSliceAccessor(); ok {
 			return memberAcessor{}, false, errorAt(fmt.Errorf("cannot use slice syntax %q in output expression", st), startLine, startCol, p.input)
+		} else if err != nil {
+			return memberAcessor{}, false, errorAt(fmt.Errorf("cannot use slice syntax in output expression"), startLine, startCol, p.input)
 		}
 		return p.parseTypeName()
 	}
@@ -559,64 +523,27 @@ func (p *Parser) parseTargetType() (memberAcessor, bool, error) {
 	return memberAcessor{}, false, nil
 }
 
-// parseUNumber parses a non-negative number composed of one or more digits.
-func (p *Parser) parseUNumber() (uint64, bool) {
-	mark := p.pos
-	if !p.skipUNumber() {
-		return 0, false
-	}
-	// We ignore the error because skipUNumber already validated that the input
-	// has the correct format.
-	n, _ := strconv.ParseUint(p.input[mark:p.pos], 10, 64)
-	return n, true
-}
-
-// parseSliceAccessor parses a slice range composed of two indexes of the form
-// "[low:high]" and returns a sliceRangeAccessor, or it parses a single index
-// of the form "[index]" and returns a sliceIndexAccessor.
-func (p *Parser) parseSliceAccessor() (va valueAccessor, ok bool, err error) {
+// parseSliceAccessor parses a slice range composed of the form "[:]".
+func (p *Parser) parseSliceAccessor() (va sliceRangeAccessor, ok bool, err error) {
 	cp := p.save()
 
 	id, ok := p.parseIdentifier()
 	if !ok {
-		return nil, false, nil
+		return sliceRangeAccessor{}, false, nil
 	}
 	if !p.skipByte('[') {
 		cp.restore()
-		return nil, false, nil
-	}
-	p.skipBlanks()
-	low, ok := p.parseUNumber()
-	lowP := &low
-	if !ok {
-		lowP = nil
+		return sliceRangeAccessor{}, false, nil
 	}
 	p.skipBlanks()
 	if !p.skipByte(':') {
-		if lowP == nil {
-			return nil, false, errorAt(fmt.Errorf("invalid slice: expected index or colon"), p.lineNum, p.colNum(), p.input)
-		}
-		if p.skipByte(']') {
-			return sliceIndexAccessor{typeName: id, index: *lowP}, true, nil
-		}
-		return nil, false, errorAt(fmt.Errorf("invalid slice: expected ] or colon"), p.lineNum, p.colNum(), p.input)
-	}
-	p.skipBlanks()
-	high, ok := p.parseUNumber()
-	highP := &high
-	if !ok {
-		highP = nil
+		return sliceRangeAccessor{}, false, errorAt(fmt.Errorf("invalid slice: expected ':'"), p.lineNum, p.colNum(), p.input)
 	}
 	p.skipBlanks()
 	if !p.skipByte(']') {
-		return nil, false, errorAt(fmt.Errorf("invalid slice: expected ]"), p.lineNum, p.colNum(), p.input)
+		return sliceRangeAccessor{}, false, errorAt(fmt.Errorf("invalid slice: expected ']'"), p.lineNum, p.colNum(), p.input)
 	}
-	if highP != nil && lowP != nil {
-		if *lowP >= *highP {
-			return nil, false, errorAt(fmt.Errorf("invalid slice: invalid indexes: %d <= %d", *highP, *lowP), cp.lineNum, cp.colNum(), p.input)
-		}
-	}
-	return sliceRangeAccessor{typeName: id, low: lowP, high: highP}, true, nil
+	return sliceRangeAccessor{typeName: id}, true, nil
 }
 
 // parseTypeName parses a Go type name qualified by a tag name (or asterisk)
@@ -769,7 +696,7 @@ func (p *Parser) parseInputExpr() (*inputExpr, bool, error) {
 		return nil, false, nil
 	}
 
-	// Case 1: Slice range, "Type[low:high]".
+	// Case 1: Slice range, "Type[:]".
 	if st, ok, err := p.parseSliceAccessor(); err != nil {
 		return nil, false, err
 	} else if ok {

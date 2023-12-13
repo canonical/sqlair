@@ -52,12 +52,6 @@ func (s parseSuite) TestRunTable(c *C) {
 		{stringf0: p.skipName, result: []bool{false}, input: "*", data: []string{}},
 		{stringf0: p.skipName, result: []bool{true}, input: "hello", data: []string{}},
 		{stringf0: p.skipName, result: []bool{false}, input: "2d3d", data: []string{}},
-
-		{stringf0: p.skipUNumber, result: []bool{true}, input: "2d3d", data: []string{}},
-		{stringf0: p.skipUNumber, result: []bool{false}, input: "-2", data: []string{}},
-		{stringf0: p.skipUNumber, result: []bool{false}, input: "a2", data: []string{}},
-		{stringf0: p.skipUNumber, result: []bool{true}, input: "2123918", data: []string{}},
-		{stringf0: p.skipUNumber, result: []bool{true}, input: "2123918as", data: []string{}},
 	}
 	for _, v := range parseTests {
 		// Reset the input.
@@ -181,35 +175,35 @@ func (s parseSuite) TestRemoveComments(c *C) {
 }
 
 func (s parseSuite) TestParseSliceRange(c *C) {
-	numToPtr := func(n uint64) *uint64 {
-		m := n
-		return &m
-	}
-	validSliceRanges := []struct {
-		input  string
-		output valueAccessor
+	sliceRangeTests := []struct {
+		input    string
+		expected valueAccessor
+		err      string
 	}{
-		{"mySlice[:]", sliceRangeAccessor{typeName: "mySlice", low: nil, high: nil}},
-		{"mySlice[ : ]", sliceRangeAccessor{typeName: "mySlice", low: nil, high: nil}},
-		{"mySlice[1020:]", sliceRangeAccessor{typeName: "mySlice", low: numToPtr(1020), high: nil}},
-		{"mySlice[:33]", sliceRangeAccessor{typeName: "mySlice", low: nil, high: numToPtr(33)}},
-		{"mySlice[12:34]", sliceRangeAccessor{typeName: "mySlice", low: numToPtr(12), high: numToPtr(34)}},
-		{"mySlice[ 12  : 34   ]", sliceRangeAccessor{typeName: "mySlice", low: numToPtr(12), high: numToPtr(34)}},
-		{"mySlice[1234]", sliceIndexAccessor{typeName: "mySlice", index: 1234}},
-		{"mySlice[ 0 ]", sliceIndexAccessor{typeName: "mySlice", index: 0}},
+		{input: "mySlice[:]", expected: sliceRangeAccessor{typeName: "mySlice"}},
+		{input: "mySlice[ : ]", expected: sliceRangeAccessor{typeName: "mySlice"}},
+		{input: "mySlice[]", err: "column 9: invalid slice: expected ':'"},
+		{input: "mySlice[1:10]", err: "column 9: invalid slice: expected ':'"},
+		{input: "mySlice[1:]", err: "column 9: invalid slice: expected ':'"},
+		{input: "mySlice[:10]", err: "column 10: invalid slice: expected ']'"},
+		{input: "mySlice[1]", err: "column 9: invalid slice: expected ':'"},
 	}
 	// invalidSliceRanges contains ranges that are invalid but that do not
 	// result in an error.
 	invalidSliceRanges := []string{"[]", "[:]", "[1:10]", "[1]"}
 
 	var p = NewParser()
-	for _, t := range validSliceRanges {
+	for _, t := range sliceRangeTests {
 		p.init(t.input)
 		sr, ok, err := p.parseSliceAccessor()
-		if !ok || err != nil {
-			c.Errorf("test failed. %s not parsed as valid slice range", t.input)
+		if err != nil && t.err != "" {
+			c.Assert(err, ErrorMatches, t.err)
+			c.Assert(ok, Equals, false)
+			continue
 		}
-		c.Assert(t.output, DeepEquals, sr)
+		c.Assert(err, IsNil)
+		c.Assert(ok, Equals, true)
+		c.Assert(t.expected, DeepEquals, sr)
 	}
 	for _, t := range invalidSliceRanges {
 		p.init(t)

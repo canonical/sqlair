@@ -416,55 +416,34 @@ of three lines' AND id = $Person.*`,
 		err:   `cannot parse expression: column 8: cannot use slice syntax "S[:]" in output expression`,
 	}, {
 		query: "SELECT &S[0] FROM t",
-		err:   `cannot parse expression: column 8: cannot use slice syntax "S[0]" in output expression`,
+		err:   `cannot parse expression: column 8: cannot use slice syntax in output expression`,
 	}, {
 		query: "SELECT &S[1:5] FROM t",
-		err:   `cannot parse expression: column 8: cannot use slice syntax "S[1:5]" in output expression`,
+		err:   `cannot parse expression: column 8: cannot use slice syntax in output expression`,
 	}, {
 		query: "SELECT col1 AS &S[1:5] FROM t",
-		err:   `cannot parse expression: column 16: cannot use slice syntax "S[1:5]" in output expression`,
+		err:   `cannot parse expression: column 16: cannot use slice syntax in output expression`,
 	}, {
 		query: "SELECT col1 AS &S[] FROM t",
-		err:   `cannot parse expression: column 19: invalid slice: expected index or colon`,
+		err:   `cannot parse expression: column 16: cannot use slice syntax in output expression`,
 	}, {
 		query: "SELECT * FROM t WHERE id IN $ids[:-1]",
-		err:   `cannot parse expression: column 35: invalid slice: expected ]`,
+		err:   `cannot parse expression: column 35: invalid slice: expected ']'`,
 	}, {
 		query: "SELECT * FROM t WHERE id IN $ids[3:1]",
-		err:   `cannot parse expression: column 30: invalid slice: invalid indexes: 1 <= 3`,
+		err:   `cannot parse expression: column 34: invalid slice: expected ':'`,
 	}, {
 		query: "SELECT * FROM t WHERE id IN $ids[1:1]",
-		err:   `cannot parse expression: column 30: invalid slice: invalid indexes: 1 <= 1`,
+		err:   `cannot parse expression: column 34: invalid slice: expected ':'`,
 	}, {
 		query: "SELECT * FROM t WHERE id IN $ids[a:]",
-		err:   `cannot parse expression: column 34: invalid slice: expected index or colon`,
+		err:   `cannot parse expression: column 34: invalid slice: expected ':'`,
 	}, {
 		query: "SELECT * FROM t WHERE id IN $ids[:b]",
-		err:   `cannot parse expression: column 35: invalid slice: expected ]`,
-	}, {
-		query: "SELECT * FROM t WHERE id IN $ids[1a2:]",
-		err:   `cannot parse expression: column 35: invalid slice: expected ] or colon`,
-	}, {
-		query: "SELECT * FROM t WHERE id IN $ids[1 2:]",
-		err:   `cannot parse expression: column 36: invalid slice: expected ] or colon`,
-	}, {
-		query: "SELECT * FROM t WHERE id IN $ids[:1 2]",
-		err:   `cannot parse expression: column 37: invalid slice: expected ]`,
-	}, {
-		query: "SELECT * FROM t WHERE id IN $ids[:1b2]",
-		err:   `cannot parse expression: column 36: invalid slice: expected ]`,
-	}, {
-		query: "SELECT * FROM t WHERE id IN $ids[1a:2b]",
-		err:   `cannot parse expression: column 35: invalid slice: expected ] or colon`,
-	}, {
-		query: "SELECT * FROM t WHERE id = $ids[1a]",
-		err:   `cannot parse expression: column 34: invalid slice: expected ] or colon`,
-	}, {
-		query: "SELECT * FROM t WHERE id = $ids[a1]",
-		err:   `cannot parse expression: column 33: invalid slice: expected index or colon`,
+		err:   `cannot parse expression: column 35: invalid slice: expected ']'`,
 	}, {
 		query: "SELECT * FROM t WHERE id = $ids[]",
-		err:   `cannot parse expression: column 33: invalid slice: expected index or colon`,
+		err:   `cannot parse expression: column 33: invalid slice: expected ':'`,
 	}}
 
 	for _, t := range tests {
@@ -835,12 +814,12 @@ func (s *ExprSuite) TestSliceSyntax(c *C) {
 		"[Bypass[SELECT name FROM person WHERE id IN (] Input[S[:]] Bypass[)]]",
 	}, {
 		"many slice ranges",
-		"SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $S[:], $Manager.id, $IntSlice[:2], $StringSlice[2:])",
-		"[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE id IN (] Input[Person.id] Bypass[, ] Input[S[:]] Bypass[, ] Input[Manager.id] Bypass[, ] Input[IntSlice[:2]] Bypass[, ] Input[StringSlice[2:]] Bypass[)]]",
+		"SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $S[:], $Manager.id, $IntSlice[:], $StringSlice[:])",
+		"[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE id IN (] Input[Person.id] Bypass[, ] Input[S[:]] Bypass[, ] Input[Manager.id] Bypass[, ] Input[IntSlice[:]] Bypass[, ] Input[StringSlice[:]] Bypass[)]]",
 	}, {
 		"slices and other expressions in IN statement",
-		`SELECT name FROM person WHERE id IN ($S[:], func(1,2), "one", $IntSlice[1:10])`,
-		`[Bypass[SELECT name FROM person WHERE id IN (] Input[S[:]] Bypass[, func(1,2), "one", ] Input[IntSlice[1:10]] Bypass[)]]`,
+		`SELECT name FROM person WHERE id IN ($S[:], func(1,2), "one", $IntSlice[:])`,
+		`[Bypass[SELECT name FROM person WHERE id IN (] Input[S[:]] Bypass[, func(1,2), "one", ] Input[IntSlice[:]] Bypass[)]]`,
 	}}
 	for _, t := range tests {
 		parser := expr.NewParser()
