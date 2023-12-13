@@ -98,7 +98,7 @@ func (e *inputExpr) bindTypes(argInfo typeinfo.ArgInfo) (typedExpr any, err erro
 
 	var input typeinfo.Input
 	switch a := e.sourceType.(type) {
-	case memberAcessor:
+	case memberAccessor:
 		input, err = argInfo.InputMember(a.typeName, a.memberName)
 		if err != nil {
 			return nil, err
@@ -113,7 +113,7 @@ func (e *inputExpr) bindTypes(argInfo typeinfo.ArgInfo) (typedExpr any, err erro
 // as well as the source table and column where it will be read from.
 type outputExpr struct {
 	sourceColumns []columnAccessor
-	targetTypes   []memberAcessor
+	targetTypes   []memberAccessor
 	raw           string
 }
 
@@ -233,7 +233,7 @@ func starCountColumns(cs []columnAccessor) int {
 }
 
 // starCountTypes counts the number of asterisks in a list of types.
-func starCountTypes(vs []memberAcessor) int {
+func starCountTypes(vs []memberAccessor) int {
 	s := 0
 	for _, v := range vs {
 		if v.memberName == "*" {
