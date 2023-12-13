@@ -43,8 +43,8 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 	}
 
 	// Generate SQL and query parameters.
-	params := []any{}
-	outputs := []typeinfo.Output{}
+	var params []any
+	var outputs []typeinfo.Output
 	// argTypeUsed is used to check that all the query parameters are
 	// referenced in the query.
 	argTypeUsed := map[reflect.Type]bool{}
