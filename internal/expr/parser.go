@@ -80,7 +80,6 @@ type expression interface {
 // valueAccessor stores information about how to access a Go value. For example:
 // by index, by key, or by slice syntax.
 type valueAccessor interface {
-	getTypeName() string
 	fmt.Stringer
 }
 
@@ -93,10 +92,6 @@ type memberAcessor struct {
 
 func (ma memberAcessor) String() string {
 	return ma.typeName + "." + ma.memberName
-}
-
-func (ma memberAcessor) getTypeName() string {
-	return ma.typeName
 }
 
 // columnAccessor stores a SQL column name and optionally its table name.
@@ -115,10 +110,6 @@ func (ca columnAccessor) String() string {
 // expression "typeName[:]".
 type sliceRangeAccessor struct {
 	typeName string
-}
-
-func (st sliceRangeAccessor) getTypeName() string {
-	return st.typeName
 }
 
 func (st sliceRangeAccessor) String() string {

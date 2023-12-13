@@ -15,7 +15,7 @@ type PrimedQuery struct {
 	// params are the query parameters to pass to the database.
 	params []any
 	// outputs specifies where to scan the query results.
-	outputs []typeinfo.Member
+	outputs []typeinfo.Output
 }
 
 // Params returns the query parameters to pass with the SQL to a database.
@@ -36,15 +36,15 @@ func (pq *PrimedQuery) HasOutputs() bool {
 func (pq *PrimedQuery) ScanArgs(columnNames []string, outputArgs []any) (scanArgs []any, onSuccess func(), err error) {
 	var typesInQuery []string
 	var inQuery = make(map[reflect.Type]bool)
-	for _, typeMember := range pq.outputs {
-		outerType := typeMember.OuterType()
-		if ok := inQuery[outerType]; !ok {
-			inQuery[outerType] = true
-			typesInQuery = append(typesInQuery, outerType.Name())
+	for _, output := range pq.outputs {
+		argType := output.ArgType()
+		if ok := inQuery[argType]; !ok {
+			inQuery[argType] = true
+			typesInQuery = append(typesInQuery, argType.Name())
 		}
 	}
 
-	var typeDest = make(map[reflect.Type]reflect.Value)
+	var typeToValue = make(map[reflect.Type]reflect.Value)
 	var outputVals []reflect.Value
 	for _, outputArg := range outputArgs {
 		if outputArg == nil {
@@ -68,10 +68,10 @@ func (pq *PrimedQuery) ScanArgs(columnNames []string, outputArgs []any) (scanArg
 		if !inQuery[outputVal.Type()] {
 			return nil, nil, fmt.Errorf("type %q does not appear in query, have: %s", outputVal.Type().Name(), strings.Join(typesInQuery, ", "))
 		}
-		if _, ok := typeDest[outputVal.Type()]; ok {
+		if _, ok := typeToValue[outputVal.Type()]; ok {
 			return nil, nil, fmt.Errorf("type %q provided more than once, rename one of them", outputVal.Type().Name())
 		}
-		typeDest[outputVal.Type()] = outputVal
+		typeToValue[outputVal.Type()] = outputVal
 		outputVals = append(outputVals, outputVal)
 	}
 
@@ -91,13 +91,8 @@ func (pq *PrimedQuery) ScanArgs(columnNames []string, outputArgs []any) (scanArg
 			return nil, nil, fmt.Errorf("internal error: sqlair column not in outputs (%d>=%d)", idx, len(pq.outputs))
 		}
 		columnInResult[idx] = true
-		typeMember := pq.outputs[idx]
-		outputVal, ok := typeDest[typeMember.OuterType()]
-		if !ok {
-			return nil, nil, fmt.Errorf("type %q found in query but not passed to get", typeMember.OuterType().Name())
-		}
-
-		ptr, scanProxy, err := typeMember.GetScanTarget(outputVal)
+		output := pq.outputs[idx]
+		ptr, scanProxy, err := output.LocateScanTarget(typeToValue)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -110,7 +105,7 @@ func (pq *PrimedQuery) ScanArgs(columnNames []string, outputArgs []any) (scanArg
 
 	for i := 0; i < len(pq.outputs); i++ {
 		if !columnInResult[i] {
-			return nil, nil, fmt.Errorf(`query uses "&%s" outside of result context`, pq.outputs[i].OuterType().Name())
+			return nil, nil, fmt.Errorf(`query uses "&%s" outside of result context`, pq.outputs[i].ArgType().Name())
 		}
 	}
 
