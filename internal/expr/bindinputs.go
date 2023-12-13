@@ -14,7 +14,7 @@ import (
 // TypeBoundExpr represents a SQLair statement bound to concrete Go types. It
 // contains information used to generate the underlying SQL query and map it to
 // the SQLair query.
-type TypeBoundExpr []typedExpression
+type TypeBoundExpr []any
 
 // BindInputs takes the SQLair input arguments and returns the PrimedQuery ready
 // for use with the database.
@@ -88,13 +88,6 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 	return &PrimedQuery{outputs: outputs, sql: sqlStr.String(), params: params}, nil
 }
 
-// typedExpression represents a expression with the type names bound to Go
-// types.
-type typedExpression interface {
-	// typedExpr is a marker method.
-	typedExpr()
-}
-
 // outputColumn stores the name of a column to fetch from the database and the
 // output type location specifying the value to scan the result into.
 type outputColumn struct {
@@ -121,26 +114,11 @@ type typedInputExpr struct {
 	input typeinfo.Input
 }
 
-// typedExpr is a marker method.
-func (*typedInputExpr) typedExpr() {}
-
-var _ typedExpression = (*typedInputExpr)(nil)
-
 // typedOutputExpr contains the columns to fetch from the database and
 // information about the Go values to read the query results into.
 type typedOutputExpr struct {
 	outputColumns []outputColumn
 }
-
-// typedExpr is a marker method.
-func (*typedOutputExpr) typedExpr() {}
-
-var _ typedExpression = (*typedOutputExpr)(nil)
-
-// typedExpr is a marker method.
-func (*bypass) typedExpr() {}
-
-var _ typedExpression = (*bypass)(nil)
 
 const markerPrefix = "_sqlair_"
 
