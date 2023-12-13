@@ -1079,7 +1079,7 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 
 	// checkStmtCache is a helper function to check if a prepared statement is
 	// cached or not.
-	checkStmtCache := func(dbID int64, sID int64, inCache bool) {
+	checkStmtCache := func(dbID uint64, sID uint64, inCache bool) {
 		cacheMutex.RLock()
 		defer cacheMutex.RUnlock()
 		dbCache, ok1 := stmtDBCache[sID]
@@ -1094,7 +1094,7 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 
 	// checkDBNotInCache is a helper function to check a db is not mentioned in
 	// the cache.
-	checkDBNotInCache := func(dbID int64) {
+	checkDBNotInCache := func(dbID uint64) {
 		cacheMutex.RLock()
 		defer cacheMutex.RUnlock()
 		for _, dbCache := range stmtDBCache {
@@ -1122,7 +1122,7 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 	p := Person{}
 
 	// createAndCacheStmt takes a db and prepares a statement on it.
-	createAndCacheStmt := func(db *sqlair.DB) (stmtID int64) {
+	createAndCacheStmt := func(db *sqlair.DB) (stmtID uint64) {
 		// Create stmt.
 		stmt, err := sqlair.Prepare(q1, Person{})
 		c.Assert(err, IsNil)
@@ -1153,7 +1153,7 @@ func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
 	}
 
 	// createDBAndTestStmt opens a new database and runs testStmtsOnDB on it.
-	createDBAndTestStmt := func(stmt *sqlair.Statement) (dbID int64) {
+	createDBAndTestStmt := func(stmt *sqlair.Statement) (dbID uint64) {
 		// Create db.
 		tables, sqldb, err := personAndAddressDB(c)
 		c.Assert(err, IsNil)
