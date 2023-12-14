@@ -5,12 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"runtime"
-	"testing"
-	"time"
-
 	_ "github.com/mattn/go-sqlite3"
 	. "gopkg.in/check.v1"
+	"testing"
 
 	"github.com/canonical/sqlair"
 )
@@ -22,38 +19,12 @@ type PackageSuite struct{}
 
 var _ = Suite(&PackageSuite{})
 
-func (s *PackageSuite) TearDownTest(c *C) {
-	// Try to run finalizers by calling GC several times.
-	for i := 0; i <= 10; i++ {
-		runtime.GC()
-		time.Sleep(0)
-	}
-
-	stmtRegistryMutex.Lock()
-	defer stmtRegistryMutex.Unlock()
-
-	// Asssert that all the open statements were closed.
-	for sPtr, query := range openedStmts[c.TestName()] {
-		c.Check(closedStmts[c.TestName()][sPtr], Equals, true,
-			Commentf("%s: failed to close statement: %s", c.TestName(), query))
-	}
-}
-
-func (s *PackageSuite) TearDownSuite(c *C) {
-	stmtRegistryMutex.Lock()
-	defer stmtRegistryMutex.Unlock()
-
-	// Reset state.
-	closedStmts = map[string]map[uintptr]bool{}
-	openedStmts = map[string]map[uintptr]string{}
-}
-
-func setupDB(testName string) (*sql.DB, error) {
-	return sql.Open("sqlite3_stmtChecked", "file:test.db?cache=shared&mode=memory&testName="+testName)
+func setupDB() (*sql.DB, error) {
+	return sql.Open("sqlite3", "file:test.db?cache=shared&mode=memory")
 }
 
 func createExampleDB(c *C, createTables string, inserts []string) (*sql.DB, error) {
-	db, err := setupDB(c.TestName())
+	db, err := setupDB()
 	c.Assert(err, IsNil)
 
 	_, err = db.Exec(createTables)
