@@ -68,6 +68,15 @@ func (p *Parser) Parse(input string) (pe *ParsedExpr, err error) {
 	return &ParsedExpr{exprs: p.exprs}, nil
 }
 
+// expression represents a parsed node of the SQLair query's AST.
+type expression interface {
+	// String returns a text representation for debugging and testing purposes.
+	String() string
+
+	// marker method
+	expr()
+}
+
 // valueAccessor stores information for accessing a Go value. It consists of a
 // type name and some value within it to be accessed. For example: a field of a
 // struct, or a key of a map.
@@ -90,6 +99,45 @@ func (ca columnAccessor) String() string {
 	}
 	return ca.tableName + "." + ca.columnName
 }
+
+// inputExpr represents a named parameter that will be sent to the database
+// while performing the query.
+type inputExpr struct {
+	sourceType valueAccessor
+	raw        string
+}
+
+func (p *inputExpr) String() string {
+	return fmt.Sprintf("Input[%+v]", p.sourceType)
+}
+
+func (p *inputExpr) expr() {}
+
+// outputExpr represents a named target output variable in the SQL expression,
+// as well as the source table and column where it will be read from.
+type outputExpr struct {
+	sourceColumns []columnAccessor
+	targetTypes   []valueAccessor
+	raw           string
+}
+
+func (p *outputExpr) String() string {
+	return fmt.Sprintf("Output[%+v %+v]", p.sourceColumns, p.targetTypes)
+}
+
+func (p *outputExpr) expr() {}
+
+// bypass represents part of the expression that we want to pass to the backend
+// database verbatim.
+type bypass struct {
+	chunk string
+}
+
+func (p *bypass) String() string {
+	return "Bypass[" + p.chunk + "]"
+}
+
+func (p *bypass) expr() {}
 
 // init resets the state of the parser and sets the input string.
 func (p *Parser) init(input string) {

@@ -44,52 +44,44 @@ func (pe *ParsedExpr) BindTypes(args ...any) (tbe *TypeBoundExpr, err error) {
 	}
 
 	// Bind types to each expression.
-	typedExprs := []any{}
+	typedExprs := []typedExpression{}
 	outputUsed := map[typeinfo.Output]bool{}
-	var typedExpr any
+	var te typedExpression
 	for _, expr := range pe.exprs {
-		typedExpr, err = expr.bindTypes(argInfo)
-		if err != nil {
-			return nil, err
-		}
-		if toe, ok := typedExpr.(*typedOutputExpr); ok {
+		switch e := expr.(type) {
+		case *inputExpr:
+			te, err = bindInputTypes(e, argInfo)
+			if err != nil {
+				return nil, err
+			}
+		case *outputExpr:
+			toe, err := bindOutputTypes(e, argInfo)
+			if err != nil {
+				return nil, err
+			}
+
 			for _, oc := range toe.outputColumns {
 				if ok := outputUsed[oc.output]; ok {
 					return nil, fmt.Errorf("%s appears more than once in output expressions", oc.output.String())
 				}
 				outputUsed[oc.output] = true
 			}
+			te = toe
+		case *bypass:
+			te = e
+		default:
+			return nil, fmt.Errorf("internal error: unknown query expr type %T", expr)
 		}
-		typedExprs = append(typedExprs, typedExpr)
+		typedExprs = append(typedExprs, te)
 	}
 
-	typeBoundExpr := TypeBoundExpr(typedExprs)
-	return &typeBoundExpr, nil
+	typedExpr := TypeBoundExpr(typedExprs)
+	return &typedExpr, nil
 }
 
-// expression represents a parsed node of the SQLair query's AST.
-type expression interface {
-	// String returns a text representation for debugging and testing purposes.
-	String() string
-
-	// bindTypes generates a typed expression from the query argument type information.
-	bindTypes(typeinfo.ArgInfo) (any, error)
-}
-
-// inputExpr represents a named parameter that will be sent to the database
-// while performing the query.
-type inputExpr struct {
-	sourceType valueAccessor
-	raw        string
-}
-
-func (p *inputExpr) String() string {
-	return fmt.Sprintf("Input[%+v]", p.sourceType)
-}
-
-// bindTypes binds the input expression to a query type and returns a typed
+// bindInputTypes binds the input expression to a query type and returns a typed
 // input expression.
-func (e *inputExpr) bindTypes(argInfo typeinfo.ArgInfo) (typedExpr any, err error) {
+func bindInputTypes(e *inputExpr, argInfo typeinfo.ArgInfo) (te *typedInputExpr, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("input expression: %s: %s", err, e.raw)
@@ -103,22 +95,10 @@ func (e *inputExpr) bindTypes(argInfo typeinfo.ArgInfo) (typedExpr any, err erro
 	return &typedInputExpr{input}, nil
 }
 
-// outputExpr represents a named target output variable in the SQL expression,
-// as well as the source table and column where it will be read from.
-type outputExpr struct {
-	sourceColumns []columnAccessor
-	targetTypes   []valueAccessor
-	raw           string
-}
-
-func (p *outputExpr) String() string {
-	return fmt.Sprintf("Output[%+v %+v]", p.sourceColumns, p.targetTypes)
-}
-
-// bindTypes binds the output expression to concrete types. It then checks the
-// expression valid with respect to its bound types and generates a typed
-// output expression.
-func (e *outputExpr) bindTypes(argInfo typeinfo.ArgInfo) (typedExpr any, err error) {
+// bindOutputTypes binds the output expression to concrete types. It then checks the
+// expression valid with respect to its bound types and generates a typed output
+// expression.
+func bindOutputTypes(e *outputExpr, argInfo typeinfo.ArgInfo) (te *typedOutputExpr, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("output expression: %s: %s", err, e.raw)
@@ -197,22 +177,6 @@ func (e *outputExpr) bindTypes(argInfo typeinfo.ArgInfo) (typedExpr any, err err
 	}
 
 	return toe, nil
-}
-
-// bypass represents part of the expression that we want to pass to the backend
-// database verbatim.
-type bypass struct {
-	chunk string
-}
-
-func (b *bypass) String() string {
-	return "Bypass[" + b.chunk + "]"
-}
-
-// bindTypes is part of the expression interface. bypass expressions have no
-// types so the same expression is returned.
-func (b *bypass) bindTypes(argInfo typeinfo.ArgInfo) (any, error) {
-	return b, nil
 }
 
 // starCountColumns counts the number of asterisks in a list of columns.
