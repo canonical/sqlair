@@ -24,12 +24,9 @@ type M map[string]any
 var ErrNoRows = sql.ErrNoRows
 var ErrTXDone = sql.ErrTxDone
 
-var stmtCache = newStatementCache()
-
 // Statement represents a SQL statement with valid SQLair expressions.
 // It is ready to be run on a SQLair DB.
 type Statement struct {
-	cacheID uint64
 	// te is the type bound SQLair query. It contains information used to
 	// generate query values from the input arguments when the Statement is run
 	// on a database.
@@ -51,8 +48,7 @@ func Prepare(query string, typeSamples ...any) (*Statement, error) {
 		return nil, err
 	}
 
-	s := stmtCache.newStatement(typedExpr)
-	return s, nil
+	return &Statement{te: typedExpr}, nil
 }
 
 // MustPrepare is the same as prepare except that it panics on error.
@@ -65,13 +61,12 @@ func MustPrepare(query string, typeSamples ...any) *Statement {
 }
 
 type DB struct {
-	cacheID uint64
-	sqldb   *sql.DB
+	sqldb *sql.DB
 }
 
 // NewDB creates a new SQLair DB from a sql.DB.
 func NewDB(sqldb *sql.DB) *DB {
-	return stmtCache.newDB(sqldb)
+	return &DB{sqldb: sqldb}
 }
 
 // PlainDB returns the underlying database object.
@@ -81,14 +76,11 @@ func (db *DB) PlainDB() *sql.DB {
 
 // Query holds the results of a database query.
 type Query struct {
-	pq      *expr.PrimedQuery
-	sqlstmt *sql.Stmt
-	ctx     context.Context
-	err     error
-	tx      *TX // tx is only set for queries in transactions.
-	// Persist statement and db so the sql.Stmt is not closed until the Query is dropped.
-	stmt *Statement
-	db   *DB
+	pq  *expr.PrimedQuery
+	ctx context.Context
+	err error
+	db  *DB
+	tx  *TX // tx is only set for queries in transactions.
 }
 
 // Iterator is used to iterate over the results of the query.
@@ -99,7 +91,6 @@ type Iterator struct {
 	err     error
 	result  sql.Result
 	started bool
-	close   func() error
 }
 
 // Query takes a context, prepared SQLair Statement and the structs mentioned in the query arguments.
@@ -114,16 +105,7 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: err}
 	}
 
-	sqlstmt, ok := stmtCache.lookupStmt(db, s)
-	if !ok {
-		sqlstmt, err = db.sqldb.PrepareContext(ctx, pq.SQL())
-		if err != nil {
-			return &Query{ctx: ctx, err: err}
-		}
-		stmtCache.storeStmt(db, s, sqlstmt)
-	}
-
-	return &Query{sqlstmt: sqlstmt, stmt: s, db: db, pq: pq, ctx: ctx, err: nil}
+	return &Query{db: db, pq: pq, ctx: ctx, err: nil}
 }
 
 // Run is an alias for Get that takes no arguments.
@@ -183,28 +165,27 @@ func (q *Query) Iter() *Iterator {
 	var rows *sql.Rows
 	var err error
 	var cols []string
-	var close func() error
-	sqlstmt := q.sqlstmt
-	if q.tx != nil {
-		sqlstmt = q.tx.sqltx.Stmt(q.sqlstmt)
-		close = sqlstmt.Close
-	}
 	if q.pq.HasOutputs() {
-		rows, err = sqlstmt.QueryContext(q.ctx, q.pq.Params()...)
+		if q.tx != nil {
+			rows, err = q.tx.sqltx.QueryContext(q.ctx, q.pq.SQL(), q.pq.Params()...)
+		} else {
+			rows, err = q.db.sqldb.QueryContext(q.ctx, q.pq.SQL(), q.pq.Params()...)
+		}
 		if err == nil { // if err IS nil
 			cols, err = rows.Columns()
 		}
 	} else {
-		result, err = sqlstmt.ExecContext(q.ctx, q.pq.Params()...)
+		if q.tx != nil {
+			result, err = q.tx.sqltx.ExecContext(q.ctx, q.pq.SQL(), q.pq.Params()...)
+		} else {
+			result, err = q.db.sqldb.ExecContext(q.ctx, q.pq.SQL(), q.pq.Params()...)
+		}
 	}
 	if err != nil {
-		if close != nil {
-			close()
-		}
 		return &Iterator{pq: q.pq, err: err}
 	}
 
-	return &Iterator{pq: q.pq, rows: rows, cols: cols, err: err, result: result, close: close}
+	return &Iterator{pq: q.pq, rows: rows, cols: cols, err: err, result: result}
 }
 
 // Next prepares the next row for Get.
@@ -214,17 +195,7 @@ func (iter *Iterator) Next() bool {
 	if iter.err != nil || iter.rows == nil {
 		return false
 	}
-	if !iter.rows.Next() {
-		if iter.close != nil {
-			err := iter.close()
-			iter.close = nil
-			if iter.err == nil {
-				iter.err = err
-			}
-		}
-		return false
-	}
-	return true
+	return iter.rows.Next()
 }
 
 // Get decodes the result from the previous Next call into the provided output arguments.
@@ -266,11 +237,6 @@ func (iter *Iterator) Get(outputArgs ...any) (err error) {
 
 // Close finishes the iteration and returns any errors encountered.
 func (iter *Iterator) Close() error {
-	var cerr error
-	if iter.close != nil {
-		cerr = iter.close()
-		iter.close = nil
-	}
 	iter.started = true
 	if iter.rows == nil {
 		return iter.err
@@ -279,9 +245,6 @@ func (iter *Iterator) Close() error {
 	iter.rows = nil
 	if iter.err != nil {
 		return iter.err
-	}
-	if err == nil {
-		err = cerr
 	}
 	return err
 }
@@ -389,10 +352,9 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 }
 
 type TX struct {
-	sqltx   *sql.Tx
-	sqlconn *sql.Conn
-	db      *DB
-	done    int32
+	sqltx *sql.Tx
+	db    *DB
+	done  int32
 }
 
 func (tx *TX) isDone() bool {
@@ -411,15 +373,11 @@ func (db *DB) Begin(ctx context.Context, opts *TXOptions) (*TX, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	sqlconn, err := db.sqldb.Conn(ctx)
+	sqltx, err := db.sqldb.BeginTx(ctx, opts.plainTXOptions())
 	if err != nil {
 		return nil, err
 	}
-	sqltx, err := sqlconn.BeginTx(ctx, opts.plainTXOptions())
-	if err != nil {
-		return nil, err
-	}
-	return &TX{sqltx: sqltx, sqlconn: sqlconn, db: db}, nil
+	return &TX{sqltx: sqltx, db: db}, nil
 }
 
 // Commit commits the transaction.
@@ -427,9 +385,6 @@ func (tx *TX) Commit() error {
 	err := tx.setDone()
 	if err == nil {
 		err = tx.sqltx.Commit()
-	}
-	if cerr := tx.sqlconn.Close(); err == nil {
-		err = cerr
 	}
 	return err
 }
@@ -439,9 +394,6 @@ func (tx *TX) Rollback() error {
 	err := tx.setDone()
 	if err == nil {
 		err = tx.sqltx.Rollback()
-	}
-	if cerr := tx.sqlconn.Close(); err == nil {
-		err = cerr
 	}
 	return err
 }
@@ -476,14 +428,5 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: err}
 	}
 
-	sqlstmt, ok := stmtCache.lookupStmt(tx.db, s)
-	if !ok {
-		sqlstmt, err = tx.sqlconn.PrepareContext(ctx, pq.SQL())
-		if err != nil {
-			return &Query{ctx: ctx, err: err}
-		}
-		stmtCache.storeStmt(tx.db, s, sqlstmt)
-	}
-
-	return &Query{sqlstmt: sqlstmt, stmt: s, db: tx.db, pq: pq, tx: tx, ctx: ctx, err: nil}
+	return &Query{db: tx.db, pq: pq, tx: tx, ctx: ctx, err: nil}
 }
