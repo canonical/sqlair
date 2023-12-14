@@ -44,9 +44,9 @@ func (pe *ParsedExpr) BindTypes(args ...any) (tbe *TypeBoundExpr, err error) {
 	}
 
 	// Bind types to each expression.
-	typedExprs := []typedExpression{}
+	var typedExprs TypeBoundExpr
 	outputUsed := map[typeinfo.Output]bool{}
-	var te typedExpression
+	var te any
 	for _, expr := range pe.exprs {
 		switch e := expr.(type) {
 		case *inputExpr:
@@ -75,8 +75,7 @@ func (pe *ParsedExpr) BindTypes(args ...any) (tbe *TypeBoundExpr, err error) {
 		typedExprs = append(typedExprs, te)
 	}
 
-	typedExpr := TypeBoundExpr(typedExprs)
-	return &typedExpr, nil
+	return &typedExprs, nil
 }
 
 // bindInputTypes binds the input expression to a query type and returns a typed
