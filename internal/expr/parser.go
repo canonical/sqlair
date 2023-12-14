@@ -81,7 +81,7 @@ type expression interface {
 // by index, by key, or by slice syntax.
 type valueAccessor interface {
 	fmt.Stringer
-	valueAccessorMarker()
+	getTypeName() string
 }
 
 // memberAccessor stores information for accessing a keyed Go value. It consists
@@ -95,7 +95,23 @@ func (ma memberAccessor) String() string {
 	return ma.typeName + "." + ma.memberName
 }
 
-func (_ memberAccessor) valueAccessorMarker() {}
+func (ma memberAccessor) getTypeName() string {
+	return ma.typeName
+}
+
+// sliceAccessor stores information for accessing a slice using the
+// expression "typeName[:]".
+type sliceAccessor struct {
+	typeName string
+}
+
+func (st sliceAccessor) String() string {
+	return fmt.Sprintf("%s[:]", st.typeName)
+}
+
+func (sa sliceAccessor) getTypeName() string {
+	return sa.typeName
+}
 
 // columnAccessor stores a SQL column name and optionally its table name.
 type columnAccessor struct {
@@ -108,20 +124,6 @@ func (ca columnAccessor) String() string {
 	}
 	return ca.tableName + "." + ca.columnName
 }
-
-func (_ columnAccessor) valueAccessorMarker() {}
-
-// sliceAccessor stores information for accessing a slice using the
-// expression "typeName[:]".
-type sliceAccessor struct {
-	typeName string
-}
-
-func (st sliceAccessor) String() string {
-	return fmt.Sprintf("%s[:]", st.typeName)
-}
-
-func (_ sliceAccessor) valueAccessorMarker() {}
 
 // inputExpr represents a named parameter that will be sent to the database
 // while performing the query.
