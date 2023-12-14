@@ -77,7 +77,7 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 		case *bypass:
 			sqlStr.WriteString(te.chunk)
 		default:
-			return nil, fmt.Errorf("invalid expression type %t", te)
+			return nil, fmt.Errorf("internal error: unknown expression type %T", te)
 		}
 	}
 
