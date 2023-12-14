@@ -54,7 +54,7 @@ func newStatementCache() *statementCache {
 // newStatement returns a new sqlair.Statement and adds it to the cache. A
 // finalizer is set on the sqlair.Statement to remove its ID from the cache and
 // close all associated sql.Stmt objects.
-func (sc *statementCache) newStatement(te *expr.TypedExpr) *Statement {
+func (sc *statementCache) newStatement(te *expr.TypeBoundExpr) *Statement {
 	cacheID := atomic.AddUint64(&sc.stmtIDCount, 1)
 	sc.mutex.Lock()
 	sc.stmtDBCache[cacheID] = map[uint64]*sql.Stmt{}

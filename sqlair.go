@@ -33,7 +33,7 @@ type Statement struct {
 	// te is the type bound SQLair query. It contains information used to
 	// generate query values from the input arguments when the Statement is run
 	// on a database.
-	te *expr.TypedExpr
+	te *expr.TypeBoundExpr
 }
 
 // Prepare expands the types mentioned in the SQLair expressions and checks
@@ -109,19 +109,18 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		ctx = context.Background()
 	}
 
+	pq, err := s.te.BindInputs(inputArgs...)
+	if err != nil {
+		return &Query{ctx: ctx, err: err}
+	}
+
 	sqlstmt, ok := stmtCache.lookupStmt(db, s)
-	var err error
 	if !ok {
-		sqlstmt, err = db.sqldb.PrepareContext(ctx, s.te.SQL())
+		sqlstmt, err = db.sqldb.PrepareContext(ctx, pq.SQL())
 		if err != nil {
 			return &Query{ctx: ctx, err: err}
 		}
 		stmtCache.storeStmt(db, s, sqlstmt)
-	}
-
-	pq, err := s.te.BindInputs(inputArgs...)
-	if err != nil {
-		return &Query{ctx: ctx, err: err}
 	}
 
 	return &Query{sqlstmt: sqlstmt, stmt: s, db: db, pq: pq, ctx: ctx, err: nil}
@@ -472,19 +471,18 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: ErrTXDone}
 	}
 
+	pq, err := s.te.BindInputs(inputArgs...)
+	if err != nil {
+		return &Query{ctx: ctx, err: err}
+	}
+
 	sqlstmt, ok := stmtCache.lookupStmt(tx.db, s)
-	var err error
 	if !ok {
-		sqlstmt, err = tx.sqlconn.PrepareContext(ctx, s.te.SQL())
+		sqlstmt, err = tx.sqlconn.PrepareContext(ctx, pq.SQL())
 		if err != nil {
 			return &Query{ctx: ctx, err: err}
 		}
 		stmtCache.storeStmt(tx.db, s, sqlstmt)
-	}
-
-	pq, err := s.te.BindInputs(inputArgs...)
-	if err != nil {
-		return &Query{ctx: ctx, err: err}
 	}
 
 	return &Query{sqlstmt: sqlstmt, stmt: s, db: tx.db, pq: pq, tx: tx, ctx: ctx, err: nil}
