@@ -76,8 +76,6 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 			}
 		case *bypass:
 			sqlStr.WriteString(te.chunk)
-		default:
-			return nil, fmt.Errorf("internal error: unknown type %T", te)
 		}
 	}
 
