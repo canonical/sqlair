@@ -94,7 +94,7 @@ func bindInputTypes(e *inputExpr, argInfo typeinfo.ArgInfo) (te *typedInputExpr,
 		if err != nil {
 			return nil, err
 		}
-	case sliceRangeAccessor:
+	case sliceAccessor:
 		return nil, fmt.Errorf("slice support not implemented")
 	}
 	return &typedInputExpr{input}, nil

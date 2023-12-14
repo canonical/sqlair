@@ -111,17 +111,17 @@ func (ca columnAccessor) String() string {
 
 func (_ columnAccessor) valueAccessorMarker() {}
 
-// sliceRangeAccessor stores information for accessing a slice using the
+// sliceAccessor stores information for accessing a slice using the
 // expression "typeName[:]".
-type sliceRangeAccessor struct {
+type sliceAccessor struct {
 	typeName string
 }
 
-func (st sliceRangeAccessor) String() string {
+func (st sliceAccessor) String() string {
 	return fmt.Sprintf("%s[:]", st.typeName)
 }
 
-func (_ sliceRangeAccessor) valueAccessorMarker() {}
+func (_ sliceAccessor) valueAccessorMarker() {}
 
 // inputExpr represents a named parameter that will be sent to the database
 // while performing the query.
@@ -513,38 +513,38 @@ func (p *Parser) parseTargetType() (memberAccessor, bool, error) {
 		} else if err != nil {
 			return memberAccessor{}, false, errorAt(fmt.Errorf("cannot use slice syntax in output expression"), startLine, startCol, p.input)
 		}
-		return p.parseTypeName()
+		return p.parseTypeMemberAccessor()
 	}
 
 	return memberAccessor{}, false, nil
 }
 
 // parseSliceAccessor parses a slice range composed of the form "[:]".
-func (p *Parser) parseSliceAccessor() (va sliceRangeAccessor, ok bool, err error) {
+func (p *Parser) parseSliceAccessor() (sa sliceAccessor, ok bool, err error) {
 	cp := p.save()
 
 	id, ok := p.parseIdentifier()
 	if !ok {
-		return sliceRangeAccessor{}, false, nil
+		return sliceAccessor{}, false, nil
 	}
 	if !p.skipByte('[') {
 		cp.restore()
-		return sliceRangeAccessor{}, false, nil
+		return sliceAccessor{}, false, nil
 	}
 	p.skipBlanks()
 	if !p.skipByte(':') {
-		return sliceRangeAccessor{}, false, errorAt(fmt.Errorf("invalid slice: expected ':'"), p.lineNum, p.colNum(), p.input)
+		return sliceAccessor{}, false, errorAt(fmt.Errorf("invalid slice: expected ':'"), p.lineNum, p.colNum(), p.input)
 	}
 	p.skipBlanks()
 	if !p.skipByte(']') {
-		return sliceRangeAccessor{}, false, errorAt(fmt.Errorf("invalid slice: expected ']'"), p.lineNum, p.colNum(), p.input)
+		return sliceAccessor{}, false, errorAt(fmt.Errorf("invalid slice: expected ']'"), p.lineNum, p.colNum(), p.input)
 	}
-	return sliceRangeAccessor{typeName: id}, true, nil
+	return sliceAccessor{typeName: id}, true, nil
 }
 
-// parseTypeName parses a Go type name qualified by a tag name (or asterisk)
+// parseTypeMemberAccessor parses a Go type name qualified by a tag name (or asterisk)
 // of the form "TypeName.col_name".
-func (p *Parser) parseTypeName() (memberAccessor, bool, error) {
+func (p *Parser) parseTypeMemberAccessor() (memberAccessor, bool, error) {
 	cp := p.save()
 
 	// The error points to the skipped & or $.
@@ -700,7 +700,7 @@ func (p *Parser) parseInputExpr() (*inputExpr, bool, error) {
 	}
 
 	// Case 2: Struct or map, "Type.something".
-	if tn, ok, err := p.parseTypeName(); ok {
+	if tn, ok, err := p.parseTypeMemberAccessor(); ok {
 		if tn.memberName == "*" {
 			return nil, false, errorAt(fmt.Errorf("asterisk not allowed in input expression %q", "$"+tn.String()), cp.lineNum, cp.colNum(), p.input)
 		}
