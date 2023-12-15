@@ -182,11 +182,11 @@ func (s parseSuite) TestParseSliceRange(c *C) {
 	}{
 		{input: "mySlice[:]", expected: sliceAccessor{typeName: "mySlice"}},
 		{input: "mySlice[ : ]", expected: sliceAccessor{typeName: "mySlice"}},
-		{input: "mySlice[]", err: "column 9: invalid slice: expected ':'"},
-		{input: "mySlice[1:10]", err: "column 9: invalid slice: expected ':'"},
-		{input: "mySlice[1:]", err: "column 9: invalid slice: expected ':'"},
-		{input: "mySlice[:10]", err: "column 10: invalid slice: expected ']'"},
-		{input: "mySlice[1]", err: "column 9: invalid slice: expected ':'"},
+		{input: "mySlice[]", err: "column 1: invalid slice: expected 'mySlice[:]'"},
+		{input: "mySlice[1:10]", err: "column 1: invalid slice: expected 'mySlice[:]'"},
+		{input: "mySlice[1:]", err: "column 1: invalid slice: expected 'mySlice[:]'"},
+		{input: "mySlice[:10]", err: "column 1: invalid slice: expected 'mySlice[:]'"},
+		{input: "mySlice[1]", err: "column 1: invalid slice: expected 'mySlice[:]'"},
 	}
 	// invalidSliceRanges contains ranges that are invalid but that do not
 	// result in an error.
@@ -197,7 +197,7 @@ func (s parseSuite) TestParseSliceRange(c *C) {
 		p.init(t.input)
 		sr, ok, err := p.parseSliceAccessor()
 		if err != nil && t.err != "" {
-			c.Assert(err, ErrorMatches, t.err)
+			c.Assert(err.Error(), Equals, t.err)
 			c.Assert(ok, Equals, false)
 			continue
 		}

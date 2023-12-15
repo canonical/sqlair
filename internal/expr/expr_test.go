@@ -475,22 +475,22 @@ of three lines' AND id = $Person.*`,
 		err:   `cannot parse expression: column 16: cannot use slice syntax in output expression`,
 	}, {
 		query: "SELECT * FROM t WHERE id IN $ids[:-1]",
-		err:   `cannot parse expression: column 35: invalid slice: expected ']'`,
+		err:   `cannot parse expression: column 30: invalid slice: expected 'ids[:]'`,
 	}, {
 		query: "SELECT * FROM t WHERE id IN $ids[3:1]",
-		err:   `cannot parse expression: column 34: invalid slice: expected ':'`,
+		err:   `cannot parse expression: column 30: invalid slice: expected 'ids[:]'`,
 	}, {
 		query: "SELECT * FROM t WHERE id IN $ids[1:1]",
-		err:   `cannot parse expression: column 34: invalid slice: expected ':'`,
+		err:   `cannot parse expression: column 30: invalid slice: expected 'ids[:]'`,
 	}, {
 		query: "SELECT * FROM t WHERE id IN $ids[a:]",
-		err:   `cannot parse expression: column 34: invalid slice: expected ':'`,
+		err:   `cannot parse expression: column 30: invalid slice: expected 'ids[:]'`,
 	}, {
 		query: "SELECT * FROM t WHERE id IN $ids[:b]",
-		err:   `cannot parse expression: column 35: invalid slice: expected ']'`,
+		err:   `cannot parse expression: column 30: invalid slice: expected 'ids[:]'`,
 	}, {
 		query: "SELECT * FROM t WHERE id = $ids[]",
-		err:   `cannot parse expression: column 33: invalid slice: expected ':'`,
+		err:   `cannot parse expression: column 29: invalid slice: expected 'ids[:]'`,
 	}}
 
 	for _, t := range tests {

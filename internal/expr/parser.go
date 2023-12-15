@@ -535,11 +535,11 @@ func (p *Parser) parseSliceAccessor() (sa sliceAccessor, ok bool, err error) {
 	}
 	p.skipBlanks()
 	if !p.skipByte(':') {
-		return sliceAccessor{}, false, errorAt(fmt.Errorf("invalid slice: expected ':'"), p.lineNum, p.colNum(), p.input)
+		return sliceAccessor{}, false, errorAt(fmt.Errorf("invalid slice: expected '%s[:]'", id), cp.lineNum, cp.colNum(), p.input)
 	}
 	p.skipBlanks()
 	if !p.skipByte(']') {
-		return sliceAccessor{}, false, errorAt(fmt.Errorf("invalid slice: expected ']'"), p.lineNum, p.colNum(), p.input)
+		return sliceAccessor{}, false, errorAt(fmt.Errorf("invalid slice: expected '%s[:]'", id), cp.lineNum, cp.colNum(), p.input)
 	}
 	return sliceAccessor{typeName: id}, true, nil
 }
