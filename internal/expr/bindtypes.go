@@ -48,7 +48,10 @@ func (pe *ParsedExpr) BindTypes(args ...any) (tbe *TypeBoundExpr, err error) {
 
 	// Bind types to each expression.
 	var typedExprs TypeBoundExpr
-	outputUsed := map[typeinfo.Output]bool{}
+	// outputUsed records if the string representation of an output appears
+	// more than once in the query. If the string appears more than once then
+	// there is ambiguity in the query.
+	outputUsed := map[string]bool{}
 	var te any
 	for _, expr := range pe.exprs {
 		switch e := expr.(type) {
@@ -64,10 +67,10 @@ func (pe *ParsedExpr) BindTypes(args ...any) (tbe *TypeBoundExpr, err error) {
 			}
 
 			for _, oc := range toe.outputColumns {
-				if ok := outputUsed[oc.output]; ok {
+				if ok := outputUsed[oc.output.String()]; ok {
 					return nil, fmt.Errorf("%s appears more than once in output expressions", oc.output.String())
 				}
-				outputUsed[oc.output] = true
+				outputUsed[oc.output.String()] = true
 			}
 			te = toe
 		case *bypass:
