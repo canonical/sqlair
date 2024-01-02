@@ -81,7 +81,6 @@ type Query struct {
 	ctx context.Context
 	err error
 	pq  *expr.PrimedQuery
-	db  *DB
 }
 
 // Iterator is used to iterate over the results of the query.
@@ -115,7 +114,7 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return rows, result, err
 	}
 
-	return &Query{db: db, pq: pq, run: run, ctx: ctx, err: nil}
+	return &Query{pq: pq, run: run, ctx: ctx, err: nil}
 }
 
 // Run is an alias for Get that takes no arguments.
@@ -347,7 +346,6 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 
 type TX struct {
 	sqltx *sql.Tx
-	db    *DB
 	done  int32
 }
 
@@ -371,7 +369,7 @@ func (db *DB) Begin(ctx context.Context, opts *TXOptions) (*TX, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &TX{sqltx: sqltx, db: db}, nil
+	return &TX{sqltx: sqltx}, nil
 }
 
 // Commit commits the transaction.
@@ -431,5 +429,5 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return rows, result, err
 	}
 
-	return &Query{db: tx.db, pq: pq, ctx: ctx, run: run, err: nil}
+	return &Query{pq: pq, ctx: ctx, run: run, err: nil}
 }
