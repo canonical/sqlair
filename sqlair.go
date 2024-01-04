@@ -77,7 +77,7 @@ func (db *DB) PlainDB() *sql.DB {
 // Query holds the results of a database query.
 type Query struct {
 	// run executes the Query against the db or the tx.
-	run func() (*sql.Rows, sql.Result, error)
+	run func(context.Context) (*sql.Rows, sql.Result, error)
 	ctx context.Context
 	err error
 	pq  *expr.PrimedQuery
@@ -105,11 +105,11 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: err}
 	}
 
-	run := func() (rows *sql.Rows, result sql.Result, err error) {
+	run := func(innerCtx context.Context) (rows *sql.Rows, result sql.Result, err error) {
 		if pq.HasOutputs() {
-			rows, err = db.sqldb.QueryContext(ctx, pq.SQL(), pq.Params()...)
+			rows, err = db.sqldb.QueryContext(innerCtx, pq.SQL(), pq.Params()...)
 		} else {
-			result, err = db.sqldb.ExecContext(ctx, pq.SQL(), pq.Params()...)
+			result, err = db.sqldb.ExecContext(innerCtx, pq.SQL(), pq.Params()...)
 		}
 		return rows, result, err
 	}
@@ -168,7 +168,7 @@ func (q *Query) Iter() *Iterator {
 	}
 
 	var cols []string
-	rows, result, err := q.run()
+	rows, result, err := q.run(q.ctx)
 	if q.pq.HasOutputs() {
 		if err == nil { // if err IS nil
 			cols, err = rows.Columns()
@@ -420,11 +420,11 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: err}
 	}
 
-	run := func() (rows *sql.Rows, result sql.Result, err error) {
+	run := func(innerCtx context.Context) (rows *sql.Rows, result sql.Result, err error) {
 		if pq.HasOutputs() {
-			rows, err = tx.sqltx.QueryContext(ctx, pq.SQL(), pq.Params()...)
+			rows, err = tx.sqltx.QueryContext(innerCtx, pq.SQL(), pq.Params()...)
 		} else {
-			result, err = tx.sqltx.ExecContext(ctx, pq.SQL(), pq.Params()...)
+			result, err = tx.sqltx.ExecContext(innerCtx, pq.SQL(), pq.Params()...)
 		}
 		return rows, result, err
 	}
