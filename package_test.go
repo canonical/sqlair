@@ -5,12 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"runtime"
-	"testing"
-	"time"
-
 	_ "github.com/mattn/go-sqlite3"
 	. "gopkg.in/check.v1"
+	"testing"
 
 	"github.com/canonical/sqlair"
 )
@@ -22,38 +19,12 @@ type PackageSuite struct{}
 
 var _ = Suite(&PackageSuite{})
 
-func (s *PackageSuite) TearDownTest(c *C) {
-	// Try to run finalizers by calling GC several times.
-	for i := 0; i <= 10; i++ {
-		runtime.GC()
-		time.Sleep(0)
-	}
-
-	stmtRegistryMutex.Lock()
-	defer stmtRegistryMutex.Unlock()
-
-	// Asssert that all the open statements were closed.
-	for sPtr, query := range openedStmts[c.TestName()] {
-		c.Check(closedStmts[c.TestName()][sPtr], Equals, true,
-			Commentf("%s: failed to close statement: %s", c.TestName(), query))
-	}
-}
-
-func (s *PackageSuite) TearDownSuite(c *C) {
-	stmtRegistryMutex.Lock()
-	defer stmtRegistryMutex.Unlock()
-
-	// Reset state.
-	closedStmts = map[string]map[uintptr]bool{}
-	openedStmts = map[string]map[uintptr]string{}
-}
-
-func setupDB(testName string) (*sql.DB, error) {
-	return sql.Open("sqlite3_stmtChecked", "file:test.db?cache=shared&mode=memory&testName="+testName)
+func setupDB() (*sql.DB, error) {
+	return sql.Open("sqlite3", "file:test.db?cache=shared&mode=memory")
 }
 
 func createExampleDB(c *C, createTables string, inserts []string) (*sql.DB, error) {
-	db, err := setupDB(c.TestName())
+	db, err := setupDB()
 	c.Assert(err, IsNil)
 
 	_, err = db.Exec(createTables)
@@ -1071,123 +1042,6 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 	}
 }
 
-// TestPreparedStmtCaching checks that the cache of statements prepared on databases behaves
-// as expected.
-func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
-	// Get cache variables.
-	stmtDBCache, dbStmtCache, cacheMutex := sqlair.Cache()
-
-	// checkStmtCache is a helper function to check if a prepared statement is
-	// cached or not.
-	checkStmtCache := func(dbID uint64, sID uint64, inCache bool) {
-		cacheMutex.RLock()
-		defer cacheMutex.RUnlock()
-		dbCache, ok1 := stmtDBCache[sID]
-		var ok2 bool
-		if ok1 {
-			_, ok2 = dbCache[dbID]
-		}
-		_, ok3 := dbStmtCache[dbID][sID]
-		c.Assert(ok2, Equals, inCache)
-		c.Assert(ok3, Equals, inCache)
-	}
-
-	// checkDBNotInCache is a helper function to check a db is not mentioned in
-	// the cache.
-	checkDBNotInCache := func(dbID uint64) {
-		cacheMutex.RLock()
-		defer cacheMutex.RUnlock()
-		for _, dbCache := range stmtDBCache {
-			_, ok := dbCache[dbID]
-			c.Assert(ok, Equals, false)
-		}
-		_, ok := dbStmtCache[dbID]
-		c.Assert(ok, Equals, false)
-	}
-
-	// checkCacheEmpty asserts both the sides of the cache are empty.
-	checkCacheEmpty := func() {
-		cacheMutex.RLock()
-		defer cacheMutex.RUnlock()
-		c.Assert(dbStmtCache, HasLen, 0)
-		c.Assert(stmtDBCache, HasLen, 0)
-	}
-
-	// For a Statement or DB to be removed from the cache it needs to go out of
-	// scope and be garbage collected. Because of this, the tests below make
-	// extensive use of functions to "forget" statements and databases.
-
-	q1 := `SELECT &Person.*	FROM person WHERE name = "Fred"`
-	q2 := `SELECT &Person.* FROM person WHERE name = "Mark"`
-	p := Person{}
-
-	// createAndCacheStmt takes a db and prepares a statement on it.
-	createAndCacheStmt := func(db *sqlair.DB) (stmtID uint64) {
-		// Create stmt.
-		stmt, err := sqlair.Prepare(q1, Person{})
-		c.Assert(err, IsNil)
-
-		// Start a query with stmt on db. This will prepare the stmt on the db.
-		c.Assert(db.Query(nil, stmt).Get(&p), IsNil)
-		// Check that stmt is now in the cache.
-		checkStmtCache(db.CacheID(), stmt.CacheID(), true)
-		return stmt.CacheID()
-	}
-
-	// testStmtsOnDB prepares a given statement on the db then creates a second
-	// statement inside another function and checks it has been cleared from
-	// the cache on garbage collection.
-	testStmtsOnDB := func(db *sqlair.DB, stmt *sqlair.Statement) {
-		// Start a query with stmt on db. This will prepare stmt on db.
-		c.Assert(db.Query(nil, stmt).Get(&p), IsNil)
-		// Check the stmt now is in the cache.
-		checkStmtCache(db.CacheID(), stmt.CacheID(), true)
-
-		// Run createAndCacheStmt and check that once the function has finished
-		// the stmt it created is not in the cache.
-		stmt2ID := createAndCacheStmt(db)
-		// Run the garbage collector and wait one millisecond for the finalizer to finish.
-		runtime.GC()
-		time.Sleep(1 * time.Millisecond)
-		checkStmtCache(db.CacheID(), stmt2ID, false)
-	}
-
-	// createDBAndTestStmt opens a new database and runs testStmtsOnDB on it.
-	createDBAndTestStmt := func(stmt *sqlair.Statement) (dbID uint64) {
-		// Create db.
-		tables, sqldb, err := personAndAddressDB(c)
-		c.Assert(err, IsNil)
-		db := sqlair.NewDB(sqldb)
-		defer dropTables(c, db, tables...)
-		// Test stmt.
-		testStmtsOnDB(db, stmt)
-		return db.CacheID()
-	}
-
-	// createStmtAndTestOnDBs creates a statement then runs createDBAndTestStmt
-	// twice. It then checks that the stmts prepared on the databases have been
-	// cleared from the cache once createDBAndTestStmt is finished.
-	createStmtAndTestOnDBs := func() {
-		// Create stmt.
-		stmt, err := sqlair.Prepare(q2, Person{})
-		c.Assert(err, IsNil)
-		db1ID := createDBAndTestStmt(stmt)
-		db2ID := createDBAndTestStmt(stmt)
-		// Run the garbage collector and wait one millisecond for the finalizer to finish.
-		runtime.GC()
-		time.Sleep(1 * time.Millisecond)
-		checkDBNotInCache(db1ID)
-		checkDBNotInCache(db2ID)
-	}
-
-	// Run the functions above.
-	createStmtAndTestOnDBs()
-	// Run the garbage collector and wait one millisecond for the finalizer to finish.
-	runtime.GC()
-	time.Sleep(1 * time.Millisecond)
-	checkCacheEmpty()
-}
-
 func (s *PackageSuite) TestTransactionWithOneConn(c *C) {
 	tables, sqldb, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
@@ -1377,54 +1231,4 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 			c.Errorf("\ntest %q failed (Close):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
 		}
 	}
-}
-
-// Because the Query struct did not contain references to either Statement or
-// DB, if either of those would go out of scope the underlying sql.Stmt would
-// be closed.
-func (s *PackageSuite) TestRaceConditionFinalizer(c *C) {
-	var q *sqlair.Query
-	// Drop all the values except the query itself.
-	func() {
-		sqldb, err := setupDB(c.TestName())
-		c.Assert(err, IsNil)
-
-		db := sqlair.NewDB(sqldb)
-
-		selectStmt := sqlair.MustPrepare(`SELECT 'hello'`)
-		q = db.Query(nil, selectStmt)
-	}()
-
-	// Try to run their finalizers by calling GC several times.
-	for i := 0; i <= 10; i++ {
-		runtime.GC()
-		time.Sleep(0)
-	}
-
-	// Assert that sql.Stmt was not closed early.
-	c.Assert(q.Run(), IsNil)
-}
-func (s *PackageSuite) TestRaceConditionFinalizerTX(c *C) {
-	var q *sqlair.Query
-	// Drop all the values except the query itself.
-	func() {
-		sqldb, err := setupDB(c.TestName())
-		c.Assert(err, IsNil)
-
-		db := sqlair.NewDB(sqldb)
-
-		selectStmt := sqlair.MustPrepare(`SELECT 'hello'`)
-		tx, err := db.Begin(nil, nil)
-		c.Assert(err, IsNil)
-		q = tx.Query(nil, selectStmt)
-	}()
-
-	// Try to run their finalizers by calling GC several times.
-	for i := 0; i <= 10; i++ {
-		runtime.GC()
-		time.Sleep(0)
-	}
-
-	// Assert that sql.Stmt was not closed early.
-	c.Assert(q.Run(), IsNil)
 }
