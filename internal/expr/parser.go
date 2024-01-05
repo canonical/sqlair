@@ -77,15 +77,40 @@ type expression interface {
 	expr()
 }
 
-// valueAccessor stores information for accessing a Go value. It consists of a
-// type name and some value within it to be accessed. For example: a field of a
-// struct, or a key of a map.
-type valueAccessor struct {
+// valueAccessor stores information about how to access a Go value. For example:
+// by index, by key, or by slice syntax.
+type valueAccessor interface {
+	fmt.Stringer
+	getTypeName() string
+}
+
+// memberAccessor stores information for accessing a keyed Go value. It consists
+// of a type name and some value within it to be accessed. For example: a field
+// of a struct, or a key of a map.
+type memberAccessor struct {
 	typeName, memberName string
 }
 
-func (va valueAccessor) String() string {
-	return va.typeName + "." + va.memberName
+func (ma memberAccessor) String() string {
+	return ma.typeName + "." + ma.memberName
+}
+
+func (ma memberAccessor) getTypeName() string {
+	return ma.typeName
+}
+
+// sliceAccessor stores information for accessing a slice using the
+// expression "typeName[:]".
+type sliceAccessor struct {
+	typeName string
+}
+
+func (st sliceAccessor) String() string {
+	return fmt.Sprintf("%s[:]", st.typeName)
+}
+
+func (sa sliceAccessor) getTypeName() string {
+	return sa.typeName
 }
 
 // columnAccessor stores a SQL column name and optionally its table name.
@@ -117,7 +142,7 @@ func (p *inputExpr) expr() {}
 // as well as the source table and column where it will be read from.
 type outputExpr struct {
 	sourceColumns []columnAccessor
-	targetTypes   []valueAccessor
+	targetTypes   []memberAccessor
 	raw           string
 }
 
@@ -213,6 +238,11 @@ func (cp *checkpoint) restore() {
 	cp.parser.exprs = cp.exprs
 	cp.parser.lineNum = cp.lineNum
 	cp.parser.lineStart = cp.lineStart
+}
+
+// colNum calculates the current column number taking into account line breaks.
+func (cp *checkpoint) colNum() int {
+	return cp.pos - cp.lineStart + 1
 }
 
 // add pushes the parsed expression to the list of expressions along with the
@@ -473,35 +503,68 @@ func (p *Parser) parseColumn() (columnAccessor, bool, error) {
 	return columnAccessor{}, false, nil
 }
 
-func (p *Parser) parseTargetType() (valueAccessor, bool, error) {
+func (p *Parser) parseTargetType() (memberAccessor, bool, error) {
+	startLine := p.lineNum
+	startCol := p.colNum()
+
 	if p.skipByte('&') {
-		return p.parseTypeName()
+		// Using a slice as an output is an error, we add the case here to
+		// improve the error message.
+		if st, ok, err := p.parseSliceAccessor(); ok {
+			return memberAccessor{}, false, errorAt(fmt.Errorf("cannot use slice syntax %q in output expression", st), startLine, startCol, p.input)
+		} else if err != nil {
+			return memberAccessor{}, false, errorAt(fmt.Errorf("cannot use slice syntax in output expression"), startLine, startCol, p.input)
+		}
+		return p.parseTypeAndMember()
 	}
 
-	return valueAccessor{}, false, nil
+	return memberAccessor{}, false, nil
 }
 
-// parseTypeName parses a Go type name qualified by a tag name (or asterisk)
+// parseSliceAccessor parses a slice range composed of the form "[:]".
+func (p *Parser) parseSliceAccessor() (sa sliceAccessor, ok bool, err error) {
+	cp := p.save()
+
+	id, ok := p.parseIdentifier()
+	if !ok {
+		return sliceAccessor{}, false, nil
+	}
+	if !p.skipByte('[') {
+		cp.restore()
+		return sliceAccessor{}, false, nil
+	}
+	p.skipBlanks()
+	if !p.skipByte(':') {
+		return sliceAccessor{}, false, errorAt(fmt.Errorf("invalid slice: expected '%s[:]'", id), cp.lineNum, cp.colNum(), p.input)
+	}
+	p.skipBlanks()
+	if !p.skipByte(']') {
+		return sliceAccessor{}, false, errorAt(fmt.Errorf("invalid slice: expected '%s[:]'", id), cp.lineNum, cp.colNum(), p.input)
+	}
+	return sliceAccessor{typeName: id}, true, nil
+}
+
+// parseTypeAndMember parses a Go type name qualified by a tag name (or asterisk)
 // of the form "TypeName.col_name".
-func (p *Parser) parseTypeName() (valueAccessor, bool, error) {
+func (p *Parser) parseTypeAndMember() (memberAccessor, bool, error) {
 	cp := p.save()
 
 	// The error points to the skipped & or $.
 	identifierCol := p.colNum() - 1
 	if id, ok := p.parseIdentifier(); ok {
 		if !p.skipByte('.') {
-			return valueAccessor{}, false, errorAt(fmt.Errorf("unqualified type, expected %s.* or %s.<db tag>", id, id), p.lineNum, identifierCol, p.input)
+			return memberAccessor{}, false, errorAt(fmt.Errorf("unqualified type, expected %s.* or %s.<db tag> or %s[:]", id, id, id), p.lineNum, identifierCol, p.input)
 		}
 
 		idField, ok := p.parseIdentifierAsterisk()
 		if !ok {
-			return valueAccessor{}, false, errorAt(fmt.Errorf("invalid identifier suffix following %q", id), p.lineNum, p.colNum(), p.input)
+			return memberAccessor{}, false, errorAt(fmt.Errorf("invalid identifier suffix following %q", id), p.lineNum, p.colNum(), p.input)
 		}
-		return valueAccessor{typeName: id, memberName: idField}, true, nil
+		return memberAccessor{typeName: id, memberName: idField}, true, nil
 	}
 
 	cp.restore()
-	return valueAccessor{}, false, nil
+	return memberAccessor{}, false, nil
 }
 
 // parseList takes a parsing function that returns a T and parses a
@@ -560,12 +623,12 @@ func (p *Parser) parseColumns() (cols []columnAccessor, parentheses bool, ok boo
 
 // parseTargetTypes parses a single output type or a list of output types.
 // Lists of types must be enclosed in parentheses.
-func (p *Parser) parseTargetTypes() (types []valueAccessor, parentheses bool, ok bool, err error) {
+func (p *Parser) parseTargetTypes() (types []memberAccessor, parentheses bool, ok bool, err error) {
 	// Case 1: A single target e.g. "&Person.name".
 	if targetTypes, ok, err := p.parseTargetType(); err != nil {
 		return nil, false, false, err
 	} else if ok {
-		return []valueAccessor{targetTypes}, false, true, nil
+		return []memberAccessor{targetTypes}, false, true, nil
 	}
 
 	// Case 2: Multiple types e.g. "(&Person.name, &Person.id)".
@@ -589,7 +652,7 @@ func (p *Parser) parseOutputExpr() (*outputExpr, bool, error) {
 	} else if ok {
 		return &outputExpr{
 			sourceColumns: []columnAccessor{},
-			targetTypes:   []valueAccessor{targetType},
+			targetTypes:   []memberAccessor{targetType},
 			raw:           p.input[start:p.pos],
 		}, true, nil
 	}
@@ -627,18 +690,25 @@ func (p *Parser) parseOutputExpr() (*outputExpr, bool, error) {
 // parseInputExpr parses an input expression of the form "$Type.name".
 func (p *Parser) parseInputExpr() (*inputExpr, bool, error) {
 	cp := p.save()
+	if !p.skipByte('$') {
+		return nil, false, nil
+	}
 
-	if p.skipByte('$') {
-		// Error points to the $ sign skipped above.
-		nameCol := p.colNum() - 1
-		if tn, ok, err := p.parseTypeName(); ok {
-			if tn.memberName == "*" {
-				return nil, false, errorAt(fmt.Errorf(`asterisk not allowed in input expression "$%s"`, tn), p.lineNum, nameCol, p.input)
-			}
-			return &inputExpr{sourceType: tn, raw: p.input[cp.pos:p.pos]}, true, nil
-		} else if err != nil {
-			return nil, false, err
+	// Case 1: Slice range, "Type[:]".
+	if st, ok, err := p.parseSliceAccessor(); err != nil {
+		return nil, false, err
+	} else if ok {
+		return &inputExpr{sourceType: st, raw: p.input[cp.pos:p.pos]}, true, nil
+	}
+
+	// Case 2: Struct or map, "Type.something".
+	if tn, ok, err := p.parseTypeAndMember(); ok {
+		if tn.memberName == "*" {
+			return nil, false, errorAt(fmt.Errorf("asterisk not allowed in input expression %q", "$"+tn.String()), cp.lineNum, cp.colNum(), p.input)
 		}
+		return &inputExpr{sourceType: tn, raw: p.input[cp.pos:p.pos]}, true, nil
+	} else if err != nil {
+		return nil, false, err
 	}
 
 	cp.restore()

@@ -173,3 +173,46 @@ func (s parseSuite) TestRemoveComments(c *C) {
 		}
 	}
 }
+
+func (s parseSuite) TestParseSliceRange(c *C) {
+	sliceRangeTests := []struct {
+		input    string
+		expected valueAccessor
+		err      string
+	}{
+		{input: "mySlice[:]", expected: sliceAccessor{typeName: "mySlice"}},
+		{input: "mySlice[ : ]", expected: sliceAccessor{typeName: "mySlice"}},
+		{input: "mySlice[]", err: "column 1: invalid slice: expected 'mySlice[:]'"},
+		{input: "mySlice[1:10]", err: "column 1: invalid slice: expected 'mySlice[:]'"},
+		{input: "mySlice[1:]", err: "column 1: invalid slice: expected 'mySlice[:]'"},
+		{input: "mySlice[:10]", err: "column 1: invalid slice: expected 'mySlice[:]'"},
+		{input: "mySlice[1]", err: "column 1: invalid slice: expected 'mySlice[:]'"},
+	}
+	// invalidSliceRanges contains ranges that are invalid but that do not
+	// result in an error.
+	invalidSliceRanges := []string{"[]", "[:]", "[1:10]", "[1]"}
+
+	var p = NewParser()
+	for _, t := range sliceRangeTests {
+		p.init(t.input)
+		sr, ok, err := p.parseSliceAccessor()
+		if err != nil && t.err != "" {
+			c.Assert(err.Error(), Equals, t.err)
+			c.Assert(ok, Equals, false)
+			continue
+		}
+		c.Assert(err, IsNil)
+		c.Assert(ok, Equals, true)
+		c.Assert(t.expected, DeepEquals, sr)
+	}
+	for _, t := range invalidSliceRanges {
+		p.init(t)
+		_, ok, err := p.parseSliceAccessor()
+		if ok {
+			c.Errorf("test failed. %s parsed as valid slice range", t)
+		}
+		if err != nil {
+			c.Errorf("test failed. parsing %s returned an error", t)
+		}
+	}
+}

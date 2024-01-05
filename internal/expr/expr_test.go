@@ -59,8 +59,8 @@ var tests = []struct {
 	typeSamples:    []any{Person{}},
 	expectedSQL:    "SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2",
 }, {
-	summary: "spaces and tabs",
-	query: "SELECT p.* 	AS 		   &Person.*",
+	summary:        "spaces and tabs",
+	query:          "SELECT p.* 	AS 		   &Person.*",
 	expectedParsed: "[Bypass[SELECT ] Output[[p.*] [Person.*]]]",
 	typeSamples:    []any{Person{}},
 	expectedSQL:    "SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2",
@@ -422,7 +422,10 @@ comment */ WHERE x = $Address.&d`,
 		err:   `cannot parse expression: column 38: invalid identifier suffix following "Address"`,
 	}, {
 		query: "SELECT foo FROM t WHERE x = $Address",
-		err:   `cannot parse expression: column 29: unqualified type, expected Address.* or Address.<db tag>`,
+		err:   `cannot parse expression: column 29: unqualified type, expected Address.* or Address.<db tag> or Address[:]`,
+	}, {
+		query: "SELECT foo FROM t WHERE x = $Address [:]",
+		err:   `cannot parse expression: column 29: unqualified type, expected Address.* or Address.<db tag> or Address[:]`,
 	}, {
 		query: "SELECT name AS (&Person.*)",
 		err:   `cannot parse expression: column 16: unexpected parentheses around types after "AS"`,
@@ -455,6 +458,39 @@ comment */
 string
 of three lines' AND id = $Person.*`,
 		err: `cannot parse expression: line 3, column 26: asterisk not allowed in input expression "$Person.*"`,
+	}, {
+		query: "SELECT &S[:] FROM t",
+		err:   `cannot parse expression: column 8: cannot use slice syntax "S[:]" in output expression`,
+	}, {
+		query: "SELECT &S[0] FROM t",
+		err:   `cannot parse expression: column 8: cannot use slice syntax in output expression`,
+	}, {
+		query: "SELECT &S[1:5] FROM t",
+		err:   `cannot parse expression: column 8: cannot use slice syntax in output expression`,
+	}, {
+		query: "SELECT col1 AS &S[1:5] FROM t",
+		err:   `cannot parse expression: column 16: cannot use slice syntax in output expression`,
+	}, {
+		query: "SELECT col1 AS &S[] FROM t",
+		err:   `cannot parse expression: column 16: cannot use slice syntax in output expression`,
+	}, {
+		query: "SELECT * FROM t WHERE id IN $ids[:-1]",
+		err:   `cannot parse expression: column 30: invalid slice: expected 'ids[:]'`,
+	}, {
+		query: "SELECT * FROM t WHERE id IN $ids[3:1]",
+		err:   `cannot parse expression: column 30: invalid slice: expected 'ids[:]'`,
+	}, {
+		query: "SELECT * FROM t WHERE id IN $ids[1:1]",
+		err:   `cannot parse expression: column 30: invalid slice: expected 'ids[:]'`,
+	}, {
+		query: "SELECT * FROM t WHERE id IN $ids[a:]",
+		err:   `cannot parse expression: column 30: invalid slice: expected 'ids[:]'`,
+	}, {
+		query: "SELECT * FROM t WHERE id IN $ids[:b]",
+		err:   `cannot parse expression: column 30: invalid slice: expected 'ids[:]'`,
+	}, {
+		query: "SELECT * FROM t WHERE id = $ids[]",
+		err:   `cannot parse expression: column 29: invalid slice: expected 'ids[:]'`,
 	}}
 
 	for _, t := range tests {
@@ -748,5 +784,31 @@ func (s *ExprSuite) TestBindInputsError(c *C) {
 		} else {
 			c.Errorf("test %d failed:\nexpected err: %q but got nil\nquery: %q", i, t.err, t.query)
 		}
+	}
+}
+
+func (s *ExprSuite) TestSliceSyntax(c *C) {
+	tests := []struct {
+		summery string
+		query   string
+		parts   string
+	}{{
+		"single slice",
+		"SELECT name FROM person WHERE id IN ($S[:])",
+		"[Bypass[SELECT name FROM person WHERE id IN (] Input[S[:]] Bypass[)]]",
+	}, {
+		"many slice ranges",
+		"SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $S[:], $Manager.id, $IntSlice[:], $StringSlice[:])",
+		"[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE id IN (] Input[Person.id] Bypass[, ] Input[S[:]] Bypass[, ] Input[Manager.id] Bypass[, ] Input[IntSlice[:]] Bypass[, ] Input[StringSlice[:]] Bypass[)]]",
+	}, {
+		"slices and other expressions in IN statement",
+		`SELECT name FROM person WHERE id IN ($S[:], func(1,2), "one", $IntSlice[:])`,
+		`[Bypass[SELECT name FROM person WHERE id IN (] Input[S[:]] Bypass[, func(1,2), "one", ] Input[IntSlice[:]] Bypass[)]]`,
+	}}
+	for _, t := range tests {
+		parser := expr.NewParser()
+		parsedExpr, err := parser.Parse(t.query)
+		c.Assert(err, IsNil)
+		c.Assert(parsedExpr.String(), Equals, t.parts)
 	}
 }

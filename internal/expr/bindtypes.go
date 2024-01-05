@@ -87,9 +87,15 @@ func bindInputTypes(e *inputExpr, argInfo typeinfo.ArgInfo) (te *typedInputExpr,
 		}
 	}()
 
-	input, err := argInfo.InputMember(e.sourceType.typeName, e.sourceType.memberName)
-	if err != nil {
-		return nil, err
+	var input typeinfo.Input
+	switch a := e.sourceType.(type) {
+	case memberAccessor:
+		input, err = argInfo.InputMember(a.typeName, a.memberName)
+		if err != nil {
+			return nil, err
+		}
+	case sliceAccessor:
+		return nil, fmt.Errorf("slice support not implemented")
 	}
 	return &typedInputExpr{input}, nil
 }
@@ -190,7 +196,7 @@ func starCountColumns(cs []columnAccessor) int {
 }
 
 // starCountTypes counts the number of asterisks in a list of types.
-func starCountTypes(vs []valueAccessor) int {
+func starCountTypes(vs []memberAccessor) int {
 	s := 0
 	for _, v := range vs {
 		if v.memberName == "*" {
