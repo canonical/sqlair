@@ -570,6 +570,7 @@ func (s *ExprSuite) TestBindTypesErrors(c *C) {
 	type NoTags struct {
 		S string
 	}
+	type myArray [10]any
 	tests := []struct {
 		query       string
 		typeSamples []any
@@ -686,6 +687,10 @@ func (s *ExprSuite) TestBindTypesErrors(c *C) {
 		query:       "SELECT street FROM t WHERE x IN ($int[:])",
 		typeSamples: []any{[]int{}},
 		err:         `cannot prepare statement: cannot use anonymous slice`,
+	}, {
+		query:       "SELECT street FROM t WHERE x IN ($myArray[:])",
+		typeSamples: []any{myArray{}},
+		err:         `cannot prepare statement: need supported type, got array`,
 	}}
 
 	for i, test := range tests {

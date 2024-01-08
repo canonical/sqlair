@@ -216,21 +216,33 @@ func (*typeInfoSuite) TestLocateParamsSlice(c *C) {
 	argInfo, err := GenerateArgInfo([]any{S{}})
 	c.Assert(err, IsNil)
 
-	s := S{1, 2}
-	valOfS := reflect.ValueOf(s)
-	typeToValue := map[reflect.Type]reflect.Value{
-		reflect.TypeOf(s): valOfS,
-	}
+	tests := []struct {
+		slice          any
+		expectedValues []any
+	}{{
+		slice:          S{1, 2},
+		expectedValues: []any{1, 2},
+	}, {
+		slice:          S{},
+		expectedValues: []any{},
+	}}
 
-	input, err := argInfo.InputSlice("S")
-	c.Assert(err, IsNil)
+	for _, test := range tests {
+		valOfSlice := reflect.ValueOf(test.slice)
+		typeToValue := map[reflect.Type]reflect.Value{
+			reflect.TypeOf(test.slice): valOfSlice,
+		}
 
-	vals, err := input.LocateParams(typeToValue)
-	c.Assert(err, IsNil)
-	c.Assert(vals, HasLen, len(s))
+		input, err := argInfo.InputSlice(valOfSlice.Type().Name())
+		c.Assert(err, IsNil)
 
-	for i := 0; i < len(s); i++ {
-		c.Assert(vals[i].Interface(), Equals, s[i])
+		vals, err := input.LocateParams(typeToValue)
+		c.Assert(err, IsNil)
+		c.Assert(vals, HasLen, len(test.expectedValues))
+
+		for i := 0; i < len(test.expectedValues); i++ {
+			c.Assert(vals[i].Interface(), Equals, test.expectedValues[i])
+		}
 	}
 }
 
