@@ -5,7 +5,7 @@
 SQLair is a convenience layer for SQL databases that embeds Go structs and maps directly into SQL queries.
 
 The SQL syntax is expanded with SQLair input and output expressions which indicate the parts of the query correspond to Go values.
-This allows the user to specify Go values (such as structs, maps and slices) to use in the SQL query itself whilst allowing the full power of SQL to be utilised.
+This allows the user to specify Go values (such as structs, maps and slices) in the SQL query itself whilst allowing the full power of SQL to be utilised.
 This package also provides an alternative API for reading the rows from the database.
 SQLair relies on database/sql for all the underlying operations.
 
@@ -37,7 +37,7 @@ Note that in the SQLair `db` tags (i.e. the column names) appear in the input/ou
 # Syntax
 
 The SQLair expressions specify Go values to use as query inputs or outputs. The
-input expressions can take values from structs maps and slices whereas the
+input expressions can take values from structs, maps and slices while the
 output expressions can scan into only structs and maps.
 
 SQLair input expressions take the following formats:

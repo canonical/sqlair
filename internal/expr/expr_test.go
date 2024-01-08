@@ -374,9 +374,8 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	expectedParams: []any{1, "two", 3.0},
 	expectedSQL:    "SELECT name FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2)",
 }, {
-	// No error is throw for an empty slice because we do not know where in the
-	// query and how the slice input will be used and we do not want to force
-	// users to work around sqlair errors.
+	// No error is throw for when the user passes an empty slice because we do
+	// not want to limit the use of slices to only the cases we have foreseen.
 	summary:        "empty slice",
 	query:          "SELECT name FROM person WHERE id IN ($S[:])",
 	expectedParsed: "[Bypass[SELECT name FROM person WHERE id IN (] Input[S[:]] Bypass[)]]",
