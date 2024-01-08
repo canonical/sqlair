@@ -657,7 +657,7 @@ func (s *ExprSuite) TestBindTypesErrors(c *C) {
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		typeSamples: []any{nil},
-		err:         `cannot prepare statement: need valid value, got nil`,
+		err:         `cannot prepare statement: need supported value, got nil`,
 	}, {
 		query:       "SELECT * AS &.* FROM t",
 		typeSamples: []any{struct{ f int }{f: 1}},
@@ -768,12 +768,12 @@ func (s *ExprSuite) TestBindInputsError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		typeSamples: []any{Address{}, Person{}},
 		inputArgs:   []any{nil, Person{Fullname: "Monty Bingles"}},
-		err:         "invalid input parameter: need valid value, got nil",
+		err:         "invalid input parameter: need supported value, got nil",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		typeSamples: []any{Address{}, Person{}},
 		inputArgs:   []any{(*Person)(nil)},
-		err:         "invalid input parameter: need valid value, got nil",
+		err:         "invalid input parameter: need supported value, got nil",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		typeSamples: []any{Address{}},

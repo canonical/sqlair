@@ -26,7 +26,7 @@ func GenerateArgInfo(typeSamples []any) (ArgInfo, error) {
 	argInfo := ArgInfo{}
 	for _, typeSample := range typeSamples {
 		if typeSample == nil {
-			return nil, fmt.Errorf("need valid value, got nil")
+			return nil, fmt.Errorf("need supported value, got nil")
 		}
 		t := reflect.TypeOf(typeSample)
 		switch t.Kind() {

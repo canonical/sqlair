@@ -120,7 +120,7 @@ func (s *typeInfoSuite) TestGenerateArgInfoInvalidTypeErrors(c *C) {
 	}{{
 
 		args: []any{nil},
-		err:  "need valid value, got nil",
+		err:  "need supported value, got nil",
 	}, {
 
 		args: []any{struct{ foo int }{}},

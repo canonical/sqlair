@@ -32,7 +32,7 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 	for _, arg := range args {
 		v := reflect.ValueOf(arg)
 		if v.Kind() == reflect.Invalid || (v.Kind() == reflect.Pointer && v.IsNil()) {
-			return nil, fmt.Errorf("need valid value, got nil")
+			return nil, fmt.Errorf("need supported value, got nil")
 		}
 		v = reflect.Indirect(v)
 		t := v.Type()
