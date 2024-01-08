@@ -47,6 +47,10 @@ type IntMap map[string]int
 
 type StringMap map[string]string
 
+type IntSlice []int
+
+type StringSlice []string
+
 var tests = []struct {
 	summary        string
 	query          string
@@ -62,8 +66,8 @@ var tests = []struct {
 	typeSamples:    []any{Person{}},
 	expectedSQL:    "SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2",
 }, {
-	summary:        "spaces and tabs",
-	query:          "SELECT p.* 	AS 		   &Person.*",
+	summary: "spaces and tabs",
+	query: "SELECT p.* 	AS 		   &Person.*",
 	expectedParsed: "[Bypass[SELECT ] Output[[p.*] [Person.*]]]",
 	typeSamples:    []any{Person{}},
 	expectedSQL:    "SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2",
@@ -337,6 +341,49 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	inputArgs:      []any{HardMaths{X: 1, Y: 2}},
 	expectedParams: []any{1, 2},
 	expectedSQL:    "INSERT INTO arr VALUES (ARRAY[[1,2],[@sqlair_0,4]], ARRAY[[5,6],[@sqlair_1,8]]);",
+}, {
+	summary:        "single slice",
+	query:          "SELECT name FROM person WHERE id IN ($S[:])",
+	expectedParsed: "[Bypass[SELECT name FROM person WHERE id IN (] Input[S[:]] Bypass[)]]",
+	typeSamples:    []any{sqlair.S{}},
+	inputArgs:      []any{sqlair.S{1, 2, 3}},
+	expectedParams: []any{1, 2, 3},
+	expectedSQL:    "SELECT name FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2)",
+}, {
+	summary:        "many slices",
+	query:          "SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $S[:], $Manager.id, $IntSlice[:], $StringSlice[:])",
+	expectedParsed: "[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE id IN (] Input[Person.id] Bypass[, ] Input[S[:]] Bypass[, ] Input[Manager.id] Bypass[, ] Input[IntSlice[:]] Bypass[, ] Input[StringSlice[:]] Bypass[)]]",
+	typeSamples:    []any{sqlair.S{}, Person{}, Manager{}, IntSlice{}, StringSlice{}},
+	inputArgs:      []any{sqlair.S{2, 3, 4}, Person{ID: 1}, Manager{ID: 5}, IntSlice{6, 7, 8}, StringSlice{"9", "10", "11"}},
+	expectedParams: []any{1, 2, 3, 4, 5, 6, 7, 8, "9", "10", "11"},
+	expectedSQL:    "SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7, @sqlair_8, @sqlair_9, @sqlair_10)",
+}, {
+	summary:        "slices and other expressions in IN statement",
+	query:          `SELECT name FROM person WHERE id IN ($S[:], func(1,2), "one", $IntSlice[:])`,
+	expectedParsed: `[Bypass[SELECT name FROM person WHERE id IN (] Input[S[:]] Bypass[, func(1,2), "one", ] Input[IntSlice[:]] Bypass[)]]`,
+	typeSamples:    []any{sqlair.S{}, IntSlice{}},
+	inputArgs:      []any{sqlair.S{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, IntSlice{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}},
+	expectedParams: []any{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+	expectedSQL:    `SELECT name FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7, @sqlair_8, @sqlair_9, func(1,2), "one", @sqlair_10, @sqlair_11, @sqlair_12, @sqlair_13, @sqlair_14, @sqlair_15, @sqlair_16, @sqlair_17, @sqlair_18, @sqlair_19)`,
+}, {
+	summary:        "slice of mixed types",
+	query:          "SELECT name FROM person WHERE id IN ($S[:])",
+	expectedParsed: "[Bypass[SELECT name FROM person WHERE id IN (] Input[S[:]] Bypass[)]]",
+	typeSamples:    []any{sqlair.S{}},
+	inputArgs:      []any{sqlair.S{1, "two", 3.0}},
+	expectedParams: []any{1, "two", 3.0},
+	expectedSQL:    "SELECT name FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2)",
+}, {
+	// No error is throw for an empty slice because we do not know where in the
+	// query and how the slice input will be used and we do not want to force
+	// users to work around sqlair errors.
+	summary:        "empty slice",
+	query:          "SELECT name FROM person WHERE id IN ($S[:])",
+	expectedParsed: "[Bypass[SELECT name FROM person WHERE id IN (] Input[S[:]] Bypass[)]]",
+	typeSamples:    []any{sqlair.S{}},
+	inputArgs:      []any{sqlair.S{}},
+	expectedParams: []any{},
+	expectedSQL:    "SELECT name FROM person WHERE id IN ()",
 }}
 
 func (s *ExprSuite) TestExprPkg(c *C) {
@@ -594,16 +641,16 @@ func (s *ExprSuite) TestBindTypesErrors(c *C) {
 		err:         `cannot prepare statement: output expression: parameter with type "Address" missing (have "Person"): street AS &Address.id`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
-		typeSamples: []any{[]any{Person{}}},
-		err:         `cannot prepare statement: need struct or map, got slice`,
+		typeSamples: []any{func() {}},
+		err:         `cannot prepare statement: need supported type, got func`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		typeSamples: []any{&Person{}},
-		err:         `cannot prepare statement: need struct or map, got pointer to struct`,
+		err:         `cannot prepare statement: need non-pointer type, got pointer to struct`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		typeSamples: []any{(*Person)(nil)},
-		err:         `cannot prepare statement: need struct or map, got pointer to struct`,
+		err:         `cannot prepare statement: need non-pointer type, got pointer to struct`,
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		typeSamples: []any{map[string]any{}},
@@ -611,7 +658,7 @@ func (s *ExprSuite) TestBindTypesErrors(c *C) {
 	}, {
 		query:       "SELECT * AS &Person.* FROM t",
 		typeSamples: []any{nil},
-		err:         `cannot prepare statement: need struct or map, got nil`,
+		err:         `cannot prepare statement: need valid value, got nil`,
 	}, {
 		query:       "SELECT * AS &.* FROM t",
 		typeSamples: []any{struct{ f int }{f: 1}},
@@ -620,6 +667,22 @@ func (s *ExprSuite) TestBindTypesErrors(c *C) {
 		query:       "SELECT &NoTags.* FROM t",
 		typeSamples: []any{NoTags{}},
 		err:         `cannot prepare statement: output expression: no "db" tags found in struct "NoTags": &NoTags.*`,
+	}, {
+		query:       "SELECT street FROM t WHERE x = $Address[:]",
+		typeSamples: []any{Person{}, Manager{}, Address{}},
+		err:         `cannot prepare statement: input expression: cannot use slice syntax with struct: $Address[:]`,
+	}, {
+		query:       "SELECT name FROM person WHERE id IN ($M[:])",
+		typeSamples: []any{M{}},
+		err:         `cannot prepare statement: input expression: cannot use slice syntax with map: $M[:]`,
+	}, {
+		query:       "SELECT &S.* FROM person",
+		typeSamples: []any{sqlair.S{}},
+		err:         `cannot prepare statement: output expression: cannot use slice with asterisk: &S.*`,
+	}, {
+		query:       "SELECT street FROM t WHERE x IN ($int[:])",
+		typeSamples: []any{[]int{}},
+		err:         `cannot prepare statement: cannot use anonymous slice`,
 	}}
 
 	for i, test := range tests {
@@ -653,17 +716,17 @@ func (s *ExprSuite) TestMapError(c *C) {
 		"all output into map star",
 		"SELECT &M.* FROM person WHERE name = 'Fred'",
 		[]any{sqlair.M{}},
-		"cannot prepare statement: output expression: columns must be specified for non-struct type: &M.*",
+		"cannot prepare statement: output expression: cannot use map with asterisk unless columns are specified: &M.*",
 	}, {
 		"all output into map star from table star",
 		"SELECT p.* AS &M.* FROM person WHERE name = 'Fred'",
 		[]any{sqlair.M{}},
-		"cannot prepare statement: output expression: columns must be specified for non-struct type: p.* AS &M.*",
+		"cannot prepare statement: output expression: cannot use map with asterisk unless columns are specified: p.* AS &M.*",
 	}, {
 		"all output into map star from lone star",
 		"SELECT * AS &CustomMap.* FROM person WHERE name = 'Fred'",
 		[]any{CustomMap{}},
-		"cannot prepare statement: output expression: columns must be specified for non-struct type: * AS &CustomMap.*",
+		"cannot prepare statement: output expression: cannot use map with asterisk unless columns are specified: * AS &CustomMap.*",
 	}, {
 		"invalid map",
 		"SELECT * AS &InvalidMap.* FROM person WHERE name = 'Fred'",
@@ -702,22 +765,17 @@ func (s *ExprSuite) TestBindInputsError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		typeSamples: []any{Address{}, Person{}},
 		inputArgs:   []any{nil, Person{Fullname: "Monty Bingles"}},
-		err:         "invalid input parameter: need struct or map, got nil",
+		err:         "invalid input parameter: need valid value, got nil",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		typeSamples: []any{Address{}, Person{}},
 		inputArgs:   []any{(*Person)(nil)},
-		err:         "invalid input parameter: need struct or map, got nil",
+		err:         "invalid input parameter: need valid value, got nil",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		typeSamples: []any{Address{}},
 		inputArgs:   []any{8},
-		err:         "invalid input parameter: need struct or map, got int",
-	}, {
-		query:       "SELECT street FROM t WHERE x = $Address.street",
-		typeSamples: []any{Address{}},
-		inputArgs:   []any{[]any{}},
-		err:         "invalid input parameter: need struct or map, got slice",
+		err:         "invalid input parameter: need supported value, got int",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		typeSamples: []any{Address{}},
@@ -743,6 +801,16 @@ func (s *ExprSuite) TestBindInputsError(c *C) {
 		typeSamples: []any{Person{}},
 		inputArgs:   []any{Person{}, Person{}},
 		err:         `invalid input parameter: type "Person" provided more than once`,
+	}, {
+		query:       "SELECT street FROM t WHERE x IN ($S[:])",
+		typeSamples: []any{sqlair.S{}},
+		inputArgs:   []any{[]any{}},
+		err:         `invalid input parameter: cannot use anonymous slice`,
+	}, {
+		query:       "SELECT street FROM t WHERE x IN ($S[:])",
+		typeSamples: []any{sqlair.S{}},
+		inputArgs:   []any{[]any{}},
+		err:         `invalid input parameter: cannot use anonymous slice`,
 	}}
 
 	outerP := Person{}
@@ -787,31 +855,5 @@ func (s *ExprSuite) TestBindInputsError(c *C) {
 		} else {
 			c.Errorf("test %d failed:\nexpected err: %q but got nil\nquery: %q", i, t.err, t.query)
 		}
-	}
-}
-
-func (s *ExprSuite) TestSliceSyntax(c *C) {
-	tests := []struct {
-		summery string
-		query   string
-		parts   string
-	}{{
-		"single slice",
-		"SELECT name FROM person WHERE id IN ($S[:])",
-		"[Bypass[SELECT name FROM person WHERE id IN (] Input[S[:]] Bypass[)]]",
-	}, {
-		"many slice ranges",
-		"SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $S[:], $Manager.id, $IntSlice[:], $StringSlice[:])",
-		"[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM person WHERE id IN (] Input[Person.id] Bypass[, ] Input[S[:]] Bypass[, ] Input[Manager.id] Bypass[, ] Input[IntSlice[:]] Bypass[, ] Input[StringSlice[:]] Bypass[)]]",
-	}, {
-		"slices and other expressions in IN statement",
-		`SELECT name FROM person WHERE id IN ($S[:], func(1,2), "one", $IntSlice[:])`,
-		`[Bypass[SELECT name FROM person WHERE id IN (] Input[S[:]] Bypass[, func(1,2), "one", ] Input[IntSlice[:]] Bypass[)]]`,
-	}}
-	for _, t := range tests {
-		parser := expr.NewParser()
-		parsedExpr, err := parser.Parse(t.query)
-		c.Assert(err, IsNil)
-		c.Assert(parsedExpr.String(), Equals, t.parts)
 	}
 }

@@ -26,11 +26,11 @@ func GenerateArgInfo(typeSamples []any) (ArgInfo, error) {
 	argInfo := ArgInfo{}
 	for _, typeSample := range typeSamples {
 		if typeSample == nil {
-			return nil, fmt.Errorf("need struct or map, got nil")
+			return nil, fmt.Errorf("need valid value, got nil")
 		}
 		t := reflect.TypeOf(typeSample)
 		switch t.Kind() {
-		case reflect.Struct, reflect.Map:
+		case reflect.Struct, reflect.Map, reflect.Slice:
 			if t.Name() == "" {
 				return nil, fmt.Errorf("cannot use anonymous %s", t.Kind())
 			}
@@ -46,9 +46,9 @@ func GenerateArgInfo(typeSamples []any) (ArgInfo, error) {
 			}
 			argInfo[t.Name()] = info
 		case reflect.Pointer:
-			return nil, fmt.Errorf("need struct or map, got pointer to %s", t.Elem().Kind())
+			return nil, fmt.Errorf("need non-pointer type, got pointer to %s", t.Elem().Kind())
 		default:
-			return nil, fmt.Errorf("need struct or map, got %s", t.Kind())
+			return nil, fmt.Errorf("need supported type, got %s", t.Kind())
 		}
 	}
 	return argInfo, nil
@@ -90,7 +90,16 @@ func (argInfo ArgInfo) AllStructOutputs(typeName string) ([]Output, []string, er
 	}
 	si, ok := arg.(*structInfo)
 	if !ok {
-		return nil, nil, fmt.Errorf("columns must be specified for non-struct type")
+		errStr := ""
+		switch arg.typ().Kind() {
+		case reflect.Map:
+			errStr = "cannot use %s with asterisk unless columns are specified"
+		case reflect.Slice:
+			errStr = "cannot use %s with asterisk"
+		default:
+			errStr = "internal error: unknown invalid arg type %s"
+		}
+		return nil, nil, fmt.Errorf(errStr, arg.typ().Kind())
 	}
 	if len(si.tags) == 0 {
 		return nil, nil, fmt.Errorf(`no "db" tags found in struct %q`, si.structType.Name())
@@ -120,8 +129,20 @@ func (argInfo ArgInfo) getMember(typeName string, memberName string) (ValueLocat
 	case *mapInfo:
 		return &mapKey{name: memberName, mapType: arg.mapType}, nil
 	default:
-		return nil, fmt.Errorf("internal error: arg type %T does not have members", arg)
+		return nil, fmt.Errorf("cannot get named member of type %q", arg.typ().Name())
 	}
+}
+
+func (argInfo ArgInfo) InputSlice(typeName string) (Input, error) {
+	arg, ok := argInfo[typeName]
+	if !ok {
+		return nil, nameNotFoundError(argInfo, typeName)
+	}
+	si, ok := arg.(*sliceInfo)
+	if !ok {
+		return nil, fmt.Errorf("cannot use slice syntax with %s", arg.typ().Kind())
+	}
+	return &slice{sliceType: si.sliceType}, nil
 }
 
 // arg exposes useful information about SQLair input/output argument types.
@@ -150,6 +171,15 @@ type mapInfo struct {
 
 func (mi *mapInfo) typ() reflect.Type {
 	return mi.mapType
+}
+
+// sliceInfo stores a slice type
+type sliceInfo struct {
+	sliceType reflect.Type
+}
+
+func (si *sliceInfo) typ() reflect.Type {
+	return si.sliceType
 }
 
 // argInfoCache caches type reflection information across queries.
@@ -209,8 +239,10 @@ func getArgInfo(t reflect.Type) (arg, error) {
 		info.tags = tags
 
 		typeInfo = &info
+	case reflect.Slice:
+		return &sliceInfo{sliceType: t}, nil
 	default:
-		return nil, fmt.Errorf("internal error: cannot obtain type information for type that is not map or struct: %s", t)
+		return nil, fmt.Errorf("internal error: cannot obtain type information for unsupported type: %s", t)
 	}
 
 	// Put type in cache.

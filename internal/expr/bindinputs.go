@@ -32,12 +32,17 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 	for _, arg := range args {
 		v := reflect.ValueOf(arg)
 		if v.Kind() == reflect.Invalid || (v.Kind() == reflect.Pointer && v.IsNil()) {
-			return nil, fmt.Errorf("need struct or map, got nil")
+			return nil, fmt.Errorf("need valid value, got nil")
 		}
 		v = reflect.Indirect(v)
 		t := v.Type()
-		if v.Kind() != reflect.Struct && v.Kind() != reflect.Map {
-			return nil, fmt.Errorf("need struct or map, got %s", t.Kind())
+		switch v.Kind() {
+		case reflect.Struct, reflect.Map, reflect.Slice:
+			if t.Name() == "" {
+				return nil, fmt.Errorf("cannot use anonymous %s", t.Kind())
+			}
+		default:
+			return nil, fmt.Errorf("need supported value, got %s", t.Kind())
 		}
 		if _, ok := typeToValue[t]; ok {
 			return nil, fmt.Errorf("type %q provided more than once", t.Name())
@@ -62,10 +67,13 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 				return nil, err
 			}
 			argTypeUsed[te.input.ArgType()] = true
-			for _, val := range vals {
+			for i, val := range vals {
 				namedInput := sql.Named("sqlair_"+strconv.Itoa(inputCount), val.Interface())
 				params = append(params, namedInput)
 				sqlStr.WriteString("@sqlair_" + strconv.Itoa(inputCount))
+				if i < len(vals)-1 {
+					sqlStr.WriteString(", ")
+				}
 				inputCount++
 			}
 		case *typedOutputExpr:

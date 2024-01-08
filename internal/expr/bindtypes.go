@@ -98,7 +98,12 @@ func bindInputTypes(e *inputExpr, argInfo typeinfo.ArgInfo) (te *typedInputExpr,
 			return nil, err
 		}
 	case sliceAccessor:
-		return nil, fmt.Errorf("slice support not implemented")
+		input, err = argInfo.InputSlice(a.typeName)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("internal error: unknown type %T", a)
 	}
 	return &typedInputExpr{input}, nil
 }

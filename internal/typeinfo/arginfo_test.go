@@ -120,7 +120,7 @@ func (s *typeInfoSuite) TestGenerateArgInfoInvalidTypeErrors(c *C) {
 	}{{
 
 		args: []any{nil},
-		err:  "need struct or map, got nil",
+		err:  "need valid value, got nil",
 	}, {
 
 		args: []any{struct{ foo int }{}},
@@ -135,22 +135,22 @@ func (s *typeInfoSuite) TestGenerateArgInfoInvalidTypeErrors(c *C) {
 	}, {
 
 		args: []any{(*T)(nil)},
-		err:  "need struct or map, got pointer to struct",
+		err:  "need non-pointer type, got pointer to struct",
 	}, {
 
 		args: []any{(*M)(nil)},
-		err:  "need struct or map, got pointer to map",
+		err:  "need non-pointer type, got pointer to map",
 	}, {
 
 		args: []any{""},
-		err:  "need struct or map, got string",
+		err:  "need supported type, got string",
 	}, {
 
 		args: []any{0},
-		err:  "need struct or map, got int",
+		err:  "need supported type, got int",
 	}, {
 		args: []any{[10]int{}},
-		err:  "need struct or map, got array",
+		err:  "need supported type, got array",
 	}, {
 		args: []any{t, T{}},
 		err:  `two types found with name "T": "typeinfo.T" and "typeinfo.T"`,
@@ -231,6 +231,10 @@ func (s *typeInfoSuite) TestArgInfoStructError(c *C) {
 	c.Assert(err.Error(), Equals, `type "myStruct" has no "bar" db tag`)
 	_, err = argInfo.InputMember("myStruct", "bar")
 	c.Assert(err.Error(), Equals, `type "myStruct" has no "bar" db tag`)
+
+	_, err = argInfo.InputSlice("myStruct")
+	c.Assert(err, Not(IsNil))
+	c.Assert(err.Error(), Equals, `cannot use slice syntax with struct`)
 }
 
 func (s *typeInfoSuite) TestGenerateArgInfoMapError(c *C) {
@@ -244,5 +248,27 @@ func (s *typeInfoSuite) TestGenerateArgInfoMapError(c *C) {
 
 	_, _, err = argInfo.AllStructOutputs("myMap")
 	c.Assert(err, Not(IsNil))
-	c.Assert(err.Error(), Equals, "columns must be specified for non-struct type")
+	c.Assert(err.Error(), Equals, `cannot use map with asterisk unless columns are specified`)
+
+	_, err = argInfo.InputSlice("myMap")
+	c.Assert(err, Not(IsNil))
+	c.Assert(err.Error(), Equals, `cannot use slice syntax with map`)
+}
+
+func (s *typeInfoSuite) TestGenerateArgInfoSliceError(c *C) {
+	type mySlice []any
+	argInfo, err := GenerateArgInfo([]any{mySlice{}})
+	c.Assert(err, IsNil)
+
+	_, _, err = argInfo.AllStructOutputs("mySlice")
+	c.Assert(err, Not(IsNil))
+	c.Assert(err.Error(), Equals, `cannot use slice with asterisk`)
+
+	_, err = argInfo.InputMember("mySlice", "member1")
+	c.Assert(err, Not(IsNil))
+	c.Assert(err.Error(), Equals, `cannot get named member of type "mySlice"`)
+
+	_, err = argInfo.OutputMember("mySlice", "member1")
+	c.Assert(err, Not(IsNil))
+	c.Assert(err.Error(), Equals, `cannot get named member of type "mySlice"`)
 }

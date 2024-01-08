@@ -8,9 +8,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"testing"
+
 	_ "github.com/mattn/go-sqlite3"
 	. "gopkg.in/check.v1"
-	"testing"
 
 	"github.com/canonical/sqlair"
 )
@@ -103,6 +104,8 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 	type M struct {
 		F string `db:"id"`
 	}
+	type IntSlice []int
+	type StringSlice []string
 	var tests = []struct {
 		summary  string
 		query    string
@@ -194,6 +197,20 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 		inputs:   []any{Address{ID: 1000}},
 		outputs:  [][]any{},
 		expected: [][]any{},
+	}, {
+		summary:  "simple in",
+		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($S[:])",
+		types:    []any{Person{}, sqlair.S{}},
+		inputs:   []any{sqlair.S{30, 35, 36, 37, 38, 39, 40}},
+		outputs:  [][]any{{&Person{}}, {&Person{}}, {&Person{}}},
+		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{40, "Mary", 3500}}, {&Person{35, "James", 4500}}},
+	}, {
+		summary:  "complex in",
+		query:    "SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $S[:], $Manager.id, $IntSlice[:], $StringSlice[:])",
+		types:    []any{Person{}, sqlair.S{}, Manager{}, IntSlice{}, StringSlice{}},
+		inputs:   []any{Person{ID: 20}, sqlair.S{21, 23, 24, 25, 26, 27, 28, 29}, IntSlice{31, 32, 33, 34, 35}, &Manager{ID: 30}, StringSlice{"36", "37", "38", "39", "40"}},
+		outputs:  [][]any{{&Person{}}, {&Person{}}, {&Person{}}, {&Person{}}},
+		expected: [][]any{{&Person{30, "Fred", 1000}}, {&Person{20, "Mark", 1500}}, {&Person{40, "Mary", 3500}}, {&Person{35, "James", 4500}}},
 	}}
 
 	// A Person struct that shadows the one in tests above and has different int types.
