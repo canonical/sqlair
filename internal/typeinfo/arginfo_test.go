@@ -266,9 +266,9 @@ func (s *typeInfoSuite) TestGenerateArgInfoSliceError(c *C) {
 
 	_, err = argInfo.InputMember("mySlice", "member1")
 	c.Assert(err, Not(IsNil))
-	c.Assert(err.Error(), Equals, `cannot get named member of type "mySlice"`)
+	c.Assert(err.Error(), Equals, `cannot get named member of slice`)
 
 	_, err = argInfo.OutputMember("mySlice", "member1")
 	c.Assert(err, Not(IsNil))
-	c.Assert(err.Error(), Equals, `cannot get named member of type "mySlice"`)
+	c.Assert(err.Error(), Equals, `cannot get named member of slice`)
 }

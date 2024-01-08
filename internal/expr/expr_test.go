@@ -680,6 +680,10 @@ func (s *ExprSuite) TestBindTypesErrors(c *C) {
 		typeSamples: []any{sqlair.S{}},
 		err:         `cannot prepare statement: output expression: cannot use slice with asterisk: &S.*`,
 	}, {
+		query:       "SELECT &S.one FROM person",
+		typeSamples: []any{sqlair.S{}},
+		err:         `cannot prepare statement: output expression: cannot get named member of slice: &S.one`,
+	}, {
 		query:       "SELECT street FROM t WHERE x IN ($int[:])",
 		typeSamples: []any{[]int{}},
 		err:         `cannot prepare statement: cannot use anonymous slice`,
@@ -807,10 +811,15 @@ func (s *ExprSuite) TestBindInputsError(c *C) {
 		inputArgs:   []any{[]any{}},
 		err:         `invalid input parameter: cannot use anonymous slice`,
 	}, {
+		query:       "SELECT street FROM t WHERE x = $M.street",
+		typeSamples: []any{sqlair.M{}},
+		inputArgs:   []any{(sqlair.M)(nil)},
+		err:         `invalid input parameter: need valid map, got nil`,
+	}, {
 		query:       "SELECT street FROM t WHERE x IN ($S[:])",
 		typeSamples: []any{sqlair.S{}},
-		inputArgs:   []any{[]any{}},
-		err:         `invalid input parameter: cannot use anonymous slice`,
+		inputArgs:   []any{(sqlair.S)(nil)},
+		err:         `invalid input parameter: need valid slice, got nil`,
 	}}
 
 	outerP := Person{}

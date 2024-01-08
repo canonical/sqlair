@@ -37,7 +37,14 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 		v = reflect.Indirect(v)
 		t := v.Type()
 		switch v.Kind() {
-		case reflect.Struct, reflect.Map, reflect.Slice:
+		case reflect.Map, reflect.Slice:
+			if v.IsNil() {
+				return nil, fmt.Errorf("need valid %s, got nil", t.Kind())
+			}
+			if t.Name() == "" {
+				return nil, fmt.Errorf("cannot use anonymous %s", t.Kind())
+			}
+		case reflect.Struct:
 			if t.Name() == "" {
 				return nil, fmt.Errorf("cannot use anonymous %s", t.Kind())
 			}

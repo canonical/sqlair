@@ -129,7 +129,7 @@ func (argInfo ArgInfo) getMember(typeName string, memberName string) (ValueLocat
 	case *mapInfo:
 		return &mapKey{name: memberName, mapType: arg.mapType}, nil
 	default:
-		return nil, fmt.Errorf("cannot get named member of type %q", arg.typ().Name())
+		return nil, fmt.Errorf("cannot get named member of %s", arg.typ().Kind())
 	}
 }
 
