@@ -90,16 +90,14 @@ func (argInfo ArgInfo) AllStructOutputs(typeName string) ([]Output, []string, er
 	}
 	si, ok := arg.(*structInfo)
 	if !ok {
-		errStr := ""
-		switch arg.typ().Kind() {
+		switch k := arg.typ().Kind(); k {
 		case reflect.Map:
-			errStr = "cannot use %s with asterisk unless columns are specified"
+			return nil, nil, fmt.Errorf("cannot use %s with asterisk unless columns are specified", k)
 		case reflect.Slice:
-			errStr = "cannot use %s with asterisk"
+			return nil, nil, fmt.Errorf("cannot use %s with asterisk", k)
 		default:
-			errStr = "internal error: unknown invalid arg type %s"
+			return nil, nil, fmt.Errorf("internal error: unknown invalid arg type %s", k)
 		}
-		return nil, nil, fmt.Errorf(errStr, arg.typ().Kind())
 	}
 	if len(si.tags) == 0 {
 		return nil, nil, fmt.Errorf(`no "db" tags found in struct %q`, si.structType.Name())
