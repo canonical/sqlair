@@ -1,3 +1,6 @@
+// Copyright 2023 Canonical Ltd.
+// Licensed under Apache 2.0, see LICENCE file for details.
+
 /*
 Package expr processes the SQLair query string, generates the SQL, and maps the
 SQLair query’s input/output arguments to the generated SQL query’s
