@@ -156,6 +156,31 @@ func (f *structField) LocateScanTarget(typeToValue map[reflect.Type]reflect.Valu
 	return val.Addr().Interface(), nil, nil
 }
 
+type slice struct {
+	sliceType reflect.Type
+}
+
+func (s *slice) String() string {
+	return s.sliceType.Name() + "[:]"
+}
+
+func (s *slice) ArgType() reflect.Type {
+	return s.sliceType
+}
+
+func (s *slice) LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]reflect.Value, error) {
+	sv, ok := typeToValue[s.sliceType]
+	if !ok {
+		return nil, valueNotFoundError(typeToValue, s.sliceType)
+	}
+
+	params := []reflect.Value{}
+	for i := 0; i < sv.Len(); i++ {
+		params = append(params, sv.Index(i))
+	}
+	return params, nil
+}
+
 // locateValue locates the value corresponding to the given type in the
 // typeToValueMap and returns an error message if it cannot be found.
 func locateValue(typeToValue map[reflect.Type]reflect.Value, typ reflect.Type) (reflect.Value, error) {
