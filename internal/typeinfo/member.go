@@ -16,6 +16,7 @@ var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
 type ValueLocator interface {
 	ArgType() reflect.Type
 	String() string
+	IDString() string
 }
 
 // Input is a locator for a Go value from SQLair input arguments to be used in
@@ -79,6 +80,11 @@ func (mk *mapKey) String() string {
 	return "key \"" + mk.name + "\" of map \"" + mk.mapType.Name() + "\""
 }
 
+// IDString returns a string identifier for the map and key.
+func (mk *mapKey) IDString() string {
+	return mk.mapType.Name() + "." + mk.name
+}
+
 // LocateScanTarget locates the map specified in mapKey from the provided
 // typeToValue map. It returns a pointer to pass to rows.Scan, and a ScanProxy
 // reference for setting the key value in the map once the pointer has been
@@ -132,6 +138,11 @@ func (f *structField) LocateParams(typeToValue map[reflect.Type]reflect.Value) (
 // error messages.
 func (f *structField) String() string {
 	return "tag \"" + f.tag + "\" of struct \"" + f.structType.Name() + "\""
+}
+
+// IDString returns a string identifier for the field and its struct.
+func (f *structField) IDString() string {
+	return f.structType.Name() + "." + f.tag
 }
 
 // LocateScanTarget locates the struct specified in structField from the
