@@ -64,10 +64,10 @@ func (pe *ParsedExpr) BindTypes(args ...any) (tbe *TypeBoundExpr, err error) {
 			}
 
 			for _, oc := range toe.outputColumns {
-				if ok := outputUsed[oc.output.ID()]; ok {
-					return nil, fmt.Errorf("%s appears more than once in output expressions", oc.output.String())
+				if ok := outputUsed[oc.output.Repr()]; ok {
+					return nil, fmt.Errorf("%s appears more than once in output expressions", oc.output.Desc())
 				}
-				outputUsed[oc.output.ID()] = true
+				outputUsed[oc.output.Repr()] = true
 			}
 			te = toe
 		case *bypass:

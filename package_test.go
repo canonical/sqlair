@@ -8,9 +8,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"testing"
+
 	_ "github.com/mattn/go-sqlite3"
 	. "gopkg.in/check.v1"
-	"testing"
 
 	"github.com/canonical/sqlair"
 )

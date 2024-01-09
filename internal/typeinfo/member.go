@@ -15,10 +15,11 @@ var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
 // ValueLocator specifies how to locate a value in a SQLair argument type.
 type ValueLocator interface {
 	ArgType() reflect.Type
-	String() string
-	// ID returns an accessor string for this ValueLocator specifying the type
-	// and, if present, member.
-	ID() string
+	// Desc returns a written description of the ValueLocator for error messages.
+	Desc() string
+	// Repr returns a string representation for the ValueLocator specifying the
+	// type and, if present, member.
+	Repr() string
 }
 
 // Input is a locator for a Go value from SQLair input arguments to be used in
@@ -76,14 +77,14 @@ func (mk *mapKey) LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]re
 	return []reflect.Value{v}, nil
 }
 
-// String returns a natural language description of the mapKey for use in error
+// Desc returns a natural language description of the mapKey for use in error
 // messages.
-func (mk *mapKey) String() string {
+func (mk *mapKey) Desc() string {
 	return "key \"" + mk.name + "\" of map \"" + mk.mapType.Name() + "\""
 }
 
-// ID returns a string identifier for the map and key.
-func (mk *mapKey) ID() string {
+// Repr returns a string identifier for the map and key.
+func (mk *mapKey) Repr() string {
 	return mk.mapType.Name() + "." + mk.name
 }
 
@@ -136,14 +137,14 @@ func (f *structField) LocateParams(typeToValue map[reflect.Type]reflect.Value) (
 	return []reflect.Value{s.Field(f.index)}, nil
 }
 
-// String returns a natural language description of the struct field for use in
+// Desc returns a natural language description of the struct field for use in
 // error messages.
-func (f *structField) String() string {
+func (f *structField) Desc() string {
 	return "tag \"" + f.tag + "\" of struct \"" + f.structType.Name() + "\""
 }
 
-// ID returns a string identifier for the field and its struct.
-func (f *structField) ID() string {
+// Repr returns a string representation of the field and its struct.
+func (f *structField) Repr() string {
 	return f.structType.Name() + "." + f.tag
 }
 
