@@ -212,16 +212,20 @@ func (s *typeInfoSuite) TestLocateParamsMapError(c *C) {
 
 func (*typeInfoSuite) TestLocateParamsSlice(c *C) {
 	type S []any
+	type T []int
 
-	argInfo, err := GenerateArgInfo([]any{S{}})
+	argInfo, err := GenerateArgInfo([]any{S{}, T{}})
 	c.Assert(err, IsNil)
 
 	tests := []struct {
 		slice          any
 		expectedValues []any
 	}{{
-		slice:          S{1, 2},
+		slice:          T{1, 2},
 		expectedValues: []any{1, 2},
+	}, {
+		slice:          S{1, "two", 3.0},
+		expectedValues: []any{1, "two", 3.0},
 	}, {
 		slice:          S{},
 		expectedValues: []any{},
@@ -248,6 +252,7 @@ func (*typeInfoSuite) TestLocateParamsSlice(c *C) {
 
 func (*typeInfoSuite) TestLocateParamsSliceError(c *C) {
 	type S []any
+	type T []int
 
 	argInfo, err := GenerateArgInfo([]any{S{}})
 	c.Assert(err, IsNil)
@@ -257,5 +262,11 @@ func (*typeInfoSuite) TestLocateParamsSliceError(c *C) {
 
 	// Check missing type error.
 	_, err = input.LocateParams(map[reflect.Type]reflect.Value{})
-	c.Assert(err, ErrorMatches, `parameter with type "S" missing`)
+	c.Assert(err, NotNil)
+	c.Assert(err.Error(), Equals, `parameter with type "S" missing`)
+
+	// Check missing type error with one type present.
+	_, err = input.LocateParams(map[reflect.Type]reflect.Value{reflect.TypeOf(T{}): reflect.ValueOf(T{})})
+	c.Assert(err, NotNil)
+	c.Assert(err.Error(), Equals, `parameter with type "S" missing (have "T")`)
 }
