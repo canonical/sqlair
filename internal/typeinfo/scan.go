@@ -1,3 +1,6 @@
+// Copyright 2023 Canonical Ltd.
+// Licensed under Apache 2.0, see LICENCE file for details.
+
 package typeinfo
 
 import "reflect"

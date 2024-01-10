@@ -1,3 +1,6 @@
+// Copyright 2023 Canonical Ltd.
+// Licensed under Apache 2.0, see LICENCE file for details.
+
 /*
 SQLair is a convenience layer for SQL databases that embeds Go structs and maps directly into SQL queries.
 
