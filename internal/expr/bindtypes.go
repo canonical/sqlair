@@ -118,6 +118,8 @@ func (e *memberInputExpr) bindTypes(argInfo typeinfo.ArgInfo) (any, error) {
 	return &typedInputExpr{input: input}, nil
 }
 
+// insertInput is a form of input expression for insert statements e.g.
+// "(*) VALUES ($Type1.member, $Type2.*)".
 type insertInputExpr struct {
 	raw           string
 	targetColumns []columnAccessor
