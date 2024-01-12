@@ -17,9 +17,9 @@ type ValueLocator interface {
 	ArgType() reflect.Type
 	// Desc returns a written description of the ValueLocator for error messages.
 	Desc() string
-	// Repr returns a string representation for the ValueLocator specifying the
-	// type and, if present, member.
-	Repr() string
+	// Identifier returns a string that uniquely identifies the ValueLocator in
+	// the query.
+	Identifier() string
 }
 
 // Input is a locator for a Go value from SQLair input arguments to be used in
@@ -83,8 +83,9 @@ func (mk *mapKey) Desc() string {
 	return "key \"" + mk.name + "\" of map \"" + mk.mapType.Name() + "\""
 }
 
-// Repr returns a string identifier for the map and key.
-func (mk *mapKey) Repr() string {
+// Identifier returns a string that uniquely identifies the map key in the
+// context of the query.
+func (mk *mapKey) Identifier() string {
 	return mk.mapType.Name() + "." + mk.name
 }
 
@@ -143,8 +144,9 @@ func (f *structField) Desc() string {
 	return "tag \"" + f.tag + "\" of struct \"" + f.structType.Name() + "\""
 }
 
-// Repr returns a string representation of the field and its struct.
-func (f *structField) Repr() string {
+// Identifier returns a string that uniquely identifies the struct field in the
+// context of the query.
+func (f *structField) Identifier() string {
 	return f.structType.Name() + "." + f.tag
 }
 
