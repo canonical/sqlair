@@ -80,7 +80,7 @@ func (mk *mapKey) LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]re
 // Desc returns a natural language description of the mapKey for use in error
 // messages.
 func (mk *mapKey) Desc() string {
-	return "key \"" + mk.name + "\" of map \"" + mk.mapType.Name() + "\""
+	return fmt.Sprintf("key %q of map %q", mk.name, mk.mapType.Name())
 }
 
 // Identifier returns a string that uniquely identifies the map key in the
@@ -141,7 +141,7 @@ func (f *structField) LocateParams(typeToValue map[reflect.Type]reflect.Value) (
 // Desc returns a natural language description of the struct field for use in
 // error messages.
 func (f *structField) Desc() string {
-	return "tag \"" + f.tag + "\" of struct \"" + f.structType.Name() + "\""
+	return fmt.Sprintf("tag %q of struct %q", f.tag, f.structType.Name())
 }
 
 // Identifier returns a string that uniquely identifies the struct field in the
