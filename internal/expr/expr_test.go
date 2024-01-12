@@ -449,6 +449,52 @@ func (s *ExprSuite) TestExprPkg(c *C) {
 	}
 }
 
+func (s *ExprSuite) TestInsertInputParser(c *C) {
+	tests := []struct {
+		summary        string
+		query          string
+		expectedParsed string
+	}{{
+		summary:        "insert asterisk",
+		query:          "INSERT INTO person (*) VALUES ($Address.street, $Person.*, $M.team)",
+		expectedParsed: "[Bypass[INSERT INTO person ] Input[[*] [Address.street Person.* M.team]]]",
+	}, {
+		summary:        "insert specified columns",
+		query:          "INSERT INTO person (id, street) VALUES ($Address.*)",
+		expectedParsed: "[Bypass[INSERT INTO person ] Input[[id street] [Address.*]]]",
+	}, {
+		summary:        "insert renamed columns",
+		query:          "INSERT INTO person (id, street) VALUES ($Person.address_id, $Address.street)",
+		expectedParsed: "[Bypass[INSERT INTO person ] Input[[id street] [Person.address_id Address.street]]]",
+	}, {
+		summary:        "insert asterisk with comment",
+		query:          "INSERT INTO person (*) VALUES ($Person.address_id, /* rouge comment */$Address.street)",
+		expectedParsed: "[Bypass[INSERT INTO person ] Input[[*] [Person.address_id Address.street]]]",
+	}, {
+		summary:        "insert single value",
+		query:          "INSERT INTO person (name) VALUES ($Person.name)",
+		expectedParsed: "[Bypass[INSERT INTO person ] Input[[name] [Person.name]]]",
+	}, {
+		summary:        "insert asterisk (no space)",
+		query:          "INSERT INTO person(*) VALUES ($Person.*)ON CONFLICT DO NOTHING",
+		expectedParsed: "[Bypass[INSERT INTO person] Input[[*] [Person.*]] Bypass[ON CONFLICT DO NOTHING]]",
+	}, {
+		summary:        "insert with standalone input expressions",
+		query:          "INSERT INTO person VALUES ($Person.name, $Person.id)",
+		expectedParsed: "[Bypass[INSERT INTO person VALUES (] Input[Person.name] Bypass[, ] Input[Person.id] Bypass[)]]",
+	}, {
+		summary:        "insert with returning clause",
+		query:          "INSERT INTO address (*) VALUES($Address.*) RETURNING (&Address.*)",
+		expectedParsed: "[Bypass[INSERT INTO address ] Input[[*] [Address.*]] Bypass[ RETURNING (] Output[[] [Address.*]] Bypass[)]]",
+	}}
+	for i, t := range tests {
+		parser := expr.NewParser()
+		expr, err := parser.Parse(t.query)
+		c.Assert(err, IsNil, Commentf("test %d failed (Parse):\nsummary: %s\nquery: %s\nexpected: %s\nerr: %s\n", i, t.summary, t.query, t.expectedParsed, err))
+		c.Assert(expr.String(), Equals, t.expectedParsed, Commentf("test %d failed (Parse):\nsummary: %s\nquery: %s\nexpected: %s\nactual:   %s\n", i, t.summary, t.query, t.expectedParsed, expr.String()))
+	}
+}
+
 func (s *ExprSuite) TestParseErrors(c *C) {
 	tests := []struct {
 		query string
@@ -519,7 +565,7 @@ comment */ WHERE x = $Address.&d`,
 		err:   `cannot parse expression: column 22: missing closing parentheses`,
 	}, {
 		query: "SELECT (name, id) WHERE id = $Person.*",
-		err:   `cannot parse expression: column 30: asterisk not allowed in input expression "$Person.*"`,
+		err:   `cannot parse expression: column 30: input expression asterisk not allowed outside insert statement "$Person.*"`,
 	}, {
 		query: `SELECT (name, id) AS (&Person.name, /* multiline
 comment */
@@ -530,7 +576,7 @@ comment */
 		query: `SELECT (name, id) WHERE name = 'multiline
 string
 of three lines' AND id = $Person.*`,
-		err: `cannot parse expression: line 3, column 26: asterisk not allowed in input expression "$Person.*"`,
+		err: `cannot parse expression: line 3, column 26: input expression asterisk not allowed outside insert statement "$Person.*"`,
 	}, {
 		query: "SELECT &S[:] FROM t",
 		err:   `cannot parse expression: column 8: cannot use slice syntax "S[:]" in output expression`,

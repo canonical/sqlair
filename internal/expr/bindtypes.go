@@ -115,7 +115,21 @@ func (e *memberInputExpr) bindTypes(argInfo typeinfo.ArgInfo) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("input expression: %s: %s", err, e.raw)
 	}
-	return &typedInputExpr{input}, nil
+	return &typedInputExpr{input: input}, nil
+}
+
+type insertInputExpr struct {
+	raw           string
+	targetColumns []columnAccessor
+	sourceTypes   []memberAccessor
+}
+
+func (ie *insertInputExpr) String() string {
+	return fmt.Sprintf("Input[%+v %+v]", ie.targetColumns, ie.sourceTypes)
+}
+
+func (ie *insertInputExpr) bindTypes(argInfo typeinfo.ArgInfo) (any, error) {
+	return nil, fmt.Errorf("insert input expression not implemented")
 }
 
 // sliceInputExpr is an input expression of the form "$S[:]" that represents a
