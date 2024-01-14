@@ -541,6 +541,10 @@ func (s *ExprSuite) TestBindTypesErrors(c *C) {
 		typeSamples: []any{Address{}, Person{}},
 		err:         `cannot prepare statement: tag "id" of struct "Address" appears more than once in output expressions`,
 	}, {
+		query:       "SELECT (&M.id, &M.id) FROM t",
+		typeSamples: []any{sqlair.M{}},
+		err:         `cannot prepare statement: key "id" of map "M" appears more than once in output expressions`,
+	}, {
 		query:       "SELECT (p.*, t.name) AS (&Address.*) FROM t",
 		typeSamples: []any{Address{}},
 		err:         "cannot prepare statement: output expression: invalid asterisk in columns: (p.*, t.name) AS (&Address.*)",
