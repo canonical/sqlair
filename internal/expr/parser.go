@@ -561,7 +561,8 @@ func (p *Parser) parseTargetType() (memberAccessor, bool, error) {
 	return memberAccessor{}, false, nil
 }
 
-// parseSliceAccessor parses a slice range composed of the form "[:]".
+// parseSliceAccessor parses a slice accessor. A slice accessor is of the form
+// "SliceType[:]". It returns the parsed slice type name.
 func (p *Parser) parseSliceAccessor() (string, bool, error) {
 	cp := p.save()
 
