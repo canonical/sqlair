@@ -17,9 +17,11 @@ type ValueLocator interface {
 	// ArgType is the type of the input/output argument that the specified
 	// value is located in.
 	ArgType() reflect.Type
-	// String returns a natural language description of the mapKey for use in error
-	// messages.
-	String() string
+	// Desc returns a written description of the ValueLocator for error messages.
+	Desc() string
+	// Identifier returns a string that uniquely identifies the ValueLocator in
+	// the query.
+	Identifier() string
 }
 
 // Input is a locator for a Go value from SQLair input arguments to be used in
@@ -77,10 +79,16 @@ func (mk *mapKey) LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]re
 	return []reflect.Value{v}, nil
 }
 
-// String returns a natural language description of the mapKey for use in error
+// Desc returns a natural language description of the mapKey for use in error
 // messages.
-func (mk *mapKey) String() string {
-	return "key \"" + mk.name + "\" of map \"" + mk.mapType.Name() + "\""
+func (mk *mapKey) Desc() string {
+	return fmt.Sprintf("key %q of map %q", mk.name, mk.mapType.Name())
+}
+
+// Identifier returns a string that uniquely identifies the map key in the
+// context of the query.
+func (mk *mapKey) Identifier() string {
+	return mk.mapType.Name() + "." + mk.name
 }
 
 // LocateScanTarget locates the map specified in mapKey from the provided
@@ -132,10 +140,16 @@ func (f *structField) LocateParams(typeToValue map[reflect.Type]reflect.Value) (
 	return []reflect.Value{s.Field(f.index)}, nil
 }
 
-// String returns a natural language description of the struct field for use in
+// Desc returns a natural language description of the struct field for use in
 // error messages.
-func (f *structField) String() string {
-	return "tag \"" + f.tag + "\" of struct \"" + f.structType.Name() + "\""
+func (f *structField) Desc() string {
+	return fmt.Sprintf("tag %q of struct %q", f.tag, f.structType.Name())
+}
+
+// Identifier returns a string that uniquely identifies the struct field in the
+// context of the query.
+func (f *structField) Identifier() string {
+	return f.structType.Name() + "." + f.tag
 }
 
 // LocateScanTarget locates the struct specified in structField from the
@@ -164,10 +178,19 @@ type slice struct {
 	sliceType reflect.Type
 }
 
-func (s *slice) String() string {
+// Desc returns a natural language description of the slice for use in error
+// messages.
+func (s *slice) Desc() string {
+	return fmt.Sprintf("slice %q", s.sliceType.Name())
+}
+
+// Identifier returns a string that uniquely identifies the slice type in the
+// context of the query.
+func (s *slice) Identifier() string {
 	return s.sliceType.Name() + "[:]"
 }
 
+// ArgType is the type of the slice input to extract query parameters from.
 func (s *slice) ArgType() reflect.Type {
 	return s.sliceType
 }
