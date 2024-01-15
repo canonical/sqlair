@@ -195,6 +195,9 @@ func (s *slice) ArgType() reflect.Type {
 	return s.sliceType
 }
 
+// LocateParams locates the slice argument assosiated with the slice
+// ValueLocator in typeToValue and returns the reflect.Value objects generated
+// by reflecting on the elements of the slice.
 func (s *slice) LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]reflect.Value, error) {
 	sv, ok := typeToValue[s.sliceType]
 	if !ok {
