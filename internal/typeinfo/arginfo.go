@@ -96,7 +96,7 @@ func (argInfo ArgInfo) AllStructOutputs(typeName string) ([]Output, []string, er
 		case reflect.Slice:
 			return nil, nil, fmt.Errorf("cannot use %s with asterisk", k)
 		default:
-			return nil, nil, fmt.Errorf("internal error: unknown invalid arg type %s", k)
+			return nil, nil, fmt.Errorf("internal error: invalid arg type %s", k)
 		}
 	}
 	if len(si.tags) == 0 {
