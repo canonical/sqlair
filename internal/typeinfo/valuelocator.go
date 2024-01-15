@@ -14,7 +14,11 @@ var scannerInterface = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
 
 // ValueLocator specifies how to locate a value in a SQLair argument type.
 type ValueLocator interface {
+	// ArgType is the type of the input/output argument that the specified
+	// value is located in.
 	ArgType() reflect.Type
+	// String returns a natural language description of the mapKey for use in error
+	// messages.
 	String() string
 }
 
