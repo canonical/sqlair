@@ -337,6 +337,14 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	inputArgs:      []any{HardMaths{X: 1, Y: 2}},
 	expectedParams: []any{1, 2},
 	expectedSQL:    "INSERT INTO arr VALUES (ARRAY[[1,2],[@sqlair_0,4]], ARRAY[[5,6],[@sqlair_1,8]]);",
+}, {
+	summary:        "functions",
+	query:          `SELECT (max(AVG(id), AVG(address_id), length("((((''""((")), IFNULL(name, "Mr &Person.id of $M.name")) AS (&M.avg, &M.name), random() AS &M.random FROM person`,
+	expectedParsed: `[Bypass[SELECT ] Output[[max(AVG(id), AVG(address_id), length("((((''""((")) IFNULL(name, "Mr &Person.id of $M.name")] [M.avg M.name]] Bypass[, ] Output[[random()] [M.random]] Bypass[ FROM person]]`,
+	typeSamples:    []any{sqlair.M{}},
+	inputArgs:      []any{},
+	expectedParams: []any{},
+	expectedSQL:    `SELECT max(AVG(id), AVG(address_id), length("((((''""((")) AS _sqlair_0, IFNULL(name, "Mr &Person.id of $M.name") AS _sqlair_1, random() AS _sqlair_2 FROM person`,
 }}
 
 func (s *ExprSuite) TestExprPkg(c *C) {
@@ -494,6 +502,12 @@ of three lines' AND id = $Person.*`,
 	}, {
 		query: "SELECT * FROM t WHERE id = $ids[]",
 		err:   `cannot parse expression: column 29: invalid slice: expected 'ids[:]'`,
+	}, {
+		query: "SELECT count(*) AS &M.* FROM t",
+		err:   `cannot parse expression: column 8: cannot read function call "count(*)" into asterisk`,
+	}, {
+		query: "SELECT (id, count(*)) AS (&M.*) FROM t",
+		err:   `cannot parse expression: column 8: cannot read function call "count(*)" into asterisk`,
 	}}
 
 	for _, t := range tests {

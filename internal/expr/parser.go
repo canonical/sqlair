@@ -116,17 +116,52 @@ func (sa sliceAccessor) getTypeName() string {
 	return sa.typeName
 }
 
-// columnAccessor stores a SQL column name and optionally its table name.
-type columnAccessor struct {
-	tableName, columnName string
+type columnAccessor interface {
+	String() string
+	tableName() string
+	columnName() string
 }
 
-func (ca columnAccessor) String() string {
-	if ca.tableName == "" {
-		return ca.columnName
-	}
-	return ca.tableName + "." + ca.columnName
+// staticColumn stores a SQL column name and optionally its table name.
+type staticColumn struct {
+	table, column string
 }
+
+func (sc staticColumn) columnName() string {
+	return sc.column
+}
+
+func (sc staticColumn) tableName() string {
+	return sc.table
+}
+
+func (sc staticColumn) String() string {
+	if sc.table == "" {
+		return sc.column
+	}
+	return sc.table + "." + sc.column
+}
+
+var _ columnAccessor = staticColumn{}
+
+// sqlFunctionCall stores a function call that is used in place of a column.
+type sqlFunctionCall struct {
+	raw string
+}
+
+func (sfc sqlFunctionCall) columnName() string {
+	return sfc.raw
+}
+
+func (sfc sqlFunctionCall) tableName() string {
+	return ""
+}
+
+func (sfc sqlFunctionCall) String() string {
+	return sfc.raw
+}
+
+var _ columnAccessor = sqlFunctionCall{}
 
 // inputExpr represents a named parameter that will be sent to the database
 // while performing the query.
@@ -486,24 +521,71 @@ func (p *Parser) parseIdentifier() (string, bool) {
 	return "", false
 }
 
-// parseColumn parses a column made up of name bytes, optionally dot-prefixed by
-// its table name.
-// parseColumn returns an error so that it can be used with parseList.
-func (p *Parser) parseColumn() (columnAccessor, bool, error) {
-	cp := p.save()
+// skipEnclosedParentheses starts from a opening parenthesis '(' and skips until
+// its enclosing ')', taking into account comments and string literals in between.
+func (p *Parser) skipEnclosedParentheses() (bool, error) {
+	initialCol, initalLine := p.colNum(), p.lineNum
 
-	if id, ok := p.parseIdentifierAsterisk(); ok {
-		if id != "*" && p.skipByte('.') {
-			if idCol, ok := p.parseIdentifierAsterisk(); ok {
-				return columnAccessor{tableName: id, columnName: idCol}, true, nil
-			}
-		} else {
-			return columnAccessor{columnName: id}, true, nil
-		}
+	if !p.skipByte('(') {
+		return false, nil
 	}
 
-	cp.restore()
-	return columnAccessor{}, false, nil
+	parenCount := 1
+	for parenCount > 0 && p.pos != len(p.input) {
+		if ok, err := p.skipStringLiteral(); err != nil {
+			return false, err
+		} else if ok {
+			continue
+		}
+		if ok := p.skipComment(); ok {
+			continue
+		}
+
+		if p.skipByte('(') {
+			parenCount++
+			continue
+		} else if p.skipByte(')') {
+			parenCount--
+			continue
+		}
+		p.advanceByte()
+	}
+
+	if parenCount > 0 {
+		return false, errorAt(fmt.Errorf(`missing closing parenthesis`), initalLine, initialCol, p.input)
+	}
+	return true, nil
+}
+
+// parseColumnAccessor parses a column made up of name bytes, optionally dot-prefixed by
+// its table name.
+// parseColumnAccessor returns an error so that it can be used with parseList.
+func (p *Parser) parseColumnAccessor() (columnAccessor, bool, error) {
+	cp := p.save()
+
+	id, ok := p.parseIdentifierAsterisk()
+	if !ok {
+		cp.restore()
+		return staticColumn{}, false, nil
+	}
+
+	// identifier.<> can only be followed by another identifier or an asterisk.
+	if id != "*" && p.skipByte('.') {
+		if idCol, ok := p.parseIdentifierAsterisk(); ok {
+			return staticColumn{table: id, column: idCol}, true, nil
+		}
+		cp.restore()
+		return staticColumn{}, false, nil
+	}
+
+	// Is it a function call instead of a lone identifier.
+	if ok, err := p.skipEnclosedParentheses(); err != nil {
+		return staticColumn{}, false, err
+	} else if ok {
+		return sqlFunctionCall{raw: p.input[cp.pos:p.pos]}, true, nil
+	}
+
+	return staticColumn{column: id}, true, nil
 }
 
 func (p *Parser) parseTargetType() (memberAccessor, bool, error) {
@@ -612,12 +694,12 @@ func parseList[T any](p *Parser, parseFn func(p *Parser) (T, bool, error)) ([]T,
 // enclosed in parentheses.
 func (p *Parser) parseColumns() (cols []columnAccessor, parentheses bool, ok bool) {
 	// Case 1: A single column e.g. "p.name".
-	if col, ok, _ := p.parseColumn(); ok {
+	if col, ok, _ := p.parseColumnAccessor(); ok {
 		return []columnAccessor{col}, false, true
 	}
 
 	// Case 2: Multiple columns e.g. "(p.name, p.id)".
-	if cols, ok, _ := parseList(p, (*Parser).parseColumn); ok {
+	if cols, ok, _ := parseList(p, (*Parser).parseColumnAccessor); ok {
 		return cols, true, true
 	}
 
@@ -676,6 +758,13 @@ func (p *Parser) parseOutputExpr() (*outputExpr, bool, error) {
 				}
 				if !parenCols && parenTypes {
 					return nil, false, errorAt(fmt.Errorf(`unexpected parentheses around types after "AS"`), p.lineNum, parenCol, p.input)
+				}
+				if starCountTypes(targetTypes) > 0 {
+					for _, c := range cols {
+						if _, ok := c.(sqlFunctionCall); ok {
+							return nil, false, errorAt(fmt.Errorf(`cannot read function call %q into asterisk`, c), cp.lineNum, cp.colNum(), p.input)
+						}
+					}
 				}
 				return &outputExpr{
 					sourceColumns: cols,
