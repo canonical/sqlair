@@ -522,7 +522,7 @@ func (p *Parser) parseIdentifier() (string, bool) {
 }
 
 // skipEnclosedParentheses starts from a opening parenthesis '(' and skips until
-// its enclosing ')', taking into account comments and string literals in between.
+// its closing ')', taking into account comments and string literals in between.
 func (p *Parser) skipEnclosedParentheses() (bool, error) {
 	initialCol, initialLine := p.colNum(), p.lineNum
 
