@@ -174,6 +174,7 @@ func (f *structField) LocateScanTarget(typeToValue map[reflect.Type]reflect.Valu
 	return val.Addr().Interface(), nil, nil
 }
 
+// slice represents a slice input.
 type slice struct {
 	sliceType reflect.Type
 }
