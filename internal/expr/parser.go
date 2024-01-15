@@ -524,7 +524,7 @@ func (p *Parser) parseIdentifier() (string, bool) {
 // skipEnclosedParentheses starts from a opening parenthesis '(' and skips until
 // its enclosing ')', taking into account comments and string literals in between.
 func (p *Parser) skipEnclosedParentheses() (bool, error) {
-	initialCol, initalLine := p.colNum(), p.lineNum
+	initialCol, initialLine := p.colNum(), p.lineNum
 
 	if !p.skipByte('(') {
 		return false, nil
@@ -552,7 +552,7 @@ func (p *Parser) skipEnclosedParentheses() (bool, error) {
 	}
 
 	if parenCount > 0 {
-		return false, errorAt(fmt.Errorf(`missing closing parenthesis`), initalLine, initialCol, p.input)
+		return false, errorAt(fmt.Errorf(`missing closing parenthesis`), initialLine, initialCol, p.input)
 	}
 	return true, nil
 }
@@ -563,24 +563,29 @@ func (p *Parser) skipEnclosedParentheses() (bool, error) {
 func (p *Parser) parseColumnAccessor() (columnAccessor, bool, error) {
 	cp := p.save()
 
-	id, ok := p.parseIdentifierAsterisk()
+	// asterisk cannot be followed by anything.
+	if p.skipByte('*') {
+		return staticColumn{column: "*"}, true, nil
+	}
+
+	id, ok := p.parseIdentifier()
 	if !ok {
 		cp.restore()
-		return staticColumn{}, false, nil
+		return nil, false, nil
 	}
 
 	// identifier.<> can only be followed by another identifier or an asterisk.
-	if id != "*" && p.skipByte('.') {
+	if p.skipByte('.') {
 		if idCol, ok := p.parseIdentifierAsterisk(); ok {
 			return staticColumn{table: id, column: idCol}, true, nil
 		}
 		cp.restore()
-		return staticColumn{}, false, nil
+		return nil, false, nil
 	}
 
-	// Is it a function call instead of a lone identifier.
+	// Check if it is a function call instead of a lone identifier.
 	if ok, err := p.skipEnclosedParentheses(); err != nil {
-		return staticColumn{}, false, err
+		return nil, false, err
 	} else if ok {
 		return sqlFunctionCall{raw: p.input[cp.pos:p.pos]}, true, nil
 	}
