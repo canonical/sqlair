@@ -330,6 +330,13 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		outputs: []any{&sqlair.M{}, sqlair.M{}},
 		err:     `cannot get result: type "M" provided more than once`,
 	}, {
+		summary: "nil map output",
+		query:   "SELECT name AS &M.* FROM person",
+		types:   []any{sqlair.M{}},
+		inputs:  []any{},
+		outputs: []any{(sqlair.M)(nil)},
+		err:     `cannot get result: need map or pointer to struct, got nil`,
+	}, {
 		summary: "type not in query",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
