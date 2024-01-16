@@ -62,8 +62,8 @@ var tests = []struct {
 	typeSamples:    []any{Person{}},
 	expectedSQL:    "SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2",
 }, {
-	summary:        "spaces and tabs",
-	query:          "SELECT p.* 	AS 		   &Person.*",
+	summary: "spaces and tabs",
+	query: "SELECT p.* 	AS 		   &Person.*",
 	expectedParsed: "[Bypass[SELECT ] Output[[p.*] [Person.*]]]",
 	typeSamples:    []any{Person{}},
 	expectedSQL:    "SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2",
@@ -348,32 +348,36 @@ func (s *ExprSuite) TestExprPkg(c *C) {
 			primedQuery *expr.PrimedQuery
 			err         error
 		)
-		if parsedExpr, err = parser.Parse(t.query); err != nil {
-			c.Errorf("test %d failed (Parse):\nsummary: %s\nquery: %s\nexpected: %s\nerr: %s\n", i, t.summary, t.query, t.expectedParsed, err)
-		} else if parsedExpr.String() != t.expectedParsed {
-			c.Errorf("test %d failed (Parse):\nsummary: %s\nquery: %s\nexpected: %s\nactual:   %s\n", i, t.summary, t.query, t.expectedParsed, parsedExpr.String())
-		}
+		parsedExpr, err = parser.Parse(t.query)
+		c.Assert(err, IsNil,
+			Commentf("test %d failed (Parse):\nsummary:  %s\nquery:    %s\nexpected: %s\nerr:      %s\n",
+				i, t.summary, t.query, t.expectedParsed, err))
+		c.Assert(parsedExpr.String(), Equals, t.expectedParsed,
+			Commentf("test %d failed (Parse):\nsummary: %s\nquery:   %s\n", i, t.summary, t.query))
 
-		if typedExpr, err = parsedExpr.BindTypes(t.typeSamples...); err != nil {
-			c.Errorf("test %d failed (BindTypes):\nsummary: %s\nquery: %s\nexpected: %s\nerr: %s\n", i, t.summary, t.query, t.expectedSQL, err)
-		}
+		typedExpr, err = parsedExpr.BindTypes(t.typeSamples...)
+		c.Assert(err, IsNil,
+			Commentf("test %d failed (BindTypes):\nsummary:  %s\nquery:    %s\nexpected: %s\nerr:      %s\n",
+				i, t.summary, t.query, t.expectedSQL, err))
 
-		if primedQuery, err = typedExpr.BindInputs(t.inputArgs...); err != nil {
-			c.Errorf("test %d failed (Query):\nsummary: %s\nquery: %s\nexpected: %s\nerr: %s\n", i, t.summary, t.query, t.expectedSQL, err)
-		} else {
-			c.Assert(primedQuery.SQL(), Equals, t.expectedSQL,
-				Commentf("test %d failed (Query):\nsummary: %s\nquery: %s\n", i, t.summary, t.query, t.expectedSQL, primedQuery.SQL()))
-			if t.inputArgs != nil {
-				params := primedQuery.Params()
-				c.Assert(params, HasLen, len(t.expectedParams),
-					Commentf("test %d failed (Query Args):\nsummary: %s\nquery: %s\n", i, t.summary, t.query))
-				for paramIndex, param := range params {
-					param := param.(sql.NamedArg)
-					c.Assert(param.Name, Equals, "sqlair_"+strconv.Itoa(paramIndex),
-						Commentf("test %d failed (Query Args):\nsummary: %s\nquery: %s\n", i, t.summary, t.query))
-					c.Assert(param.Value, Equals, t.expectedParams[paramIndex],
-						Commentf("test %d failed (Query Args):\nsummary: %s\nquery: %s\n", i, t.summary, t.query))
-				}
+		primedQuery, err = typedExpr.BindInputs(t.inputArgs...)
+		c.Assert(err, IsNil,
+			Commentf("test %d failed (BindInputs):\nsummary: %s\nquery: %s\nexpected: %s\nerr: %s\n",
+				i, t.summary, t.query, t.expectedSQL, err))
+
+		c.Assert(primedQuery.SQL(), Equals, t.expectedSQL, Commentf("test %d failed (SQL):\nsummary: %s\nquery: %s\n",
+			i, t.summary, t.query, t.expectedSQL, primedQuery.SQL()))
+
+		if t.inputArgs != nil {
+			params := primedQuery.Params()
+			c.Assert(params, HasLen, len(t.expectedParams),
+				Commentf("test %d failed (Query Params):\nsummary: %s\nquery: %s\n", i, t.summary, t.query))
+			for paramIndex, param := range params {
+				param := param.(sql.NamedArg)
+				c.Assert(param.Name, Equals, "sqlair_"+strconv.Itoa(paramIndex),
+					Commentf("test %d failed (Query Params):\nsummary: %s\nquery: %s\n", i, t.summary, t.query))
+				c.Assert(param.Value, Equals, t.expectedParams[paramIndex],
+					Commentf("test %d failed (Query Params):\nsummary: %s\nquery: %s\n", i, t.summary, t.query))
 			}
 		}
 	}
@@ -629,9 +633,7 @@ func (s *ExprSuite) TestBindTypesErrors(c *C) {
 	for i, test := range tests {
 		parser := expr.NewParser()
 		parsedExpr, err := parser.Parse(test.query)
-		if err != nil {
-			c.Fatal(err)
-		}
+		c.Assert(err, IsNil)
 		_, err = parsedExpr.BindTypes(test.typeSamples...)
 		if err != nil {
 			c.Assert(err.Error(), Equals, test.err,
@@ -683,9 +685,7 @@ func (s *ExprSuite) TestMapError(c *C) {
 	for _, test := range tests {
 		parser := expr.NewParser()
 		parsedExpr, err := parser.Parse(test.input)
-		if err != nil {
-			c.Fatal(err)
-		}
+		c.Assert(err, IsNil)
 		_, err = parsedExpr.BindTypes(test.args...)
 		c.Assert(err.Error(), Equals, test.expect)
 	}
@@ -775,14 +775,10 @@ func (s *ExprSuite) TestBindInputsError(c *C) {
 	for i, t := range tests {
 		parser := expr.NewParser()
 		parsedExpr, err := parser.Parse(t.query)
-		if err != nil {
-			c.Fatal(err)
-		}
+		c.Assert(err, IsNil)
 
 		typedExpr, err := parsedExpr.BindTypes(t.typeSamples...)
-		if err != nil {
-			c.Fatal(err)
-		}
+		c.Assert(err, IsNil)
 
 		_, err = typedExpr.BindInputs(t.inputArgs...)
 		if err != nil {
