@@ -1,8 +1,15 @@
+// Copyright 2023 Canonical Ltd.
+// Licensed under Apache 2.0, see LICENCE file for details.
+
 package expr
 
 import (
 	. "gopkg.in/check.v1"
 )
+
+type parseSuite struct{}
+
+var _ = Suite(&parseSuite{})
 
 type parseHelperTest struct {
 	bytef    func(byte) bool
@@ -13,7 +20,7 @@ type parseHelperTest struct {
 	data     []string
 }
 
-func (s *ExprInternalSuite) TestRunTable(c *C) {
+func (s parseSuite) TestRunTable(c *C) {
 	var p = NewParser()
 	var parseTests = []parseHelperTest{
 
@@ -64,13 +71,13 @@ func (s *ExprInternalSuite) TestRunTable(c *C) {
 				result = v.stringf0()
 			}
 			if v.result[i] != result {
-				c.Errorf("Test %#v failed. Expected: '%t', got '%t'\n", v, result, v.result[i])
+				c.Errorf("Test %#v failed. Expected: '%t', got '%t'\n", v, v.result[i], result)
 			}
 		}
 	}
 }
 
-func (s *ExprInternalSuite) TestValidQuotes(c *C) {
+func (s parseSuite) TestValidQuotes(c *C) {
 	var p = NewParser()
 
 	validQuotes := []string{
@@ -94,7 +101,7 @@ func (s *ExprInternalSuite) TestValidQuotes(c *C) {
 	}
 }
 
-func (s *ExprInternalSuite) TestInvalidQuote(c *C) {
+func (s parseSuite) TestInvalidQuote(c *C) {
 	var p = NewParser()
 
 	invalidQuote := []string{
@@ -111,7 +118,7 @@ func (s *ExprInternalSuite) TestInvalidQuote(c *C) {
 	}
 }
 
-func (s *ExprInternalSuite) TestUnfinishedQuote(c *C) {
+func (s parseSuite) TestUnfinishedQuote(c *C) {
 	var p = NewParser()
 
 	unfinishedQuotes := []string{
@@ -133,7 +140,7 @@ func (s *ExprInternalSuite) TestUnfinishedQuote(c *C) {
 	}
 }
 
-func (s *ExprInternalSuite) TestRemoveComments(c *C) {
+func (s parseSuite) TestRemoveComments(c *C) {
 	validComments := []string{
 		`-- Single line comment`,
 		`-- Single line comment with line break
@@ -166,6 +173,49 @@ func (s *ExprInternalSuite) TestRemoveComments(c *C) {
 		p.init(s)
 		if ok := p.skipComment(); ok {
 			c.Errorf("comment %s parsed as comment when it should not be", s)
+		}
+	}
+}
+
+func (s parseSuite) TestParseSliceRange(c *C) {
+	sliceRangeTests := []struct {
+		input    string
+		expected valueAccessor
+		err      string
+	}{
+		{input: "mySlice[:]", expected: sliceAccessor{typeName: "mySlice"}},
+		{input: "mySlice[ : ]", expected: sliceAccessor{typeName: "mySlice"}},
+		{input: "mySlice[]", err: "column 1: invalid slice: expected 'mySlice[:]'"},
+		{input: "mySlice[1:10]", err: "column 1: invalid slice: expected 'mySlice[:]'"},
+		{input: "mySlice[1:]", err: "column 1: invalid slice: expected 'mySlice[:]'"},
+		{input: "mySlice[:10]", err: "column 1: invalid slice: expected 'mySlice[:]'"},
+		{input: "mySlice[1]", err: "column 1: invalid slice: expected 'mySlice[:]'"},
+	}
+	// invalidSliceRanges contains ranges that are invalid but that do not
+	// result in an error.
+	invalidSliceRanges := []string{"[]", "[:]", "[1:10]", "[1]"}
+
+	var p = NewParser()
+	for _, t := range sliceRangeTests {
+		p.init(t.input)
+		sr, ok, err := p.parseSliceAccessor()
+		if err != nil && t.err != "" {
+			c.Assert(err.Error(), Equals, t.err)
+			c.Assert(ok, Equals, false)
+			continue
+		}
+		c.Assert(err, IsNil)
+		c.Assert(ok, Equals, true)
+		c.Assert(t.expected, DeepEquals, sr)
+	}
+	for _, t := range invalidSliceRanges {
+		p.init(t)
+		_, ok, err := p.parseSliceAccessor()
+		if ok {
+			c.Errorf("test failed. %s parsed as valid slice range", t)
+		}
+		if err != nil {
+			c.Errorf("test failed. parsing %s returned an error", t)
 		}
 	}
 }

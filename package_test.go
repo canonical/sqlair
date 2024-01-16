@@ -1,3 +1,6 @@
+// Copyright 2023 Canonical Ltd.
+// Licensed under Apache 2.0, see LICENCE file for details.
+
 package sqlair_test
 
 import (
@@ -5,9 +8,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"runtime"
 	"testing"
-	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 	. "gopkg.in/check.v1"
@@ -26,21 +27,15 @@ func setupDB() (*sql.DB, error) {
 	return sql.Open("sqlite3", "file:test.db?cache=shared&mode=memory")
 }
 
-func createExampleDB(createTables string, inserts []string) (*sql.DB, error) {
+func createExampleDB(c *C, createTables string, inserts []string) (*sql.DB, error) {
 	db, err := setupDB()
-	if err != nil {
-		return nil, err
-	}
+	c.Assert(err, IsNil)
 
 	_, err = db.Exec(createTables)
-	if err != nil {
-		return nil, err
-	}
+	c.Assert(err, IsNil)
 	for _, insert := range inserts {
 		_, err := db.Exec(insert)
-		if err != nil {
-			return nil, err
-		}
+		c.Assert(err, IsNil)
 	}
 	return db, nil
 }
@@ -73,7 +68,7 @@ type District struct{}
 
 type CustomMap map[string]any
 
-func personAndAddressDB() ([]string, *sql.DB, error) {
+func personAndAddressDB(c *C) ([]string, *sql.DB, error) {
 
 	createTables := `
 CREATE TABLE person (
@@ -98,10 +93,8 @@ CREATE TABLE address (
 		"INSERT INTO address VALUES (3500, 'Ambivalent Commons', 'Station Lane');",
 	}
 
-	db, err := createExampleDB(createTables, inserts)
-	if err != nil {
-		return nil, nil, err
-	}
+	db, err := createExampleDB(c, createTables, inserts)
+	c.Assert(err, IsNil)
 	return []string{"person", "address"}, db, nil
 }
 
@@ -229,7 +222,7 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 
 	tests = append(tests, testsWithShadowPerson...)
 
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
@@ -274,67 +267,75 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		query   string
 		types   []any
 		inputs  []any
-		outputs [][]any
+		outputs []any
 		err     string
 	}{{
 		summary: "nil parameter",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
-		outputs: [][]any{{nil}},
+		outputs: []any{nil},
 		err:     "cannot get result: need map or pointer to struct, got nil",
 	}, {
 		summary: "nil pointer parameter",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
-		outputs: [][]any{{(*Person)(nil)}},
+		outputs: []any{(*Person)(nil)},
 		err:     "cannot get result: got nil pointer",
 	}, {
 		summary: "non pointer parameter",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
-		outputs: [][]any{{Person{}}},
+		outputs: []any{Person{}},
 		err:     "cannot get result: need map or pointer to struct, got struct",
 	}, {
 		summary: "wrong struct",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
-		outputs: [][]any{{&Address{}}},
+		outputs: []any{&Address{}},
 		err:     `cannot get result: type "Address" does not appear in query, have: Person`,
 	}, {
 		summary: "not a struct",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
-		outputs: [][]any{{&[]any{}}},
+		outputs: []any{&[]any{}},
 		err:     "cannot get result: need map or pointer to struct, got pointer to slice",
 	}, {
 		summary: "missing get value",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
-		outputs: [][]any{{}},
-		err:     `cannot get result: type "Person" found in query but not passed to get`,
+		outputs: []any{},
+		err:     `cannot get result: parameter with type "Person" missing`,
 	}, {
 		summary: "multiple of the same type",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
-		outputs: [][]any{{&Person{}, &Person{}}},
+		outputs: []any{&Person{}, &Person{}},
 		err:     `cannot get result: type "Person" provided more than once, rename one of them`,
 	}, {
 		summary: "multiple of the same type",
 		query:   "SELECT name AS &M.* FROM person",
 		types:   []any{sqlair.M{}},
 		inputs:  []any{},
-		outputs: [][]any{{&sqlair.M{}, sqlair.M{}}},
+		outputs: []any{&sqlair.M{}, sqlair.M{}},
 		err:     `cannot get result: type "M" provided more than once, rename one of them`,
+	}, {
+		summary: "output expr in a with clause",
+		query: `WITH averageID(avgid) AS (SELECT &Person.id FROM person)
+		        SELECT id FROM person, averageID WHERE id > averageID.avgid LIMIT 1`,
+		types:   []any{Person{}},
+		inputs:  []any{},
+		outputs: []any{&Person{}},
+		err:     `cannot get result: query uses "&Person" outside of result context`,
 	}}
 
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
@@ -347,19 +348,12 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 
 		iter := db.Query(nil, stmt, t.inputs...).Iter()
 		defer iter.Close()
-		i := 0
-		for iter.Next() {
-			if i >= len(t.outputs) {
-				c.Fatalf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d > %d)\n", t.summary, t.query, i+1, len(t.outputs))
-			}
-			if err := iter.Get(t.outputs[i]...); err != nil {
-				c.Assert(err, ErrorMatches, t.err,
-					Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
-				iter.Close()
-				break
-			}
-			i++
+		if !iter.Next() {
+			c.Fatalf("\ntest %q failed (Get):\ninput: %s\nerr: no rows returned\n", t.summary, t.query)
 		}
+		err = iter.Get(t.outputs...)
+		c.Assert(err, ErrorMatches, t.err,
+			Commentf("\ntest %q failed:\ninput: %s\noutputs: %s\n", t.summary, t.query, t.outputs))
 		err = iter.Close()
 		c.Assert(err, IsNil,
 			Commentf("\ntest %q failed (Close):\ninput: %s\n", t.summary, t.query))
@@ -449,7 +443,7 @@ func (s *PackageSuite) TestNulls(c *C) {
 		expected: []any{&ScannerDude{Fullname: ScannerString{SS: "ScannerString scanned well!"}, ID: ScannerInt{SI: 666}, PostalCode: ScannerInt{SI: 666}}},
 	}}
 
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
@@ -506,7 +500,7 @@ func (s *PackageSuite) TestValidGet(c *C) {
 		expected: []any{sqlair.M{"name": "Fred"}},
 	}}
 
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
@@ -561,7 +555,7 @@ func (s *PackageSuite) TestGetErrors(c *C) {
 		err:     `invalid input parameter: map "M" does not contain key "p1"`,
 	}}
 
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
@@ -578,7 +572,7 @@ func (s *PackageSuite) TestGetErrors(c *C) {
 	}
 }
 func (s *PackageSuite) TestErrNoRows(c *C) {
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
@@ -642,7 +636,7 @@ func (s *PackageSuite) TestValidGetAll(c *C) {
 		expected: []any{&[]sqlair.M{{"name": "Mark"}}, &[]CustomMap{{"id": int64(20)}}},
 	}}
 
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
@@ -737,7 +731,7 @@ func (s *PackageSuite) TestGetAllErrors(c *C) {
 		err:     `cannot populate slice: output variables provided but not referenced in query`,
 	}}
 
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
@@ -755,7 +749,7 @@ func (s *PackageSuite) TestGetAllErrors(c *C) {
 }
 
 func (s *PackageSuite) TestRun(c *C) {
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
 
 	var jim = Person{
@@ -781,7 +775,7 @@ func (s *PackageSuite) TestRun(c *C) {
 }
 
 func (s *PackageSuite) TestOutcome(c *C) {
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
 
 	var jim = Person{
@@ -849,6 +843,11 @@ func (s *PackageSuite) TestOutcome(c *C) {
 	c.Assert(err, IsNil)
 
 	c.Assert(outcome.Result(), IsNil)
+	// Test Iter.Get with zero args and without Outcome
+	selectStmt = sqlair.MustPrepare(`SELECT 'hello'`)
+	iter = db.Query(nil, selectStmt).Iter()
+	err = iter.Get()
+	c.Assert(err, ErrorMatches, "cannot get result: cannot call Get before Next unless getting outcome")
 }
 
 func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
@@ -863,7 +862,7 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	oneOutput := &Person{}
 	oneExpected := &Person{30, "Fred", 1000}
 
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
@@ -899,7 +898,7 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 }
 
 func (s *PackageSuite) TestTransactions(c *C) {
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
 
 	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE address_id = $Person.address_id", Person{})
@@ -947,7 +946,7 @@ func (s *PackageSuite) TestTransactions(c *C) {
 }
 
 func (s *PackageSuite) TestTransactionErrors(c *C) {
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
@@ -992,125 +991,8 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 	}
 }
 
-// TestPreparedStmtCaching checks that the cache of statements prepared on databases behaves
-// as expected.
-func (s *PackageSuite) TestPreparedStmtCaching(c *C) {
-	// Get cache variables.
-	stmtDBCache, dbStmtCache, cacheMutex := sqlair.Cache()
-
-	// checkStmtCache is a helper function to check if a prepared statement is
-	// cached or not.
-	checkStmtCache := func(dbID int64, sID int64, inCache bool) {
-		cacheMutex.RLock()
-		defer cacheMutex.RUnlock()
-		dbCache, ok1 := stmtDBCache[sID]
-		var ok2 bool
-		if ok1 {
-			_, ok2 = dbCache[dbID]
-		}
-		_, ok3 := dbStmtCache[dbID][sID]
-		c.Assert(ok2, Equals, inCache)
-		c.Assert(ok3, Equals, inCache)
-	}
-
-	// checkDBNotInCache is a helper function to check a db is not mentioned in
-	// the cache.
-	checkDBNotInCache := func(dbID int64) {
-		cacheMutex.RLock()
-		defer cacheMutex.RUnlock()
-		for _, dbCache := range stmtDBCache {
-			_, ok := dbCache[dbID]
-			c.Assert(ok, Equals, false)
-		}
-		_, ok := dbStmtCache[dbID]
-		c.Assert(ok, Equals, false)
-	}
-
-	// checkCacheEmpty asserts both the sides of the cache are empty.
-	checkCacheEmpty := func() {
-		cacheMutex.RLock()
-		defer cacheMutex.RUnlock()
-		c.Assert(dbStmtCache, HasLen, 0)
-		c.Assert(stmtDBCache, HasLen, 0)
-	}
-
-	// For a Statement or DB to be removed from the cache it needs to go out of
-	// scope and be garbage collected. Because of this, the tests below make
-	// extensive use of functions to "forget" statements and databases.
-
-	q1 := `SELECT &Person.*	FROM person WHERE name = "Fred"`
-	q2 := `SELECT &Person.* FROM person WHERE name = "Mark"`
-	p := Person{}
-
-	// createAndCacheStmt takes a db and prepares a statement on it.
-	createAndCacheStmt := func(db *sqlair.DB) (stmtID int64) {
-		// Create stmt.
-		stmt, err := sqlair.Prepare(q1, Person{})
-		c.Assert(err, IsNil)
-
-		// Start a query with stmt on db. This will prepare the stmt on the db.
-		c.Assert(db.Query(nil, stmt).Get(&p), IsNil)
-		// Check that stmt is now in the cache.
-		checkStmtCache(db.CacheID(), stmt.CacheID(), true)
-		return stmt.CacheID()
-	}
-
-	// testStmtsOnDB prepares a given statement on the db then creates a second
-	// statement inside another function and checks it has been cleared from
-	// the cache on garbage collection.
-	testStmtsOnDB := func(db *sqlair.DB, stmt *sqlair.Statement) {
-		// Start a query with stmt on db. This will prepare stmt on db.
-		c.Assert(db.Query(nil, stmt).Get(&p), IsNil)
-		// Check the stmt now is in the cache.
-		checkStmtCache(db.CacheID(), stmt.CacheID(), true)
-
-		// Run createAndCacheStmt and check that once the function has finished
-		// the stmt it created is not in the cache.
-		stmt2ID := createAndCacheStmt(db)
-		// Run the garbage collector and wait one millisecond for the finalizer to finish.
-		runtime.GC()
-		time.Sleep(1 * time.Millisecond)
-		checkStmtCache(db.CacheID(), stmt2ID, false)
-	}
-
-	// createDBAndTestStmt opens a new database and runs testStmtsOnDB on it.
-	createDBAndTestStmt := func(stmt *sqlair.Statement) (dbID int64) {
-		// Create db.
-		tables, sqldb, err := personAndAddressDB()
-		c.Assert(err, IsNil)
-		db := sqlair.NewDB(sqldb)
-		defer dropTables(c, db, tables...)
-		// Test stmt.
-		testStmtsOnDB(db, stmt)
-		return db.CacheID()
-	}
-
-	// createStmtAndTestOnDBs creates a statement then runs createDBAndTestStmt
-	// twice. It then checks that the stmts prepared on the databases have been
-	// cleared from the cache once createDBAndTestStmt is finished.
-	createStmtAndTestOnDBs := func() {
-		// Create stmt.
-		stmt, err := sqlair.Prepare(q2, Person{})
-		c.Assert(err, IsNil)
-		db1ID := createDBAndTestStmt(stmt)
-		db2ID := createDBAndTestStmt(stmt)
-		// Run the garbage collector and wait one millisecond for the finalizer to finish.
-		runtime.GC()
-		time.Sleep(1 * time.Millisecond)
-		checkDBNotInCache(db1ID)
-		checkDBNotInCache(db2ID)
-	}
-
-	// Run the functions above.
-	createStmtAndTestOnDBs()
-	// Run the garbage collector and wait one millisecond for the finalizer to finish.
-	runtime.GC()
-	time.Sleep(1 * time.Millisecond)
-	checkCacheEmpty()
-}
-
 func (s *PackageSuite) TestTransactionWithOneConn(c *C) {
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
 	sqldb.SetMaxOpenConns(1)
 	ctx := context.Background()
@@ -1154,7 +1036,7 @@ type JujuLeaseInfo struct {
 	Expiry int    `db:"expiry"`
 }
 
-func JujuStoreLeaseDB() ([]string, *sql.DB, error) {
+func JujuStoreLeaseDB(c *C) ([]string, *sql.DB, error) {
 	createTables := `
 CREATE TABLE lease (
 	model_uuid text,
@@ -1179,16 +1061,14 @@ CREATE TABLE lease_type (
 		"INSERT INTO lease_type VALUES ('type_id2', 'type2');",
 	}
 
-	db, err := createExampleDB(createTables, inserts)
-	if err != nil {
-		return nil, nil, err
-	}
+	db, err := createExampleDB(c, createTables, inserts)
+	c.Assert(err, IsNil)
 	return tables, db, nil
 
 }
 
 func (s *PackageSuite) TestIterMethodOrder(c *C) {
-	tables, sqldb, err := personAndAddressDB()
+	tables, sqldb, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
@@ -1263,7 +1143,7 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 		expected: [][]any{{&JujuLeaseKey{Namespace: "type1", ModelUUID: "uuid1", Lease: "name1"}, &JujuLeaseInfo{Holder: "holder1", Expiry: 1}}},
 	}}
 
-	tables, sqldb, err := JujuStoreLeaseDB()
+	tables, sqldb, err := JujuStoreLeaseDB(c)
 	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
