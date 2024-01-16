@@ -286,7 +286,7 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: []any{(*Person)(nil)},
-		err:     "cannot get result: got nil pointer",
+		err:     "cannot get result: need map or pointer to struct, got nil",
 	}, {
 		summary: "non pointer parameter",
 		query:   "SELECT * AS &Person.* FROM person",
@@ -300,7 +300,7 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: []any{&Address{}},
-		err:     `cannot get result: type "Address" does not appear in query, have: Person`,
+		err:     `cannot get result: parameter with type "Person" missing \(have "Address"\)`,
 	}, {
 		summary: "not a struct",
 		query:   "SELECT * AS &Person.* FROM person",
@@ -321,14 +321,21 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: []any{&Person{}, &Person{}},
-		err:     `cannot get result: type "Person" provided more than once, rename one of them`,
+		err:     `cannot get result: type "Person" provided more than once`,
 	}, {
 		summary: "multiple of the same type",
 		query:   "SELECT name AS &M.* FROM person",
 		types:   []any{sqlair.M{}},
 		inputs:  []any{},
 		outputs: []any{&sqlair.M{}, sqlair.M{}},
-		err:     `cannot get result: type "M" provided more than once, rename one of them`,
+		err:     `cannot get result: type "M" provided more than once`,
+	}, {
+		summary: "type not in query",
+		query:   "SELECT * AS &Person.* FROM person",
+		types:   []any{Person{}},
+		inputs:  []any{},
+		outputs: []any{&Person{}, &Address{}},
+		err:     `cannot get result: "Address" not referenced in query`,
 	}, {
 		summary: "output expr in a with clause",
 		query: `WITH averageID(avgid) AS (SELECT &Person.id FROM person)
@@ -736,7 +743,7 @@ func (s *PackageSuite) TestGetAllErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		slices:  []any{&[]*Address{}},
-		err:     `cannot populate slice: cannot get result: type "Address" does not appear in query, have: Person`,
+		err:     `cannot populate slice: cannot get result: parameter with type "Person" missing \(have "Address"\)`,
 	}, {
 		summary: "wrong slice type (int)",
 		query:   "SELECT * AS &Person.* FROM person",

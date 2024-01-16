@@ -6,7 +6,6 @@ package expr
 import (
 	"fmt"
 	"reflect"
-	"strings"
 
 	"github.com/canonical/sqlair/internal/typeinfo"
 )
@@ -42,51 +41,17 @@ func (pq *PrimedQuery) SQL() string {
 // be populated with the query results. All the structs/maps/slices mentioned in
 // the query must be in outputArgs.
 func (pq *PrimedQuery) ScanArgs(columnNames []string, outputArgs []any) (scanArgs []any, onSuccess func(), err error) {
-	var typesInQuery []string
-	var inQuery = make(map[reflect.Type]bool)
-	for _, output := range pq.outputs {
-		argType := output.ArgType()
-		if ok := inQuery[argType]; !ok {
-			inQuery[argType] = true
-			typesInQuery = append(typesInQuery, argType.Name())
-		}
-	}
 
-	var typeToValue = make(map[reflect.Type]reflect.Value)
-	var outputVals []reflect.Value
-	for _, outputArg := range outputArgs {
-		if outputArg == nil {
-			return nil, nil, fmt.Errorf("need map or pointer to struct, got nil")
-		}
-		outputVal := reflect.ValueOf(outputArg)
-		k := outputVal.Kind()
-		if k != reflect.Map {
-			if k != reflect.Pointer {
-				return nil, nil, fmt.Errorf("need map or pointer to struct, got %s", k)
-			}
-			if outputVal.IsNil() {
-				return nil, nil, fmt.Errorf("got nil pointer")
-			}
-			outputVal = outputVal.Elem()
-			k = outputVal.Kind()
-			if k != reflect.Struct && k != reflect.Map {
-				return nil, nil, fmt.Errorf("need map or pointer to struct, got pointer to %s", k)
-			}
-		}
-		if !inQuery[outputVal.Type()] {
-			return nil, nil, fmt.Errorf("type %q does not appear in query, have: %s", outputVal.Type().Name(), strings.Join(typesInQuery, ", "))
-		}
-		if _, ok := typeToValue[outputVal.Type()]; ok {
-			return nil, nil, fmt.Errorf("type %q provided more than once, rename one of them", outputVal.Type().Name())
-		}
-		typeToValue[outputVal.Type()] = outputVal
-		outputVals = append(outputVals, outputVal)
+	typeToValue, err := typeinfo.ValidateOutputs(outputArgs)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	// Generate the pointers.
 	var ptrs []any
 	var scanProxies []typeinfo.ScanProxy
 	var columnInResult = make([]bool, len(columnNames))
+	argTypeUsed := map[reflect.Type]bool{}
 	for _, column := range columnNames {
 		idx, ok := markerIndex(column)
 		if !ok {
@@ -104,6 +69,7 @@ func (pq *PrimedQuery) ScanArgs(columnNames []string, outputArgs []any) (scanArg
 		if err != nil {
 			return nil, nil, err
 		}
+		argTypeUsed[output.ArgType()] = true
 
 		ptrs = append(ptrs, ptr)
 		if scanProxy != nil {
@@ -114,6 +80,12 @@ func (pq *PrimedQuery) ScanArgs(columnNames []string, outputArgs []any) (scanArg
 	for i := 0; i < len(pq.outputs); i++ {
 		if !columnInResult[i] {
 			return nil, nil, fmt.Errorf(`query uses "&%s" outside of result context`, pq.outputs[i].ArgType().Name())
+		}
+	}
+
+	for argType := range typeToValue {
+		if !argTypeUsed[argType] {
+			return nil, nil, fmt.Errorf("%q not referenced in query", argType.Name())
 		}
 	}
 
