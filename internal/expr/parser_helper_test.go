@@ -11,6 +11,10 @@ type parseSuite struct{}
 
 var _ = Suite(&parseSuite{})
 
+// Type assertions.
+var _ columnAccessor = sqlFunctionCall{}
+var _ columnAccessor = basicColumn{}
+
 type parseHelperTest struct {
 	bytef    func(byte) bool
 	stringf  func(string) bool
