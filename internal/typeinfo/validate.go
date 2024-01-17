@@ -8,7 +8,7 @@ import (
 	"reflect"
 )
 
-type TypeToValue map[reflect.Type]reflect.Value
+type TypeToValue = map[reflect.Type]reflect.Value
 
 // ValidateInputs takes the raw SQLair input arguments from the user and uses
 // reflection to check that they are valid. It returns a TypeToValue containing
