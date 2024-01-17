@@ -512,6 +512,13 @@ func (s *PackageSuite) TestValidGet(c *C) {
 		inputs:   []any{sqlair.M{"p1": 1000}},
 		outputs:  []any{sqlair.M{}},
 		expected: []any{sqlair.M{"name": "Fred"}},
+	}, {
+		summary:  "sql functions",
+		query:    `SELECT (max(AVG(id), AVG(address_id), length("((((''""((")), IFNULL(name, "Mr &Person.id of $M.name")) AS (&M.avg, &M.name), round(24.5234) AS other_col FROM person`,
+		types:    []any{sqlair.M{}},
+		inputs:   []any{},
+		outputs:  []any{sqlair.M{}},
+		expected: []any{sqlair.M{"avg": float64(2625), "name": "Fred"}},
 	}}
 
 	tables, sqldb, err := personAndAddressDB(c)
