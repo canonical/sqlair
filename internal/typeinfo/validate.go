@@ -8,8 +8,13 @@ import (
 	"reflect"
 )
 
-func ValidateInputs(args []any) (map[reflect.Type]reflect.Value, error) {
-	typeToValue := map[reflect.Type]reflect.Value{}
+type TypeToValue map[reflect.Type]reflect.Value
+
+// ValidateInputs takes the raw SQLair input arguments from the user and uses
+// reflection to check that they are valid. It returns a TypeToValue containing
+// the reflect.Value of the input arguments.
+func ValidateInputs(args []any) (TypeToValue, error) {
+	typeToValue := TypeToValue{}
 	for _, arg := range args {
 		v := reflect.ValueOf(arg)
 		if isNil(v) {
@@ -29,8 +34,11 @@ func ValidateInputs(args []any) (map[reflect.Type]reflect.Value, error) {
 	return typeToValue, nil
 }
 
-func ValidateOutputs(args []any) (map[reflect.Type]reflect.Value, error) {
-	typeToValue := map[reflect.Type]reflect.Value{}
+// ValidateOutputs takes the raw SQLair output arguments from the user and uses
+// reflection to check that they are valid. It returns a TypeToValue containing
+// the reflect.Value of the output arguments.
+func ValidateOutputs(args []any) (TypeToValue, error) {
+	typeToValue := TypeToValue{}
 	for _, arg := range args {
 		v := reflect.ValueOf(arg)
 		if isNil(v) {
