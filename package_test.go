@@ -239,38 +239,34 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 	tests = append(tests, testsWithShadowPerson...)
 
 	tables, sqldb, err := personAndAddressDB(c)
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
 	defer dropTables(c, db, tables...)
 
 	for _, t := range tests {
 		stmt, err := sqlair.Prepare(t.query, t.types...)
-		if err != nil {
-			c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			continue
-		}
+		c.Assert(err, IsNil,
+			Commentf("\ntest %q failed (Prepare):\ninput: %s\n", t.summary, t.query))
 
 		iter := db.Query(nil, stmt, t.inputs...).Iter()
 		defer iter.Close()
 		i := 0
 		for iter.Next() {
 			if i >= len(t.outputs) {
-				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d > %d)\n", t.summary, t.query, i+1, len(t.outputs))
-				break
+				c.Fatalf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d > %d)\n", t.summary, t.query, i+1, len(t.outputs))
 			}
-			if err := iter.Get(t.outputs[i]...); err != nil {
-				c.Errorf("\ntest %q failed (Get):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			}
+
+			err = iter.Get(t.outputs[i]...)
+			c.Assert(err, IsNil,
+				Commentf("\ntest %q failed (Get):\ninput: %s\n", t.summary, t.query))
+
 			i++
 		}
 
 		err = iter.Close()
-		if err != nil {
-			c.Errorf("\ntest %q failed (Close):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-		}
+		c.Assert(err, IsNil,
+			Commentf("\ntest %q failed (Close):\ninput: %s\n", t.summary, t.query))
 		for i, row := range t.expected {
 			for j, col := range row {
 				c.Assert(t.outputs[i][j], DeepEquals, col,
@@ -302,7 +298,7 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: []any{(*Person)(nil)},
-		err:     "cannot get result: got nil pointer",
+		err:     "cannot get result: need map or pointer to struct, got nil",
 	}, {
 		summary: "non pointer parameter",
 		query:   "SELECT * AS &Person.* FROM person",
@@ -316,7 +312,7 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: []any{&Address{}},
-		err:     `cannot get result: type "Address" does not appear in query, have: Person`,
+		err:     `cannot get result: parameter with type "Person" missing \(have "Address"\)`,
 	}, {
 		summary: "not a struct",
 		query:   "SELECT * AS &Person.* FROM person",
@@ -337,14 +333,28 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: []any{&Person{}, &Person{}},
-		err:     `cannot get result: type "Person" provided more than once, rename one of them`,
+		err:     `cannot get result: type "Person" provided more than once`,
 	}, {
 		summary: "multiple of the same type",
 		query:   "SELECT name AS &M.* FROM person",
 		types:   []any{sqlair.M{}},
 		inputs:  []any{},
 		outputs: []any{&sqlair.M{}, sqlair.M{}},
-		err:     `cannot get result: type "M" provided more than once, rename one of them`,
+		err:     `cannot get result: type "M" provided more than once`,
+	}, {
+		summary: "nil map output",
+		query:   "SELECT name AS &M.* FROM person",
+		types:   []any{sqlair.M{}},
+		inputs:  []any{},
+		outputs: []any{(sqlair.M)(nil)},
+		err:     `cannot get result: need map or pointer to struct, got nil`,
+	}, {
+		summary: "type not in query",
+		query:   "SELECT * AS &Person.* FROM person",
+		types:   []any{Person{}},
+		inputs:  []any{},
+		outputs: []any{&Person{}, &Address{}},
+		err:     `cannot get result: "Address" not referenced in query`,
 	}, {
 		summary: "output expr in a with clause",
 		query: `WITH averageID(avgid) AS (SELECT &Person.id FROM person)
@@ -356,19 +366,15 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 	}}
 
 	tables, sqldb, err := personAndAddressDB(c)
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
 	defer dropTables(c, db, tables...)
 
 	for _, t := range tests {
 		stmt, err := sqlair.Prepare(t.query, t.types...)
-		if err != nil {
-			c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			continue
-		}
+		c.Assert(err, IsNil,
+			Commentf("\ntest %q failed (Prepare):\ninput: %s\n", t.summary, t.query))
 
 		iter := db.Query(nil, stmt, t.inputs...).Iter()
 		defer iter.Close()
@@ -379,9 +385,8 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		c.Assert(err, ErrorMatches, t.err,
 			Commentf("\ntest %q failed:\ninput: %s\noutputs: %s\n", t.summary, t.query, t.outputs))
 		err = iter.Close()
-		if err != nil {
-			c.Errorf("\ntest %q failed (Close):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-		}
+		c.Assert(err, IsNil,
+			Commentf("\ntest %q failed (Close):\ninput: %s\n", t.summary, t.query))
 	}
 }
 
@@ -469,9 +474,7 @@ func (s *PackageSuite) TestNulls(c *C) {
 	}}
 
 	tables, sqldb, err := personAndAddressDB(c)
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
 	defer dropTables(c, db, tables...)
@@ -482,17 +485,13 @@ func (s *PackageSuite) TestNulls(c *C) {
 
 	for _, t := range tests {
 		stmt, err := sqlair.Prepare(t.query, t.types...)
-		if err != nil {
-			c.Errorf("\ntest %q failed (prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			continue
-		}
+		c.Assert(err, IsNil,
+			Commentf("\ntest %q failed (Prepare):\ninput: %s\n", t.summary, t.query))
 
-		q := db.Query(nil, stmt, t.inputs...)
-		err = q.Get(t.outputs...)
-		if err != nil {
-			c.Errorf("\ntest %q failed (Get):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			continue
-		}
+		err = db.Query(nil, stmt, t.inputs...).Get(t.outputs...)
+		c.Assert(err, IsNil,
+			Commentf("\ntest %q failed (Get):\ninput: %s\n", t.summary, t.query))
+
 		for i, s := range t.expected {
 			c.Assert(t.outputs[i], DeepEquals, s,
 				Commentf("\ntest %q failed:\ninput: %s", t.summary, t.query))
@@ -529,12 +528,17 @@ func (s *PackageSuite) TestValidGet(c *C) {
 		inputs:   []any{sqlair.M{"p1": 1000}},
 		outputs:  []any{sqlair.M{}},
 		expected: []any{sqlair.M{"name": "Fred"}},
+	}, {
+		summary:  "sql functions",
+		query:    `SELECT (max(AVG(id), AVG(address_id), length("((((''""((")), IFNULL(name, "Mr &Person.id of $M.name")) AS (&M.avg, &M.name), round(24.5234) AS other_col FROM person`,
+		types:    []any{sqlair.M{}},
+		inputs:   []any{},
+		outputs:  []any{sqlair.M{}},
+		expected: []any{sqlair.M{"avg": float64(2625), "name": "Fred"}},
 	}}
 
 	tables, sqldb, err := personAndAddressDB(c)
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
 	defer dropTables(c, db, tables...)
@@ -546,12 +550,10 @@ func (s *PackageSuite) TestValidGet(c *C) {
 			continue
 		}
 
-		q := db.Query(nil, stmt, t.inputs...)
-		err = q.Get(t.outputs...)
-		if err != nil {
-			c.Errorf("\ntest %q failed (Get):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			continue
-		}
+		err = db.Query(nil, stmt, t.inputs...).Get(t.outputs...)
+		c.Assert(err, IsNil,
+			Commentf("\ntest %q failed (Get):\ninput: %s\n", t.summary, t.query))
+
 		for i, s := range t.expected {
 			c.Assert(t.outputs[i], DeepEquals, s,
 				Commentf("\ntest %q failed:\ninput: %s", t.summary, t.query))
@@ -591,43 +593,32 @@ func (s *PackageSuite) TestGetErrors(c *C) {
 	}}
 
 	tables, sqldb, err := personAndAddressDB(c)
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
 	defer dropTables(c, db, tables...)
 
 	for _, t := range tests {
 		stmt, err := sqlair.Prepare(t.query, t.types...)
-		if err != nil {
-			c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			continue
-		}
+		c.Assert(err, IsNil,
+			Commentf("\ntest %q failed (Prepare):\ninput: %s\n", t.summary, t.query))
 
 		err = db.Query(nil, stmt, t.inputs...).Get(t.outputs...)
 		c.Assert(err, ErrorMatches, t.err,
 			Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
 	}
 }
-
 func (s *PackageSuite) TestErrNoRows(c *C) {
 	tables, sqldb, err := personAndAddressDB(c)
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
 	defer dropTables(c, db, tables...)
 
 	stmt := sqlair.MustPrepare("SELECT * AS &Person.* FROM person WHERE id=12312", Person{})
 	err = db.Query(nil, stmt).Get(&Person{})
-	if !errors.Is(err, sqlair.ErrNoRows) {
-		c.Errorf("expected %q, got %q", sqlair.ErrNoRows, err)
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		c.Errorf("expected %q, got %q", sql.ErrNoRows, err)
-	}
+	c.Assert(err, Equals, sqlair.ErrNoRows)
+	c.Assert(err, Equals, sql.ErrNoRows)
 }
 
 func (s *PackageSuite) TestValidGetAll(c *C) {
@@ -683,26 +674,20 @@ func (s *PackageSuite) TestValidGetAll(c *C) {
 	}}
 
 	tables, sqldb, err := personAndAddressDB(c)
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
 	defer dropTables(c, db, tables...)
 
 	for _, t := range tests {
 		stmt, err := sqlair.Prepare(t.query, t.types...)
-		if err != nil {
-			c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			continue
-		}
+		c.Assert(err, IsNil,
+			Commentf("\ntest %q failed (Prepare):\ninput: %s\n", t.summary, t.query))
 
-		q := db.Query(nil, stmt, t.inputs...)
-		err = q.GetAll(t.slices...)
-		if err != nil {
-			c.Errorf("\ntest %q failed (GetAll):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			continue
-		}
+		err = db.Query(nil, stmt, t.inputs...).GetAll(t.slices...)
+		c.Assert(err, IsNil,
+			Commentf("\ntest %q failed (All):\ninput: %s\n", t.summary, t.query))
+
 		for i, column := range t.expected {
 			c.Assert(t.slices[i], DeepEquals, column,
 				Commentf("\ntest %q failed:\ninput: %s", t.summary, t.query))
@@ -752,7 +737,7 @@ func (s *PackageSuite) TestGetAllErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		slices:  []any{&[]*Address{}},
-		err:     `cannot populate slice: cannot get result: type "Address" does not appear in query, have: Person`,
+		err:     `cannot populate slice: cannot get result: parameter with type "Person" missing \(have "Address"\)`,
 	}, {
 		summary: "wrong slice type (int)",
 		query:   "SELECT * AS &Person.* FROM person",
@@ -784,19 +769,15 @@ func (s *PackageSuite) TestGetAllErrors(c *C) {
 	}}
 
 	tables, sqldb, err := personAndAddressDB(c)
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
 	defer dropTables(c, db, tables...)
 
 	for _, t := range tests {
 		stmt, err := sqlair.Prepare(t.query, t.types...)
-		if err != nil {
-			c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			continue
-		}
+		c.Assert(err, IsNil,
+			Commentf("\ntest %q failed (Prepare):\ninput: %s\n", t.summary, t.query))
 
 		err = db.Query(nil, stmt, t.inputs...).GetAll(t.slices...)
 		c.Assert(err, ErrorMatches, t.err,
@@ -845,46 +826,59 @@ func (s *PackageSuite) TestOutcome(c *C) {
 
 	var outcome = sqlair.Outcome{}
 
-	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ($Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
-	q1 := db.Query(nil, insertStmt, &jim)
 	// Test INSERT with Get
-	c.Assert(q1.Get(&outcome), IsNil)
-	if outcome.Result() == nil {
-		c.Errorf("result in outcome is nil")
-	}
+	insertStmt := sqlair.MustPrepare(`
+		INSERT INTO person 
+		VALUES ($Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');
+	`, Person{})
+	err = db.Query(nil, insertStmt, &jim).Get(&outcome)
+	c.Assert(err, IsNil)
+
+	res := outcome.Result()
+	c.Assert(res, Not(IsNil))
 	rowsAffected, err := outcome.Result().RowsAffected()
 	c.Assert(err, IsNil)
-	if rowsAffected != 1 {
-		c.Errorf("got %d for rowsAffected, expected 1", rowsAffected)
-	}
+	c.Assert(rowsAffected, Equals, int64(1))
+
 	// Test SELECT with Get
-	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person", Person{})
-	q2 := db.Query(nil, selectStmt)
-	c.Assert(q2.Get(&outcome, &jim), IsNil)
+	selectStmt := sqlair.MustPrepare(`
+		SELECT &Person.*
+		FROM person
+	`, Person{})
+	err = db.Query(nil, selectStmt).Get(&outcome, &jim)
+	c.Assert(err, IsNil)
+
 	c.Assert(outcome.Result(), IsNil)
+
 	// Test INSERT with Iter
-	iter := q1.Iter()
-	c.Assert(iter.Get(&outcome), IsNil)
-	if outcome.Result() == nil {
-		c.Errorf("result in outcome is nil")
-	}
+	iter := db.Query(nil, insertStmt, &jim).Iter()
+	err = iter.Get(&outcome)
+	c.Assert(err, IsNil)
+
+	res = outcome.Result()
+	c.Assert(res, Not(IsNil))
 	rowsAffected, err = outcome.Result().RowsAffected()
 	c.Assert(err, IsNil)
-	if rowsAffected != 1 {
-		c.Errorf("got %d for rowsAffected, expected 1", rowsAffected)
-	}
+	c.Assert(rowsAffected, Equals, int64(1))
+
 	c.Assert(iter.Next(), Equals, false)
+	c.Assert(iter.Close(), IsNil)
+
 	// Test SELECT with Iter.Get
-	iter = q2.Iter()
+	iter = db.Query(nil, selectStmt).Iter()
 	c.Assert(iter.Get(&outcome), IsNil)
+
 	c.Assert(outcome.Result(), IsNil)
+
 	c.Assert(iter.Next(), Equals, true)
 	c.Assert(iter.Get(&jim), IsNil)
 	c.Assert(iter.Close(), IsNil)
+
 	// Test SELECT with GetAll
 	var jims = []Person{}
-	err = q2.GetAll(&outcome, &jims)
+	err = db.Query(nil, selectStmt).GetAll(&outcome, &jims)
 	c.Assert(err, IsNil)
+
 	c.Assert(outcome.Result(), IsNil)
 	// Test Iter.Get with zero args and without Outcome
 	selectStmt = sqlair.MustPrepare(`SELECT 'hello'`)
@@ -894,6 +888,8 @@ func (s *PackageSuite) TestOutcome(c *C) {
 }
 
 func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
+	// Note: Query structs are not designed to be reused (hence why they store a context as a struct field).
+	//       It is, however, possible.
 	allOutput := &[]*Person{}
 	allExpected := &[]*Person{&Person{30, "Fred", 1000}, &Person{20, "Mark", 1500}, &Person{40, "Mary", 3500}, &Person{35, "James", 4500}}
 
@@ -928,44 +924,14 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 		if i >= len(iterOutputs) {
 			c.Fatalf("expected %d rows, got more", len(iterOutputs))
 		}
-		if err := iter.Get(iterOutputs[i]); err != nil {
-			c.Fatal(err)
-		}
+		err = iter.Get(iterOutputs[i])
+		c.Assert(err, IsNil)
 		i++
 	}
+
 	err = iter.Close()
 	c.Assert(err, IsNil)
 	c.Assert(iterOutputs, DeepEquals, iterExpected)
-
-	// Run them all again for good measure.
-	allOutput = &[]*Person{}
-	iterOutputs = []any{&Person{}, &Person{}, &Person{}, &Person{}}
-	oneOutput = &Person{}
-
-	err = q.GetAll(allOutput)
-	c.Assert(err, IsNil)
-	c.Assert(allOutput, DeepEquals, allExpected)
-
-	iter = q.Iter()
-	defer iter.Close()
-	i = 0
-	for iter.Next() {
-		if i >= len(iterOutputs) {
-			c.Fatalf("expected %d rows, got more", len(iterOutputs))
-		}
-		if err := iter.Get(iterOutputs[i]); err != nil {
-			c.Fatal(err)
-		}
-		i++
-	}
-	err = iter.Close()
-	c.Assert(err, IsNil)
-	c.Assert(iterOutputs, DeepEquals, iterExpected)
-
-	q = db.Query(nil, stmt)
-	err = q.Get(oneOutput)
-	c.Assert(err, IsNil)
-	c.Assert(oneExpected, DeepEquals, oneOutput)
 }
 
 func (s *PackageSuite) TestTransactions(c *C) {
@@ -1140,9 +1106,7 @@ CREATE TABLE lease_type (
 
 func (s *PackageSuite) TestIterMethodOrder(c *C) {
 	tables, sqldb, err := personAndAddressDB(c)
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
 	defer dropTables(c, db, tables...)
@@ -1217,9 +1181,7 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 	}}
 
 	tables, sqldb, err := JujuStoreLeaseDB(c)
-	if err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 
 	db := sqlair.NewDB(sqldb)
 	defer dropTables(c, db, tables...)
@@ -1227,10 +1189,8 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 	for _, t := range tests {
 
 		stmt, err := sqlair.Prepare(t.query, t.types...)
-		if err != nil {
-			c.Errorf("\ntest %q failed (Prepare):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			continue
-		}
+		c.Assert(err, IsNil,
+			Commentf("\ntest %q failed (Prepare):\ninput: %s\n", t.summary, t.query))
 
 		iter := db.Query(nil, stmt, t.inputs...).Iter()
 		defer iter.Close()
@@ -1240,15 +1200,15 @@ AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
 				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d > %d)\n", t.summary, t.query, i+1, len(t.outputs))
 				break
 			}
-			if err := iter.Get(t.outputs[i]...); err != nil {
-				c.Errorf("\ntest %q failed (Get):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-			}
+			err := iter.Get(t.outputs[i]...)
+			c.Assert(err, IsNil,
+				Commentf("\ntest %q failed (Get):\ninput: %s\n", t.summary, t.query))
+
 			i++
 		}
 
 		err = iter.Close()
-		if err != nil {
-			c.Errorf("\ntest %q failed (Close):\ninput: %s\nerr: %s\n", t.summary, t.query, err)
-		}
+		c.Assert(err, IsNil,
+			Commentf("\ntest %q failed (Close):\ninput: %s\n", t.summary, t.query))
 	}
 }

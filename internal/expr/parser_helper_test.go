@@ -11,13 +11,19 @@ type parseSuite struct{}
 
 var _ = Suite(&parseSuite{})
 
+// Type assertions.
+var _ columnAccessor = sqlFunctionCall{}
+var _ columnAccessor = basicColumn{}
+
 type parseHelperTest struct {
 	bytef    func(byte) bool
 	stringf  func(string) bool
 	stringf0 func() bool
+	stringf1 func() (bool, error)
 	result   []bool
 	input    string
 	data     []string
+	err      string
 }
 
 func (s parseSuite) TestRunTable(c *C) {
@@ -55,12 +61,24 @@ func (s parseSuite) TestRunTable(c *C) {
 		{stringf0: p.skipName, result: []bool{false}, input: "*", data: []string{}},
 		{stringf0: p.skipName, result: []bool{true}, input: "hello", data: []string{}},
 		{stringf0: p.skipName, result: []bool{false}, input: "2d3d", data: []string{}},
+
+		{stringf1: p.skipEnclosedParentheses, result: []bool{false}, input: `count *`},
+		{stringf1: p.skipEnclosedParentheses, result: []bool{false}, input: `)`},
+		{stringf1: p.skipEnclosedParentheses, result: []bool{false}, input: `(")"`, err: `column 1: missing closing parenthesis`},
+		{stringf1: p.skipEnclosedParentheses, result: []bool{false}, input: `(--)`, err: `column 1: missing closing parenthesis`},
+		{stringf1: p.skipEnclosedParentheses, result: []bool{false}, input: `(/*)*/`, err: `column 1: missing closing parenthesis`},
+		{stringf1: p.skipEnclosedParentheses, result: []bool{true}, input: `()`},
+		{stringf1: p.skipEnclosedParentheses, result: []bool{true}, input: `(columnName)`},
+		{stringf1: p.skipEnclosedParentheses, result: []bool{true}, input: `(/*)(""*/)`},
+		{stringf1: p.skipEnclosedParentheses, result: []bool{true}, input: `(")")`},
+		{stringf1: p.skipEnclosedParentheses, result: []bool{true}, input: `("/*)*/")`},
 	}
 	for _, v := range parseTests {
 		// Reset the input.
 		p.init(v.input)
 		for i, _ := range v.result {
 			var result bool
+			var err error
 			if v.bytef != nil {
 				result = v.bytef(v.data[i][0])
 			}
@@ -70,8 +88,14 @@ func (s parseSuite) TestRunTable(c *C) {
 			if v.stringf0 != nil {
 				result = v.stringf0()
 			}
+			if v.stringf1 != nil {
+				result, err = v.stringf1()
+			}
 			if v.result[i] != result {
 				c.Errorf("Test %#v failed. Expected: '%t', got '%t'\n", v, v.result[i], result)
+			}
+			if v.err != "" {
+				c.Check(err, ErrorMatches, v.err)
 			}
 		}
 	}

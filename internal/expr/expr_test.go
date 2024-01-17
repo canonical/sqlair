@@ -66,8 +66,8 @@ var tests = []struct {
 	typeSamples:    []any{Person{}},
 	expectedSQL:    "SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2",
 }, {
-	summary:        "spaces and tabs",
-	query:          "SELECT p.* 	AS 		   &Person.*",
+	summary: "spaces and tabs",
+	query: "SELECT p.* 	AS 		   &Person.*",
 	expectedParsed: "[Bypass[SELECT ] Output[[p.*] [Person.*]]]",
 	typeSamples:    []any{Person{}},
 	expectedSQL:    "SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2",
@@ -342,6 +342,14 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	expectedParams: []any{1, 2},
 	expectedSQL:    "INSERT INTO arr VALUES (ARRAY[[1,2],[@sqlair_0,4]], ARRAY[[5,6],[@sqlair_1,8]]);",
 }, {
+	summary:        "functions",
+	query:          `SELECT (max(AVG(id), AVG(address_id), length("((((''""((")), IFNULL(name, "Mr &Person.id of $M.name")) AS (&M.avg, &M.name), random() AS &M.random FROM person`,
+	expectedParsed: `[Bypass[SELECT ] Output[[max(AVG(id), AVG(address_id), length("((((''""((")) IFNULL(name, "Mr &Person.id of $M.name")] [M.avg M.name]] Bypass[, ] Output[[random()] [M.random]] Bypass[ FROM person]]`,
+	typeSamples:    []any{sqlair.M{}},
+	inputArgs:      []any{},
+	expectedParams: []any{},
+	expectedSQL:    `SELECT max(AVG(id), AVG(address_id), length("((((''""((")) AS _sqlair_0, IFNULL(name, "Mr &Person.id of $M.name") AS _sqlair_1, random() AS _sqlair_2 FROM person`,
+}, {
 	summary:        "single slice",
 	query:          "SELECT name FROM person WHERE id IN ($S[:])",
 	expectedParsed: "[Bypass[SELECT name FROM person WHERE id IN (] Input[S[:]] Bypass[)]]",
@@ -394,32 +402,36 @@ func (s *ExprSuite) TestExprPkg(c *C) {
 			primedQuery *expr.PrimedQuery
 			err         error
 		)
-		if parsedExpr, err = parser.Parse(t.query); err != nil {
-			c.Errorf("test %d failed (Parse):\nsummary: %s\nquery: %s\nexpected: %s\nerr: %s\n", i, t.summary, t.query, t.expectedParsed, err)
-		} else if parsedExpr.String() != t.expectedParsed {
-			c.Errorf("test %d failed (Parse):\nsummary: %s\nquery: %s\nexpected: %s\nactual:   %s\n", i, t.summary, t.query, t.expectedParsed, parsedExpr.String())
-		}
+		parsedExpr, err = parser.Parse(t.query)
+		c.Assert(err, IsNil,
+			Commentf("test %d failed (Parse):\nsummary:  %s\nquery:    %s\nexpected: %s\nerr:      %s\n",
+				i, t.summary, t.query, t.expectedParsed, err))
+		c.Assert(parsedExpr.String(), Equals, t.expectedParsed,
+			Commentf("test %d failed (Parse):\nsummary: %s\nquery:   %s\n", i, t.summary, t.query))
 
-		if typedExpr, err = parsedExpr.BindTypes(t.typeSamples...); err != nil {
-			c.Errorf("test %d failed (BindTypes):\nsummary: %s\nquery: %s\nexpected: %s\nerr: %s\n", i, t.summary, t.query, t.expectedSQL, err)
-		}
+		typedExpr, err = parsedExpr.BindTypes(t.typeSamples...)
+		c.Assert(err, IsNil,
+			Commentf("test %d failed (BindTypes):\nsummary:  %s\nquery:    %s\nexpected: %s\nerr:      %s\n",
+				i, t.summary, t.query, t.expectedSQL, err))
 
-		if primedQuery, err = typedExpr.BindInputs(t.inputArgs...); err != nil {
-			c.Errorf("test %d failed (Query):\nsummary: %s\nquery: %s\nexpected: %s\nerr: %s\n", i, t.summary, t.query, t.expectedSQL, err)
-		} else {
-			c.Assert(primedQuery.SQL(), Equals, t.expectedSQL,
-				Commentf("test %d failed (Query):\nsummary: %s\nquery: %s\n", i, t.summary, t.query, t.expectedSQL, primedQuery.SQL()))
-			if t.inputArgs != nil {
-				params := primedQuery.Params()
-				c.Assert(params, HasLen, len(t.expectedParams),
-					Commentf("test %d failed (Query Args):\nsummary: %s\nquery: %s\n", i, t.summary, t.query))
-				for paramIndex, param := range params {
-					param := param.(sql.NamedArg)
-					c.Assert(param.Name, Equals, "sqlair_"+strconv.Itoa(paramIndex),
-						Commentf("test %d failed (Query Args):\nsummary: %s\nquery: %s\n", i, t.summary, t.query))
-					c.Assert(param.Value, Equals, t.expectedParams[paramIndex],
-						Commentf("test %d failed (Query Args):\nsummary: %s\nquery: %s\n", i, t.summary, t.query))
-				}
+		primedQuery, err = typedExpr.BindInputs(t.inputArgs...)
+		c.Assert(err, IsNil,
+			Commentf("test %d failed (BindInputs):\nsummary: %s\nquery: %s\nexpected: %s\nerr: %s\n",
+				i, t.summary, t.query, t.expectedSQL, err))
+
+		c.Assert(primedQuery.SQL(), Equals, t.expectedSQL, Commentf("test %d failed (SQL):\nsummary: %s\nquery: %s\n",
+			i, t.summary, t.query, t.expectedSQL, primedQuery.SQL()))
+
+		if t.inputArgs != nil {
+			params := primedQuery.Params()
+			c.Assert(params, HasLen, len(t.expectedParams),
+				Commentf("test %d failed (Query Params):\nsummary: %s\nquery: %s\n", i, t.summary, t.query))
+			for paramIndex, param := range params {
+				param := param.(sql.NamedArg)
+				c.Assert(param.Name, Equals, "sqlair_"+strconv.Itoa(paramIndex),
+					Commentf("test %d failed (Query Params):\nsummary: %s\nquery: %s\n", i, t.summary, t.query))
+				c.Assert(param.Value, Equals, t.expectedParams[paramIndex],
+					Commentf("test %d failed (Query Params):\nsummary: %s\nquery: %s\n", i, t.summary, t.query))
 			}
 		}
 	}
@@ -540,6 +552,12 @@ of three lines' AND id = $Person.*`,
 	}, {
 		query: "SELECT * FROM t WHERE id = $ids[]",
 		err:   `cannot parse expression: column 29: invalid slice: expected 'ids[:]'`,
+	}, {
+		query: "SELECT count(*) AS &M.* FROM t",
+		err:   `cannot parse expression: column 8: cannot read function call "count(*)" into asterisk`,
+	}, {
+		query: "SELECT (id, count(*)) AS (&M.*) FROM t",
+		err:   `cannot parse expression: column 8: cannot read function call "count(*)" into asterisk`,
 	}}
 
 	for _, t := range tests {
@@ -700,9 +718,7 @@ func (s *ExprSuite) TestBindTypesErrors(c *C) {
 	for i, test := range tests {
 		parser := expr.NewParser()
 		parsedExpr, err := parser.Parse(test.query)
-		if err != nil {
-			c.Fatal(err)
-		}
+		c.Assert(err, IsNil)
 		_, err = parsedExpr.BindTypes(test.typeSamples...)
 		if err != nil {
 			c.Assert(err.Error(), Equals, test.err,
@@ -754,9 +770,7 @@ func (s *ExprSuite) TestMapError(c *C) {
 	for _, test := range tests {
 		parser := expr.NewParser()
 		parsedExpr, err := parser.Parse(test.input)
-		if err != nil {
-			c.Fatal(err)
-		}
+		c.Assert(err, IsNil)
 		_, err = parsedExpr.BindTypes(test.args...)
 		c.Assert(err.Error(), Equals, test.expect)
 	}
@@ -779,6 +793,11 @@ func (s *ExprSuite) TestBindInputsError(c *C) {
 		inputArgs:   []any{nil, Person{Fullname: "Monty Bingles"}},
 		err:         "invalid input parameter: need supported value, got nil",
 	}, {
+		query:       "SELECT street FROM t WHERE x = $M.x",
+		typeSamples: []any{sqlair.M{}},
+		inputArgs:   []any{(sqlair.M)(nil)},
+		err:         "invalid input parameter: need supported value, got nil",
+	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		typeSamples: []any{Address{}, Person{}},
 		inputArgs:   []any{(*Person)(nil)},
@@ -792,7 +811,7 @@ func (s *ExprSuite) TestBindInputsError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		typeSamples: []any{Address{}},
 		inputArgs:   []any{Address{}, Person{}},
-		err:         "invalid input parameter: Person not referenced in query",
+		err:         `invalid input parameter: "Person" not referenced in query`,
 	}, {
 		query:       "SELECT * AS &Address.* FROM t WHERE x = $M.Fullname",
 		typeSamples: []any{Address{}, sqlair.M{}},
@@ -822,12 +841,12 @@ func (s *ExprSuite) TestBindInputsError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $M.street",
 		typeSamples: []any{sqlair.M{}},
 		inputArgs:   []any{(sqlair.M)(nil)},
-		err:         `invalid input parameter: need valid map, got nil`,
+		err:         `invalid input parameter: need supported value, got nil`,
 	}, {
 		query:       "SELECT street FROM t WHERE x IN ($S[:])",
 		typeSamples: []any{sqlair.S{}},
 		inputArgs:   []any{(sqlair.S)(nil)},
-		err:         `invalid input parameter: need valid slice, got nil`,
+		err:         `invalid input parameter: need supported value, got nil`,
 	}}
 
 	outerP := Person{}
@@ -856,14 +875,10 @@ func (s *ExprSuite) TestBindInputsError(c *C) {
 	for i, t := range tests {
 		parser := expr.NewParser()
 		parsedExpr, err := parser.Parse(t.query)
-		if err != nil {
-			c.Fatal(err)
-		}
+		c.Assert(err, IsNil)
 
 		typedExpr, err := parsedExpr.BindTypes(t.typeSamples...)
-		if err != nil {
-			c.Fatal(err)
-		}
+		c.Assert(err, IsNil)
 
 		_, err = typedExpr.BindInputs(t.inputArgs...)
 		if err != nil {

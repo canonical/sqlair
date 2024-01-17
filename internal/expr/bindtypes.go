@@ -130,7 +130,7 @@ func bindOutputTypes(e *outputExpr, argInfo typeinfo.ArgInfo) (te *typedOutputEx
 		pref := ""
 		// Prepend table name. E.g. "t" in "t.* AS &P.*".
 		if numColumns > 0 {
-			pref = e.sourceColumns[0].tableName
+			pref = e.sourceColumns[0].tableName()
 		}
 
 		for _, t := range e.targetTypes {
@@ -162,11 +162,11 @@ func bindOutputTypes(e *outputExpr, argInfo typeinfo.ArgInfo) (te *typedOutputEx
 	// Case 2: Explicit columns, single asterisk type e.g. "(col1, t.col2) AS &P.*".
 	if starTypes == 1 && numTypes == 1 {
 		for _, c := range e.sourceColumns {
-			output, err := argInfo.OutputMember(e.targetTypes[0].typeName, c.columnName)
+			output, err := argInfo.OutputMember(e.targetTypes[0].typeName, c.columnName())
 			if err != nil {
 				return nil, err
 			}
-			oc := newOutputColumn(c.tableName, c.columnName, output)
+			oc := newOutputColumn(c.tableName(), c.columnName(), output)
 			toe.outputColumns = append(toe.outputColumns, oc)
 		}
 		return toe, nil
@@ -182,7 +182,7 @@ func bindOutputTypes(e *outputExpr, argInfo typeinfo.ArgInfo) (te *typedOutputEx
 			if err != nil {
 				return nil, err
 			}
-			oc := newOutputColumn(c.tableName, c.columnName, output)
+			oc := newOutputColumn(c.tableName(), c.columnName(), output)
 			toe.outputColumns = append(toe.outputColumns, oc)
 		}
 	} else {
@@ -196,7 +196,7 @@ func bindOutputTypes(e *outputExpr, argInfo typeinfo.ArgInfo) (te *typedOutputEx
 func starCountColumns(cs []columnAccessor) int {
 	s := 0
 	for _, c := range cs {
-		if c.columnName == "*" {
+		if c.columnName() == "*" {
 			s++
 		}
 	}
