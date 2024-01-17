@@ -708,6 +708,11 @@ func (s *ExprSuite) TestBindInputsError(c *C) {
 		inputArgs:   []any{nil, Person{Fullname: "Monty Bingles"}},
 		err:         "invalid input parameter: need struct or map, got nil",
 	}, {
+		query:       "SELECT street FROM t WHERE x = $M.x",
+		typeSamples: []any{sqlair.M{}},
+		inputArgs:   []any{(sqlair.M)(nil)},
+		err:         "invalid input parameter: need struct or map, got nil",
+	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		typeSamples: []any{Address{}, Person{}},
 		inputArgs:   []any{(*Person)(nil)},
@@ -726,7 +731,7 @@ func (s *ExprSuite) TestBindInputsError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		typeSamples: []any{Address{}},
 		inputArgs:   []any{Address{}, Person{}},
-		err:         "invalid input parameter: Person not referenced in query",
+		err:         `invalid input parameter: "Person" not referenced in query`,
 	}, {
 		query:       "SELECT * AS &Address.* FROM t WHERE x = $M.Fullname",
 		typeSamples: []any{Address{}, sqlair.M{}},

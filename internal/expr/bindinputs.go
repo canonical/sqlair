@@ -28,21 +28,9 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 		}
 	}()
 
-	typeToValue := map[reflect.Type]reflect.Value{}
-	for _, arg := range args {
-		v := reflect.ValueOf(arg)
-		if v.Kind() == reflect.Invalid || (v.Kind() == reflect.Pointer && v.IsNil()) {
-			return nil, fmt.Errorf("need struct or map, got nil")
-		}
-		v = reflect.Indirect(v)
-		t := v.Type()
-		if v.Kind() != reflect.Struct && v.Kind() != reflect.Map {
-			return nil, fmt.Errorf("need struct or map, got %s", t.Kind())
-		}
-		if _, ok := typeToValue[t]; ok {
-			return nil, fmt.Errorf("type %q provided more than once", t.Name())
-		}
-		typeToValue[t] = v
+	typeToValue, err := typeinfo.ValidateInputs(args)
+	if err != nil {
+		return nil, err
 	}
 
 	// Generate SQL and query parameters.
@@ -86,7 +74,7 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 
 	for argType := range typeToValue {
 		if !argTypeUsed[argType] {
-			return nil, fmt.Errorf("%s not referenced in query", argType.Name())
+			return nil, fmt.Errorf("%q not referenced in query", argType.Name())
 		}
 	}
 
