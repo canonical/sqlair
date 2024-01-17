@@ -557,7 +557,7 @@ func (s *ExprSuite) TestBindTypesErrors(c *C) {
 	}, {
 		query:       "SELECT (&Address.*, &Address.id) FROM t",
 		typeSamples: []any{Address{}, Person{}},
-		err:         `cannot prepare statement: tag "id" of struct "Address" appears more than once in output expressions`,
+		err:         `cannot prepare statement: tag "id" of struct "Address" appears in: &Address.* and in: &Address.id`,
 	}, {
 		query:       "SELECT (&M.id, &M.id) FROM t",
 		typeSamples: []any{sqlair.M{}},
@@ -573,7 +573,7 @@ func (s *ExprSuite) TestBindTypesErrors(c *C) {
 	}, {
 		query:       "SELECT (&Person.*, &Person.*) FROM t",
 		typeSamples: []any{Address{}, Person{}},
-		err:         `cannot prepare statement: tag "address_id" of struct "Person" appears more than once in output expressions`,
+		err:         `cannot prepare statement: tag "address_id" of struct "Person" appears in: &Person.* and in: &Person.*`,
 	}, {
 		query:       "SELECT (p.*, t.*) AS (&Address.*) FROM t",
 		typeSamples: []any{Address{}},
@@ -715,7 +715,7 @@ func (s *ExprSuite) TestBindInputsError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		typeSamples: []any{Address{}, Person{}},
 		inputArgs:   []any{Address{Street: "Dead end road"}},
-		err:         `invalid input parameter: parameter with type "Person" missing (have "Address")`,
+		err:         `invalid input parameter: parameter with type "Person" missing (have "Address"): $Person.name`,
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		typeSamples: []any{Address{}, Person{}},
@@ -750,17 +750,17 @@ func (s *ExprSuite) TestBindInputsError(c *C) {
 		query:       "SELECT * AS &Address.* FROM t WHERE x = $M.Fullname",
 		typeSamples: []any{Address{}, sqlair.M{}},
 		inputArgs:   []any{sqlair.M{"fullname": "Jimany Johnson"}},
-		err:         `invalid input parameter: map "M" does not contain key "Fullname"`,
+		err:         `invalid input parameter: map "M" does not contain key "Fullname": $M.Fullname`,
 	}, {
 		query:       "SELECT foo FROM t WHERE x = $M.street, y = $Person.id",
 		typeSamples: []any{Person{}, sqlair.M{}},
 		inputArgs:   []any{Person{ID: 666}, sqlair.M{"Street": "Highway to Hell"}},
-		err:         `invalid input parameter: map "M" does not contain key "street"`,
+		err:         `invalid input parameter: map "M" does not contain key "street": $M.street`,
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		typeSamples: []any{Address{}, Person{}},
 		inputArgs:   []any{},
-		err:         `invalid input parameter: parameter with type "Address" missing`,
+		err:         `invalid input parameter: parameter with type "Address" missing: $Address.street`,
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Person.id, y = $Person.name",
 		typeSamples: []any{Person{}},
