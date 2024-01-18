@@ -557,11 +557,11 @@ func (s *ExprSuite) TestBindTypesErrors(c *C) {
 	}, {
 		query:       "SELECT (&Address.*, &Address.id) FROM t",
 		typeSamples: []any{Address{}, Person{}},
-		err:         `cannot prepare statement: tag "id" of struct "Address" appears in "&Address.*" and in "&Address.id"`,
+		err:         `cannot prepare statement: tag "id" of struct "Address" appears in "&Address.id" and in "&Address.*"`,
 	}, {
 		query:       "SELECT (&M.id, &M.id) FROM t",
 		typeSamples: []any{sqlair.M{}},
-		err:         `cannot prepare statement: key "id" of map "M" appears more than once in "&M.id" and "&M.id"`,
+		err:         `cannot prepare statement: key "id" of map "M" appears in "&M.id" and in "&M.id"`,
 	}, {
 		query:       "SELECT (p.*, t.name) AS (&Address.*) FROM t",
 		typeSamples: []any{Address{}},
@@ -782,7 +782,7 @@ func (s *ExprSuite) TestBindInputsError(c *C) {
 		query:       "SELECT street FROM t WHERE y = $Person.name",
 		typeSamples: []any{outerP},
 		inputArgs:   []any{shadowedP},
-		err:         `invalid input parameter: parameter with type "expr_test.Person" missing, have type with same name: "expr_test.Person"`,
+		err:         `invalid input parameter: parameter with type "expr_test.Person" missing, have type with same name: "expr_test.Person": $Person.name`,
 	}}
 
 	tests = append(tests, testsShadowed...)

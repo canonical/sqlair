@@ -17,7 +17,7 @@ type PrimedQuery struct {
 	// params are the query parameters to pass to the database.
 	params []any
 	// outputs specifies where to scan the query results.
-	outputs []typeinfo.Output
+	outputs []*typedOutputExpr
 }
 
 // Params returns the query parameters to pass with the SQL to a database.
@@ -47,39 +47,37 @@ func (pq *PrimedQuery) ScanArgs(columnNames []string, outputArgs []any) (scanArg
 		return nil, nil, err
 	}
 
-	// Generate the pointers.
-	var ptrs []any
-	var scanProxies []typeinfo.ScanProxy
-	var columnInResult = make([]bool, len(columnNames))
-	argTypeUsed := map[reflect.Type]bool{}
-	for _, column := range columnNames {
-		idx, ok := markerIndex(column)
+	colIDToPos := map[int]int{}
+	ptrs := make([]any, len(columnNames))
+	for i, column := range columnNames {
+		colID, ok := markerIndex(column)
 		if !ok {
 			// Columns not mentioned in output expressions are scanned into x.
 			var x any
-			ptrs = append(ptrs, &x)
+			ptrs[i] = &x
 			continue
 		}
-		if idx >= len(pq.outputs) {
-			return nil, nil, fmt.Errorf("internal error: sqlair column not in outputs (%d>=%d)", idx, len(pq.outputs))
-		}
-		columnInResult[idx] = true
-		output := pq.outputs[idx]
-		ptr, scanProxy, err := output.LocateScanTarget(typeToValue)
-		if err != nil {
-			return nil, nil, err
-		}
-		argTypeUsed[output.ArgType()] = true
-
-		ptrs = append(ptrs, ptr)
-		if scanProxy != nil {
-			scanProxies = append(scanProxies, *scanProxy)
-		}
+		colIDToPos[colID] = i
 	}
 
-	for i := 0; i < len(pq.outputs); i++ {
-		if !columnInResult[i] {
-			return nil, nil, fmt.Errorf(`query uses "&%s" outside of result context`, pq.outputs[i].ArgType().Name())
+	var scanProxies []typeinfo.ScanProxy
+	argTypeUsed := map[reflect.Type]bool{}
+	colID := 0
+	for _, te := range pq.outputs {
+		for _, outputCol := range te.outputColumns {
+			pos, ok := colIDToPos[colID]
+			if !ok {
+				return nil, nil, fmt.Errorf(`query uses "&%s" outside of result context`, outputCol.output.ArgType().Name())
+			}
+			ptr, scanProxy, err := outputCol.output.LocateScanTarget(typeToValue)
+			if err != nil {
+				return nil, nil, fmt.Errorf("%s: %s", err, te.raw())
+			}
+			ptrs[pos] = ptr
+			if scanProxy != nil {
+				scanProxies = append(scanProxies, *scanProxy)
+			}
+			argTypeUsed[outputCol.output.ArgType()] = true
 		}
 	}
 

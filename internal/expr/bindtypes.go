@@ -48,8 +48,8 @@ func (pe *ParsedExpr) BindTypes(args ...any) (tbe *TypeBoundExpr, err error) {
 
 	// Bind types to each expression.
 	var typedExprs TypeBoundExpr
-	outputUsed := map[string]bool{}
-	var te any
+	outputUsed := map[string]*typedOutputExpr{}
+	var te typedExpr
 	for _, expr := range pe.exprs {
 		switch e := expr.(type) {
 		case *inputExpr:
@@ -64,10 +64,10 @@ func (pe *ParsedExpr) BindTypes(args ...any) (tbe *TypeBoundExpr, err error) {
 			}
 
 			for _, oc := range toe.outputColumns {
-				if ok := outputUsed[oc.output.Identifier()]; ok {
-					return nil, fmt.Errorf("%s appears more than once in output expressions", oc.output.Desc())
+				if used, ok := outputUsed[oc.output.Identifier()]; ok {
+					return nil, fmt.Errorf("%s appears in %q and in %q", oc.output.Desc(), toe.raw(), used.raw())
 				}
-				outputUsed[oc.output.Identifier()] = true
+				outputUsed[oc.output.Identifier()] = toe
 			}
 			te = toe
 		case *bypass:
@@ -100,7 +100,7 @@ func bindInputTypes(e *inputExpr, argInfo typeinfo.ArgInfo) (te *typedInputExpr,
 	case sliceAccessor:
 		return nil, fmt.Errorf("slice support not implemented")
 	}
-	return &typedInputExpr{input}, nil
+	return &typedInputExpr{rawExpr: e.raw, input: input}, nil
 }
 
 // bindOutputTypes binds the output expression to concrete types. It then checks the
@@ -118,7 +118,7 @@ func bindOutputTypes(e *outputExpr, argInfo typeinfo.ArgInfo) (te *typedOutputEx
 	starTypes := starCountTypes(e.targetTypes)
 	starColumns := starCountColumns(e.sourceColumns)
 
-	toe := &typedOutputExpr{}
+	toe := &typedOutputExpr{rawExpr: e.raw}
 
 	// Case 1: Generated columns e.g. "* AS (&P.*, &A.id)" or "&P.*".
 	if numColumns == 0 || (numColumns == 1 && starColumns == 1) {

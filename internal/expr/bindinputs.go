@@ -17,7 +17,7 @@ import (
 // TypeBoundExpr represents a SQLair statement bound to concrete Go types. It
 // contains information used to generate the underlying SQL query and map it to
 // the SQLair query.
-type TypeBoundExpr []any
+type TypeBoundExpr []typedExpr
 
 // BindInputs takes the SQLair input arguments and returns the PrimedQuery ready
 // for use with the database.
@@ -35,7 +35,7 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 
 	// Generate SQL and query parameters.
 	var params []any
-	var outputs []typeinfo.Output
+	var outputs []*typedOutputExpr
 	// argTypeUsed is used to check that all the query parameters are
 	// referenced in the query.
 	argTypeUsed := map[reflect.Type]bool{}
@@ -47,7 +47,7 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 		case *typedInputExpr:
 			vals, err := te.input.LocateParams(typeToValue)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("%s: %s", err, te.raw())
 			}
 			argTypeUsed[te.input.ArgType()] = true
 			for _, val := range vals {
@@ -63,8 +63,8 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 					sqlStr.WriteString(", ")
 				}
 				outputCount++
-				outputs = append(outputs, oc.output)
 			}
+			outputs = append(outputs, te)
 		case *bypass:
 			sqlStr.WriteString(te.chunk)
 		default:
@@ -102,15 +102,33 @@ func newOutputColumn(tableName string, columnName string, output typeinfo.Output
 	return outputColumn{column: tableName + "." + columnName, output: output}
 }
 
+type typedExpr interface {
+	// raw returns the raw expression the typedExpr was generated from.
+	raw() string
+}
+
 // typedInputExpr stores information about a Go value to use as a query input.
 type typedInputExpr struct {
-	input typeinfo.Input
+	input   typeinfo.Input
+	rawExpr string
+}
+
+// raw returns the raw input expression the typedInputExpr was generated from.
+func (te *typedInputExpr) raw() string {
+	return te.rawExpr
 }
 
 // typedOutputExpr contains the columns to fetch from the database and
 // information about the Go values to read the query results into.
 type typedOutputExpr struct {
 	outputColumns []outputColumn
+	rawExpr       string
+}
+
+// raw returns the raw output expression the typedOutputExpr was generated
+// from.
+func (te *typedOutputExpr) raw() string {
+	return te.rawExpr
 }
 
 const markerPrefix = "_sqlair_"

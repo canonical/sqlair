@@ -198,6 +198,10 @@ func (p *bypass) String() string {
 
 func (p *bypass) expr() {}
 
+func (p *bypass) raw() string {
+	return p.chunk
+}
+
 // init resets the state of the parser and sets the input string.
 func (p *Parser) init(input string) {
 	p.input = input
