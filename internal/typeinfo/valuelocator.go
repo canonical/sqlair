@@ -32,7 +32,7 @@ type Input interface {
 	// the typeToValue map and then returns the Go values within the input
 	// argument that are to be used in query parameters. An error is returned
 	// if typeToValue does not contain the input argument.
-	LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]reflect.Value, error)
+	LocateParams(typeToValue TypeToValue) ([]reflect.Value, error)
 }
 
 // Output is a locator for a target to scan results to in the SQLair output
@@ -49,7 +49,7 @@ type Output interface {
 	// implement sql.Scanner, a pointer to them is generated and passed to
 	// Rows.Scan. If Scan has set this pointer to nil the value is zeroed by
 	// ScanProxy.OnSuccess.
-	LocateScanTarget(typeToValue map[reflect.Type]reflect.Value) (any, *ScanProxy, error)
+	LocateScanTarget(typeToValue TypeToValue) (any, *ScanProxy, error)
 }
 
 // mapKey specifies at which key to find a value in a particular map.
@@ -67,7 +67,7 @@ func (mk *mapKey) ArgType() reflect.Type {
 // with the key specified in mapKey. An error is returned if the map does not
 // contain this key. A slice with a single entry is returned to fit the Input
 // interface.
-func (mk *mapKey) LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]reflect.Value, error) {
+func (mk *mapKey) LocateParams(typeToValue TypeToValue) ([]reflect.Value, error) {
 	m, ok := typeToValue[mk.mapType]
 	if !ok {
 		return nil, valueNotFoundError(typeToValue, mk.mapType)
@@ -95,7 +95,7 @@ func (mk *mapKey) Identifier() string {
 // typeToValue map. It returns a pointer to pass to rows.Scan, and a ScanProxy
 // reference for setting the key value in the map once the pointer has been
 // scanned into.
-func (mk *mapKey) LocateScanTarget(typeToValue map[reflect.Type]reflect.Value) (any, *ScanProxy, error) {
+func (mk *mapKey) LocateScanTarget(typeToValue TypeToValue) (any, *ScanProxy, error) {
 	m, ok := typeToValue[mk.mapType]
 	if !ok {
 		return nil, nil, valueNotFoundError(typeToValue, mk.mapType)
@@ -132,7 +132,7 @@ func (f *structField) ArgType() reflect.Type {
 // LocateParams locates the struct that contains the field in the typeToValue
 // map. It returns the value of this field. A slice with a single entry is
 // returned to fit the Input interface.
-func (f *structField) LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]reflect.Value, error) {
+func (f *structField) LocateParams(typeToValue TypeToValue) ([]reflect.Value, error) {
 	s, ok := typeToValue[f.structType]
 	if !ok {
 		return nil, valueNotFoundError(typeToValue, f.structType)
@@ -156,7 +156,7 @@ func (f *structField) Identifier() string {
 // provided typeToValue map. It returns a pointer for the target of rows.Scan,
 // and a ScanProxy reference in the event that we need to coerce that pointer
 // into a struct field.
-func (f *structField) LocateScanTarget(typeToValue map[reflect.Type]reflect.Value) (any, *ScanProxy, error) {
+func (f *structField) LocateScanTarget(typeToValue TypeToValue) (any, *ScanProxy, error) {
 	s, ok := typeToValue[f.structType]
 	if !ok {
 		return nil, nil, valueNotFoundError(typeToValue, f.structType)
@@ -199,7 +199,7 @@ func (s *slice) ArgType() reflect.Type {
 // LocateParams locates the slice argument assosiated with the slice
 // ValueLocator in typeToValue and returns the reflect.Value objects generated
 // by reflecting on the elements of the slice.
-func (s *slice) LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]reflect.Value, error) {
+func (s *slice) LocateParams(typeToValue TypeToValue) ([]reflect.Value, error) {
 	sv, ok := typeToValue[s.sliceType]
 	if !ok {
 		return nil, valueNotFoundError(typeToValue, s.sliceType)
@@ -213,7 +213,7 @@ func (s *slice) LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]refl
 }
 
 // valueNotFoundError generates the arguments present and returns a typeMissingError
-func valueNotFoundError(typeToValue map[reflect.Type]reflect.Value, missingType reflect.Type) error {
+func valueNotFoundError(typeToValue TypeToValue, missingType reflect.Type) error {
 	// Get the argument names from typeToValue map.
 	argNames := []string{}
 	for argType := range typeToValue {
