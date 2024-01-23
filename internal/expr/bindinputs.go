@@ -51,12 +51,12 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 			}
 			argTypeUsed[te.input.ArgType()] = true
 			for i, val := range vals {
+				if i != 0 {
+					sqlStr.WriteString(", ")
+				}
 				namedInput := sql.Named("sqlair_"+strconv.Itoa(inputCount), val.Interface())
 				params = append(params, namedInput)
 				sqlStr.WriteString("@sqlair_" + strconv.Itoa(inputCount))
-				if i < len(vals)-1 {
-					sqlStr.WriteString(", ")
-				}
 				inputCount++
 			}
 		case *typedOutputExpr:
