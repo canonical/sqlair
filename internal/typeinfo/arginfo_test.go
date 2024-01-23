@@ -120,7 +120,7 @@ func (s *typeInfoSuite) TestGenerateArgInfoInvalidTypeErrors(c *C) {
 	}{{
 
 		args: []any{nil},
-		err:  "need struct or map, got nil",
+		err:  "need supported value, got nil",
 	}, {
 
 		args: []any{struct{ foo int }{}},
@@ -135,22 +135,22 @@ func (s *typeInfoSuite) TestGenerateArgInfoInvalidTypeErrors(c *C) {
 	}, {
 
 		args: []any{(*T)(nil)},
-		err:  "need struct or map, got pointer to struct",
+		err:  "need non-pointer type, got pointer to struct",
 	}, {
 
 		args: []any{(*M)(nil)},
-		err:  "need struct or map, got pointer to map",
+		err:  "need non-pointer type, got pointer to map",
 	}, {
 
 		args: []any{""},
-		err:  "need struct or map, got string",
+		err:  "need supported type, got string",
 	}, {
 
 		args: []any{0},
-		err:  "need struct or map, got int",
+		err:  "need supported type, got int",
 	}, {
 		args: []any{[10]int{}},
-		err:  "need struct or map, got array",
+		err:  "need supported type, got array",
 	}, {
 		args: []any{t, T{}},
 		err:  `two types found with name "T": "typeinfo.T" and "typeinfo.T"`,
@@ -198,51 +198,105 @@ func (s *typeInfoSuite) TestGenerateArgInfoStructError(c *C) {
 	}
 	_, err = GenerateArgInfo([]any{S6{}})
 	c.Assert(err.Error(), Equals, `cannot parse tag for field S6.Foo: invalid column name in 'db' tag: "id$$"`)
+
+	type badMap map[int]any
+	_, err = GenerateArgInfo([]any{badMap{}})
+	c.Assert(err, ErrorMatches, "map type badMap must have key type string, found type int")
+
+	_, err = GenerateArgInfo([]any{[]int{}})
+	c.Assert(err, ErrorMatches, "cannot use anonymous slice")
 }
 
-func (s *typeInfoSuite) TestArgInfoStructError(c *C) {
-	argInfo, err := GenerateArgInfo([]any{})
-	c.Assert(err, IsNil)
-
-	_, err = argInfo.OutputMember("wrongStruct", "foo")
-	c.Assert(err.Error(), Equals, `parameter with type "wrongStruct" missing`)
-	_, err = argInfo.InputMember("wrongStruct", "foo")
-	c.Assert(err.Error(), Equals, `parameter with type "wrongStruct" missing`)
-	_, _, err = argInfo.AllStructOutputs("wrongStruct")
-	c.Assert(err.Error(), Equals, `parameter with type "wrongStruct" missing`)
-
+func (*typeInfoSuite) TestInputAndOutputMemberError(c *C) {
+	type mySlice []any
+	type myMap map[string]any
 	type myStruct struct {
 		Foo int `db:"foo"`
 	}
-	type myOtherStruct struct {
-		Bar int `db:"bar"`
-	}
-	argInfo, err = GenerateArgInfo([]any{myStruct{}, myOtherStruct{}})
+	argInfo, err := GenerateArgInfo([]any{mySlice{}, myMap{}, myStruct{}})
 	c.Assert(err, IsNil)
 
-	_, err = argInfo.OutputMember("wrongStruct", "foo")
-	c.Assert(err.Error(), Equals, `parameter with type "wrongStruct" missing (have "myOtherStruct", "myStruct")`)
-	_, err = argInfo.InputMember("wrongStruct", "foo")
-	c.Assert(err.Error(), Equals, `parameter with type "wrongStruct" missing (have "myOtherStruct", "myStruct")`)
-	_, _, err = argInfo.AllStructOutputs("wrongStruct")
-	c.Assert(err.Error(), Equals, `parameter with type "wrongStruct" missing (have "myOtherStruct", "myStruct")`)
+	tests := []struct {
+		typeName   string
+		memberName string
+		err        string
+	}{{
+		typeName:   "mySlice",
+		memberName: "member1",
+		err:        "cannot get named member of slice",
+	}, {
+		typeName:   "myStruct",
+		memberName: "bar",
+		err:        `type "myStruct" has no "bar" db tag`,
+	}, {
+		typeName:   "wrongStruct",
+		memberName: "foo",
+		err:        `parameter with type "wrongStruct" missing (have "myMap", "mySlice", "myStruct")`,
+	}}
 
-	_, err = argInfo.OutputMember("myStruct", "bar")
-	c.Assert(err.Error(), Equals, `type "myStruct" has no "bar" db tag`)
-	_, err = argInfo.InputMember("myStruct", "bar")
-	c.Assert(err.Error(), Equals, `type "myStruct" has no "bar" db tag`)
+	for i, test := range tests {
+		_, err = argInfo.InputMember(test.typeName, test.memberName)
+		c.Assert(err, NotNil, Commentf("test %d failed", i+1))
+		c.Assert(err.Error(), Equals, test.err)
+
+		_, err = argInfo.OutputMember(test.typeName, test.memberName)
+		c.Assert(err, NotNil, Commentf("test %d failed", i+1))
+		c.Assert(err.Error(), Equals, test.err)
+	}
 }
 
-func (s *typeInfoSuite) TestGenerateArgInfoMapError(c *C) {
-	type badMap map[int]any
-	argInfo, err := GenerateArgInfo([]any{badMap{}})
-	c.Assert(err, ErrorMatches, "map type badMap must have key type string, found type int")
-
+func (*typeInfoSuite) TestAllOutputMemberError(c *C) {
+	type mySlice []any
 	type myMap map[string]any
-	argInfo, err = GenerateArgInfo([]any{myMap{}})
+	argInfo, err := GenerateArgInfo([]any{mySlice{}, myMap{}})
 	c.Assert(err, IsNil)
 
-	_, _, err = argInfo.AllStructOutputs("myMap")
-	c.Assert(err, Not(IsNil))
-	c.Assert(err.Error(), Equals, "columns must be specified for non-struct type")
+	tests := []struct {
+		typeName string
+		err      string
+	}{{
+		typeName: "mySlice",
+		err:      "cannot use slice with asterisk",
+	}, {
+		typeName: "myMap",
+		err:      "cannot use map with asterisk unless columns are specified",
+	}, {
+		typeName: "wrongStruct",
+		err:      `parameter with type "wrongStruct" missing (have "myMap", "mySlice")`,
+	}}
+
+	for i, test := range tests {
+		_, _, err = argInfo.AllStructOutputs(test.typeName)
+		c.Assert(err, NotNil, Commentf("test %d failed", i+1))
+		c.Assert(err.Error(), Equals, test.err)
+	}
+}
+
+func (*typeInfoSuite) TestSliceInputError(c *C) {
+	type myMap map[string]any
+	type myStruct struct {
+		Foo int `db:"foo"`
+	}
+	argInfo, err := GenerateArgInfo([]any{myMap{}, myStruct{}})
+	c.Assert(err, IsNil)
+
+	tests := []struct {
+		typeName string
+		err      string
+	}{{
+		typeName: "myStruct",
+		err:      "cannot use slice syntax with struct",
+	}, {
+		typeName: "myMap",
+		err:      "cannot use slice syntax with map",
+	}, {
+		typeName: "wrongSlice",
+		err:      `parameter with type "wrongSlice" missing (have "myMap", "myStruct")`,
+	}}
+
+	for i, test := range tests {
+		_, err = argInfo.InputSlice(test.typeName)
+		c.Assert(err, NotNil, Commentf("test %d failed", i+1))
+		c.Assert(err.Error(), Equals, test.err)
+	}
 }

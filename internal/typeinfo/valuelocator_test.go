@@ -1,3 +1,6 @@
+// Copyright 2023 Canonical Ltd.
+// Licensed under Apache 2.0, see LICENCE file for details.
+
 package typeinfo
 
 import (
@@ -208,4 +211,65 @@ func (s *typeInfoSuite) TestLocateParamsMapError(c *C) {
 	// Check missing type error.
 	_, err = input.LocateParams(map[reflect.Type]reflect.Value{})
 	c.Assert(err, ErrorMatches, `parameter with type "M" missing`)
+}
+
+func (*typeInfoSuite) TestLocateParamsSlice(c *C) {
+	type S []any
+	type T []int
+
+	argInfo, err := GenerateArgInfo([]any{S{}, T{}})
+	c.Assert(err, IsNil)
+
+	tests := []struct {
+		slice          any
+		expectedValues []any
+	}{{
+		slice:          T{1, 2},
+		expectedValues: []any{1, 2},
+	}, {
+		slice:          S{1, "two", 3.0},
+		expectedValues: []any{1, "two", 3.0},
+	}, {
+		slice:          S{},
+		expectedValues: []any{},
+	}}
+
+	for _, test := range tests {
+		valOfSlice := reflect.ValueOf(test.slice)
+		typeToValue := map[reflect.Type]reflect.Value{
+			reflect.TypeOf(test.slice): valOfSlice,
+		}
+
+		input, err := argInfo.InputSlice(valOfSlice.Type().Name())
+		c.Assert(err, IsNil)
+
+		vals, err := input.LocateParams(typeToValue)
+		c.Assert(err, IsNil)
+		c.Assert(vals, HasLen, len(test.expectedValues))
+
+		for i := 0; i < len(test.expectedValues); i++ {
+			c.Assert(vals[i].Interface(), Equals, test.expectedValues[i])
+		}
+	}
+}
+
+func (*typeInfoSuite) TestLocateParamsSliceError(c *C) {
+	type S []any
+	type T []int
+
+	argInfo, err := GenerateArgInfo([]any{S{}})
+	c.Assert(err, IsNil)
+
+	input, err := argInfo.InputSlice("S")
+	c.Assert(err, IsNil)
+
+	// Check missing type error.
+	_, err = input.LocateParams(map[reflect.Type]reflect.Value{})
+	c.Assert(err, NotNil)
+	c.Assert(err.Error(), Equals, `parameter with type "S" missing`)
+
+	// Check missing type error with one type present.
+	_, err = input.LocateParams(map[reflect.Type]reflect.Value{reflect.TypeOf(T{}): reflect.ValueOf(T{})})
+	c.Assert(err, NotNil)
+	c.Assert(err.Error(), Equals, `parameter with type "S" missing (have "T")`)
 }

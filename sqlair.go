@@ -24,6 +24,10 @@ import (
 //	err := q.Get(resultMap) // => sqlair.M{"name": "Fred", "postcode": 10031}
 type M map[string]any
 
+// S is a slice type that, as with other named slice types, can be used with
+// SQLair to pass a slice of input values.
+type S []any
+
 var ErrNoRows = sql.ErrNoRows
 var ErrTXDone = sql.ErrTxDone
 

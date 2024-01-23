@@ -4,8 +4,8 @@
 /*
 SQLair is a convenience layer for SQL databases that embeds Go structs and maps directly into SQL queries.
 
-The SQL syntax is expanded with SQLair input and output expressions which indicate the parts of the query that correspond to Go structs or maps.
-This allows the user to specify the Go structs/maps they want in the SQL query itself whilst allowing the full power of SQL to be utilised.
+The SQL syntax is expanded with SQLair input and output expressions that indicate the parts of the query corresponding to Go values.
+This allows the user to specify Go values (such as structs, maps and slices) in the SQL query itself whilst allowing the full power of SQL to be utilised.
 This package also provides an alternative API for reading the rows from the database.
 SQLair relies on database/sql for all the underlying operations.
 
@@ -36,12 +36,19 @@ Note that in the SQLair `db` tags (i.e. the column names) appear in the input/ou
 
 # Syntax
 
-SQLair input expressions take the format:
+The SQLair expressions specify Go values to use as query inputs or outputs. The
+input expressions can take values from structs, maps and slices while the
+output expressions can scan into only structs and maps.
 
-	$Type.col_name
+SQLair input expressions take the following formats:
 
-If Type is a struct then col_name is a `db` tag on one of the structs fields.
-If Type is a map then col_name is a key in the map.
+ 1. $Type.col_name
+    - If Type is a struct then col_name is a `db` tag on one of the structs fields.
+    - If Type is a map then col_name is a key in the map.
+
+ 2. $Type[:]
+    - Type must be a named slice type.
+    - Passes all the values in the slice as query parameters.
 
 SQLair output expressions can take the following formats:
 

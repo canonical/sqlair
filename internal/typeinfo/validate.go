@@ -18,14 +18,18 @@ func ValidateInputs(args []any) (TypeToValue, error) {
 	for _, arg := range args {
 		v := reflect.ValueOf(arg)
 		if isNil(v) {
-			return nil, fmt.Errorf("need struct or map, got nil")
+			return nil, fmt.Errorf("need supported value, got nil")
 		}
 		v = reflect.Indirect(v)
-		k := v.Kind()
-		if k != reflect.Struct && k != reflect.Map {
-			return nil, fmt.Errorf("need struct or map, got %s", k)
-		}
 		t := v.Type()
+		switch k := v.Kind(); k {
+		case reflect.Map, reflect.Slice, reflect.Struct:
+			if t.Name() == "" {
+				return nil, fmt.Errorf("cannot use anonymous %s", k)
+			}
+		default:
+			return nil, fmt.Errorf("need supported value, got %s", k)
+		}
 		if _, ok := typeToValue[t]; ok {
 			return nil, fmt.Errorf("type %q provided more than once", t.Name())
 		}
@@ -68,7 +72,7 @@ func isNil(v reflect.Value) bool {
 	switch v.Kind() {
 	case reflect.Invalid:
 		return true
-	case reflect.Pointer, reflect.Map:
+	case reflect.Pointer, reflect.Map, reflect.Slice:
 		return v.IsNil()
 	}
 	return false
