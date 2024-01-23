@@ -212,16 +212,6 @@ func (s *slice) LocateParams(typeToValue map[reflect.Type]reflect.Value) ([]refl
 	return params, nil
 }
 
-// locateValue locates the value corresponding to the given type in the
-// typeToValueMap and returns an error message if it cannot be found.
-func locateValue(typeToValue map[reflect.Type]reflect.Value, typ reflect.Type) (reflect.Value, error) {
-	v, ok := typeToValue[typ]
-	if !ok {
-
-	}
-	return v, nil
-}
-
 // valueNotFoundError generates the arguments present and returns a typeMissingError
 func valueNotFoundError(typeToValue map[reflect.Type]reflect.Value, missingType reflect.Type) error {
 	// Get the argument names from typeToValue map.
