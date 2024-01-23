@@ -131,6 +131,7 @@ func (argInfo ArgInfo) getMember(typeName string, memberName string) (ValueLocat
 	}
 }
 
+// InputSlice returns an input locator for a slice.
 func (argInfo ArgInfo) InputSlice(typeName string) (Input, error) {
 	arg, ok := argInfo[typeName]
 	if !ok {
