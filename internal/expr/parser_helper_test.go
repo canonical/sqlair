@@ -204,11 +204,11 @@ func (s parseSuite) TestRemoveComments(c *C) {
 func (s parseSuite) TestParseSliceRange(c *C) {
 	sliceRangeTests := []struct {
 		input    string
-		expected valueAccessor
+		expected string
 		err      string
 	}{
-		{input: "mySlice[:]", expected: sliceAccessor{typeName: "mySlice"}},
-		{input: "mySlice[ : ]", expected: sliceAccessor{typeName: "mySlice"}},
+		{input: "mySlice[:]", expected: "mySlice"},
+		{input: "mySlice[ : ]", expected: "mySlice"},
 		{input: "mySlice[]", err: "column 1: invalid slice: expected 'mySlice[:]'"},
 		{input: "mySlice[1:10]", err: "column 1: invalid slice: expected 'mySlice[:]'"},
 		{input: "mySlice[1:]", err: "column 1: invalid slice: expected 'mySlice[:]'"},
