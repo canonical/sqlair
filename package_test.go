@@ -1498,6 +1498,13 @@ func (s *PackageSuite) TestBasicTypes(c *C) {
 	err = db.Query(nil, stmt, v14).Get(&o14)
 	c.Assert(err, IsNil)
 	c.Assert(v14, Equals, o14)
+
+	v15 := Person{}
+	stmt, err = sqlair.Prepare("SELECT name AS &string FROM person")
+	c.Assert(err, IsNil)
+	err = db.Query(nil, stmt).Get(&v15.Fullname)
+	c.Assert(err, IsNil)
+	c.Assert(v15.Fullname, Equals, "Fred")
 }
 
 // Because the Query struct did not contain references to either Statement or
