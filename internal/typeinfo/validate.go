@@ -72,7 +72,7 @@ func isNil(v reflect.Value) bool {
 	switch v.Kind() {
 	case reflect.Invalid:
 		return true
-	case reflect.Pointer, reflect.Map, reflect.Slice:
+	case reflect.Pointer, reflect.Map:
 		return v.IsNil()
 	}
 	return false
