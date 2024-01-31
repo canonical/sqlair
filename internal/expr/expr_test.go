@@ -803,17 +803,17 @@ func (s *ExprSuite) TestBindInputsError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		typeSamples: []any{Address{}, Person{}},
 		inputArgs:   []any{nil, Person{Fullname: "Monty Bingles"}},
-		err:         "invalid input parameter: need supported value, got nil",
+		err:         "invalid input parameter: got nil argument",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $M.x",
 		typeSamples: []any{sqlair.M{}},
 		inputArgs:   []any{(sqlair.M)(nil)},
-		err:         "invalid input parameter: need supported value, got nil",
+		err:         "invalid input parameter: got nil M",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		typeSamples: []any{Address{}, Person{}},
 		inputArgs:   []any{(*Person)(nil)},
-		err:         "invalid input parameter: need supported value, got nil",
+		err:         "invalid input parameter: got nil pointer to Person",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		typeSamples: []any{Address{}},
@@ -853,7 +853,7 @@ func (s *ExprSuite) TestBindInputsError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $M.street",
 		typeSamples: []any{sqlair.M{}},
 		inputArgs:   []any{(sqlair.M)(nil)},
-		err:         `invalid input parameter: need supported value, got nil`,
+		err:         `invalid input parameter: got nil M`,
 	}}
 
 	outerP := Person{}

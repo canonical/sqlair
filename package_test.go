@@ -291,14 +291,14 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: []any{nil},
-		err:     "cannot get result: need map or pointer to struct, got nil",
+		err:     "cannot get result: got nil argument",
 	}, {
 		summary: "nil pointer parameter",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: []any{(*Person)(nil)},
-		err:     "cannot get result: need map or pointer to struct, got nil",
+		err:     "cannot get result: got nil pointer to Person",
 	}, {
 		summary: "non pointer parameter",
 		query:   "SELECT * AS &Person.* FROM person",
@@ -347,7 +347,7 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		types:   []any{sqlair.M{}},
 		inputs:  []any{},
 		outputs: []any{(sqlair.M)(nil)},
-		err:     `cannot get result: need map or pointer to struct, got nil`,
+		err:     `cannot get result: got nil M`,
 	}, {
 		summary: "type not in query",
 		query:   "SELECT * AS &Person.* FROM person",
