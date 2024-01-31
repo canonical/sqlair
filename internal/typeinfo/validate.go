@@ -17,7 +17,7 @@ func ValidateInputs(args []any) (TypeToValue, error) {
 	typeToValue := TypeToValue{}
 	for _, arg := range args {
 		v := reflect.ValueOf(arg)
-		if isNil(v) {
+		if isInvalidNil(v) {
 			return nil, fmt.Errorf("need supported value, got nil")
 		}
 		v = reflect.Indirect(v)
@@ -45,7 +45,7 @@ func ValidateOutputs(args []any) (TypeToValue, error) {
 	typeToValue := TypeToValue{}
 	for _, arg := range args {
 		v := reflect.ValueOf(arg)
-		if isNil(v) {
+		if isInvalidNil(v) {
 			return nil, fmt.Errorf("need map or pointer to struct, got nil")
 		}
 		k := v.Kind()
@@ -68,7 +68,7 @@ func ValidateOutputs(args []any) (TypeToValue, error) {
 	return typeToValue, nil
 }
 
-func isNil(v reflect.Value) bool {
+func isInvalidNil(v reflect.Value) bool {
 	switch v.Kind() {
 	case reflect.Invalid:
 		return true
