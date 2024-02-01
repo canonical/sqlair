@@ -390,7 +390,19 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{sqlair.S{}},
 	inputArgs:      []any{sqlair.S{}},
 	expectedParams: []any{},
-	expectedSQL:    "SELECT name FROM person WHERE id IN ()",
+	// This is valid in SQLite (though not in MySQL).
+	expectedSQL: "SELECT name FROM person WHERE id IN ()",
+}, {
+	// The nil slice is used interchangeably with the empty slice so this is
+	// allowed as well.
+	summary:        "nil slice",
+	query:          "SELECT name FROM person WHERE id IN ($S[:])",
+	expectedParsed: "[Bypass[SELECT name FROM person WHERE id IN (] Input[S[:]] Bypass[)]]",
+	typeSamples:    []any{sqlair.S{}},
+	inputArgs:      []any{(sqlair.S)(nil)},
+	expectedParams: []any{},
+	// This is valid in SQLite (though not in MySQL).
+	expectedSQL: "SELECT name FROM person WHERE id IN ()",
 }}
 
 func (s *ExprSuite) TestExprPkg(c *C) {
@@ -791,17 +803,17 @@ func (s *ExprSuite) TestBindInputsError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		typeSamples: []any{Address{}, Person{}},
 		inputArgs:   []any{nil, Person{Fullname: "Monty Bingles"}},
-		err:         "invalid input parameter: need supported value, got nil",
+		err:         "invalid input parameter: got nil argument",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $M.x",
 		typeSamples: []any{sqlair.M{}},
 		inputArgs:   []any{(sqlair.M)(nil)},
-		err:         "invalid input parameter: need supported value, got nil",
+		err:         "invalid input parameter: got nil M",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street, y = $Person.name",
 		typeSamples: []any{Address{}, Person{}},
 		inputArgs:   []any{(*Person)(nil)},
-		err:         "invalid input parameter: need supported value, got nil",
+		err:         "invalid input parameter: got nil pointer to Person",
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address.street",
 		typeSamples: []any{Address{}},
@@ -841,12 +853,7 @@ func (s *ExprSuite) TestBindInputsError(c *C) {
 		query:       "SELECT street FROM t WHERE x = $M.street",
 		typeSamples: []any{sqlair.M{}},
 		inputArgs:   []any{(sqlair.M)(nil)},
-		err:         `invalid input parameter: need supported value, got nil`,
-	}, {
-		query:       "SELECT street FROM t WHERE x IN ($S[:])",
-		typeSamples: []any{sqlair.S{}},
-		inputArgs:   []any{(sqlair.S)(nil)},
-		err:         `invalid input parameter: need supported value, got nil`,
+		err:         `invalid input parameter: got nil M`,
 	}}
 
 	outerP := Person{}
