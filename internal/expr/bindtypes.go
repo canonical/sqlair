@@ -118,34 +118,34 @@ func (e *memberInputExpr) bindTypes(argInfo typeinfo.ArgInfo) (any, error) {
 	return &typedInputExpr{input: input}, nil
 }
 
-// insertIntoAsteriskExpr is a form of input expression for insert statements e.g.
+// insertToAsteriskExpr is a form of input expression for insert statements e.g.
 // "(*) VALUES ($Type1.member, $Type2.*)".
-type insertIntoAsteriskExpr struct {
+type insertToAsteriskExpr struct {
 	sources []memberAccessor
 	raw     string
 }
 
-func (e *insertIntoAsteriskExpr) String() string {
+func (e *insertToAsteriskExpr) String() string {
 	return fmt.Sprintf("AsteriskInsert[[*] %v]", e.sources)
 }
 
-func (e *insertIntoAsteriskExpr) bindTypes(argInfo typeinfo.ArgInfo) (any, error) {
+func (e *insertToAsteriskExpr) bindTypes(argInfo typeinfo.ArgInfo) (any, error) {
 	return nil, fmt.Errorf("insert input expression not implemented")
 }
 
-// insertIntoColumnsExpr is a form of input expression for insert statements e.g.
+// insertToColumnsExpr is a form of input expression for insert statements e.g.
 // "(col1, col2, col3) VALUES ($Type.*)".
-type insertIntoColumnsExpr struct {
+type insertToColumnsExpr struct {
 	columns  []columnAccessor
 	typeName string
 	raw      string
 }
 
-func (e *insertIntoColumnsExpr) String() string {
+func (e *insertToColumnsExpr) String() string {
 	return fmt.Sprintf("ColumnInsert[%v [%v.*]]", e.columns, e.typeName)
 }
 
-func (e *insertIntoColumnsExpr) bindTypes(argInfo typeinfo.ArgInfo) (any, error) {
+func (e *insertToColumnsExpr) bindTypes(argInfo typeinfo.ArgInfo) (any, error) {
 	return nil, fmt.Errorf("insert input expression not implemented")
 }
 

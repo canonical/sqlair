@@ -759,7 +759,7 @@ func (p *Parser) parseInputExpr() (expression, bool, error) {
 		if sources, ok, err := parseList(p, (*Parser).parseInputMemberAccessor); err != nil {
 			return nil, false, err
 		} else if ok {
-			return &insertIntoAsteriskExpr{sources: sources, raw: p.input[cp.pos:p.pos]}, true, nil
+			return &insertToAsteriskExpr{sources: sources, raw: p.input[cp.pos:p.pos]}, true, nil
 		}
 		// Check for types with missing parentheses.
 		if _, ok, err := p.parseTypeAndMember(); err != nil {
@@ -791,7 +791,7 @@ func (p *Parser) parseInputExpr() (expression, bool, error) {
 					cp.restore()
 					return nil, false, nil
 				}
-				return &insertIntoColumnsExpr{
+				return &insertToColumnsExpr{
 					columns:  columns,
 					typeName: sources[0].typeName,
 					raw:      p.input[cp.pos:p.pos],
