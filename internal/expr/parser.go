@@ -752,7 +752,24 @@ func (p *Parser) parseInputExpr() (expression, bool, error) {
 		return nil, false, err
 	}
 
-	// Case 3: INSERT VALUES statement e.g. "(name, id) VALUES ($Person.*)".
+	// Case 3:
+	parenCol := p.pos + 1
+	if p.skipString("(*)") && p.skipBlanks() && p.skipString("VALUES") {
+		p.skipBlanks()
+		if sources, ok, err := parseList(p, (*Parser).parseInputMemberAccessor); err != nil {
+			return nil, false, err
+		} else if ok {
+			return &insertIntoAsteriskExpr{sources: sources, raw: p.input[cp.pos:p.pos]}, true, nil
+		}
+		// Check for types with missing parentheses.
+		if _, ok, err := p.parseTypeAndMember(); err != nil {
+			return nil, false, err
+		} else if ok {
+			return nil, false, errorAt(fmt.Errorf(`missing parentheses around types after "VALUES"`), p.lineNum, parenCol, p.input)
+		}
+	}
+
+	// Case 4: INSERT VALUES statement e.g. "(name, id) VALUES ($Person.*)".
 	if columns, paren, ok := p.parseColumns(); ok && paren {
 		p.skipBlanks()
 		if p.skipString("VALUES") {
@@ -761,7 +778,24 @@ func (p *Parser) parseInputExpr() (expression, bool, error) {
 			if sources, ok, err := parseList(p, (*Parser).parseInputMemberAccessor); err != nil {
 				return nil, false, err
 			} else if ok {
-				return &insertInputExpr{targetColumns: columns, sourceTypes: sources, raw: p.input[cp.pos:p.pos]}, true, nil
+				if len(sources) > 1 {
+					if starCountTypes(sources) > 0 {
+						return nil, false, errorAt(fmt.Errorf("got multiple types in insert expression with columns"), p.lineNum, parenCol, p.input)
+					}
+				}
+				if sources[0].memberName != "*" {
+					// In this case we have something like:
+					// "(col1, col2, ...) AS ($Type.member)".
+					// Return false and leave the "$Type.member" to be parsed
+					// as a simple input expression.
+					cp.restore()
+					return nil, false, nil
+				}
+				return &insertIntoColumnsExpr{
+					columns:  columns,
+					typeName: sources[0].typeName,
+					raw:      p.input[cp.pos:p.pos],
+				}, true, nil
 			}
 			// Check for types with missing parentheses.
 			if _, ok, err := p.parseTypeAndMember(); err != nil {

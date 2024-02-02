@@ -457,35 +457,35 @@ func (s *ExprSuite) TestInsertInputParser(c *C) {
 	}{{
 		summary:        "insert asterisk",
 		query:          "INSERT INTO person (*) VALUES ($Address.street, $Person.*, $M.team)",
-		expectedParsed: "[Bypass[INSERT INTO person ] Input[[*] [Address.street Person.* M.team]]]",
+		expectedParsed: "[Bypass[INSERT INTO person ] AsteriskInsert[[*] [Address.street Person.* M.team]]]",
 	}, {
 		summary:        "insert specified columns",
 		query:          "INSERT INTO person (id, street) VALUES ($Address.*)",
-		expectedParsed: "[Bypass[INSERT INTO person ] Input[[id street] [Address.*]]]",
-	}, {
-		summary:        "insert renamed columns",
-		query:          "INSERT INTO person (id, street) VALUES ($Person.address_id, $Address.street)",
-		expectedParsed: "[Bypass[INSERT INTO person ] Input[[id street] [Person.address_id Address.street]]]",
+		expectedParsed: "[Bypass[INSERT INTO person ] ColumnInsert[[id street] [Address.*]]]",
 	}, {
 		summary:        "insert asterisk with comment",
 		query:          "INSERT INTO person (*) VALUES ($Person.address_id, /* rouge comment */$Address.street)",
-		expectedParsed: "[Bypass[INSERT INTO person ] Input[[*] [Person.address_id Address.street]]]",
-	}, {
-		summary:        "insert single value",
-		query:          "INSERT INTO person (name) VALUES ($Person.name)",
-		expectedParsed: "[Bypass[INSERT INTO person ] Input[[name] [Person.name]]]",
+		expectedParsed: "[Bypass[INSERT INTO person ] AsteriskInsert[[*] [Person.address_id Address.street]]]",
 	}, {
 		summary:        "insert asterisk (no space)",
 		query:          "INSERT INTO person(*) VALUES ($Person.*)ON CONFLICT DO NOTHING",
-		expectedParsed: "[Bypass[INSERT INTO person] Input[[*] [Person.*]] Bypass[ON CONFLICT DO NOTHING]]",
+		expectedParsed: "[Bypass[INSERT INTO person] AsteriskInsert[[*] [Person.*]] Bypass[ON CONFLICT DO NOTHING]]",
+	}, {
+		summary:        "insert with returning clause",
+		query:          "INSERT INTO address (*) VALUES($Address.*) RETURNING (&Address.*)",
+		expectedParsed: "[Bypass[INSERT INTO address ] AsteriskInsert[[*] [Address.*]] Bypass[ RETURNING (] Output[[] [Address.*]] Bypass[)]]",
+	}, {
+		summary:        "insert renamed columns",
+		query:          "INSERT INTO person (id, street) VALUES ($Person.address_id, $Address.street)",
+		expectedParsed: "[Bypass[INSERT INTO person (id, street) VALUES (] Input[Person.address_id] Bypass[, ] Input[Address.street] Bypass[)]]",
+	}, {
+		summary:        "insert single value",
+		query:          "INSERT INTO person (name) VALUES ($Person.name)",
+		expectedParsed: "[Bypass[INSERT INTO person (name) VALUES (] Input[Person.name] Bypass[)]]",
 	}, {
 		summary:        "insert with standalone input expressions",
 		query:          "INSERT INTO person VALUES ($Person.name, $Person.id)",
 		expectedParsed: "[Bypass[INSERT INTO person VALUES (] Input[Person.name] Bypass[, ] Input[Person.id] Bypass[)]]",
-	}, {
-		summary:        "insert with returning clause",
-		query:          "INSERT INTO address (*) VALUES($Address.*) RETURNING (&Address.*)",
-		expectedParsed: "[Bypass[INSERT INTO address ] Input[[*] [Address.*]] Bypass[ RETURNING (] Output[[] [Address.*]] Bypass[)]]",
 	}}
 	for i, t := range tests {
 		parser := expr.NewParser()
