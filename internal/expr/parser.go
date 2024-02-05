@@ -6,8 +6,6 @@ package expr
 import (
 	"fmt"
 	"strings"
-
-	"github.com/canonical/sqlair/internal/typeinfo"
 )
 
 func NewParser() *Parser {
@@ -129,23 +127,6 @@ func (sfc sqlFunctionCall) tableName() string {
 
 func (sfc sqlFunctionCall) String() string {
 	return sfc.raw
-}
-
-// bypass represents part of the expression that we want to pass to the backend
-// database verbatim.
-type bypass struct {
-	chunk string
-}
-
-// String returns a text representation for debugging and testing purposes.
-func (b *bypass) String() string {
-	return "Bypass[" + b.chunk + "]"
-}
-
-// bindTypes returns the bypass part itself since it contains no references to
-// types.
-func (b *bypass) bindTypes(typeinfo.ArgInfo) (any, error) {
-	return b, nil
 }
 
 // init resets the state of the parser and sets the input string.

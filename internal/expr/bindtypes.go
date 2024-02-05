@@ -79,6 +79,23 @@ type expression interface {
 	bindTypes(typeinfo.ArgInfo) (any, error)
 }
 
+// bypass represents part of the expression that we want to pass to the backend
+// database verbatim.
+type bypass struct {
+	chunk string
+}
+
+// String returns a text representation for debugging and testing purposes.
+func (b *bypass) String() string {
+	return "Bypass[" + b.chunk + "]"
+}
+
+// bindTypes returns the bypass part itself since it contains no references to
+// types.
+func (b *bypass) bindTypes(typeinfo.ArgInfo) (any, error) {
+	return b, nil
+}
+
 // memberInputExpr is an input expression of the form "$Type.member" which
 // represents a query parameter contained in a member of a type.
 type memberInputExpr struct {
@@ -137,7 +154,7 @@ func (e *outputExpr) String() string {
 }
 
 // bindTypes binds the output expression to concrete types. It then checks the
-// expression valid with respect to its bound types and returns a
+// expression is valid with respect to its bound types and returns a
 // *typedOutputExpr.
 func (e *outputExpr) bindTypes(argInfo typeinfo.ArgInfo) (te any, err error) {
 	defer func() {
