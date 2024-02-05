@@ -37,20 +37,9 @@ func (p *Parser) Parse(input string) (pe *ParsedExpr, err error) {
 		}
 	}()
 
-	p.init(input)
+	p.init(input, 0)
 
-	for {
-		// Advance the parser to the start of the next expression.
-		if err := p.advance(); err != nil {
-			return nil, err
-		}
-
-		p.currentExprStart = p.pos
-
-		if p.pos == len(p.input) {
-			break
-		}
-
+	for p.pos < len(p.input) {
 		if out, ok, err := p.parseOutputExpr(); err != nil {
 			return nil, err
 		} else if ok {
@@ -64,10 +53,16 @@ func (p *Parser) Parse(input string) (pe *ParsedExpr, err error) {
 			p.add(in)
 			continue
 		}
-	}
 
+		// Advance the parser to the start of the next expression.
+		if err := p.advanceUntil(nil); err != nil {
+			return nil, err
+		}
+	}
 	// Add any remaining unparsed string input to the parser.
-	p.add(nil)
+	if p.pos != p.prevExprEnd {
+		p.exprs = append(p.exprs, &bypass{p.input[p.prevExprEnd:p.pos]})
+	}
 	return &ParsedExpr{exprs: p.exprs}, nil
 }
 
@@ -199,11 +194,11 @@ func (p *bypass) String() string {
 func (p *bypass) expr() {}
 
 // init resets the state of the parser and sets the input string.
-func (p *Parser) init(input string) {
+func (p *Parser) init(input string, startPos int) {
 	p.input = input
-	p.pos = 0
-	p.prevExprEnd = 0
-	p.currentExprStart = 0
+	p.pos = startPos
+	p.prevExprEnd = startPos
+	p.currentExprStart = startPos
 	p.exprs = []expression{}
 	p.lineNum = 1
 	p.lineStart = 0
@@ -334,9 +329,10 @@ func (p *Parser) skipComment() bool {
 	return false
 }
 
-// advance increments p.pos until it reaches content that might preceed a token
-// we want to parse.
-func (p *Parser) advance() error {
+// advanceUntil increments p.pos until it reaches content that might precede a
+// token we want to parse or until one of the chars passed is found (without
+// consuming it).
+func (p *Parser) advanceUntil(chars []byte) error {
 
 loop:
 	for p.pos < len(p.input) {
@@ -349,6 +345,12 @@ loop:
 			continue
 		}
 
+		for _, c := range chars {
+			if p.peekByte(c) {
+				break loop
+			}
+		}
+
 		switch p.input[p.pos] {
 		// If the preceding byte is one of these then we might be at the start
 		// of an expression.
@@ -359,10 +361,7 @@ loop:
 		p.advanceByte()
 	}
 
-	p.skipBlanks()
-
 	return nil
-
 }
 
 // skipStringLiteral jumps over single and double quoted sections of input.
@@ -734,20 +733,20 @@ func (p *Parser) parseTargetTypes() (types []memberAccessor, parentheses bool, o
 // parseOutputExpr requires that the ampersand before the identifiers must
 // be followed by a name byte.
 func (p *Parser) parseOutputExpr() (*outputExpr, bool, error) {
-	start := p.pos
+	cp := p.save()
+	p.currentExprStart = p.pos
 
 	// Case 1: There are no columns e.g. "&Person.*".
 	if targetType, ok, err := p.parseTargetType(); err != nil {
+		cp.restore()
 		return nil, false, err
 	} else if ok {
 		return &outputExpr{
 			sourceColumns: []columnAccessor{},
 			targetTypes:   []memberAccessor{targetType},
-			raw:           p.input[start:p.pos],
+			raw:           p.input[p.currentExprStart:p.pos],
 		}, true, nil
 	}
-
-	cp := p.save()
 
 	// Case 2: There are columns e.g. "p.col1 AS &Person.*".
 	if cols, parenCols, ok := p.parseColumns(); ok {
@@ -774,7 +773,7 @@ func (p *Parser) parseOutputExpr() (*outputExpr, bool, error) {
 				return &outputExpr{
 					sourceColumns: cols,
 					targetTypes:   targetTypes,
-					raw:           p.input[start:p.pos],
+					raw:           p.input[p.currentExprStart:p.pos],
 				}, true, nil
 			}
 		}
@@ -790,6 +789,8 @@ func (p *Parser) parseInputExpr() (*inputExpr, bool, error) {
 	if !p.skipByte('$') {
 		return nil, false, nil
 	}
+
+	p.currentExprStart = p.pos - 1
 
 	// Case 1: Slice range, "Type[:]".
 	if st, ok, err := p.parseSliceAccessor(); err != nil {

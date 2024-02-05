@@ -75,7 +75,7 @@ func (s parseSuite) TestRunTable(c *C) {
 	}
 	for _, v := range parseTests {
 		// Reset the input.
-		p.init(v.input)
+		p.init(v.input, 0)
 		for i, _ := range v.result {
 			var result bool
 			var err error
@@ -117,7 +117,7 @@ func (s parseSuite) TestValidQuotes(c *C) {
 	}
 
 	for _, q := range validQuotes {
-		p.init(q)
+		p.init(q, 0)
 		ok, _ := p.skipStringLiteral()
 		if !ok {
 			c.Errorf("test failed. %s is a valid quoted string", q)
@@ -134,7 +134,7 @@ func (s parseSuite) TestInvalidQuote(c *C) {
 	}
 
 	for _, q := range invalidQuote {
-		p.init(q)
+		p.init(q, 0)
 		ok, _ := p.skipStringLiteral()
 		if ok {
 			c.Errorf("test failed. %s is not a valid quoted string but is recognised as one", q)
@@ -156,7 +156,7 @@ func (s parseSuite) TestUnfinishedQuote(c *C) {
 	}
 
 	for _, q := range unfinishedQuotes {
-		p.init(q)
+		p.init(q, 0)
 		_, err := p.skipStringLiteral()
 		if err == nil {
 			c.Errorf("test failed. the string %s was parsed but is not valid", q)
@@ -188,13 +188,13 @@ func (s parseSuite) TestRemoveComments(c *C) {
 
 	var p = NewParser()
 	for _, s := range validComments {
-		p.init(s)
+		p.init(s, 0)
 		if ok := p.skipComment(); !ok {
 			c.Errorf("comment %s not parsed as comment", s)
 		}
 	}
 	for _, s := range invalidComments {
-		p.init(s)
+		p.init(s, 0)
 		if ok := p.skipComment(); ok {
 			c.Errorf("comment %s parsed as comment when it should not be", s)
 		}
@@ -221,7 +221,7 @@ func (s parseSuite) TestParseSliceRange(c *C) {
 
 	var p = NewParser()
 	for _, t := range sliceRangeTests {
-		p.init(t.input)
+		p.init(t.input, 0)
 		sr, ok, err := p.parseSliceAccessor()
 		if err != nil && t.err != "" {
 			c.Assert(err.Error(), Equals, t.err)
@@ -233,7 +233,7 @@ func (s parseSuite) TestParseSliceRange(c *C) {
 		c.Assert(t.expected, DeepEquals, sr)
 	}
 	for _, t := range invalidSliceRanges {
-		p.init(t)
+		p.init(t, 0)
 		_, ok, err := p.parseSliceAccessor()
 		if ok {
 			c.Errorf("test failed. %s parsed as valid slice range", t)
