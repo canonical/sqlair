@@ -71,22 +71,6 @@ func (p *Parser) Parse(input string) (pe *ParsedExpr, err error) {
 	return &ParsedExpr{exprs: p.exprs}, nil
 }
 
-// expression represents a parsed node of the SQLair query's AST.
-type expression interface {
-	// String returns a text representation for debugging and testing purposes.
-	String() string
-
-	// marker method
-	expr()
-}
-
-// valueAccessor stores information about how to access a Go value. For example:
-// by index, by key, or by slice syntax.
-type valueAccessor interface {
-	fmt.Stringer
-	getTypeName() string
-}
-
 // memberAccessor stores information for accessing a keyed Go value. It consists
 // of a type name and some value within it to be accessed. For example: a field
 // of a struct, or a key of a map.
@@ -100,20 +84,6 @@ func (ma memberAccessor) String() string {
 
 func (ma memberAccessor) getTypeName() string {
 	return ma.typeName
-}
-
-// sliceAccessor stores information for accessing a slice using the
-// expression "typeName[:]".
-type sliceAccessor struct {
-	typeName string
-}
-
-func (st sliceAccessor) String() string {
-	return fmt.Sprintf("%s[:]", st.typeName)
-}
-
-func (sa sliceAccessor) getTypeName() string {
-	return sa.typeName
 }
 
 type columnAccessor interface {
@@ -158,45 +128,6 @@ func (sfc sqlFunctionCall) tableName() string {
 func (sfc sqlFunctionCall) String() string {
 	return sfc.raw
 }
-
-// inputExpr represents a named parameter that will be sent to the database
-// while performing the query.
-type inputExpr struct {
-	sourceType valueAccessor
-	raw        string
-}
-
-func (p *inputExpr) String() string {
-	return fmt.Sprintf("Input[%+v]", p.sourceType)
-}
-
-func (p *inputExpr) expr() {}
-
-// outputExpr represents a named target output variable in the SQL expression,
-// as well as the source table and column where it will be read from.
-type outputExpr struct {
-	sourceColumns []columnAccessor
-	targetTypes   []memberAccessor
-	raw           string
-}
-
-func (p *outputExpr) String() string {
-	return fmt.Sprintf("Output[%+v %+v]", p.sourceColumns, p.targetTypes)
-}
-
-func (p *outputExpr) expr() {}
-
-// bypass represents part of the expression that we want to pass to the backend
-// database verbatim.
-type bypass struct {
-	chunk string
-}
-
-func (p *bypass) String() string {
-	return "Bypass[" + p.chunk + "]"
-}
-
-func (p *bypass) expr() {}
 
 // init resets the state of the parser and sets the input string.
 func (p *Parser) init(input string) {
@@ -601,7 +532,7 @@ func (p *Parser) parseTargetType() (memberAccessor, bool, error) {
 		// Using a slice as an output is an error, we add the case here to
 		// improve the error message.
 		if st, ok, err := p.parseSliceAccessor(); ok {
-			return memberAccessor{}, false, errorAt(fmt.Errorf("cannot use slice syntax %q in output expression", st), startLine, startCol, p.input)
+			return memberAccessor{}, false, errorAt(fmt.Errorf(`cannot use slice syntax "%s[:]" in output expression`, st), startLine, startCol, p.input)
 		} else if err != nil {
 			return memberAccessor{}, false, errorAt(fmt.Errorf("cannot use slice syntax in output expression"), startLine, startCol, p.input)
 		}
@@ -611,27 +542,28 @@ func (p *Parser) parseTargetType() (memberAccessor, bool, error) {
 	return memberAccessor{}, false, nil
 }
 
-// parseSliceAccessor parses a slice range composed of the form "[:]".
-func (p *Parser) parseSliceAccessor() (sa sliceAccessor, ok bool, err error) {
+// parseSliceAccessor parses a slice accessor. A slice accessor is of the form
+// "SliceType[:]". It returns the parsed slice type name.
+func (p *Parser) parseSliceAccessor() (typeName string, ok bool, err error) {
 	cp := p.save()
 
 	id, ok := p.parseIdentifier()
 	if !ok {
-		return sliceAccessor{}, false, nil
+		return "", false, nil
 	}
 	if !p.skipByte('[') {
 		cp.restore()
-		return sliceAccessor{}, false, nil
+		return "", false, nil
 	}
 	p.skipBlanks()
 	if !p.skipByte(':') {
-		return sliceAccessor{}, false, errorAt(fmt.Errorf("invalid slice: expected '%s[:]'", id), cp.lineNum, cp.colNum(), p.input)
+		return "", false, errorAt(fmt.Errorf("invalid slice: expected '%s[:]'", id), cp.lineNum, cp.colNum(), p.input)
 	}
 	p.skipBlanks()
 	if !p.skipByte(']') {
-		return sliceAccessor{}, false, errorAt(fmt.Errorf("invalid slice: expected '%s[:]'", id), cp.lineNum, cp.colNum(), p.input)
+		return "", false, errorAt(fmt.Errorf("invalid slice: expected '%s[:]'", id), cp.lineNum, cp.colNum(), p.input)
 	}
-	return sliceAccessor{typeName: id}, true, nil
+	return id, true, nil
 }
 
 // parseTypeAndMember parses a Go type name qualified by a tag name (or asterisk)
@@ -785,7 +717,7 @@ func (p *Parser) parseOutputExpr() (*outputExpr, bool, error) {
 }
 
 // parseInputExpr parses an input expression of the form "$Type.name".
-func (p *Parser) parseInputExpr() (*inputExpr, bool, error) {
+func (p *Parser) parseInputExpr() (expression, bool, error) {
 	cp := p.save()
 	if !p.skipByte('$') {
 		return nil, false, nil
@@ -795,15 +727,15 @@ func (p *Parser) parseInputExpr() (*inputExpr, bool, error) {
 	if st, ok, err := p.parseSliceAccessor(); err != nil {
 		return nil, false, err
 	} else if ok {
-		return &inputExpr{sourceType: st, raw: p.input[cp.pos:p.pos]}, true, nil
+		return &sliceInputExpr{sliceTypeName: st, raw: p.input[cp.pos:p.pos]}, true, nil
 	}
 
 	// Case 2: Struct or map, "Type.something".
-	if tn, ok, err := p.parseTypeAndMember(); ok {
-		if tn.memberName == "*" {
-			return nil, false, errorAt(fmt.Errorf("asterisk not allowed in input expression %q", "$"+tn.String()), cp.lineNum, cp.colNum(), p.input)
+	if ma, ok, err := p.parseTypeAndMember(); ok {
+		if ma.memberName == "*" {
+			return nil, false, errorAt(fmt.Errorf("asterisk not allowed in input expression %q", "$"+ma.String()), cp.lineNum, cp.colNum(), p.input)
 		}
-		return &inputExpr{sourceType: tn, raw: p.input[cp.pos:p.pos]}, true, nil
+		return &memberInputExpr{ma: ma, raw: p.input[cp.pos:p.pos]}, true, nil
 	} else if err != nil {
 		return nil, false, err
 	}
