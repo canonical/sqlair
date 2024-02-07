@@ -565,7 +565,7 @@ comment */ WHERE x = $Address.&d`,
 		err:   `cannot parse expression: column 22: missing closing parentheses`,
 	}, {
 		query: "SELECT (name, id) WHERE id = $Person.*",
-		err:   `cannot parse expression: column 30: input expression asterisk not allowed outside insert statement "$Person.*"`,
+		err:   `cannot parse expression: column 30: asterisk not allowed in input outside insert statement "$Person.*"`,
 	}, {
 		query: `SELECT (name, id) AS (&Person.name, /* multiline
 comment */
@@ -576,7 +576,7 @@ comment */
 		query: `SELECT (name, id) WHERE name = 'multiline
 string
 of three lines' AND id = $Person.*`,
-		err: `cannot parse expression: line 3, column 26: input expression asterisk not allowed outside insert statement "$Person.*"`,
+		err: `cannot parse expression: line 3, column 26: asterisk not allowed in input outside insert statement "$Person.*"`,
 	}, {
 		query: "SELECT &S[:] FROM t",
 		err:   `cannot parse expression: column 8: cannot use slice syntax "S[:]" in output expression`,

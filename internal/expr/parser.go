@@ -743,9 +743,9 @@ func (p *Parser) parseInputExpr() (expression, bool, error) {
 	}
 
 	// Case 2: Struct or map, "$Type.something".
-	if ma, ok, err := p.parseTypeAndMember(); ok {
+	if ma, ok, err := p.parseInputMemberAccessor(); ok {
 		if ma.memberName == "*" {
-			return nil, false, errorAt(fmt.Errorf("asterisk not allowed in input expression %q", "$"+ma.String()), cp.lineNum, cp.colNum(), p.input)
+			return nil, false, errorAt(fmt.Errorf("asterisk not allowed in input outside insert statement %q", "$"+ma.String()), cp.lineNum, cp.colNum(), p.input)
 		}
 		return &memberInputExpr{ma: ma, raw: p.input[cp.pos:p.pos]}, true, nil
 	} else if err != nil {
