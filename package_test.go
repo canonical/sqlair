@@ -658,19 +658,19 @@ func (s *PackageSuite) TestValidGetAll(c *C) {
 		slices:   []any{&[]*Manager{}, &[]*Person{}, &[]*Address{}},
 		expected: []any{&[]*Manager{{30, "Fred", 1000}}, &[]*Person{{30, "Fred", 1000}}, &[]*Address{{1000, "Happy Land", "Main Street"}}},
 	}, {
-		summary:  "nothing returned",
-		query:    "SELECT &Person.* FROM person WHERE id = $Person.id",
-		types:    []any{Person{}},
-		inputs:   []any{Person{ID: 1243321}},
-		slices:   []any{&[]*Person{}},
-		expected: []any{&[]*Person{}},
-	}, {
 		summary:  "select into maps",
 		query:    "SELECT &M.name, &CustomMap.id FROM person WHERE name = 'Mark'",
 		types:    []any{sqlair.M{}, CustomMap{}},
 		inputs:   []any{},
 		slices:   []any{&[]sqlair.M{}, &[]CustomMap{}},
 		expected: []any{&[]sqlair.M{{"name": "Mark"}}, &[]CustomMap{{"id": int64(20)}}},
+	}, {
+		summary:  "run insert with GetAll",
+		query:    `INSERT INTO person (name) VALUES ($M.name)`,
+		types:    []any{sqlair.M{}},
+		inputs:   []any{sqlair.M{"name": "Joe"}},
+		slices:   []any{},
+		expected: []any{},
 	}}
 
 	tables, sqldb, err := personAndAddressDB(c)
@@ -766,6 +766,13 @@ func (s *PackageSuite) TestGetAllErrors(c *C) {
 		inputs:  []any{},
 		slices:  []any{&[]Person{}},
 		err:     `cannot populate slice: output variables provided but not referenced in query`,
+	}, {
+		summary: "nothing returned",
+		query:   "SELECT &Person.* FROM person WHERE id = $Person.id",
+		types:   []any{Person{}},
+		inputs:  []any{Person{ID: 1243321}},
+		slices:  []any{&[]*Person{}},
+		err:     "cannot populate slice: sql: no rows in result set",
 	}}
 
 	tables, sqldb, err := personAndAddressDB(c)
