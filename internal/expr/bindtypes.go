@@ -118,34 +118,38 @@ func (e *memberInputExpr) bindTypes(argInfo typeinfo.ArgInfo) (any, error) {
 	return &typedInputExpr{input: input}, nil
 }
 
-// insertToAsteriskExpr is a form of input expression for insert statements e.g.
-// "(*) VALUES ($Type1.member, $Type2.*)".
-type insertToAsteriskExpr struct {
+// asteriskInputExpr is an input expression in an INSERT statement with an
+// asterisk on the left meaning that SQLair generates the columns.
+// e.g. "(*) VALUES ($Type1.member, $Type2.*)".
+type asteriskInputExpr struct {
 	sources []memberAccessor
 	raw     string
 }
 
-func (e *insertToAsteriskExpr) String() string {
-	return fmt.Sprintf("AsteriskInsert[[*] %v]", e.sources)
+// String returns a text representation for debugging and testing purposes.
+func (e *asteriskInputExpr) String() string {
+	return fmt.Sprintf("AsteriskInput[[*] %v]", e.sources)
 }
 
-func (e *insertToAsteriskExpr) bindTypes(argInfo typeinfo.ArgInfo) (any, error) {
+func (e *asteriskInputExpr) bindTypes(argInfo typeinfo.ArgInfo) (any, error) {
 	return nil, fmt.Errorf("insert input expression not implemented")
 }
 
-// insertToColumnsExpr is a form of input expression for insert statements e.g.
-// "(col1, col2, col3) VALUES ($Type.*)".
-type insertToColumnsExpr struct {
+// columnsInputExpr is an input expression in an INSERT statement with a single
+// asterisk type and explicit columns.
+// e.g. "(col1, col2, col3) VALUES ($Type.*)".
+type columnsInputExpr struct {
 	columns  []columnAccessor
 	typeName string
 	raw      string
 }
 
-func (e *insertToColumnsExpr) String() string {
-	return fmt.Sprintf("ColumnInsert[%v [%v.*]]", e.columns, e.typeName)
+// String returns a text representation for debugging and testing purposes.
+func (e *columnsInputExpr) String() string {
+	return fmt.Sprintf("ColumnInput[%v [%v.*]]", e.columns, e.typeName)
 }
 
-func (e *insertToColumnsExpr) bindTypes(argInfo typeinfo.ArgInfo) (any, error) {
+func (e *columnsInputExpr) bindTypes(argInfo typeinfo.ArgInfo) (any, error) {
 	return nil, fmt.Errorf("insert input expression not implemented")
 }
 

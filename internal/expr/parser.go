@@ -521,6 +521,7 @@ func (p *Parser) parseColumnAccessor() (columnAccessor, bool, error) {
 
 	// Check if it is a function call instead of a lone identifier.
 	if ok, err := p.skipEnclosedParentheses(); err != nil {
+		cp.restore()
 		return nil, false, err
 	} else if ok {
 		return sqlFunctionCall{raw: p.input[cp.pos:p.pos]}, true, nil
@@ -619,7 +620,9 @@ func parseList[T any](p *Parser, parseFn func(p *Parser) (T, bool, error)) ([]T,
 			return nil, false, nil
 		} else {
 			// On subsequent items we return an error.
-			return nil, false, errorAt(fmt.Errorf("invalid expression in list"), p.lineNum, p.colNum(), p.input)
+			err := errorAt(fmt.Errorf("invalid expression in list"), p.lineNum, p.colNum(), p.input)
+			cp.restore()
+			return nil, false, err
 		}
 
 		p.skipBlanks()
@@ -629,7 +632,9 @@ func parseList[T any](p *Parser, parseFn func(p *Parser) (T, bool, error)) ([]T,
 
 		nextItem = p.skipByte(',')
 	}
-	return nil, false, errorAt(fmt.Errorf("missing closing parentheses"), openingParenLine, openingParenCol, p.input)
+	err := errorAt(fmt.Errorf("missing closing parentheses"), openingParenLine, openingParenCol, p.input)
+	cp.restore()
+	return nil, false, err
 }
 
 // parseColumns parses a single column or a list of columns. Lists must be
@@ -668,6 +673,8 @@ func (p *Parser) parseTargetTypes() (types []memberAccessor, parentheses bool, o
 	return nil, false, false, nil
 }
 
+// parseInputMemberAccessor parses an accessor preceded by a doller
+// e.g. "$Type.member".
 func (p *Parser) parseInputMemberAccessor() (memberAccessor, bool, error) {
 	if p.skipByte('$') {
 		return p.parseTypeAndMember()
@@ -728,84 +735,145 @@ func (p *Parser) parseOutputExpr() (*outputExpr, bool, error) {
 	return nil, false, nil
 }
 
-// parseInputExpr parses an input expression of the form "$Type.name".
-func (p *Parser) parseInputExpr() (expression, bool, error) {
+// parseSliceInputExpr parses an input expression of the form "$Type[:]".
+func (p *Parser) parseSliceInputExpr() (*sliceInputExpr, bool, error) {
 	cp := p.save()
+	if !p.skipByte('$') {
+		return nil, false, nil
+	}
 
-	// Case 1: Slice range, "$Type[:]".
-	if p.skipByte('$') {
-		if st, ok, err := p.parseSliceAccessor(); err != nil {
-			return nil, false, err
-		} else if ok {
-			return &sliceInputExpr{sliceTypeName: st, raw: p.input[cp.pos:p.pos]}, true, nil
-		}
+	if st, ok, err := p.parseSliceAccessor(); err != nil {
 		cp.restore()
-	}
-
-	// Case 2: Struct or map, "$Type.something".
-	if ma, ok, err := p.parseInputMemberAccessor(); ok {
-		if ma.memberName == "*" {
-			return nil, false, errorAt(fmt.Errorf("asterisk not allowed in input outside insert statement %q", "$"+ma.String()), cp.lineNum, cp.colNum(), p.input)
-		}
-		return &memberInputExpr{ma: ma, raw: p.input[cp.pos:p.pos]}, true, nil
-	} else if err != nil {
 		return nil, false, err
-	}
-
-	// Case 3:
-	parenCol := p.pos + 1
-	if p.skipString("(*)") && p.skipBlanks() && p.skipString("VALUES") {
-		p.skipBlanks()
-		if sources, ok, err := parseList(p, (*Parser).parseInputMemberAccessor); err != nil {
-			return nil, false, err
-		} else if ok {
-			return &insertToAsteriskExpr{sources: sources, raw: p.input[cp.pos:p.pos]}, true, nil
-		}
-		// Check for types with missing parentheses.
-		if _, ok, err := p.parseTypeAndMember(); err != nil {
-			return nil, false, err
-		} else if ok {
-			return nil, false, errorAt(fmt.Errorf(`missing parentheses around types after "VALUES"`), p.lineNum, parenCol, p.input)
-		}
-	}
-
-	// Case 4: INSERT VALUES statement e.g. "(name, id) VALUES ($Person.*)".
-	if columns, paren, ok := p.parseColumns(); ok && paren {
-		p.skipBlanks()
-		if p.skipString("VALUES") {
-			p.skipBlanks()
-			parenCol := p.colNum()
-			if sources, ok, err := parseList(p, (*Parser).parseInputMemberAccessor); err != nil {
-				return nil, false, err
-			} else if ok {
-				if len(sources) > 1 {
-					if starCountTypes(sources) > 0 {
-						return nil, false, errorAt(fmt.Errorf("got multiple types in insert expression with columns"), p.lineNum, parenCol, p.input)
-					}
-				}
-				if sources[0].memberName != "*" {
-					// In this case we have something like:
-					// "(col1, col2, ...) AS ($Type.member)".
-					// Return false and leave the "$Type.member" to be parsed
-					// as a simple input expression.
-					cp.restore()
-					return nil, false, nil
-				}
-				return &insertToColumnsExpr{
-					columns:  columns,
-					typeName: sources[0].typeName,
-					raw:      p.input[cp.pos:p.pos],
-				}, true, nil
-			}
-			// Check for types with missing parentheses.
-			if _, ok, err := p.parseTypeAndMember(); err != nil {
-				return nil, false, err
-			} else if ok {
-				return nil, false, errorAt(fmt.Errorf(`missing parentheses around types after "VALUES"`), p.lineNum, parenCol, p.input)
-			}
-		}
+	} else if ok {
+		return &sliceInputExpr{sliceTypeName: st, raw: p.input[cp.pos:p.pos]}, true, nil
 	}
 
 	cp.restore()
+	return nil, false, nil
+}
+
+// parseMemberInputExpr parses an input expression of the form "$Type.member".
+func (p *Parser) parseMemberInputExpr() (*memberInputExpr, bool, error) {
+	cp := p.save()
+	ma, ok, err := p.parseInputMemberAccessor()
+	if !ok {
+		cp.restore()
+		return nil, false, err
+	}
+	if ma.memberName == "*" {
+		cp.restore()
+		return nil, false, errorAt(fmt.Errorf("invalid asterisk input placement %q", "$"+ma.String()), cp.lineNum, cp.colNum(), p.input)
+	}
+	return &memberInputExpr{ma: ma, raw: p.input[cp.pos:p.pos]}, true, nil
+}
+
+// parseAsteriskInputExpr parses an INSERT statement input expression where
+// SQLair generates the columns.
+// It is of the form "(*) VALUES ($Type.*, $Type.member,...)".
+func (p *Parser) parseAsteriskInputExpr() (*asteriskInputExpr, bool, error) {
+	cp := p.save()
+
+	parenCol := p.pos + 1
+	if !p.skipString("(*)") {
+		return nil, false, nil
+	}
+	p.skipBlanks()
+	if !p.skipString("VALUES") {
+		cp.restore()
+		return nil, false, nil
+	}
+	p.skipBlanks()
+
+	sources, ok, err := parseList(p, (*Parser).parseInputMemberAccessor)
+	if err != nil {
+		cp.restore()
+		return nil, false, err
+	} else if !ok {
+		// Check for types with missing parentheses.
+		if _, ok, _ := p.parseInputMemberAccessor(); ok {
+			err = errorAt(fmt.Errorf(`missing parentheses around types after "VALUES"`), p.lineNum, parenCol, p.input)
+		}
+		cp.restore()
+		return nil, false, err
+	}
+
+	return &asteriskInputExpr{sources: sources, raw: p.input[cp.pos:p.pos]}, true, nil
+}
+
+// parseColumnsInputExpr parses an INSERT statement input expression where the
+// user specifies the columns to insert from a single type.
+// It is of the form "(col1, col2,...) VALUES ($Type.*)".
+func (p *Parser) parseColumnsInputExpr() (*columnsInputExpr, bool, error) {
+	cp := p.save()
+
+	columns, paren, ok := p.parseColumns()
+	if !(ok && paren) {
+		cp.restore()
+		return nil, false, nil
+	}
+
+	p.skipBlanks()
+	if !p.skipString("VALUES") {
+		cp.restore()
+		return nil, false, nil
+	}
+	p.skipBlanks()
+
+	parenCol := p.colNum()
+	// Ignore errors and leave them to be handled by
+	// parseMemberInputExpr later.
+	sources, ok, _ := parseList(p, (*Parser).parseInputMemberAccessor)
+	if !ok {
+		// Check for types with missing parentheses.
+		if _, ok, _ := p.parseTypeAndMember(); ok {
+			return nil, false, errorAt(fmt.Errorf(`missing parentheses around types after "VALUES"`), p.lineNum, parenCol, p.input)
+		}
+		cp.restore()
+		return nil, false, nil
+	}
+	if len(sources) > 1 {
+		if starCountTypes(sources) > 0 {
+			err := errorAt(fmt.Errorf("got multiple types in insert expression with columns"), p.lineNum, parenCol, p.input)
+			cp.restore()
+			return nil, false, err
+		}
+	}
+	if sources[0].memberName != "*" {
+		// leave this case to be parsed by parseMemberInputExpr later.
+		cp.restore()
+		return nil, false, nil
+	}
+
+	return &columnsInputExpr{columns: columns, typeName: sources[0].typeName, raw: p.input[cp.pos:p.pos]}, true, nil
+}
+
+// parseInputExpr parses all forms of input expressions, that is, expressions
+// containing a "$".
+func (p *Parser) parseInputExpr() (expression, bool, error) {
+	if expr, ok, err := p.parseSliceInputExpr(); err != nil {
+		return nil, false, err
+	} else if ok {
+		return expr, true, nil
+	}
+
+	if expr, ok, err := p.parseMemberInputExpr(); err != nil {
+		return nil, false, err
+	} else if ok {
+		return expr, true, nil
+	}
+
+	if expr, ok, err := p.parseAsteriskInputExpr(); err != nil {
+		return nil, false, err
+	} else if ok {
+		return expr, true, nil
+	}
+
+	if expr, ok, err := p.parseColumnsInputExpr(); err != nil {
+		return nil, false, err
+	} else if ok {
+		return expr, true, nil
+	}
+
 	return nil, false, nil
 }
