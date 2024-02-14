@@ -302,10 +302,10 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 		sliceVals = append(sliceVals, sliceVal)
 	}
 
-	noRows := true
+	rowsReturned := false
 	iter := q.Iter()
 	for iter.Next() {
-		noRows = false
+		rowsReturned = true
 		var outputArgs = []any{}
 		for _, sliceVal := range sliceVals {
 			elemType := sliceVal.Type().Elem()
@@ -346,7 +346,7 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 	err = iter.Close()
 	if err != nil {
 		return err
-	} else if noRows && q.pq.HasOutputs() {
+	} else if !rowsReturned && q.pq.HasOutputs() {
 		return ErrNoRows
 	}
 

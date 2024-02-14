@@ -665,7 +665,7 @@ func (s *PackageSuite) TestValidGetAll(c *C) {
 		slices:   []any{&[]sqlair.M{}, &[]CustomMap{}},
 		expected: []any{&[]sqlair.M{{"name": "Mark"}}, &[]CustomMap{{"id": int64(20)}}},
 	}, {
-		summary:  "run insert with GetAll",
+		summary:  "GetAll returns no error when there are no outputs",
 		query:    `INSERT INTO person (name) VALUES ($M.name)`,
 		types:    []any{sqlair.M{}},
 		inputs:   []any{sqlair.M{"name": "Joe"}},
