@@ -139,14 +139,14 @@ func (e *asteriskInputExpr) bindTypes(argInfo typeinfo.ArgInfo) (any, error) {
 // asterisk type and explicit columns.
 // e.g. "(col1, col2, col3) VALUES ($Type.*)".
 type columnsInputExpr struct {
-	columns  []columnAccessor
-	typeName string
-	raw      string
+	columns []columnAccessor
+	sources []memberAccessor
+	raw     string
 }
 
 // String returns a text representation for debugging and testing purposes.
 func (e *columnsInputExpr) String() string {
-	return fmt.Sprintf("ColumnInput[%v [%v.*]]", e.columns, e.typeName)
+	return fmt.Sprintf("ColumnInput[%v %v]", e.columns, e.sources)
 }
 
 func (e *columnsInputExpr) bindTypes(argInfo typeinfo.ArgInfo) (any, error) {

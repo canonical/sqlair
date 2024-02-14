@@ -459,9 +459,17 @@ func (s *ExprSuite) TestInsertInputParser(c *C) {
 		query:          "INSERT INTO person (*) VALUES ($Address.street, $Person.*, $M.team)",
 		expectedParsed: "[Bypass[INSERT INTO person ] AsteriskInput[[*] [Address.street Person.* M.team]]]",
 	}, {
-		summary:        "insert specified columns",
+		summary:        "insert specified columns to single type",
 		query:          "INSERT INTO person (id, street) VALUES ($Address.*)",
 		expectedParsed: "[Bypass[INSERT INTO person ] ColumnInput[[id street] [Address.*]]]",
+	}, {
+		summary:        "insert specified columns to multiple types",
+		query:          "INSERT INTO person (id, street) VALUES ($Address.*, $M.street)",
+		expectedParsed: "[Bypass[INSERT INTO person ] ColumnInput[[id street] [Address.* M.street]]]",
+	}, {
+		summary:        "insert specified columns to multiple structs",
+		query:          "INSERT INTO person (name, street) VALUES ($Address.*, $Person.*)",
+		expectedParsed: "[Bypass[INSERT INTO person ] ColumnInput[[name street] [Address.* Person.*]]]",
 	}, {
 		summary:        "insert asterisk with comment",
 		query:          "INSERT INTO person (*) VALUES ($Person.address_id, /* rouge comment */$Address.street)",
@@ -634,15 +642,6 @@ of three lines' AND id = $Person.*`,
 	}, {
 		query: "INSERT INTO person VALUES ($Address.*)",
 		err:   `cannot parse expression: column 28: invalid asterisk input placement "$Address.*"`,
-	}, {
-		query: "INSERT INTO person (col1, col2) VALUES ($Address.*, $M.*)",
-		err:   `cannot parse expression: column 40: got multiple types in insert expression with columns`,
-	}, {
-		query: "INSERT INTO person (col1, col2) VALUES ($Address.*, $M.col2)",
-		err:   `cannot parse expression: column 40: got multiple types in insert expression with columns`,
-	}, {
-		query: "INSERT INTO person (col1, col2) VALUES ($M.col2, $Address.*)",
-		err:   `cannot parse expression: column 40: got multiple types in insert expression with columns`,
 	}}
 
 	for _, t := range tests {

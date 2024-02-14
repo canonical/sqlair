@@ -832,20 +832,14 @@ func (p *Parser) parseColumnsInputExpr() (*columnsInputExpr, bool, error) {
 		cp.restore()
 		return nil, false, nil
 	}
-	if len(sources) > 1 {
-		if starCountTypes(sources) > 0 {
-			err := errorAt(fmt.Errorf("got multiple types in insert expression with columns"), p.lineNum, parenCol, p.input)
-			cp.restore()
-			return nil, false, err
-		}
-	}
-	if sources[0].memberName != "*" {
-		// leave this case to be parsed by parseMemberInputExpr later.
+	if starCountTypes(sources) == 0 {
+		// If there are no asterisk accessors leave the accessors to be handled
+		// by parseMemberInputExpr later.
 		cp.restore()
 		return nil, false, nil
 	}
 
-	return &columnsInputExpr{columns: columns, typeName: sources[0].typeName, raw: p.input[cp.pos:p.pos]}, true, nil
+	return &columnsInputExpr{columns: columns, sources: sources, raw: p.input[cp.pos:p.pos]}, true, nil
 }
 
 // parseInputExpr parses all forms of input expressions, that is, expressions
