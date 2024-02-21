@@ -617,8 +617,12 @@ func (s *PackageSuite) TestErrNoRows(c *C) {
 
 	stmt := sqlair.MustPrepare("SELECT * AS &Person.* FROM person WHERE id=12312", Person{})
 	err = db.Query(nil, stmt).Get(&Person{})
-	c.Assert(err, Equals, sqlair.ErrNoRows)
-	c.Assert(err, Equals, sql.ErrNoRows)
+	errors.Is(err, sqlair.ErrNoRows)
+	errors.Is(err, sql.ErrNoRows)
+
+	err = db.Query(nil, stmt).GetAll(&Person{})
+	errors.Is(err, sqlair.ErrNoRows)
+	errors.Is(err, sql.ErrNoRows)
 }
 
 func (s *PackageSuite) TestValidGetAll(c *C) {
