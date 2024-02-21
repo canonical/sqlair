@@ -118,9 +118,10 @@ func (e *memberInputExpr) bindTypes(argInfo typeinfo.ArgInfo) (any, error) {
 	return &typedInputExpr{input: input}, nil
 }
 
-// asteriskInputExpr is an input expression in an INSERT statement with an
-// asterisk on the left meaning that SQLair generates the columns.
-// e.g. "(*) VALUES ($Type1.member, $Type2.*)".
+// asteriskInputExpr is an input expression occurring within an INSERT
+// statement that consists of an asterisk on the left and explicit type accessors
+// on the right. This means that SQLair generates the columns.
+// e.g. "(*) VALUES ($Type1.col1, $Type2.*)".
 type asteriskInputExpr struct {
 	sources []memberAccessor
 	raw     string
@@ -135,9 +136,9 @@ func (e *asteriskInputExpr) bindTypes(argInfo typeinfo.ArgInfo) (any, error) {
 	return nil, fmt.Errorf("insert input expression not implemented")
 }
 
-// columnsInputExpr is an input expression in an INSERT statement with a single
-// asterisk type and explicit columns.
-// e.g. "(col1, col2, col3) VALUES ($Type.*)".
+// columnsInputExpr is an input expression occurring within an INSERT statement
+// that consists of explicit columns on the left and type accessors on the right.
+// e.g. "(col1, col2, col3) VALUES ($Type.*, $Type2.col1)".
 type columnsInputExpr struct {
 	columns []columnAccessor
 	sources []memberAccessor

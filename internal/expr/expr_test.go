@@ -484,8 +484,8 @@ func (s *ExprSuite) TestInsertInputParser(c *C) {
 		expectedParsed: "[Bypass[INSERT INTO address] AsteriskInput[[*] [Address.*]] Bypass[ RETURNING (] Output[[] [Address.*]] Bypass[)]]",
 	}, {
 		summary:        "insert rename columns with standalone inputs",
-		query:          `INSERT INTO person (id, street) VALUES ($Person.address_id, "random string", rand(), $Address.street)`,
-		expectedParsed: `[Bypass[INSERT INTO person (id, street) VALUES (] Input[Person.address_id] Bypass[, "random string", rand(), ] Input[Address.street] Bypass[)]]`,
+		query:          `INSERT INTO person (id, random_string, random_thing, street) VALUES ($Person.address_id, "random string", rand(), $Address.street)`,
+		expectedParsed: `[Bypass[INSERT INTO person (id, random_string, random_thing, street) VALUES (] Input[Person.address_id] Bypass[, "random string", rand(), ] Input[Address.street] Bypass[)]]`,
 	}, {
 		summary:        "insert single value",
 		query:          "INSERT INTO person (name) VALUES ($Person.name)",
@@ -636,9 +636,6 @@ of three lines' AND id = $Person.*`,
 	}, {
 		query: "INSERT INTO person * VALUES ($Address.*)",
 		err:   `cannot parse expression: column 30: invalid asterisk input placement "$Address.*"`,
-	}, {
-		query: "INSERT INTO person VALUES ($Address.*)",
-		err:   `cannot parse expression: column 28: invalid asterisk input placement "$Address.*"`,
 	}, {
 		query: "INSERT INTO person VALUES ($Address.*)",
 		err:   `cannot parse expression: column 28: invalid asterisk input placement "$Address.*"`,

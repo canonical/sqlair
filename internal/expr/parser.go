@@ -673,7 +673,7 @@ func (p *Parser) parseTargetTypes() (types []memberAccessor, parentheses bool, o
 	return nil, false, false, nil
 }
 
-// parseInputMemberAccessor parses an accessor preceded by a doller
+// parseInputMemberAccessor parses an accessor preceded by '$'.
 // e.g. "$Type.member".
 func (p *Parser) parseInputMemberAccessor() (memberAccessor, bool, error) {
 	if p.skipByte('$') {
@@ -774,10 +774,21 @@ func (p *Parser) parseMemberInputExpr() (*memberInputExpr, bool, error) {
 func (p *Parser) parseAsteriskInputExpr() (*asteriskInputExpr, bool, error) {
 	cp := p.save()
 
-	parenCol := p.pos + 1
-	if !p.skipString("(*)") {
+	if !p.skipByte('(') {
 		return nil, false, nil
 	}
+	parenCol := p.pos
+	p.skipBlanks()
+	if !p.skipByte('*') {
+		cp.restore()
+		return nil, false, nil
+	}
+	p.skipBlanks()
+	if !p.skipByte(')') {
+		cp.restore()
+		return nil, false, nil
+	}
+
 	p.skipBlanks()
 	if !p.skipString("VALUES") {
 		cp.restore()
@@ -827,6 +838,7 @@ func (p *Parser) parseColumnsInputExpr() (*columnsInputExpr, bool, error) {
 	if !ok {
 		// Check for types with missing parentheses.
 		if _, ok, _ := p.parseTypeAndMember(); ok {
+			cp.restore()
 			return nil, false, errorAt(fmt.Errorf(`missing parentheses around types after "VALUES"`), p.lineNum, parenCol, p.input)
 		}
 		cp.restore()
