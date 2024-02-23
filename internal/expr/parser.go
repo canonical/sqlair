@@ -783,7 +783,8 @@ func (p *Parser) parseAsteriskInputExpr() (*asteriskInputExpr, bool, error) {
 	if !p.skipByte('(') {
 		return nil, false, nil
 	}
-	parenCol := p.pos
+	parenCol := p.colNum()
+	parenLine := p.lineNum
 	p.skipBlanks()
 	if !p.skipByte('*') {
 		cp.restore()
@@ -809,7 +810,7 @@ func (p *Parser) parseAsteriskInputExpr() (*asteriskInputExpr, bool, error) {
 	} else if !ok {
 		// Check for types with missing parentheses.
 		if _, ok, _ := p.parseInputMemberAccessor(); ok {
-			err = errorAt(fmt.Errorf(`missing parentheses around types after "VALUES"`), p.lineNum, parenCol, p.input)
+			err = errorAt(fmt.Errorf(`missing parentheses around types after "VALUES"`), parenLine, parenCol, p.input)
 		}
 		cp.restore()
 		return nil, false, err
@@ -838,6 +839,7 @@ func (p *Parser) parseColumnsInputExpr() (*columnsInputExpr, bool, error) {
 	p.skipBlanks()
 
 	parenCol := p.colNum()
+	parenLine := p.lineNum
 	// Ignore errors and leave them to be handled by
 	// parseMemberInputExpr later.
 	sources, ok, _ := parseList(p, (*Parser).parseInputMemberAccessor)
@@ -845,7 +847,7 @@ func (p *Parser) parseColumnsInputExpr() (*columnsInputExpr, bool, error) {
 		// Check for types with missing parentheses.
 		if _, ok, _ := p.parseTypeAndMember(); ok {
 			cp.restore()
-			return nil, false, errorAt(fmt.Errorf(`missing parentheses around types after "VALUES"`), p.lineNum, parenCol, p.input)
+			return nil, false, errorAt(fmt.Errorf(`missing parentheses around types after "VALUES"`), parenLine, parenCol, p.input)
 		}
 		cp.restore()
 		return nil, false, nil
