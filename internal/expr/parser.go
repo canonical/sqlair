@@ -40,8 +40,7 @@ func (p *Parser) Parse(input string) (pe *ParsedExpr, err error) {
 	p.init(input)
 
 	for {
-		// Advance the parser to the start of the next expression.
-		if err := p.advance(); err != nil {
+		if err := p.advanceToNextExpression(); err != nil {
 			return nil, err
 		}
 
@@ -64,6 +63,8 @@ func (p *Parser) Parse(input string) (pe *ParsedExpr, err error) {
 			p.add(in)
 			continue
 		}
+
+		p.advanceByte()
 	}
 
 	// Add any remaining unparsed string input to the parser.
@@ -265,10 +266,9 @@ func (p *Parser) skipComment() bool {
 	return false
 }
 
-// advance increments p.pos until it reaches content that might precede a token
-// we want to parse.
-func (p *Parser) advance() error {
-
+// advanceToNextExpression increments p.pos until it reaches content that might precede
+// an expression we want to parse.
+func (p *Parser) advanceToNextExpression() error {
 loop:
 	for p.pos < len(p.input) {
 		if ok, err := p.skipStringLiteral(); err != nil {
@@ -280,17 +280,23 @@ loop:
 			continue
 		}
 
-		prevByte := p.input[p.pos]
-		p.advanceByte()
-
-		switch prevByte {
-		// These bytes may precede the start of an expression.
-		case ' ', '\t', '\n', '\r', '=', ',', '(', '[', '>', '<', '+', '-', '*', '/', '|', '%':
+		switch p.input[p.pos] {
+		// These bytes may precede the start of an expression. An output
+		// expression may start with a column or function name so are not
+		// captured by the case below.
+		case ' ', '\t', '\n', '\r', '=', ',', '[', '>', '<', '+', '-', '/', '|', '%':
+			p.advanceByte()
+			if p.pos >= len(p.input) || isInitialNameByte(p.input[p.pos]) {
+				break loop
+			}
+			continue
+		// These bytes may be the start of an expression.
+		case '(', '*', '$', '&':
 			break loop
 		}
 
-		// An opening parentheses might be the start of an expression.
-		if p.peekByte('(') {
+		p.advanceByte()
+		if p.pos == len(p.input) {
 			break loop
 		}
 	}
