@@ -297,11 +297,7 @@ loop:
 			}
 			continue
 		}
-
 		p.advanceByte()
-		if p.pos == len(p.input) {
-			break loop
-		}
 	}
 
 	p.skipBlanks()
