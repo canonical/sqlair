@@ -266,8 +266,8 @@ func (p *Parser) skipComment() bool {
 	return false
 }
 
-// advanceToNextExpression increments p.pos until it reaches content that might precede
-// an expression we want to parse.
+// advanceToNextExpression advances the parser until it finds a character that
+// could be the start of an expression.
 func (p *Parser) advanceToNextExpression() error {
 loop:
 	for p.pos < len(p.input) {
@@ -281,18 +281,21 @@ loop:
 		}
 
 		switch p.input[p.pos] {
-		// These bytes may precede the start of an expression. An output
-		// expression may start with a column or function name so are not
-		// captured by the case below.
+		// These bytes may be the start of an expression.
+		case '(', '*', '$', '&':
+			break loop
+		// An expression can also start with an initial name byte, e.g. a
+		// expression starting with a column name or a SQL function.
+		// Rather than testing for every initial name byte (we would stop at
+		// every letter of every word), we look for bytes that may precede the
+		// start of an expression and then check if the next byte is an initial
+		// name byte.
 		case ' ', '\t', '\n', '\r', '=', ',', '[', '>', '<', '+', '-', '/', '|', '%':
 			p.advanceByte()
 			if p.pos >= len(p.input) || isInitialNameByte(p.input[p.pos]) {
 				break loop
 			}
 			continue
-		// These bytes may be the start of an expression.
-		case '(', '*', '$', '&':
-			break loop
 		}
 
 		p.advanceByte()
