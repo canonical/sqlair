@@ -479,6 +479,10 @@ func (s *ExprSuite) TestInsertInputParser(c *C) {
 		query:          "INSERT INTO person(*) VALUES ($Person.*)ON CONFLICT DO NOTHING",
 		expectedParsed: "[Bypass[INSERT INTO person] AsteriskInput[[*] [Person.*]] Bypass[ON CONFLICT DO NOTHING]]",
 	}, {
+		summary:        "insert asterisk (weird spacing)",
+		query:          "INSERT INTO person ( * )VALUES( $Person.* )ON CONFLICT DO NOTHING",
+		expectedParsed: "[Bypass[INSERT INTO person ] AsteriskInput[[*] [Person.*]] Bypass[ON CONFLICT DO NOTHING]]",
+	}, {
 		summary:        "insert with returning clause",
 		query:          "INSERT INTO address(*) VALUES($Address.*) RETURNING (&Address.*)",
 		expectedParsed: "[Bypass[INSERT INTO address] AsteriskInput[[*] [Address.*]] Bypass[ RETURNING (] Output[[] [Address.*]] Bypass[)]]",
@@ -626,10 +630,10 @@ of three lines' AND id = $Person.*`,
 		err:   `cannot parse expression: column 8: cannot read function call "count(*)" into asterisk`,
 	}, {
 		query: "INSERT INTO person (*) VALUES $Address.*",
-		err:   `cannot parse expression: column 21: missing parentheses around types after "VALUES"`,
+		err:   `cannot parse expression: column 20: missing parentheses around types after "VALUES"`,
 	}, {
 		query: "INSERT INTO person (*) VALUES $M.col1",
-		err:   `cannot parse expression: column 21: missing parentheses around types after "VALUES"`,
+		err:   `cannot parse expression: column 20: missing parentheses around types after "VALUES"`,
 	}, {
 		query: "INSERT INTO person * VALUES $Address.*",
 		err:   `cannot parse expression: column 29: invalid asterisk input placement "$Address.*"`,

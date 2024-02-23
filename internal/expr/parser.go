@@ -64,6 +64,8 @@ func (p *Parser) Parse(input string) (pe *ParsedExpr, err error) {
 			continue
 		}
 
+		// No expression found, advance the parser. This prevents
+		// advanceToNextExpression finding the same char again.
 		p.advanceByte()
 	}
 
@@ -779,11 +781,11 @@ func (p *Parser) parseMemberInputExpr() (*memberInputExpr, bool, error) {
 func (p *Parser) parseAsteriskInputExpr() (*asteriskInputExpr, bool, error) {
 	cp := p.save()
 
+	parenCol := p.colNum()
+	parenLine := p.lineNum
 	if !p.skipByte('(') {
 		return nil, false, nil
 	}
-	parenCol := p.colNum()
-	parenLine := p.lineNum
 	p.skipBlanks()
 	if !p.skipByte('*') {
 		cp.restore()

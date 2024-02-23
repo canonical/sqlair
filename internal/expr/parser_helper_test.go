@@ -243,3 +243,54 @@ func (s parseSuite) TestParseSliceRange(c *C) {
 		}
 	}
 }
+
+func (s parseSuite) TestAdvanceToNextExpr(c *C) {
+	var p = NewParser()
+
+	tests := []struct {
+		input   string
+		stopPos []int
+	}{{
+		input:   `word,&`,
+		stopPos: []int{5},
+	}, {
+		input:   ` ,&`,
+		stopPos: []int{2},
+	}, {
+		input:   ` col1`,
+		stopPos: []int{1},
+	}, {
+		input:   `/* &Person.* */`,
+		stopPos: []int{},
+	}, {
+		input:   `" &Person.*"`,
+		stopPos: []int{},
+	}, {
+		input:   ` ""`,
+		stopPos: []int{},
+	}, {
+		input:   ` /**/`,
+		stopPos: []int{},
+	}}
+
+	for _, t := range tests {
+		p.init(t.input)
+		currentStopPos := 0
+		for p.pos < len(p.input) {
+			err := p.advanceToNextExpression()
+			c.Assert(err, IsNil)
+			if p.pos >= len(p.input) {
+				break
+			}
+
+			if len(t.stopPos) <= currentStopPos {
+				c.Fatalf("unexpected extra stop at position %d with input %s",
+					p.pos, t.input)
+			}
+			c.Assert(p.pos, Equals, t.stopPos[currentStopPos])
+			currentStopPos++
+
+			p.advanceByte()
+		}
+	}
+}
