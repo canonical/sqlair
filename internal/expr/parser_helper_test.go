@@ -251,6 +251,17 @@ func (s parseSuite) TestAdvanceToNextExpr(c *C) {
 		input   string
 		stopPos []int
 	}{{
+		// advanceToNextExpr stops on the first char if it is the start of the
+		// expr.
+		input:   `col1`,
+		stopPos: []int{0},
+	}, {
+		input:   `&col`,
+		stopPos: []int{0},
+	}, {
+		input:   `$col`,
+		stopPos: []int{0},
+	}, {
 		input:   `word,&`,
 		stopPos: []int{5},
 	}, {

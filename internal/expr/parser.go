@@ -780,9 +780,6 @@ func (p *Parser) parseMemberInputExpr() (*memberInputExpr, bool, error) {
 // It is of the form "(*) VALUES ($Type.*, $Type.member,...)".
 func (p *Parser) parseAsteriskInputExpr() (*asteriskInputExpr, bool, error) {
 	cp := p.save()
-
-	parenCol := p.colNum()
-	parenLine := p.lineNum
 	if !p.skipByte('(') {
 		return nil, false, nil
 	}
@@ -811,7 +808,7 @@ func (p *Parser) parseAsteriskInputExpr() (*asteriskInputExpr, bool, error) {
 	} else if !ok {
 		// Check for types with missing parentheses.
 		if _, ok, _ := p.parseInputMemberAccessor(); ok {
-			err = errorAt(fmt.Errorf(`missing parentheses around types after "VALUES"`), parenLine, parenCol, p.input)
+			err = errorAt(fmt.Errorf(`missing parentheses around types after "VALUES"`), cp.colNum(), cp.lineNum, p.input)
 		}
 		cp.restore()
 		return nil, false, err
