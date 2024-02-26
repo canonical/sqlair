@@ -808,7 +808,7 @@ func (p *Parser) parseAsteriskInputExpr() (*asteriskInputExpr, bool, error) {
 	} else if !ok {
 		// Check for types with missing parentheses.
 		if _, ok, _ := p.parseInputMemberAccessor(); ok {
-			err = errorAt(fmt.Errorf(`missing parentheses around types after "VALUES"`), cp.colNum(), cp.lineNum, p.input)
+			err = errorAt(fmt.Errorf(`missing parentheses around types after "VALUES"`), cp.lineNum, cp.colNum(), p.input)
 		}
 		cp.restore()
 		return nil, false, err
