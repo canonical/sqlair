@@ -577,7 +577,7 @@ comment */ WHERE x = $Address.&d`,
 		err:   `cannot parse expression: column 22: missing closing parentheses`,
 	}, {
 		query: "SELECT (name, id) WHERE id = $Person.*",
-		err:   `cannot parse expression: column 30: invalid asterisk input placement "$Person.*"`,
+		err:   `cannot parse expression: column 30: invalid asterisk placement in input "$Person.*"`,
 	}, {
 		query: `SELECT (name, id) AS (&Person.name, /* multiline
 comment */
@@ -588,7 +588,7 @@ comment */
 		query: `SELECT (name, id) WHERE name = 'multiline
 string
 of three lines' AND id = $Person.*`,
-		err: `cannot parse expression: line 3, column 26: invalid asterisk input placement "$Person.*"`,
+		err: `cannot parse expression: line 3, column 26: invalid asterisk placement in input "$Person.*"`,
 	}, {
 		query: "SELECT &S[:] FROM t",
 		err:   `cannot parse expression: column 8: cannot use slice syntax "S[:]" in output expression`,
@@ -636,13 +636,13 @@ of three lines' AND id = $Person.*`,
 		err:   `cannot parse expression: column 20: missing parentheses around types after "VALUES"`,
 	}, {
 		query: "INSERT INTO person * VALUES $Address.*",
-		err:   `cannot parse expression: column 29: invalid asterisk input placement "$Address.*"`,
+		err:   `cannot parse expression: column 29: invalid asterisk placement in input "$Address.*"`,
 	}, {
 		query: "INSERT INTO person * VALUES ($Address.*)",
-		err:   `cannot parse expression: column 30: invalid asterisk input placement "$Address.*"`,
+		err:   `cannot parse expression: column 30: invalid asterisk placement in input "$Address.*"`,
 	}, {
 		query: "INSERT INTO person VALUES ($Address.*)",
-		err:   `cannot parse expression: column 28: invalid asterisk input placement "$Address.*"`,
+		err:   `cannot parse expression: column 28: invalid asterisk placement in input "$Address.*"`,
 	}}
 
 	for _, t := range tests {

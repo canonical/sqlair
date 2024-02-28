@@ -263,7 +263,7 @@ func (s parseSuite) TestAdvanceToNextExpr(c *C) {
 		stopPos: []int{0},
 	}, {
 		input:   `word,&`,
-		stopPos: []int{5},
+		stopPos: []int{0, 5},
 	}, {
 		input:   ` ,&`,
 		stopPos: []int{2},
@@ -291,14 +291,15 @@ func (s parseSuite) TestAdvanceToNextExpr(c *C) {
 			err := p.advanceToNextExpression()
 			c.Assert(err, IsNil)
 			if p.pos >= len(p.input) {
+				c.Assert(currentStopPos, Equals, len(t.stopPos), Commentf("input: %q", t.input))
 				break
 			}
 
-			if len(t.stopPos) <= currentStopPos {
+			if currentStopPos >= len(t.stopPos) {
 				c.Fatalf("unexpected extra stop at position %d with input %s",
 					p.pos, t.input)
 			}
-			c.Assert(p.pos, Equals, t.stopPos[currentStopPos])
+			c.Assert(p.pos, Equals, t.stopPos[currentStopPos], Commentf("input: %q", t.input))
 			currentStopPos++
 
 			p.advanceByte()

@@ -271,6 +271,11 @@ func (p *Parser) skipComment() bool {
 // advanceToNextExpression advances the parser until it finds a character that
 // could be the start of an expression.
 func (p *Parser) advanceToNextExpression() error {
+	// If the first char of input is an InitalNameByte then return as it could
+	// be an expression. This case is not covered below.
+	if p.pos < len(p.input) && p.pos == 0 && isInitialNameByte(p.input[p.pos]) {
+		return nil
+	}
 loop:
 	for p.pos < len(p.input) {
 		if ok, err := p.skipStringLiteral(); err != nil {
@@ -294,7 +299,10 @@ loop:
 		// name byte.
 		case ' ', '\t', '\n', '\r', '=', ',', '[', '>', '<', '+', '-', '/', '|', '%':
 			p.advanceByte()
-			if p.pos >= len(p.input) || isInitialNameByte(p.input[p.pos]) {
+			if p.pos >= len(p.input) {
+				return nil
+			}
+			if isInitialNameByte(p.input[p.pos]) {
 				break loop
 			}
 			continue
@@ -611,8 +619,6 @@ func parseList[T any](p *Parser, parseFn func(p *Parser) (T, bool, error)) ([]T,
 	}
 
 	// Error points to first parentheses skipped above.
-	openingParenCol := p.colNum() - 1
-	openingParenLine := p.lineNum
 	nextItem := true
 	var objs []T
 	for i := 0; nextItem; i++ {
@@ -639,7 +645,7 @@ func parseList[T any](p *Parser, parseFn func(p *Parser) (T, bool, error)) ([]T,
 
 		nextItem = p.skipByte(',')
 	}
-	err := errorAt(fmt.Errorf("missing closing parentheses"), openingParenLine, openingParenCol, p.input)
+	err := errorAt(fmt.Errorf("missing closing parentheses"), cp.lineNum, cp.colNum(), p.input)
 	cp.restore()
 	return nil, false, err
 }
@@ -770,7 +776,7 @@ func (p *Parser) parseMemberInputExpr() (*memberInputExpr, bool, error) {
 	}
 	if ma.memberName == "*" {
 		cp.restore()
-		return nil, false, errorAt(fmt.Errorf("invalid asterisk input placement %q", "$"+ma.String()), cp.lineNum, cp.colNum(), p.input)
+		return nil, false, errorAt(fmt.Errorf("invalid asterisk placement in input %q", "$"+ma.String()), cp.lineNum, cp.colNum(), p.input)
 	}
 	return &memberInputExpr{ma: ma, raw: p.input[cp.pos:p.pos]}, true, nil
 }
@@ -793,7 +799,6 @@ func (p *Parser) parseAsteriskInputExpr() (*asteriskInputExpr, bool, error) {
 		cp.restore()
 		return nil, false, nil
 	}
-
 	p.skipBlanks()
 	if !p.skipString("VALUES") {
 		cp.restore()
@@ -828,7 +833,6 @@ func (p *Parser) parseColumnsInputExpr() (*columnsInputExpr, bool, error) {
 		cp.restore()
 		return nil, false, nil
 	}
-
 	p.skipBlanks()
 	if !p.skipString("VALUES") {
 		cp.restore()
@@ -851,8 +855,8 @@ func (p *Parser) parseColumnsInputExpr() (*columnsInputExpr, bool, error) {
 		return nil, false, nil
 	}
 	if starCountTypes(sources) == 0 {
-		// If there are no asterisk accessors leave the accessors to be handled
-		// by parseMemberInputExpr later.
+		// If there are no asterisk accessors leave the accessors then leave
+		// the accessors to be handled elsewhere.
 		cp.restore()
 		return nil, false, nil
 	}
