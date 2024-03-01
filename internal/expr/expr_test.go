@@ -66,8 +66,8 @@ var tests = []struct {
 	typeSamples:    []any{Person{}},
 	expectedSQL:    "SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2",
 }, {
-	summary: "spaces and tabs",
-	query: "SELECT p.* 	AS 		   &Person.*",
+	summary:        "spaces and tabs",
+	query:          "SELECT p.* 	AS 		   &Person.*",
 	expectedParsed: "[Bypass[SELECT ] Output[[p.*] [Person.*]]]",
 	typeSamples:    []any{Person{}},
 	expectedSQL:    "SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2",
@@ -457,35 +457,35 @@ func (s *ExprSuite) TestInsertInputParser(c *C) {
 	}{{
 		summary:        "insert asterisk",
 		query:          "INSERT INTO person (*) VALUES ($Address.street, $Person.*, $M.team)",
-		expectedParsed: "[Bypass[INSERT INTO person ] AsteriskInput[[*] [Address.street Person.* M.team]]]",
+		expectedParsed: "[Bypass[INSERT INTO person ] AsteriskInsert[[*] [Address.street Person.* M.team]]]",
 	}, {
 		summary:        "insert specified columns to single type",
 		query:          "INSERT INTO person (id, street) VALUES ($Address.*)",
-		expectedParsed: "[Bypass[INSERT INTO person ] ColumnInput[[id street] [Address.*]]]",
+		expectedParsed: "[Bypass[INSERT INTO person ] ColumnInsert[[id street] [Address.*]]]",
 	}, {
 		summary:        "insert specified columns to multiple types",
 		query:          "INSERT INTO person (id, street) VALUES ($Address.*, $M.street)",
-		expectedParsed: "[Bypass[INSERT INTO person ] ColumnInput[[id street] [Address.* M.street]]]",
+		expectedParsed: "[Bypass[INSERT INTO person ] ColumnInsert[[id street] [Address.* M.street]]]",
 	}, {
 		summary:        "insert specified columns to multiple structs",
 		query:          "INSERT INTO person (name, street) VALUES ($Address.*, $Person.*)",
-		expectedParsed: "[Bypass[INSERT INTO person ] ColumnInput[[name street] [Address.* Person.*]]]",
+		expectedParsed: "[Bypass[INSERT INTO person ] ColumnInsert[[name street] [Address.* Person.*]]]",
 	}, {
 		summary:        "insert asterisk with comment",
 		query:          "INSERT INTO person (*) VALUES ($Person.address_id, /* rouge comment */$Address.street)",
-		expectedParsed: "[Bypass[INSERT INTO person ] AsteriskInput[[*] [Person.address_id Address.street]]]",
+		expectedParsed: "[Bypass[INSERT INTO person ] AsteriskInsert[[*] [Person.address_id Address.street]]]",
 	}, {
 		summary:        "insert asterisk (no space)",
 		query:          "INSERT INTO person(*) VALUES ($Person.*)ON CONFLICT DO NOTHING",
-		expectedParsed: "[Bypass[INSERT INTO person] AsteriskInput[[*] [Person.*]] Bypass[ON CONFLICT DO NOTHING]]",
+		expectedParsed: "[Bypass[INSERT INTO person] AsteriskInsert[[*] [Person.*]] Bypass[ON CONFLICT DO NOTHING]]",
 	}, {
 		summary:        "insert asterisk (weird spacing)",
 		query:          "INSERT INTO person ( * )VALUES( $Person.* )ON CONFLICT DO NOTHING",
-		expectedParsed: "[Bypass[INSERT INTO person ] AsteriskInput[[*] [Person.*]] Bypass[ON CONFLICT DO NOTHING]]",
+		expectedParsed: "[Bypass[INSERT INTO person ] AsteriskInsert[[*] [Person.*]] Bypass[ON CONFLICT DO NOTHING]]",
 	}, {
 		summary:        "insert with returning clause",
 		query:          "INSERT INTO address(*) VALUES($Address.*) RETURNING (&Address.*)",
-		expectedParsed: "[Bypass[INSERT INTO address] AsteriskInput[[*] [Address.*]] Bypass[ RETURNING (] Output[[] [Address.*]] Bypass[)]]",
+		expectedParsed: "[Bypass[INSERT INTO address] AsteriskInsert[[*] [Address.*]] Bypass[ RETURNING (] Output[[] [Address.*]] Bypass[)]]",
 	}, {
 		summary:        "insert rename columns with standalone inputs",
 		query:          `INSERT INTO person (id, random_string, random_thing, street) VALUES ($Person.address_id, "random string", rand(), $Address.street)`,

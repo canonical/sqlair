@@ -748,8 +748,28 @@ func (p *Parser) parseOutputExpr() (*outputExpr, bool, error) {
 	return nil, false, nil
 }
 
+// parseInputExpr parses all forms of input expressions, that is, expressions
+// containing a "$".
+func (p *Parser) parseInputExpr() (expression, bool, error) {
+	inputExprParsers := []func(*Parser) (expression, bool, error){
+		(*Parser).parseSliceInputExpr,
+		(*Parser).parseMemberInputExpr,
+		(*Parser).parseAsteriskInsertExpr,
+		(*Parser).parseColumnsInsertExpr,
+	}
+	for _, inputExprParser := range inputExprParsers {
+		if expr, ok, err := inputExprParser(p); err != nil {
+			return nil, false, err
+		} else if ok {
+			return expr, true, nil
+		}
+	}
+
+	return nil, false, nil
+}
+
 // parseSliceInputExpr parses an input expression of the form "$Type[:]".
-func (p *Parser) parseSliceInputExpr() (*sliceInputExpr, bool, error) {
+func (p *Parser) parseSliceInputExpr() (expression, bool, error) {
 	cp := p.save()
 	if !p.skipByte('$') {
 		return nil, false, nil
@@ -767,7 +787,7 @@ func (p *Parser) parseSliceInputExpr() (*sliceInputExpr, bool, error) {
 }
 
 // parseMemberInputExpr parses an input expression of the form "$Type.member".
-func (p *Parser) parseMemberInputExpr() (*memberInputExpr, bool, error) {
+func (p *Parser) parseMemberInputExpr() (expression, bool, error) {
 	cp := p.save()
 	ma, ok, err := p.parseInputMemberAccessor()
 	if !ok {
@@ -781,10 +801,10 @@ func (p *Parser) parseMemberInputExpr() (*memberInputExpr, bool, error) {
 	return &memberInputExpr{ma: ma, raw: p.input[cp.pos:p.pos]}, true, nil
 }
 
-// parseAsteriskInputExpr parses an INSERT statement input expression where
+// parseAsteriskInsertExpr parses an INSERT statement input expression where
 // SQLair generates the columns.
 // It is of the form "(*) VALUES ($Type.*, $Type.member,...)".
-func (p *Parser) parseAsteriskInputExpr() (*asteriskInputExpr, bool, error) {
+func (p *Parser) parseAsteriskInsertExpr() (expression, bool, error) {
 	cp := p.save()
 	if !p.skipByte('(') {
 		return nil, false, nil
@@ -819,13 +839,13 @@ func (p *Parser) parseAsteriskInputExpr() (*asteriskInputExpr, bool, error) {
 		return nil, false, err
 	}
 
-	return &asteriskInputExpr{sources: sources, raw: p.input[cp.pos:p.pos]}, true, nil
+	return &asteriskInsertExpr{sources: sources, raw: p.input[cp.pos:p.pos]}, true, nil
 }
 
-// parseColumnsInputExpr parses an INSERT statement input expression where the
+// parseColumnsInsertExpr parses an INSERT statement input expression where the
 // user specifies the columns to insert from a single type.
 // It is of the form "(col1, col2,...) VALUES ($Type.*)".
-func (p *Parser) parseColumnsInputExpr() (*columnsInputExpr, bool, error) {
+func (p *Parser) parseColumnsInsertExpr() (expression, bool, error) {
 	cp := p.save()
 
 	columns, paren, ok := p.parseColumns()
@@ -855,41 +875,11 @@ func (p *Parser) parseColumnsInputExpr() (*columnsInputExpr, bool, error) {
 		return nil, false, nil
 	}
 	if starCountTypes(sources) == 0 {
-		// If there are no asterisk accessors leave the accessors then leave
-		// the accessors to be handled elsewhere.
+		// If there are no asterisk accessors then leave the accessors to be
+		// handled elsewhere.
 		cp.restore()
 		return nil, false, nil
 	}
 
-	return &columnsInputExpr{columns: columns, sources: sources, raw: p.input[cp.pos:p.pos]}, true, nil
-}
-
-// parseInputExpr parses all forms of input expressions, that is, expressions
-// containing a "$".
-func (p *Parser) parseInputExpr() (expression, bool, error) {
-	if expr, ok, err := p.parseSliceInputExpr(); err != nil {
-		return nil, false, err
-	} else if ok {
-		return expr, true, nil
-	}
-
-	if expr, ok, err := p.parseMemberInputExpr(); err != nil {
-		return nil, false, err
-	} else if ok {
-		return expr, true, nil
-	}
-
-	if expr, ok, err := p.parseAsteriskInputExpr(); err != nil {
-		return nil, false, err
-	} else if ok {
-		return expr, true, nil
-	}
-
-	if expr, ok, err := p.parseColumnsInputExpr(); err != nil {
-		return nil, false, err
-	} else if ok {
-		return expr, true, nil
-	}
-
-	return nil, false, nil
+	return &columnsInsertExpr{columns: columns, sources: sources, raw: p.input[cp.pos:p.pos]}, true, nil
 }
