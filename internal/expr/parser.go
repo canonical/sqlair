@@ -40,8 +40,7 @@ func (p *Parser) Parse(input string) (pe *ParsedExpr, err error) {
 	p.init(input)
 
 	for {
-		// Advance the parser to the start of the next expression.
-		if err := p.advance(); err != nil {
+		if err := p.advanceToNextExpression(); err != nil {
 			return nil, err
 		}
 
@@ -64,6 +63,10 @@ func (p *Parser) Parse(input string) (pe *ParsedExpr, err error) {
 			p.add(in)
 			continue
 		}
+
+		// No expression found, advance the parser. This prevents
+		// advanceToNextExpression finding the same char again.
+		p.advanceByte()
 	}
 
 	// Add any remaining unparsed string input to the parser.
@@ -265,10 +268,14 @@ func (p *Parser) skipComment() bool {
 	return false
 }
 
-// advance increments p.pos until it reaches content that might preceed a token
-// we want to parse.
-func (p *Parser) advance() error {
-
+// advanceToNextExpression advances the parser until it finds a character that
+// could be the start of an expression.
+func (p *Parser) advanceToNextExpression() error {
+	// If the first char of input is an InitalNameByte then return as it could
+	// be an expression. This case is not covered below.
+	if p.pos < len(p.input) && p.pos == 0 && isInitialNameByte(p.input[p.pos]) {
+		return nil
+	}
 loop:
 	for p.pos < len(p.input) {
 		if ok, err := p.skipStringLiteral(); err != nil {
@@ -281,11 +288,24 @@ loop:
 		}
 
 		switch p.input[p.pos] {
-		// If the preceding byte is one of these then we might be at the start
-		// of an expression.
-		case ' ', '\t', '\n', '\r', '=', ',', '(', '[', '>', '<', '+', '-', '*', '/', '|', '%':
-			p.advanceByte()
+		// These bytes may be the start of an expression.
+		case '(', '*', '$', '&':
 			break loop
+		// An expression can also start with an initial name byte, e.g. a
+		// expression starting with a column name or a SQL function.
+		// Rather than testing for every initial name byte (we would stop at
+		// every letter of every word), we look for bytes that may precede the
+		// start of an expression and then check if the next byte is an initial
+		// name byte.
+		case ' ', '\t', '\n', '\r', '=', ',', '[', '>', '<', '+', '-', '/', '|', '%':
+			p.advanceByte()
+			if p.pos >= len(p.input) {
+				return nil
+			}
+			if isInitialNameByte(p.input[p.pos]) {
+				break loop
+			}
+			continue
 		}
 		p.advanceByte()
 	}
@@ -516,6 +536,7 @@ func (p *Parser) parseColumnAccessor() (columnAccessor, bool, error) {
 
 	// Check if it is a function call instead of a lone identifier.
 	if ok, err := p.skipEnclosedParentheses(); err != nil {
+		cp.restore()
 		return nil, false, err
 	} else if ok {
 		return sqlFunctionCall{raw: p.input[cp.pos:p.pos]}, true, nil
@@ -598,8 +619,6 @@ func parseList[T any](p *Parser, parseFn func(p *Parser) (T, bool, error)) ([]T,
 	}
 
 	// Error points to first parentheses skipped above.
-	openingParenCol := p.colNum() - 1
-	openingParenLine := p.lineNum
 	nextItem := true
 	var objs []T
 	for i := 0; nextItem; i++ {
@@ -614,7 +633,9 @@ func parseList[T any](p *Parser, parseFn func(p *Parser) (T, bool, error)) ([]T,
 			return nil, false, nil
 		} else {
 			// On subsequent items we return an error.
-			return nil, false, errorAt(fmt.Errorf("invalid expression in list"), p.lineNum, p.colNum(), p.input)
+			err := errorAt(fmt.Errorf("invalid expression in list"), p.lineNum, p.colNum(), p.input)
+			cp.restore()
+			return nil, false, err
 		}
 
 		p.skipBlanks()
@@ -624,7 +645,9 @@ func parseList[T any](p *Parser, parseFn func(p *Parser) (T, bool, error)) ([]T,
 
 		nextItem = p.skipByte(',')
 	}
-	return nil, false, errorAt(fmt.Errorf("missing closing parentheses"), openingParenLine, openingParenCol, p.input)
+	err := errorAt(fmt.Errorf("missing closing parentheses"), cp.lineNum, cp.colNum(), p.input)
+	cp.restore()
+	return nil, false, err
 }
 
 // parseColumns parses a single column or a list of columns. Lists must be
@@ -661,6 +684,15 @@ func (p *Parser) parseTargetTypes() (types []memberAccessor, parentheses bool, o
 	}
 
 	return nil, false, false, nil
+}
+
+// parseInputMemberAccessor parses an accessor preceded by '$'.
+// e.g. "$Type.member".
+func (p *Parser) parseInputMemberAccessor() (memberAccessor, bool, error) {
+	if p.skipByte('$') {
+		return p.parseTypeAndMember()
+	}
+	return memberAccessor{}, false, nil
 }
 
 // parseOutputExpr requires that the ampersand before the identifiers must
@@ -716,30 +748,138 @@ func (p *Parser) parseOutputExpr() (*outputExpr, bool, error) {
 	return nil, false, nil
 }
 
-// parseInputExpr parses an input expression of the form "$Type.name".
+// parseInputExpr parses all forms of input expressions, that is, expressions
+// containing a "$".
 func (p *Parser) parseInputExpr() (expression, bool, error) {
+	inputExprParsers := []func(*Parser) (expression, bool, error){
+		(*Parser).parseSliceInputExpr,
+		(*Parser).parseMemberInputExpr,
+		(*Parser).parseAsteriskInsertExpr,
+		(*Parser).parseColumnsInsertExpr,
+	}
+	for _, inputExprParser := range inputExprParsers {
+		if expr, ok, err := inputExprParser(p); err != nil {
+			return nil, false, err
+		} else if ok {
+			return expr, true, nil
+		}
+	}
+
+	return nil, false, nil
+}
+
+// parseSliceInputExpr parses an input expression of the form "$Type[:]".
+func (p *Parser) parseSliceInputExpr() (expression, bool, error) {
 	cp := p.save()
 	if !p.skipByte('$') {
 		return nil, false, nil
 	}
 
-	// Case 1: Slice range, "Type[:]".
 	if st, ok, err := p.parseSliceAccessor(); err != nil {
+		cp.restore()
 		return nil, false, err
 	} else if ok {
 		return &sliceInputExpr{sliceTypeName: st, raw: p.input[cp.pos:p.pos]}, true, nil
 	}
 
-	// Case 2: Struct or map, "Type.something".
-	if ma, ok, err := p.parseTypeAndMember(); ok {
-		if ma.memberName == "*" {
-			return nil, false, errorAt(fmt.Errorf("asterisk not allowed in input expression %q", "$"+ma.String()), cp.lineNum, cp.colNum(), p.input)
+	cp.restore()
+	return nil, false, nil
+}
+
+// parseMemberInputExpr parses an input expression of the form "$Type.member".
+func (p *Parser) parseMemberInputExpr() (expression, bool, error) {
+	cp := p.save()
+	ma, ok, err := p.parseInputMemberAccessor()
+	if !ok {
+		cp.restore()
+		return nil, false, err
+	}
+	if ma.memberName == "*" {
+		cp.restore()
+		return nil, false, errorAt(fmt.Errorf("invalid asterisk placement in input %q", "$"+ma.String()), cp.lineNum, cp.colNum(), p.input)
+	}
+	return &memberInputExpr{ma: ma, raw: p.input[cp.pos:p.pos]}, true, nil
+}
+
+// parseAsteriskInsertExpr parses an INSERT statement input expression where
+// SQLair generates the columns.
+// It is of the form "(*) VALUES ($Type.*, $Type.member,...)".
+func (p *Parser) parseAsteriskInsertExpr() (expression, bool, error) {
+	cp := p.save()
+	if !p.skipByte('(') {
+		return nil, false, nil
+	}
+	p.skipBlanks()
+	if !p.skipByte('*') {
+		cp.restore()
+		return nil, false, nil
+	}
+	p.skipBlanks()
+	if !p.skipByte(')') {
+		cp.restore()
+		return nil, false, nil
+	}
+	p.skipBlanks()
+	if !p.skipString("VALUES") {
+		cp.restore()
+		return nil, false, nil
+	}
+	p.skipBlanks()
+
+	sources, ok, err := parseList(p, (*Parser).parseInputMemberAccessor)
+	if err != nil {
+		cp.restore()
+		return nil, false, err
+	} else if !ok {
+		// Check for types with missing parentheses.
+		if _, ok, _ := p.parseInputMemberAccessor(); ok {
+			err = errorAt(fmt.Errorf(`missing parentheses around types after "VALUES"`), cp.lineNum, cp.colNum(), p.input)
 		}
-		return &memberInputExpr{ma: ma, raw: p.input[cp.pos:p.pos]}, true, nil
-	} else if err != nil {
+		cp.restore()
 		return nil, false, err
 	}
 
-	cp.restore()
-	return nil, false, nil
+	return &asteriskInsertExpr{sources: sources, raw: p.input[cp.pos:p.pos]}, true, nil
+}
+
+// parseColumnsInsertExpr parses an INSERT statement input expression where the
+// user specifies the columns to insert from a single type.
+// It is of the form "(col1, col2,...) VALUES ($Type.*)".
+func (p *Parser) parseColumnsInsertExpr() (expression, bool, error) {
+	cp := p.save()
+
+	columns, paren, ok := p.parseColumns()
+	if !(ok && paren) {
+		cp.restore()
+		return nil, false, nil
+	}
+	p.skipBlanks()
+	if !p.skipString("VALUES") {
+		cp.restore()
+		return nil, false, nil
+	}
+	p.skipBlanks()
+
+	parenCol := p.colNum()
+	parenLine := p.lineNum
+	// Ignore errors and leave them to be handled by
+	// parseMemberInputExpr later.
+	sources, ok, _ := parseList(p, (*Parser).parseInputMemberAccessor)
+	if !ok {
+		// Check for types with missing parentheses.
+		if _, ok, _ := p.parseTypeAndMember(); ok {
+			cp.restore()
+			return nil, false, errorAt(fmt.Errorf(`missing parentheses around types after "VALUES"`), parenLine, parenCol, p.input)
+		}
+		cp.restore()
+		return nil, false, nil
+	}
+	if starCountTypes(sources) == 0 {
+		// If there are no asterisk accessors then leave the accessors to be
+		// handled elsewhere.
+		cp.restore()
+		return nil, false, nil
+	}
+
+	return &columnsInsertExpr{columns: columns, sources: sources, raw: p.input[cp.pos:p.pos]}, true, nil
 }

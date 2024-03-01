@@ -66,8 +66,8 @@ var tests = []struct {
 	typeSamples:    []any{Person{}},
 	expectedSQL:    "SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2",
 }, {
-	summary: "spaces and tabs",
-	query: "SELECT p.* 	AS 		   &Person.*",
+	summary:        "spaces and tabs",
+	query:          "SELECT p.* 	AS 		   &Person.*",
 	expectedParsed: "[Bypass[SELECT ] Output[[p.*] [Person.*]]]",
 	typeSamples:    []any{Person{}},
 	expectedSQL:    "SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2",
@@ -449,6 +449,64 @@ func (s *ExprSuite) TestExprPkg(c *C) {
 	}
 }
 
+func (s *ExprSuite) TestInsertInputParser(c *C) {
+	tests := []struct {
+		summary        string
+		query          string
+		expectedParsed string
+	}{{
+		summary:        "insert asterisk",
+		query:          "INSERT INTO person (*) VALUES ($Address.street, $Person.*, $M.team)",
+		expectedParsed: "[Bypass[INSERT INTO person ] AsteriskInsert[[*] [Address.street Person.* M.team]]]",
+	}, {
+		summary:        "insert specified columns to single type",
+		query:          "INSERT INTO person (id, street) VALUES ($Address.*)",
+		expectedParsed: "[Bypass[INSERT INTO person ] ColumnInsert[[id street] [Address.*]]]",
+	}, {
+		summary:        "insert specified columns to multiple types",
+		query:          "INSERT INTO person (id, street) VALUES ($Address.*, $M.street)",
+		expectedParsed: "[Bypass[INSERT INTO person ] ColumnInsert[[id street] [Address.* M.street]]]",
+	}, {
+		summary:        "insert specified columns to multiple structs",
+		query:          "INSERT INTO person (name, street) VALUES ($Address.*, $Person.*)",
+		expectedParsed: "[Bypass[INSERT INTO person ] ColumnInsert[[name street] [Address.* Person.*]]]",
+	}, {
+		summary:        "insert asterisk with comment",
+		query:          "INSERT INTO person (*) VALUES ($Person.address_id, /* rouge comment */$Address.street)",
+		expectedParsed: "[Bypass[INSERT INTO person ] AsteriskInsert[[*] [Person.address_id Address.street]]]",
+	}, {
+		summary:        "insert asterisk (no space)",
+		query:          "INSERT INTO person(*) VALUES ($Person.*)ON CONFLICT DO NOTHING",
+		expectedParsed: "[Bypass[INSERT INTO person] AsteriskInsert[[*] [Person.*]] Bypass[ON CONFLICT DO NOTHING]]",
+	}, {
+		summary:        "insert asterisk (weird spacing)",
+		query:          "INSERT INTO person ( * )VALUES( $Person.* )ON CONFLICT DO NOTHING",
+		expectedParsed: "[Bypass[INSERT INTO person ] AsteriskInsert[[*] [Person.*]] Bypass[ON CONFLICT DO NOTHING]]",
+	}, {
+		summary:        "insert with returning clause",
+		query:          "INSERT INTO address(*) VALUES($Address.*) RETURNING (&Address.*)",
+		expectedParsed: "[Bypass[INSERT INTO address] AsteriskInsert[[*] [Address.*]] Bypass[ RETURNING (] Output[[] [Address.*]] Bypass[)]]",
+	}, {
+		summary:        "insert rename columns with standalone inputs",
+		query:          `INSERT INTO person (id, random_string, random_thing, street) VALUES ($Person.address_id, "random string", rand(), $Address.street)`,
+		expectedParsed: `[Bypass[INSERT INTO person (id, random_string, random_thing, street) VALUES (] Input[Person.address_id] Bypass[, "random string", rand(), ] Input[Address.street] Bypass[)]]`,
+	}, {
+		summary:        "insert single value",
+		query:          "INSERT INTO person (name) VALUES ($Person.name)",
+		expectedParsed: "[Bypass[INSERT INTO person (name) VALUES (] Input[Person.name] Bypass[)]]",
+	}, {
+		summary:        "insert with standalone input expressions",
+		query:          `INSERT INTO person VALUES ($Person.name, "random string", $Person.id)`,
+		expectedParsed: `[Bypass[INSERT INTO person VALUES (] Input[Person.name] Bypass[, "random string", ] Input[Person.id] Bypass[)]]`,
+	}}
+	for i, t := range tests {
+		parser := expr.NewParser()
+		expr, err := parser.Parse(t.query)
+		c.Assert(err, IsNil, Commentf("test %d failed (Parse):\nsummary: %s\nquery: %s\nexpected: %s\nerr: %s\n", i, t.summary, t.query, t.expectedParsed, err))
+		c.Assert(expr.String(), Equals, t.expectedParsed, Commentf("test %d failed (Parse):\nsummary: %s\nquery: %s\nexpected: %s\nactual:   %s\n", i, t.summary, t.query, t.expectedParsed, expr.String()))
+	}
+}
+
 func (s *ExprSuite) TestParseErrors(c *C) {
 	tests := []struct {
 		query string
@@ -519,7 +577,7 @@ comment */ WHERE x = $Address.&d`,
 		err:   `cannot parse expression: column 22: missing closing parentheses`,
 	}, {
 		query: "SELECT (name, id) WHERE id = $Person.*",
-		err:   `cannot parse expression: column 30: asterisk not allowed in input expression "$Person.*"`,
+		err:   `cannot parse expression: column 30: invalid asterisk placement in input "$Person.*"`,
 	}, {
 		query: `SELECT (name, id) AS (&Person.name, /* multiline
 comment */
@@ -530,7 +588,7 @@ comment */
 		query: `SELECT (name, id) WHERE name = 'multiline
 string
 of three lines' AND id = $Person.*`,
-		err: `cannot parse expression: line 3, column 26: asterisk not allowed in input expression "$Person.*"`,
+		err: `cannot parse expression: line 3, column 26: invalid asterisk placement in input "$Person.*"`,
 	}, {
 		query: "SELECT &S[:] FROM t",
 		err:   `cannot parse expression: column 8: cannot use slice syntax "S[:]" in output expression`,
@@ -570,6 +628,21 @@ of three lines' AND id = $Person.*`,
 	}, {
 		query: "SELECT (id, count(*)) AS (&M.*) FROM t",
 		err:   `cannot parse expression: column 8: cannot read function call "count(*)" into asterisk`,
+	}, {
+		query: "INSERT INTO person (*) VALUES $Address.*",
+		err:   `cannot parse expression: column 20: missing parentheses around types after "VALUES"`,
+	}, {
+		query: "INSERT INTO person (*) VALUES $M.col1",
+		err:   `cannot parse expression: column 20: missing parentheses around types after "VALUES"`,
+	}, {
+		query: "INSERT INTO person * VALUES $Address.*",
+		err:   `cannot parse expression: column 29: invalid asterisk placement in input "$Address.*"`,
+	}, {
+		query: "INSERT INTO person * VALUES ($Address.*)",
+		err:   `cannot parse expression: column 30: invalid asterisk placement in input "$Address.*"`,
+	}, {
+		query: "INSERT INTO person VALUES ($Address.*)",
+		err:   `cannot parse expression: column 28: invalid asterisk placement in input "$Address.*"`,
 	}}
 
 	for _, t := range tests {

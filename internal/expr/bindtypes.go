@@ -115,7 +115,43 @@ func (e *memberInputExpr) bindTypes(argInfo typeinfo.ArgInfo) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("input expression: %s: %s", err, e.raw)
 	}
-	return &typedInputExpr{input}, nil
+	return &typedInputExpr{input: input}, nil
+}
+
+// asteriskInsertExpr is an input expression occurring within an INSERT
+// statement that consists of an asterisk on the left and explicit type accessors
+// on the right. This means that SQLair generates the columns.
+// e.g. "(*) VALUES ($Type1.col1, $Type2.*)".
+type asteriskInsertExpr struct {
+	sources []memberAccessor
+	raw     string
+}
+
+// String returns a text representation for debugging and testing purposes.
+func (e *asteriskInsertExpr) String() string {
+	return fmt.Sprintf("AsteriskInsert[[*] %v]", e.sources)
+}
+
+func (e *asteriskInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (any, error) {
+	return nil, fmt.Errorf("insert input expression not implemented")
+}
+
+// columnsInsertExpr is an input expression occurring within an INSERT statement
+// that consists of explicit columns on the left and type accessors on the right.
+// e.g. "(col1, col2, col3) VALUES ($Type.*, $Type2.col1)".
+type columnsInsertExpr struct {
+	columns []columnAccessor
+	sources []memberAccessor
+	raw     string
+}
+
+// String returns a text representation for debugging and testing purposes.
+func (e *columnsInsertExpr) String() string {
+	return fmt.Sprintf("ColumnInsert[%v %v]", e.columns, e.sources)
+}
+
+func (e *columnsInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (any, error) {
+	return nil, fmt.Errorf("insert input expression not implemented")
 }
 
 // sliceInputExpr is an input expression of the form "$S[:]" that represents a
