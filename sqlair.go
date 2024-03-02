@@ -76,11 +76,12 @@ func (db *DB) PlainDB() *sql.DB {
 
 // Query holds the results of a database query.
 type Query struct {
-	pq  *expr.PrimedQuery
+	// run executes the Query against the db or the tx.
+	run func() (*sql.Rows, sql.Result, error)
 	ctx context.Context
 	err error
+	pq  *expr.PrimedQuery
 	db  *DB
-	tx  *TX // tx is only set for queries in transactions.
 }
 
 // Iterator is used to iterate over the results of the query.
@@ -105,7 +106,16 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: err}
 	}
 
-	return &Query{db: db, pq: pq, ctx: ctx, err: nil}
+	run := func() (rows *sql.Rows, result sql.Result, err error) {
+		if pq.HasOutputs() {
+			rows, err = db.sqldb.QueryContext(ctx, pq.SQL(), pq.Params()...)
+		} else {
+			result, err = db.sqldb.ExecContext(ctx, pq.SQL(), pq.Params()...)
+		}
+		return rows, result, err
+	}
+
+	return &Query{db: db, pq: pq, run: run, ctx: ctx, err: nil}
 }
 
 // Run is an alias for Get that takes no arguments.
@@ -157,28 +167,12 @@ func (q *Query) Iter() *Iterator {
 	if q.err != nil {
 		return &Iterator{err: q.err}
 	}
-	if q.tx != nil && q.tx.isDone() {
-		return &Iterator{err: ErrTXDone}
-	}
 
-	var result sql.Result
-	var rows *sql.Rows
-	var err error
 	var cols []string
+	rows, result, err := q.run()
 	if q.pq.HasOutputs() {
-		if q.tx != nil {
-			rows, err = q.tx.sqltx.QueryContext(q.ctx, q.pq.SQL(), q.pq.Params()...)
-		} else {
-			rows, err = q.db.sqldb.QueryContext(q.ctx, q.pq.SQL(), q.pq.Params()...)
-		}
 		if err == nil { // if err IS nil
 			cols, err = rows.Columns()
-		}
-	} else {
-		if q.tx != nil {
-			result, err = q.tx.sqltx.ExecContext(q.ctx, q.pq.SQL(), q.pq.Params()...)
-		} else {
-			result, err = q.db.sqldb.ExecContext(q.ctx, q.pq.SQL(), q.pq.Params()...)
 		}
 	}
 	if err != nil {
@@ -428,5 +422,14 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: err}
 	}
 
-	return &Query{db: tx.db, pq: pq, tx: tx, ctx: ctx, err: nil}
+	run := func() (rows *sql.Rows, result sql.Result, err error) {
+		if pq.HasOutputs() {
+			rows, err = tx.sqltx.QueryContext(ctx, pq.SQL(), pq.Params()...)
+		} else {
+			result, err = tx.sqltx.ExecContext(ctx, pq.SQL(), pq.Params()...)
+		}
+		return rows, result, err
+	}
+
+	return &Query{db: tx.db, pq: pq, ctx: ctx, run: run, err: nil}
 }
