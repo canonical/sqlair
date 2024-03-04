@@ -262,6 +262,8 @@ func (o *Outcome) Result() sql.Result {
 // GetAll iterates over the query and scans all rows into the provided slices.
 // sliceArgs must contain pointers to slices of each of the output types.
 // An &Outcome{} variable may be provided as the first output variable.
+//
+// ErrNoRows will be returned if no rows are found.
 func (q *Query) GetAll(sliceArgs ...any) (err error) {
 	if q.err != nil {
 		return q.err
@@ -300,8 +302,10 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 		sliceVals = append(sliceVals, sliceVal)
 	}
 
+	rowsReturned := false
 	iter := q.Iter()
 	for iter.Next() {
+		rowsReturned = true
 		var outputArgs = []any{}
 		for _, sliceVal := range sliceVals {
 			elemType := sliceVal.Type().Elem()
@@ -342,6 +346,8 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 	err = iter.Close()
 	if err != nil {
 		return err
+	} else if !rowsReturned && q.pq.HasOutputs() {
+		return ErrNoRows
 	}
 
 	for i, ptrVal := range slicePtrVals {
