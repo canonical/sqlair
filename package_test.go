@@ -819,7 +819,23 @@ func (s *PackageSuite) TestRun(c *C) {
 	var jimCheck = Person{}
 	err = db.Query(nil, selectStmt, &jim).Get(&jimCheck)
 	c.Assert(err, IsNil)
-	c.Assert(jimCheck, Equals, jim)
+
+	joe := Person{
+		ID:         34,
+		Fullname:   "Joe",
+		PostalCode: 55555,
+	}
+	// Insert Joe.
+	insertStmt = sqlair.MustPrepare("INSERT INTO person (*) VALUES ($Person.*);", Person{})
+	err = db.Query(nil, insertStmt, &joe).Run()
+	c.Assert(err, IsNil)
+
+	// Check Joe is in the db.
+	selectStmt = sqlair.MustPrepare("SELECT &Person.* FROM person WHERE id = $Person.id", Person{})
+	var joeCheck = Person{}
+	err = db.Query(nil, selectStmt, &joe).Get(&joeCheck)
+	c.Assert(err, IsNil)
+	c.Assert(joeCheck, Equals, joe)
 }
 
 func (s *PackageSuite) TestOutcome(c *C) {

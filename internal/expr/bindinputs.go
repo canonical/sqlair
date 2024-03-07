@@ -59,12 +59,43 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 				sqlStr.WriteString("@sqlair_" + strconv.Itoa(inputCount))
 				inputCount++
 			}
-		case *typedOutputExpr:
-			for i, oc := range te.outputColumns {
-				sqlStr.WriteString(oc.sql(outputCount))
-				if i != len(te.outputColumns)-1 {
+		case *typedInsertExpr:
+			// Write out the columns.
+			sqlStr.WriteString("(")
+			for i, col := range te.columns {
+				if i != 0 {
 					sqlStr.WriteString(", ")
 				}
+				sqlStr.WriteString(col)
+			}
+			sqlStr.WriteString(") VALUES (")
+			// Write out the values.
+			for i, input := range te.inputs {
+				if i != 0 {
+					sqlStr.WriteString(", ")
+				}
+				vals, err := input.LocateParams(typeToValue)
+				if err != nil {
+					return nil, err
+				}
+				argTypeUsed[input.ArgType()] = true
+				for j, val := range vals {
+					if j != 0 {
+						sqlStr.WriteString(", ")
+					}
+					namedInput := sql.Named("sqlair_"+strconv.Itoa(inputCount), val.Interface())
+					params = append(params, namedInput)
+					sqlStr.WriteString("@sqlair_" + strconv.Itoa(inputCount))
+					inputCount++
+				}
+			}
+			sqlStr.WriteString(")")
+		case *typedOutputExpr:
+			for i, oc := range te.outputColumns {
+				if i != 0 {
+					sqlStr.WriteString(", ")
+				}
+				sqlStr.WriteString(oc.sql(outputCount))
 				outputCount++
 				outputs = append(outputs, oc.output)
 			}
@@ -108,6 +139,13 @@ func newOutputColumn(tableName string, columnName string, output typeinfo.Output
 // typedInputExpr stores information about a Go value to use as a query input.
 type typedInputExpr struct {
 	input typeinfo.Input
+}
+
+// typedInsertExpr stores information about the Go values to use as inputs inside
+// an INSERT statement.
+type typedInsertExpr struct {
+	columns []string
+	inputs  []typeinfo.Input
 }
 
 // typedOutputExpr contains the columns to fetch from the database and

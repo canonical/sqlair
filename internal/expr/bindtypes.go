@@ -6,6 +6,7 @@ package expr
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 
 	"github.com/canonical/sqlair/internal/typeinfo"
 )
@@ -132,8 +133,35 @@ func (e *asteriskInsertExpr) String() string {
 	return fmt.Sprintf("AsteriskInsert[[*] %v]", e.sources)
 }
 
-func (e *asteriskInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (any, error) {
-	return nil, fmt.Errorf("insert input expression not implemented")
+// bindTypes generates a *typedInputExpr containing type information about the
+// asteriskInsertExpr.
+func (e *asteriskInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie any, err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("input expression: %s: %s", err, e.raw)
+		}
+	}()
+
+	var inputs []typeinfo.Input
+	var columns []string
+	for _, source := range e.sources {
+		if source.memberName == "*" {
+			inps, tags, err := argInfo.AllStructInputs(source.typeName)
+			if err != nil {
+				return nil, err
+			}
+			columns = append(columns, tags...)
+			inputs = append(inputs, inps...)
+		} else {
+			inp, err := argInfo.InputMember(source.typeName, source.memberName)
+			if err != nil {
+				return nil, err
+			}
+			columns = append(columns, source.memberName)
+			inputs = append(inputs, inp)
+		}
+	}
+	return &typedInsertExpr{inputs: inputs, columns: columns}, nil
 }
 
 // columnsInsertExpr is an input expression occurring within an INSERT statement
@@ -150,8 +178,80 @@ func (e *columnsInsertExpr) String() string {
 	return fmt.Sprintf("ColumnInsert[%v %v]", e.columns, e.sources)
 }
 
-func (e *columnsInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (any, error) {
-	return nil, fmt.Errorf("insert input expression not implemented")
+// bindTypes generates a *typedInputExpr containing type information about the
+// columnsInsertExpr. It checks that all the listed columns are provided by the
+// supplied types. If a map with an asterisk is passed, the spare columns are
+// taken from that map.
+func (e *columnsInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie any, err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("input expression: %s: %s", err, e.raw)
+		}
+	}()
+
+	// 1. We go over all the supplied types and collect all the columns that
+	// they provide.
+	var remainingMap *string
+	// We want to store a list of inputs instead of throwing out an error early.
+	// Because if the column is not used, the query would still be valid even
+	// if two structs clash.
+	colToInput := make(map[string][]typeinfo.Input)
+	for _, source := range e.sources {
+		if source.memberName == "*" {
+			kind, err := argInfo.Kind(source.typeName)
+			if err != nil {
+				return nil, err
+			}
+			// If we find a map save it for later to match the spare columns.
+			if kind == reflect.Map {
+				if remainingMap != nil {
+					return nil, fmt.Errorf("cannot use more than one map with asterisk")
+				}
+				remainingMap = &source.typeName
+				continue
+			}
+			inps, tags, err := argInfo.AllStructInputs(source.typeName)
+			if err != nil {
+				return nil, err
+			}
+			for i := range tags {
+				colToInput[tags[i]] = append(colToInput[tags[i]], inps[i])
+			}
+		} else {
+			inp, err := argInfo.InputMember(source.typeName, source.memberName)
+			if err != nil {
+				return nil, err
+			}
+			colToInput[source.memberName] = []typeinfo.Input{inp}
+		}
+	}
+
+	// 2. We go over all the columns listed in SQL and match them against the
+	// provided. If a map with an asterisk is present, we use it to supply the
+	// spare columns. If it is not present, a spare column is an error.
+	var columns []string
+	var inputs []typeinfo.Input
+	for _, column := range e.columns {
+		columnStr := column.String()
+		input, ok := colToInput[columnStr]
+		if !ok && remainingMap != nil {
+			// The spare columns must belong to the map.
+			inp, err := argInfo.InputMember(*remainingMap, columnStr)
+			if err != nil {
+				// unreachable
+				return nil, err
+			}
+			input = []typeinfo.Input{inp}
+		} else if !ok {
+			return nil, fmt.Errorf("missing type that provides column %q", columnStr)
+		}
+		if len(input) > 1 {
+			return nil, fmt.Errorf("more than one type provides column %q", columnStr)
+		}
+		columns = append(columns, columnStr)
+		inputs = append(inputs, input[0])
+	}
+	return &typedInsertExpr{inputs: inputs, columns: columns}, nil
 }
 
 // sliceInputExpr is an input expression of the form "$S[:]" that represents a

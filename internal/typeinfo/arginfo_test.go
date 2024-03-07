@@ -61,9 +61,14 @@ func (s *typeInfoSuite) TestArgInfoStruct(c *C) {
 		tag:       "name",
 	}}
 
-	allOutputs, names, err := argInfo.AllStructOutputs("myStruct")
+	allOutputs, outputNames, err := argInfo.AllStructOutputs("myStruct")
 	c.Assert(err, IsNil)
 	c.Assert(allOutputs, HasLen, len(structFields))
+
+	allInputs, inputNames, err := argInfo.AllStructInputs("myStruct")
+	c.Assert(err, IsNil)
+	c.Assert(allInputs, HasLen, len(structFields))
+	c.Assert(outputNames, DeepEquals, inputNames)
 
 	structType := reflect.TypeOf(myStruct{})
 	for i, t := range structFields {
@@ -83,8 +88,13 @@ func (s *typeInfoSuite) TestArgInfoStruct(c *C) {
 		c.Assert(err, IsNil)
 		c.Assert(output, DeepEquals, expectedStructField)
 
+		kind, err := argInfo.Kind("myStruct")
+		c.Assert(err, IsNil)
+		c.Assert(kind, DeepEquals, reflect.Struct)
+
 		c.Assert(allOutputs[i], DeepEquals, expectedStructField)
-		c.Assert(names[i], Equals, t.tag)
+		c.Assert(allInputs[i], DeepEquals, expectedStructField)
+		c.Assert(outputNames[i], Equals, t.tag)
 	}
 }
 
@@ -103,6 +113,10 @@ func (s *typeInfoSuite) TestArgInfoMap(c *C) {
 	output, err := argInfo.OutputMember("myMap", expectedMapKey.name)
 	c.Assert(err, IsNil)
 	c.Assert(output, DeepEquals, expectedMapKey)
+
+	kind, err := argInfo.Kind("myMap")
+	c.Assert(err, IsNil)
+	c.Assert(kind, DeepEquals, reflect.Map)
 }
 
 // This struct is used to test shadowed types in TestGenerateArgInfoInvalidTypeErrors
@@ -245,7 +259,7 @@ func (*typeInfoSuite) TestInputAndOutputMemberError(c *C) {
 	}
 }
 
-func (*typeInfoSuite) TestAllOutputMemberError(c *C) {
+func (*typeInfoSuite) TestAllMemberError(c *C) {
 	type mySlice []any
 	type myMap map[string]any
 	argInfo, err := GenerateArgInfo([]any{mySlice{}, myMap{}})
@@ -267,6 +281,10 @@ func (*typeInfoSuite) TestAllOutputMemberError(c *C) {
 
 	for i, test := range tests {
 		_, _, err = argInfo.AllStructOutputs(test.typeName)
+		c.Assert(err, NotNil, Commentf("test %d failed", i+1))
+		c.Assert(err.Error(), Equals, test.err)
+
+		_, _, err = argInfo.AllStructInputs(test.typeName)
 		c.Assert(err, NotNil, Commentf("test %d failed", i+1))
 		c.Assert(err.Error(), Equals, test.err)
 	}
