@@ -63,7 +63,7 @@ func (mk *mapKey) ArgType() reflect.Type {
 	return mk.mapType
 }
 
-// LocateParams locates the map in typeToValue and then gets value assosiated
+// LocateParams locates the map in typeToValue and then gets value associated
 // with the key specified in mapKey. An error is returned if the map does not
 // contain this key. A slice with a single entry is returned to fit the Input
 // interface.
@@ -222,7 +222,7 @@ func valueNotFoundError(typeToValue TypeToValue, missingType reflect.Type) error
 		}
 		argNames = append(argNames, argType.Name())
 	}
-	// Sort for consistant error messages.
+	// Sort for consistent error messages.
 	sort.Strings(argNames)
 	return typeMissingError(missingType.Name(), argNames)
 }

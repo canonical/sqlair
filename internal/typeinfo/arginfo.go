@@ -291,12 +291,12 @@ func nameNotFoundError(argInfo ArgInfo, missingTypeName string) error {
 	for argName := range argInfo {
 		argNames = append(argNames, argName)
 	}
-	// Sort for consistant error messages.
+	// Sort for consistent error messages.
 	sort.Strings(argNames)
 	return typeMissingError(missingTypeName, argNames)
 }
 
-// typeMissingError returns an error specificing the missing type and types
+// typeMissingError returns an error specifying the missing type and types
 // that are present.
 func typeMissingError(missingType string, existingTypes []string) error {
 	if len(existingTypes) == 0 {
