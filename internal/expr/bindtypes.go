@@ -133,7 +133,7 @@ func (e *asteriskInsertExpr) String() string {
 	return fmt.Sprintf("AsteriskInsert[[*] %v]", e.sources)
 }
 
-// bindTypes generates a *typedInputExpr containing type information about the
+// bindTypes generates a *typedInsertExpr containing type information about the
 // asteriskInsertExpr.
 func (e *asteriskInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie any, err error) {
 	defer func() {
@@ -178,7 +178,7 @@ func (e *columnsInsertExpr) String() string {
 	return fmt.Sprintf("ColumnInsert[%v %v]", e.columns, e.sources)
 }
 
-// bindTypes generates a *typedInputExpr containing type information about the
+// bindTypes generates a *typedInsertExpr containing type information about the
 // columnsInsertExpr. It checks that all the listed columns are provided by the
 // supplied types. If a map with an asterisk is passed, the spare columns are
 // taken from that map.
@@ -189,13 +189,16 @@ func (e *columnsInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie any, err er
 		}
 	}()
 
-	// 1. We go over all the supplied types and collect all the columns that
-	// they provide.
-	var remainingMap *string
+	// 1. Work out all the columns available on the right hand side of the insert
+	// expression. For each valueAccessor on the right, save all the columns names
+	// that can be found in the type it specifies.
 	// We want to store a list of inputs instead of throwing out an error early.
 	// Because if the column is not used, the query would still be valid even
 	// if two structs clash.
 	colToInput := make(map[string][]typeinfo.Input)
+	// remainingMap stores the map with an asterisk if passed, the remaining
+	// columns are taken from it later.
+	var remainingMap *string
 	for _, source := range e.sources {
 		if source.memberName == "*" {
 			kind, err := argInfo.Kind(source.typeName)
@@ -226,9 +229,10 @@ func (e *columnsInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie any, err er
 		}
 	}
 
-	// 2. We go over all the columns listed in SQL and match them against the
-	// provided. If a map with an asterisk is present, we use it to supply the
-	// spare columns. If it is not present, a spare column is an error.
+	// 2. We go over all the columns listed on the left of the insert expression
+	// and match them against the columns provided by the types on the right.
+	// If a map with an asterisk is present, we use it to supply the spare
+	// columns. If it is not present, a spare column is an error.
 	var columns []string
 	var inputs []typeinfo.Input
 	for _, column := range e.columns {

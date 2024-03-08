@@ -136,7 +136,8 @@ func newOutputColumn(tableName string, columnName string, output typeinfo.Output
 	return outputColumn{column: tableName + "." + columnName, output: output}
 }
 
-// typedInputExpr stores information about a Go value to use as a query input.
+// typedInputExpr stores information about a Go value to use as a standalone query
+// input.
 type typedInputExpr struct {
 	input typeinfo.Input
 }
