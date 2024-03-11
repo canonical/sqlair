@@ -68,8 +68,11 @@ type District struct{}
 
 type CustomMap map[string]any
 
-func personAndAddressDB(c *C) ([]string, *sqlair.DB, error) {
+type lowerCaseStruct struct {
+	X int `db:"id"`
+}
 
+func personAndAddressDB(c *C) ([]string, *sqlair.DB, error) {
 	createTables := `
 CREATE TABLE person (
 	name text,
@@ -534,6 +537,13 @@ func (s *PackageSuite) TestValidGet(c *C) {
 		inputs:   []any{Address{ID: 1000}, Person{ID: 30}},
 		outputs:  []any{&Person{}, &Address{}, &Manager{}},
 		expected: []any{&Person{30, "Fred", 1000}, &Address{1000, "Happy Land", "Main Street"}, &Manager{30, "Fred", 1000}},
+	}, {
+		summary:  "lower case struct",
+		query:    "SELECT &lowerCaseStruct.* FROM person",
+		types:    []any{lowerCaseStruct{}},
+		inputs:   []any{},
+		outputs:  []any{&lowerCaseStruct{}},
+		expected: []any{&lowerCaseStruct{X: 30}},
 	}, {
 		summary:  "select into map",
 		query:    "SELECT &M.name FROM person WHERE address_id = $M.p1",

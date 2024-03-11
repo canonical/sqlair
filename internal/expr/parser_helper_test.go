@@ -16,7 +16,7 @@ var _ columnAccessor = sqlFunctionCall{}
 var _ columnAccessor = basicColumn{}
 
 type parseHelperTest struct {
-	bytef    func(byte) bool
+	charf    func(rune) bool
 	stringf  func(string) bool
 	stringf0 func() bool
 	stringf1 func() (bool, error)
@@ -30,17 +30,17 @@ func (s parseSuite) TestRunTable(c *C) {
 	var p = NewParser()
 	var parseTests = []parseHelperTest{
 
-		{bytef: p.peekByte, result: []bool{false}, input: "", data: []string{"a"}},
-		{bytef: p.peekByte, result: []bool{false}, input: "b", data: []string{"a"}},
-		{bytef: p.peekByte, result: []bool{true}, input: "a", data: []string{"a"}},
+		{charf: p.peekChar, result: []bool{false}, input: "", data: []string{"a"}},
+		{charf: p.peekChar, result: []bool{false}, input: "b", data: []string{"a"}},
+		{charf: p.peekChar, result: []bool{true}, input: "a", data: []string{"a"}},
 
-		{bytef: p.skipByte, result: []bool{false}, input: "", data: []string{"a"}},
-		{bytef: p.skipByte, result: []bool{false}, input: "abc", data: []string{"b"}},
-		{bytef: p.skipByte, result: []bool{true, true}, input: "abc", data: []string{"a", "b"}},
+		{charf: p.skipChar, result: []bool{false}, input: "", data: []string{"a"}},
+		{charf: p.skipChar, result: []bool{false}, input: "abc", data: []string{"b"}},
+		{charf: p.skipChar, result: []bool{true, true}, input: "abc", data: []string{"a", "b"}},
 
-		{bytef: p.skipByteFind, result: []bool{false}, input: "", data: []string{"a"}},
-		{bytef: p.skipByteFind, result: []bool{false, true, true}, input: "abcde", data: []string{"x", "b", "c"}},
-		{bytef: p.skipByteFind, result: []bool{true, false}, input: "abcde ", data: []string{" ", " "}},
+		{charf: p.skipCharFind, result: []bool{false}, input: "", data: []string{"a"}},
+		{charf: p.skipCharFind, result: []bool{false, true, true}, input: "abcde", data: []string{"x", "b", "c"}},
+		{charf: p.skipCharFind, result: []bool{true, false}, input: "abcde ", data: []string{" ", " "}},
 
 		{stringf0: p.skipBlanks, result: []bool{false}, input: "", data: []string{}},
 		{stringf0: p.skipBlanks, result: []bool{false}, input: "abc    d", data: []string{}},
@@ -79,8 +79,8 @@ func (s parseSuite) TestRunTable(c *C) {
 		for i := range v.result {
 			var result bool
 			var err error
-			if v.bytef != nil {
-				result = v.bytef(v.data[i][0])
+			if v.charf != nil {
+				result = v.charf(rune(v.data[i][0]))
 			}
 			if v.stringf != nil {
 				result = v.stringf(v.data[i])
@@ -302,7 +302,7 @@ func (s parseSuite) TestAdvanceToNextExpr(c *C) {
 			c.Assert(p.pos, Equals, t.stopPos[currentStopPos], Commentf("input: %q", t.input))
 			currentStopPos++
 
-			p.advanceByte()
+			p.advanceChar()
 		}
 	}
 }

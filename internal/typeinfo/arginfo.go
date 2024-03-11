@@ -6,10 +6,11 @@ package typeinfo
 import (
 	"fmt"
 	"reflect"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
+	"unicode"
+	"unicode/utf8"
 )
 
 // ArgInfo is used to access type information about SQLair input and output
@@ -287,10 +288,6 @@ func getArgInfo(t reflect.Type) (arg, error) {
 	return typeInfo, nil
 }
 
-// This expression should be aligned with the bytes we allow in isNameByte in
-// the parser.
-var validColNameRx = regexp.MustCompile(`^([a-zA-Z_])+([a-zA-Z_0-9])*$`)
-
 // parseTag parses the input tag string and returns its
 // name and whether it contains the "omitempty" option.
 func parseTag(tag string) (string, bool, error) {
@@ -312,8 +309,37 @@ func parseTag(tag string) (string, bool, error) {
 		return "", false, fmt.Errorf("empty db tag")
 	}
 
-	if !validColNameRx.MatchString(name) {
+	// Check the tag is a valid column name.
+
+	if name[0] == '"' || name[0] == '\'' {
+		if name[len(name)-1] != name[0] {
+			return "", false, fmt.Errorf("missing quotes at end of 'db' tag: %q", name)
+		}
+		// No need to validate chars in quotes.
+		return name, omitEmpty, nil
+	}
+
+	char, size := utf8.DecodeRuneInString(name)
+	nextPos := size
+	var checker func(rune) bool
+	if unicode.IsDigit(char) {
+		// If it starts with a digit, check the tag is a number.
+		checker = func(char rune) bool {
+			return unicode.IsDigit(char)
+		}
+	} else if unicode.IsLetter(char) || char == '_' {
+		checker = func(char rune) bool {
+			return unicode.IsLetter(char) || unicode.IsDigit(char) || char == '_'
+		}
+	} else {
 		return "", false, fmt.Errorf("invalid column name in 'db' tag: %q", name)
+	}
+	for nextPos < len(name) {
+		char, size = utf8.DecodeRuneInString(name[nextPos:])
+		nextPos += size
+		if !(checker(char)) {
+			return "", false, fmt.Errorf("invalid column name in 'db' tag: %q", name)
+		}
 	}
 
 	return name, omitEmpty, nil
