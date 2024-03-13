@@ -63,12 +63,12 @@ func (s *typeInfoSuite) TestArgInfoStruct(c *C) {
 
 	allOutputs, outputNames, err := argInfo.AllStructOutputs("myStruct")
 	c.Assert(err, IsNil)
-	c.Assert(allOutputs, HasLen, len(structFields))
+	c.Check(allOutputs, HasLen, len(structFields))
 
 	allInputs, inputNames, err := argInfo.AllStructInputs("myStruct")
 	c.Assert(err, IsNil)
-	c.Assert(allInputs, HasLen, len(structFields))
-	c.Assert(outputNames, DeepEquals, inputNames)
+	c.Check(allInputs, HasLen, len(structFields))
+	c.Check(outputNames, DeepEquals, inputNames)
 
 	structType := reflect.TypeOf(myStruct{})
 	for i, t := range structFields {
@@ -82,19 +82,19 @@ func (s *typeInfoSuite) TestArgInfoStruct(c *C) {
 
 		input, err := argInfo.InputMember("myStruct", t.tag)
 		c.Assert(err, IsNil)
-		c.Assert(input, DeepEquals, expectedStructField)
+		c.Check(input, DeepEquals, expectedStructField)
 
 		output, err := argInfo.OutputMember("myStruct", t.tag)
 		c.Assert(err, IsNil)
-		c.Assert(output, DeepEquals, expectedStructField)
+		c.Check(output, DeepEquals, expectedStructField)
 
 		kind, err := argInfo.Kind("myStruct")
 		c.Assert(err, IsNil)
-		c.Assert(kind, DeepEquals, reflect.Struct)
+		c.Check(kind, DeepEquals, reflect.Struct)
 
-		c.Assert(allOutputs[i], DeepEquals, expectedStructField)
-		c.Assert(allInputs[i], DeepEquals, expectedStructField)
-		c.Assert(outputNames[i], Equals, t.tag)
+		c.Check(allOutputs[i], DeepEquals, expectedStructField)
+		c.Check(allInputs[i], DeepEquals, expectedStructField)
+		c.Check(outputNames[i], Equals, t.tag)
 	}
 }
 
@@ -108,15 +108,15 @@ func (s *typeInfoSuite) TestArgInfoMap(c *C) {
 
 	input, err := argInfo.InputMember("myMap", expectedMapKey.name)
 	c.Assert(err, IsNil)
-	c.Assert(input, DeepEquals, expectedMapKey)
+	c.Check(input, DeepEquals, expectedMapKey)
 
 	output, err := argInfo.OutputMember("myMap", expectedMapKey.name)
 	c.Assert(err, IsNil)
-	c.Assert(output, DeepEquals, expectedMapKey)
+	c.Check(output, DeepEquals, expectedMapKey)
 
 	kind, err := argInfo.Kind("myMap")
 	c.Assert(err, IsNil)
-	c.Assert(kind, DeepEquals, reflect.Map)
+	c.Check(kind, DeepEquals, reflect.Map)
 }
 
 // This struct is used to test shadowed types in TestGenerateArgInfoInvalidTypeErrors
@@ -251,11 +251,11 @@ func (*typeInfoSuite) TestInputAndOutputMemberError(c *C) {
 	for i, test := range tests {
 		_, err = argInfo.InputMember(test.typeName, test.memberName)
 		c.Assert(err, NotNil, Commentf("test %d failed", i+1))
-		c.Assert(err.Error(), Equals, test.err)
+		c.Check(err.Error(), Equals, test.err)
 
 		_, err = argInfo.OutputMember(test.typeName, test.memberName)
 		c.Assert(err, NotNil, Commentf("test %d failed", i+1))
-		c.Assert(err.Error(), Equals, test.err)
+		c.Check(err.Error(), Equals, test.err)
 	}
 }
 
@@ -282,11 +282,11 @@ func (*typeInfoSuite) TestAllMemberError(c *C) {
 	for i, test := range tests {
 		_, _, err = argInfo.AllStructOutputs(test.typeName)
 		c.Assert(err, NotNil, Commentf("test %d failed", i+1))
-		c.Assert(err.Error(), Equals, test.err)
+		c.Check(err.Error(), Equals, test.err)
 
 		_, _, err = argInfo.AllStructInputs(test.typeName)
 		c.Assert(err, NotNil, Commentf("test %d failed", i+1))
-		c.Assert(err.Error(), Equals, test.err)
+		c.Check(err.Error(), Equals, test.err)
 	}
 }
 
@@ -315,6 +315,6 @@ func (*typeInfoSuite) TestSliceInputError(c *C) {
 	for i, test := range tests {
 		_, err = argInfo.InputSlice(test.typeName)
 		c.Assert(err, NotNil, Commentf("test %d failed", i+1))
-		c.Assert(err.Error(), Equals, test.err)
+		c.Check(err.Error(), Equals, test.err)
 	}
 }

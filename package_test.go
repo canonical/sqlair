@@ -836,7 +836,7 @@ func (s *PackageSuite) TestRun(c *C) {
 	var joeCheck = Person{}
 	err = db.Query(nil, selectStmt, &joe).Get(&joeCheck)
 	c.Assert(err, IsNil)
-	c.Assert(joeCheck, Equals, joe)
+	c.Check(joeCheck, Equals, joe)
 }
 
 func (s *PackageSuite) TestOutcome(c *C) {
