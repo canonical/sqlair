@@ -68,7 +68,7 @@ type District struct{}
 
 type CustomMap map[string]any
 
-func personAndAddressDB(c *C) ([]string, *sql.DB, error) {
+func personAndAddressDB(c *C) ([]string, *sqlair.DB, error) {
 
 	createTables := `
 CREATE TABLE person (
@@ -83,18 +83,37 @@ CREATE TABLE address (
 	street text
 );
 `
-	inserts := []string{
-		"INSERT INTO person VALUES ('Fred', 30, 1000, 'fred@email.com');",
-		"INSERT INTO person VALUES ('Mark', 20, 1500, 'mark@email.com');",
-		"INSERT INTO person VALUES ('Mary', 40, 3500, 'mary@email.com');",
-		"INSERT INTO person VALUES ('James', 35, 4500, 'james@email.com');",
-		"INSERT INTO address VALUES (1000, 'Happy Land', 'Main Street');",
-		"INSERT INTO address VALUES (1500, 'Sad World', 'Church Road');",
-		"INSERT INTO address VALUES (3500, 'Ambivalent Commons', 'Station Lane');",
+
+	sqldb, err := setupDB()
+	c.Assert(err, IsNil)
+	_, err = sqldb.Exec(createTables)
+	c.Assert(err, IsNil)
+	db := sqlair.NewDB(sqldb)
+
+	people := []Person{
+		{Fullname: "Fred", ID: 30, PostalCode: 1000},
+		{Fullname: "Mark", ID: 20, PostalCode: 1500},
+		{Fullname: "Mary", ID: 40, PostalCode: 3500},
+		{Fullname: "James", ID: 35, PostalCode: 4500},
+	}
+	addresses := []Address{
+		{ID: 1000, District: "Happy Land", Street: "Main Street"},
+		{ID: 1500, District: "Sad World", Street: "Church Road"},
+		{ID: 3500, District: "Ambivalent Commons", Street: "Station Lane"},
+	}
+	personInsert, err := sqlair.Prepare("INSERT INTO person (*) VALUES ($Person.*);", Person{})
+	c.Assert(err, IsNil)
+	for _, person := range people {
+		err := db.Query(nil, personInsert, person).Run()
+		c.Assert(err, IsNil)
+	}
+	addressInsert, err := sqlair.Prepare("INSERT INTO address (*) VALUES ($Address.*)", Address{})
+	c.Assert(err, IsNil)
+	for _, address := range addresses {
+		err := db.Query(nil, addressInsert, address).Run()
+		c.Assert(err, IsNil)
 	}
 
-	db, err := createExampleDB(c, createTables, inserts)
-	c.Assert(err, IsNil)
 	return []string{"person", "address"}, db, nil
 }
 
@@ -238,10 +257,8 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 
 	tests = append(tests, testsWithShadowPerson...)
 
-	tables, sqldb, err := personAndAddressDB(c)
+	tables, db, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
-
-	db := sqlair.NewDB(sqldb)
 	defer dropTables(c, db, tables...)
 
 	for _, t := range tests {
@@ -365,10 +382,8 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		err:     `cannot get result: query uses "&Person" outside of result context`,
 	}}
 
-	tables, sqldb, err := personAndAddressDB(c)
+	tables, db, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
-
-	db := sqlair.NewDB(sqldb)
 	defer dropTables(c, db, tables...)
 
 	for _, t := range tests {
@@ -473,10 +488,8 @@ func (s *PackageSuite) TestNulls(c *C) {
 		expected: []any{&ScannerDude{Fullname: ScannerString{SS: "ScannerString scanned well!"}, ID: ScannerInt{SI: 666}, PostalCode: ScannerInt{SI: 666}}},
 	}}
 
-	tables, sqldb, err := personAndAddressDB(c)
+	tables, db, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
-
-	db := sqlair.NewDB(sqldb)
 	defer dropTables(c, db, tables...)
 
 	insertNullPerson, err := sqlair.Prepare("INSERT INTO person VALUES ('Nully', NULL, NULL, NULL);")
@@ -537,10 +550,8 @@ func (s *PackageSuite) TestValidGet(c *C) {
 		expected: []any{sqlair.M{"avg": float64(2625), "name": "Fred"}},
 	}}
 
-	tables, sqldb, err := personAndAddressDB(c)
+	tables, db, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
-
-	db := sqlair.NewDB(sqldb)
 	defer dropTables(c, db, tables...)
 
 	for _, t := range tests {
@@ -592,10 +603,8 @@ func (s *PackageSuite) TestGetErrors(c *C) {
 		err:     `invalid input parameter: map "M" does not contain key "p1"`,
 	}}
 
-	tables, sqldb, err := personAndAddressDB(c)
+	tables, db, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
-
-	db := sqlair.NewDB(sqldb)
 	defer dropTables(c, db, tables...)
 
 	for _, t := range tests {
@@ -609,10 +618,8 @@ func (s *PackageSuite) TestGetErrors(c *C) {
 	}
 }
 func (s *PackageSuite) TestErrNoRows(c *C) {
-	tables, sqldb, err := personAndAddressDB(c)
+	tables, db, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
-
-	db := sqlair.NewDB(sqldb)
 	defer dropTables(c, db, tables...)
 
 	stmt := sqlair.MustPrepare("SELECT * AS &Person.* FROM person WHERE id=12312", Person{})
@@ -677,10 +684,8 @@ func (s *PackageSuite) TestValidGetAll(c *C) {
 		expected: []any{},
 	}}
 
-	tables, sqldb, err := personAndAddressDB(c)
+	tables, db, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
-
-	db := sqlair.NewDB(sqldb)
 	defer dropTables(c, db, tables...)
 
 	for _, t := range tests {
@@ -779,10 +784,8 @@ func (s *PackageSuite) TestGetAllErrors(c *C) {
 		err:     "cannot populate slice: sql: no rows in result set",
 	}}
 
-	tables, sqldb, err := personAndAddressDB(c)
+	tables, db, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
-
-	db := sqlair.NewDB(sqldb)
 	defer dropTables(c, db, tables...)
 
 	for _, t := range tests {
@@ -797,17 +800,15 @@ func (s *PackageSuite) TestGetAllErrors(c *C) {
 }
 
 func (s *PackageSuite) TestRun(c *C) {
-	tables, sqldb, err := personAndAddressDB(c)
+	tables, db, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
+	defer dropTables(c, db, tables...)
 
 	var jim = Person{
 		ID:         70,
 		Fullname:   "Jim",
 		PostalCode: 500,
 	}
-
-	db := sqlair.NewDB(sqldb)
-	defer dropTables(c, db, tables...)
 
 	// Insert Jim.
 	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ($Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
@@ -819,21 +820,35 @@ func (s *PackageSuite) TestRun(c *C) {
 	var jimCheck = Person{}
 	err = db.Query(nil, selectStmt, &jim).Get(&jimCheck)
 	c.Assert(err, IsNil)
-	c.Assert(jimCheck, Equals, jim)
+
+	joe := Person{
+		ID:         34,
+		Fullname:   "Joe",
+		PostalCode: 55555,
+	}
+	// Insert Joe.
+	insertStmt = sqlair.MustPrepare("INSERT INTO person (*) VALUES ($Person.*);", Person{})
+	err = db.Query(nil, insertStmt, &joe).Run()
+	c.Assert(err, IsNil)
+
+	// Check Joe is in the db.
+	selectStmt = sqlair.MustPrepare("SELECT &Person.* FROM person WHERE id = $Person.id", Person{})
+	var joeCheck = Person{}
+	err = db.Query(nil, selectStmt, &joe).Get(&joeCheck)
+	c.Assert(err, IsNil)
+	c.Check(joeCheck, Equals, joe)
 }
 
 func (s *PackageSuite) TestOutcome(c *C) {
-	tables, sqldb, err := personAndAddressDB(c)
+	tables, db, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
+	defer dropTables(c, db, tables...)
 
 	var jim = Person{
 		ID:         70,
 		Fullname:   "Jim",
 		PostalCode: 500,
 	}
-
-	db := sqlair.NewDB(sqldb)
-	defer dropTables(c, db, tables...)
 
 	var outcome = sqlair.Outcome{}
 
@@ -910,10 +925,8 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	oneOutput := &Person{}
 	oneExpected := &Person{30, "Fred", 1000}
 
-	tables, sqldb, err := personAndAddressDB(c)
+	tables, db, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
-
-	db := sqlair.NewDB(sqldb)
 	defer dropTables(c, db, tables...)
 
 	stmt := sqlair.MustPrepare("SELECT &Person.* FROM person", Person{})
@@ -946,16 +959,14 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 }
 
 func (s *PackageSuite) TestTransactions(c *C) {
-	tables, sqldb, err := personAndAddressDB(c)
+	tables, db, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
+	defer dropTables(c, db, tables...)
 
 	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE address_id = $Person.address_id", Person{})
 	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ( $Person.name, $Person.id, $Person.address_id, 'fred@email.com');", Person{})
 	var derek = Person{ID: 85, Fullname: "Derek", PostalCode: 8000}
 	ctx := context.Background()
-
-	db := sqlair.NewDB(sqldb)
-	defer dropTables(c, db, tables...)
 
 	tx, err := db.Begin(ctx, nil)
 	c.Assert(err, IsNil)
@@ -994,10 +1005,8 @@ func (s *PackageSuite) TestTransactions(c *C) {
 }
 
 func (s *PackageSuite) TestTransactionErrors(c *C) {
-	tables, sqldb, err := personAndAddressDB(c)
+	tables, db, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
-
-	db := sqlair.NewDB(sqldb)
 	defer dropTables(c, db, tables...)
 
 	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ($Person.name, $Person.id, $Person.address_id, 'fred@email.com');", Person{})
@@ -1040,13 +1049,11 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 }
 
 func (s *PackageSuite) TestTransactionWithOneConn(c *C) {
-	tables, sqldb, err := personAndAddressDB(c)
+	tables, db, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
-	sqldb.SetMaxOpenConns(1)
-	ctx := context.Background()
-
-	db := sqlair.NewDB(sqldb)
 	defer dropTables(c, db, tables...)
+	db.PlainDB().SetMaxOpenConns(1)
+	ctx := context.Background()
 
 	// This test sets the maximum number of connections to the DB to one. The
 	// database/sql library makes use of a pool of connections to communicate
@@ -1116,10 +1123,8 @@ CREATE TABLE lease_type (
 }
 
 func (s *PackageSuite) TestIterMethodOrder(c *C) {
-	tables, sqldb, err := personAndAddressDB(c)
+	tables, db, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
-
-	db := sqlair.NewDB(sqldb)
 	defer dropTables(c, db, tables...)
 
 	var p = Person{}

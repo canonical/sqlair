@@ -403,6 +403,110 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	expectedParams: []any{},
 	// This is valid in SQLite (though not in MySQL).
 	expectedSQL: "SELECT name FROM person WHERE id IN ()",
+}, {
+	summary:        "insert asterisk",
+	query:          "INSERT INTO person (*) VALUES ($Address.street, $Person.*, $M.team)",
+	expectedParsed: "[Bypass[INSERT INTO person ] AsteriskInsert[[*] [Address.street Person.* M.team]]]",
+	typeSamples:    []any{Address{}, Person{}, sqlair.M{}},
+	inputArgs:      []any{Address{Street: "Wallaby Way"}, Person{ID: 34, Fullname: "Dory", PostalCode: 11111}, sqlair.M{"team": "OCTO"}},
+	expectedParams: []any{"Wallaby Way", 11111, 34, "Dory", "OCTO"},
+	expectedSQL:    "INSERT INTO person (street, address_id, id, name, team) VALUES (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4)",
+}, {
+	summary:        "insert specified columns to single struct",
+	query:          "INSERT INTO person (id, street) VALUES ($Address.*)",
+	expectedParsed: "[Bypass[INSERT INTO person ] ColumnInsert[[id street] [Address.*]]]",
+	typeSamples:    []any{Address{}},
+	inputArgs:      []any{Address{ID: 34, Street: "Wallaby Way"}},
+	expectedParams: []any{34, "Wallaby Way"},
+	expectedSQL:    "INSERT INTO person (id, street) VALUES (@sqlair_0, @sqlair_1)",
+}, {
+	summary:        "insert specified columns to single map",
+	query:          "INSERT INTO person (id, street) VALUES ($M.*)",
+	expectedParsed: "[Bypass[INSERT INTO person ] ColumnInsert[[id street] [M.*]]]",
+	typeSamples:    []any{sqlair.M{}},
+	inputArgs:      []any{sqlair.M{"id": 34, "street": "Wallaby Way"}},
+	expectedParams: []any{34, "Wallaby Way"},
+	expectedSQL:    "INSERT INTO person (id, street) VALUES (@sqlair_0, @sqlair_1)",
+}, {
+	summary:        "insert specified columns from multiple types",
+	query:          "INSERT INTO person (id, street) VALUES ($Address.*, $M.street)",
+	expectedParsed: "[Bypass[INSERT INTO person ] ColumnInsert[[id street] [Address.* M.street]]]",
+	typeSamples:    []any{Address{}, sqlair.M{}},
+	inputArgs:      []any{Address{ID: 34}, sqlair.M{"street": "Wallaby Way"}},
+	expectedParams: []any{34, "Wallaby Way"},
+	expectedSQL:    "INSERT INTO person (id, street) VALUES (@sqlair_0, @sqlair_1)",
+}, {
+	summary:        "insert specified columns from multiple structs",
+	query:          "INSERT INTO person (name, street) VALUES ($Address.*, $Person.*)",
+	expectedParsed: "[Bypass[INSERT INTO person ] ColumnInsert[[name street] [Address.* Person.*]]]",
+	typeSamples:    []any{Address{}, Person{}},
+	inputArgs:      []any{Address{Street: "Wallaby Way"}, Person{Fullname: "John Doe"}},
+	expectedParams: []any{"John Doe", "Wallaby Way"},
+	expectedSQL:    "INSERT INTO person (name, street) VALUES (@sqlair_0, @sqlair_1)",
+}, {
+	summary:        "insert specified columns from struct and map",
+	query:          "INSERT INTO person (name, street) VALUES ($Address.*, $M.*)",
+	expectedParsed: "[Bypass[INSERT INTO person ] ColumnInsert[[name street] [Address.* M.*]]]",
+	typeSamples:    []any{Address{}, sqlair.M{}},
+	inputArgs:      []any{Address{Street: "Wallaby Way"}, sqlair.M{"name": "John Doe"}},
+	expectedParams: []any{"John Doe", "Wallaby Way"},
+	expectedSQL:    "INSERT INTO person (name, street) VALUES (@sqlair_0, @sqlair_1)",
+}, {
+	summary:        "insert asterisk with comment",
+	query:          "INSERT INTO person (*) VALUES ($Person.address_id, /* rouge comment */$Address.street)",
+	expectedParsed: "[Bypass[INSERT INTO person ] AsteriskInsert[[*] [Person.address_id Address.street]]]",
+	typeSamples:    []any{Person{}, Address{}},
+	inputArgs:      []any{Person{PostalCode: 11111}, Address{Street: "Wallaby Way"}},
+	expectedParams: []any{11111, "Wallaby Way"},
+	expectedSQL:    "INSERT INTO person (address_id, street) VALUES (@sqlair_0, @sqlair_1)",
+}, {
+	summary:        "insert asterisk (no space)",
+	query:          "INSERT INTO person(*) VALUES ($Person.*)ON CONFLICT DO NOTHING",
+	expectedParsed: "[Bypass[INSERT INTO person] AsteriskInsert[[*] [Person.*]] Bypass[ON CONFLICT DO NOTHING]]",
+	typeSamples:    []any{Person{}},
+	inputArgs:      []any{Person{ID: 34, Fullname: "Dory", PostalCode: 11111}},
+	expectedParams: []any{11111, 34, "Dory"},
+	expectedSQL:    "INSERT INTO person(address_id, id, name) VALUES (@sqlair_0, @sqlair_1, @sqlair_2)ON CONFLICT DO NOTHING",
+}, {
+	summary:        "insert asterisk (weird spacing)",
+	query:          "INSERT INTO person ( * )VALUES( $Person.* )ON CONFLICT DO NOTHING",
+	expectedParsed: "[Bypass[INSERT INTO person ] AsteriskInsert[[*] [Person.*]] Bypass[ON CONFLICT DO NOTHING]]",
+	typeSamples:    []any{Person{}},
+	inputArgs:      []any{Person{ID: 34, Fullname: "Dory", PostalCode: 11111}},
+	expectedParams: []any{11111, 34, "Dory"},
+	expectedSQL:    "INSERT INTO person (address_id, id, name) VALUES (@sqlair_0, @sqlair_1, @sqlair_2)ON CONFLICT DO NOTHING",
+}, {
+	summary:        "insert with returning clause",
+	query:          "INSERT INTO address(*) VALUES($Address.*) RETURNING (&Address.*)",
+	expectedParsed: "[Bypass[INSERT INTO address] AsteriskInsert[[*] [Address.*]] Bypass[ RETURNING (] Output[[] [Address.*]] Bypass[)]]",
+	typeSamples:    []any{Address{}},
+	inputArgs:      []any{Address{ID: 34, Street: "Wallaby Way", District: "Sydney"}},
+	expectedParams: []any{"Sydney", 34, "Wallaby Way"},
+	expectedSQL:    "INSERT INTO address(district, id, street) VALUES (@sqlair_0, @sqlair_1, @sqlair_2) RETURNING (district AS _sqlair_0, id AS _sqlair_1, street AS _sqlair_2)",
+}, {
+	summary:        "insert rename columns with standalone inputs",
+	query:          `INSERT INTO person (id, random_string, random_thing, street) VALUES ($Person.address_id, "random string", rand(), $Address.street)`,
+	expectedParsed: `[Bypass[INSERT INTO person (id, random_string, random_thing, street) VALUES (] Input[Person.address_id] Bypass[, "random string", rand(), ] Input[Address.street] Bypass[)]]`,
+	typeSamples:    []any{Address{}, Person{}},
+	inputArgs:      []any{Address{Street: "Wallaby Way"}, Person{PostalCode: 11111}},
+	expectedParams: []any{11111, "Wallaby Way"},
+	expectedSQL:    `INSERT INTO person (id, random_string, random_thing, street) VALUES (@sqlair_0, "random string", rand(), @sqlair_1)`,
+}, {
+	summary:        "insert single value",
+	query:          "INSERT INTO person (name) VALUES ($Person.name)",
+	expectedParsed: "[Bypass[INSERT INTO person (name) VALUES (] Input[Person.name] Bypass[)]]",
+	typeSamples:    []any{Person{}},
+	inputArgs:      []any{Person{Fullname: "John Doe"}},
+	expectedParams: []any{"John Doe"},
+	expectedSQL:    "INSERT INTO person (name) VALUES (@sqlair_0)",
+}, {
+	summary:        "insert with standalone input expressions",
+	query:          `INSERT INTO person VALUES ($Person.name, "random string", $Person.id)`,
+	expectedParsed: `[Bypass[INSERT INTO person VALUES (] Input[Person.name] Bypass[, "random string", ] Input[Person.id] Bypass[)]]`,
+	typeSamples:    []any{Person{}},
+	inputArgs:      []any{Person{ID: 34, Fullname: "John Doe"}},
+	expectedParams: []any{"John Doe", 34},
+	expectedSQL:    `INSERT INTO person VALUES (@sqlair_0, "random string", @sqlair_1)`,
 }}
 
 func (s *ExprSuite) TestExprPkg(c *C) {
@@ -446,64 +550,6 @@ func (s *ExprSuite) TestExprPkg(c *C) {
 					Commentf("test %d failed (Query Params):\nsummary: %s\nquery: %s\n", i, t.summary, t.query))
 			}
 		}
-	}
-}
-
-func (s *ExprSuite) TestInsertInputParser(c *C) {
-	tests := []struct {
-		summary        string
-		query          string
-		expectedParsed string
-	}{{
-		summary:        "insert asterisk",
-		query:          "INSERT INTO person (*) VALUES ($Address.street, $Person.*, $M.team)",
-		expectedParsed: "[Bypass[INSERT INTO person ] AsteriskInsert[[*] [Address.street Person.* M.team]]]",
-	}, {
-		summary:        "insert specified columns to single type",
-		query:          "INSERT INTO person (id, street) VALUES ($Address.*)",
-		expectedParsed: "[Bypass[INSERT INTO person ] ColumnInsert[[id street] [Address.*]]]",
-	}, {
-		summary:        "insert specified columns to multiple types",
-		query:          "INSERT INTO person (id, street) VALUES ($Address.*, $M.street)",
-		expectedParsed: "[Bypass[INSERT INTO person ] ColumnInsert[[id street] [Address.* M.street]]]",
-	}, {
-		summary:        "insert specified columns to multiple structs",
-		query:          "INSERT INTO person (name, street) VALUES ($Address.*, $Person.*)",
-		expectedParsed: "[Bypass[INSERT INTO person ] ColumnInsert[[name street] [Address.* Person.*]]]",
-	}, {
-		summary:        "insert asterisk with comment",
-		query:          "INSERT INTO person (*) VALUES ($Person.address_id, /* rouge comment */$Address.street)",
-		expectedParsed: "[Bypass[INSERT INTO person ] AsteriskInsert[[*] [Person.address_id Address.street]]]",
-	}, {
-		summary:        "insert asterisk (no space)",
-		query:          "INSERT INTO person(*) VALUES ($Person.*)ON CONFLICT DO NOTHING",
-		expectedParsed: "[Bypass[INSERT INTO person] AsteriskInsert[[*] [Person.*]] Bypass[ON CONFLICT DO NOTHING]]",
-	}, {
-		summary:        "insert asterisk (weird spacing)",
-		query:          "INSERT INTO person ( * )VALUES( $Person.* )ON CONFLICT DO NOTHING",
-		expectedParsed: "[Bypass[INSERT INTO person ] AsteriskInsert[[*] [Person.*]] Bypass[ON CONFLICT DO NOTHING]]",
-	}, {
-		summary:        "insert with returning clause",
-		query:          "INSERT INTO address(*) VALUES($Address.*) RETURNING (&Address.*)",
-		expectedParsed: "[Bypass[INSERT INTO address] AsteriskInsert[[*] [Address.*]] Bypass[ RETURNING (] Output[[] [Address.*]] Bypass[)]]",
-	}, {
-		summary:        "insert rename columns with standalone inputs",
-		query:          `INSERT INTO person (id, random_string, random_thing, street) VALUES ($Person.address_id, "random string", rand(), $Address.street)`,
-		expectedParsed: `[Bypass[INSERT INTO person (id, random_string, random_thing, street) VALUES (] Input[Person.address_id] Bypass[, "random string", rand(), ] Input[Address.street] Bypass[)]]`,
-	}, {
-		summary:        "insert single value",
-		query:          "INSERT INTO person (name) VALUES ($Person.name)",
-		expectedParsed: "[Bypass[INSERT INTO person (name) VALUES (] Input[Person.name] Bypass[)]]",
-	}, {
-		summary:        "insert with standalone input expressions",
-		query:          `INSERT INTO person VALUES ($Person.name, "random string", $Person.id)`,
-		expectedParsed: `[Bypass[INSERT INTO person VALUES (] Input[Person.name] Bypass[, "random string", ] Input[Person.id] Bypass[)]]`,
-	}}
-	for i, t := range tests {
-		parser := expr.NewParser()
-		expr, err := parser.Parse(t.query)
-		c.Assert(err, IsNil, Commentf("test %d failed (Parse):\nsummary: %s\nquery: %s\nexpected: %s\nerr: %s\n", i, t.summary, t.query, t.expectedParsed, err))
-		c.Assert(expr.String(), Equals, t.expectedParsed, Commentf("test %d failed (Parse):\nsummary: %s\nquery: %s\nexpected: %s\nactual:   %s\n", i, t.summary, t.query, t.expectedParsed, expr.String()))
 	}
 }
 
@@ -674,6 +720,7 @@ func (s *ExprSuite) TestBindTypesErrors(c *C) {
 		S string
 	}
 	type myArray [10]any
+	type myMap map[string]any
 	tests := []struct {
 		query       string
 		typeSamples []any
@@ -798,6 +845,38 @@ func (s *ExprSuite) TestBindTypesErrors(c *C) {
 		query:       "SELECT street FROM t WHERE x IN ($myArray[:])",
 		typeSamples: []any{myArray{}},
 		err:         `cannot prepare statement: need supported type, got array`,
+	}, {
+		query:       "INSERT INTO t (*) VALUES ($M.*)",
+		typeSamples: []any{sqlair.M{}},
+		err:         `cannot prepare statement: input expression: cannot use map with asterisk unless columns are specified: (*) VALUES ($M.*)`,
+	}, {
+		query:       "INSERT INTO person (id, street) VALUES ($M.*, $myMap.*)",
+		typeSamples: []any{sqlair.M{}, myMap{}},
+		err:         `cannot prepare statement: input expression: cannot use more than one map with asterisk: (id, street) VALUES ($M.*, $myMap.*)`,
+	}, {
+		query:       "INSERT INTO t (*) VALUES ($S.*)",
+		typeSamples: []any{sqlair.S{}},
+		err:         `cannot prepare statement: input expression: cannot use slice with asterisk: (*) VALUES ($S.*)`,
+	}, {
+		query:       "INSERT INTO t (col1, col2) VALUES ($S.*)",
+		typeSamples: []any{sqlair.S{}},
+		err:         `cannot prepare statement: input expression: cannot use slice with asterisk: (col1, col2) VALUES ($S.*)`,
+	}, {
+		query:       "INSERT INTO t (*) VALUES ($Person.missing)",
+		typeSamples: []any{Person{}},
+		err:         `cannot prepare statement: input expression: type "Person" has no "missing" db tag: (*) VALUES ($Person.missing)`,
+	}, {
+		query:       "INSERT INTO t (missing) VALUES ($Person.*)",
+		typeSamples: []any{Person{}},
+		err:         `cannot prepare statement: input expression: missing type that provides column "missing": (missing) VALUES ($Person.*)`,
+	}, {
+		query:       "INSERT INTO t (id) VALUES ($Person.id, $Address.*)",
+		typeSamples: []any{Person{}, Address{}},
+		err:         `cannot prepare statement: input expression: more than one type provides column "id": (id) VALUES ($Person.id, $Address.*)`,
+	}, {
+		query:       "INSERT INTO t (id) VALUES ($Person.*, $Address.*)",
+		typeSamples: []any{Person{}, Address{}},
+		err:         `cannot prepare statement: input expression: more than one type provides column "id": (id) VALUES ($Person.*, $Address.*)`,
 	}}
 
 	for i, test := range tests {
@@ -850,8 +929,7 @@ func (s *ExprSuite) TestMapError(c *C) {
 		"SELECT * AS &M.* FROM person WHERE name = $M.id",
 		[]any{M{}, sqlair.M{}},
 		`cannot prepare statement: two types found with name "M": "expr_test.M" and "sqlair.M"`,
-	},
-	}
+	}}
 	for _, test := range tests {
 		parser := expr.NewParser()
 		parsedExpr, err := parser.Parse(test.input)

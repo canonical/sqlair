@@ -50,6 +50,21 @@ SQLair input expressions take the following formats:
     - Type must be a named slice type.
     - Passes all the values in the slice as query parameters.
 
+ 3. (*) VALUES ($Type1.*, $Type2.col_name2, ...)
+    - Follows an INSERT INTO ... clause.
+    - Types followed by an asterisk must be structs.
+    - Types followed by an asterisk insert all tagged fields of Type.
+    - Types followed by a column name insert the matching member of Type.
+
+ 4. (col_name1, col_name2, ...) VALUES ($Type1.*, $Type2.col_name2, ...)
+    - Follows an INSERT INTO ... clause.
+    - Inserts the specified columns from the types.
+    - Types followed by an asterisk must be structs or maps.
+    - There can only be one map type followed by asterisk.
+    - Structs followed by an asterisk insert all tagged fields of Type.
+    - Map followed by an asterisk collects the columns not accessed by the other types.
+    - Types followed by a column name insert the matching member of Type.
+
 SQLair output expressions can take the following formats:
 
  1. &Type.col_name

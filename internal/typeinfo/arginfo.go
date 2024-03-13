@@ -54,6 +54,15 @@ func GenerateArgInfo(typeSamples []any) (ArgInfo, error) {
 	return argInfo, nil
 }
 
+// Kind looks up the type name and returns its kind.
+func (argInfo ArgInfo) Kind(typeName string) (reflect.Kind, error) {
+	arg, ok := argInfo[typeName]
+	if !ok {
+		return 0, nameNotFoundError(argInfo, typeName)
+	}
+	return arg.typ().Kind(), nil
+}
+
 // InputMember returns an input locator for a member of a struct or map.
 func (argInfo ArgInfo) InputMember(typeName string, memberName string) (Input, error) {
 	vl, err := argInfo.getMember(typeName, memberName)
@@ -65,6 +74,22 @@ func (argInfo ArgInfo) InputMember(typeName string, memberName string) (Input, e
 		return nil, fmt.Errorf("internal error: %s cannot be used as input", vl.ArgType().Kind())
 	}
 	return input, nil
+}
+
+// AllStructInputs returns a list of inputs locators that locate every member
+// of the named type along with the names of the members. If the type is not a
+// struct an error is returned.
+func (argInfo ArgInfo) AllStructInputs(typeName string) ([]Input, []string, error) {
+	si, err := argInfo.getAllStructMembers(typeName)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var inputs []Input
+	for _, tag := range si.tags {
+		inputs = append(inputs, si.tagToField[tag])
+	}
+	return inputs, si.tags, nil
 }
 
 // OutputMember returns an output locator for a member of a struct or map.
@@ -84,23 +109,9 @@ func (argInfo ArgInfo) OutputMember(typeName string, memberName string) (Output,
 // of the named type along with the names of the members. If the type is not a
 // struct an error is returned.
 func (argInfo ArgInfo) AllStructOutputs(typeName string) ([]Output, []string, error) {
-	arg, ok := argInfo[typeName]
-	if !ok {
-		return nil, nil, nameNotFoundError(argInfo, typeName)
-	}
-	si, ok := arg.(*structInfo)
-	if !ok {
-		switch k := arg.typ().Kind(); k {
-		case reflect.Map:
-			return nil, nil, fmt.Errorf("cannot use %s with asterisk unless columns are specified", k)
-		case reflect.Slice:
-			return nil, nil, fmt.Errorf("cannot use %s with asterisk", k)
-		default:
-			return nil, nil, fmt.Errorf("internal error: invalid arg type %s", k)
-		}
-	}
-	if len(si.tags) == 0 {
-		return nil, nil, fmt.Errorf(`no "db" tags found in struct %q`, si.structType.Name())
+	si, err := argInfo.getAllStructMembers(typeName)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	var outputs []Output
@@ -129,6 +140,30 @@ func (argInfo ArgInfo) getMember(typeName string, memberName string) (ValueLocat
 	default:
 		return nil, fmt.Errorf("cannot get named member of %s", arg.typ().Kind())
 	}
+}
+
+// getAllStructMembers returns a information about every member of the named type
+// along with their names.
+func (argInfo ArgInfo) getAllStructMembers(typeName string) (*structInfo, error) {
+	arg, ok := argInfo[typeName]
+	if !ok {
+		return nil, nameNotFoundError(argInfo, typeName)
+	}
+	si, ok := arg.(*structInfo)
+	if !ok {
+		switch k := arg.typ().Kind(); k {
+		case reflect.Map:
+			return nil, fmt.Errorf("cannot use %s with asterisk unless columns are specified", k)
+		case reflect.Slice:
+			return nil, fmt.Errorf("cannot use %s with asterisk", k)
+		default:
+			return nil, fmt.Errorf("internal error: invalid arg type %s", k)
+		}
+	}
+	if len(si.tags) == 0 {
+		return nil, fmt.Errorf(`no "db" tags found in struct %q`, si.structType.Name())
+	}
+	return si, nil
 }
 
 // InputSlice returns an input locator for a slice.
