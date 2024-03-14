@@ -53,7 +53,7 @@ type NumberLiteralColumn struct {
 
 type M map[string]any
 
-type lowerCaseMap map[string]any
+type unexportedMap map[string]any
 
 type IntMap map[string]int
 
@@ -84,8 +84,8 @@ var tests = []struct {
 	typeSamples:    []any{Person{}},
 	expectedSQL:    "SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2",
 }, {
-	summary: "spaces and tabs",
-	query: "SELECT p.* 	AS 		   &Person.*",
+	summary:        "spaces and tabs",
+	query:          "SELECT p.* 	AS 		   &Person.*",
 	expectedParsed: "[Bypass[SELECT ] Output[[p.*] [Person.*]]]",
 	typeSamples:    []any{Person{}},
 	expectedSQL:    "SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2",
@@ -535,9 +535,9 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	expectedSQL:    "INSERT INTO arr VALUES (ARRAY[[1,2],[@sqlair_0,4]], ARRAY[[5,6],[@sqlair_1,8]]);",
 }, {
 	summary:        "lower case struct",
-	query:          "SELECT &lowerCaseMap.x FROM person",
-	expectedParsed: "[Bypass[SELECT ] Output[[] [lowerCaseMap.x]] Bypass[ FROM person]]",
-	typeSamples:    []any{lowerCaseMap{}},
+	query:          "SELECT &unexportedMap.x FROM person",
+	expectedParsed: "[Bypass[SELECT ] Output[[] [unexportedMap.x]] Bypass[ FROM person]]",
+	typeSamples:    []any{unexportedMap{}},
 	expectedSQL:    "SELECT x AS _sqlair_0 FROM person",
 }, {
 	summary:        "unicode asterisk",

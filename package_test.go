@@ -68,7 +68,7 @@ type District struct{}
 
 type CustomMap map[string]any
 
-type lowerCaseStruct struct {
+type unexportedStruct struct {
 	X int `db:"id"`
 }
 
@@ -122,7 +122,7 @@ CREATE TABLE address (
 
 func (s *PackageSuite) TestValidIterGet(c *C) {
 	type StringMap map[string]string
-	type lowerCaseMap map[string]any
+	type unexportedMap map[string]any
 	type M struct {
 		F string `db:"id"`
 	}
@@ -200,11 +200,11 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 		expected: [][]any{{&StringMap{"name": "Fred"}, CustomMap{"id": int64(30)}}},
 	}, {
 		summary:  "lower case map",
-		query:    "SELECT name AS &lowerCaseMap.*, id AS &lowerCaseMap.* FROM person WHERE address_id = $lowerCaseMap.address_id",
-		types:    []any{lowerCaseMap{}},
-		inputs:   []any{lowerCaseMap{"address_id": "1000"}},
-		outputs:  [][]any{{&lowerCaseMap{}}},
-		expected: [][]any{{&lowerCaseMap{"name": "Fred", "id": int64(30)}}},
+		query:    "SELECT name AS &unexportedMap.*, id AS &unexportedMap.* FROM person WHERE address_id = $unexportedMap.address_id",
+		types:    []any{unexportedMap{}},
+		inputs:   []any{unexportedMap{"address_id": "1000"}},
+		outputs:  [][]any{{&unexportedMap{}}},
+		expected: [][]any{{&unexportedMap{"name": "Fred", "id": int64(30)}}},
 	}, {
 		summary:  "insert",
 		query:    "INSERT INTO address VALUES ($Address.id, $Address.district, $Address.street);",
@@ -539,11 +539,11 @@ func (s *PackageSuite) TestValidGet(c *C) {
 		expected: []any{&Person{30, "Fred", 1000}, &Address{1000, "Happy Land", "Main Street"}, &Manager{30, "Fred", 1000}},
 	}, {
 		summary:  "lower case struct",
-		query:    "SELECT &lowerCaseStruct.* FROM person",
-		types:    []any{lowerCaseStruct{}},
+		query:    "SELECT &unexportedStruct.* FROM person",
+		types:    []any{unexportedStruct{}},
 		inputs:   []any{},
-		outputs:  []any{&lowerCaseStruct{}},
-		expected: []any{&lowerCaseStruct{X: 30}},
+		outputs:  []any{&unexportedStruct{}},
+		expected: []any{&unexportedStruct{X: 30}},
 	}, {
 		summary:  "select into map",
 		query:    "SELECT &M.name FROM person WHERE address_id = $M.p1",

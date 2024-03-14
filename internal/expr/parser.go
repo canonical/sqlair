@@ -419,9 +419,11 @@ func (p *Parser) skipBlanks() bool {
 // In that case returns true, false otherwise.
 // This function is case insensitive.
 func (p *Parser) skipString(s string) bool {
+	// EqualFold is used here because it is case insensitive.
 	if p.pos+len(s) <= len(p.input) &&
 		strings.EqualFold(p.input[p.pos:p.pos+len(s)], s) {
-		// Manually advance the parser to the end of the string.
+		// EqualFold does not advnace the parser, so we must manually advance
+		// the parser to the end of the string.
 		p.pos += len(s)
 		var size int
 		p.char, size = utf8.DecodeRuneInString(p.input[p.pos:])
@@ -437,7 +439,7 @@ func isNameChar(c rune) bool {
 	return unicode.IsLetter(c) || unicode.IsDigit(c) || c == '_'
 }
 
-// isNameInitialChar returns true if the given char can appear at the start of a
+// isInitialNameChar returns true if the given char can appear at the start of a
 // name. It returns false otherwise.
 func isInitialNameChar(c rune) bool {
 	return unicode.IsLetter(c) || c == '_'
