@@ -32,7 +32,9 @@ type Input interface {
 	// the typeToValue map and then returns the Go values within the input
 	// argument that are to be used in query parameters. An error is returned
 	// if typeToValue does not contain the input argument.
-	LocateParams(typeToValue TypeToValue) ([]reflect.Value, error)
+	// The omit flag indicates if the params have an omitempty flag set and
+	// should be ommited from input.
+	LocateParams(typeToValue TypeToValue) (vals []reflect.Value, omit bool, err error)
 }
 
 // Output is a locator for a target to scan results to in the SQLair output
@@ -67,16 +69,16 @@ func (mk *mapKey) ArgType() reflect.Type {
 // with the key specified in mapKey. An error is returned if the map does not
 // contain this key. A slice with a single entry is returned to fit the Input
 // interface.
-func (mk *mapKey) LocateParams(typeToValue TypeToValue) ([]reflect.Value, error) {
+func (mk *mapKey) LocateParams(typeToValue TypeToValue) (vals []reflect.Value, omit bool, err error) {
 	m, ok := typeToValue[mk.mapType]
 	if !ok {
-		return nil, valueNotFoundError(typeToValue, mk.mapType)
+		return nil, false, valueNotFoundError(typeToValue, mk.mapType)
 	}
 	v := m.MapIndex(reflect.ValueOf(mk.name))
 	if v.Kind() == reflect.Invalid {
-		return nil, fmt.Errorf("map %q does not contain key %q", mk.mapType.Name(), mk.name)
+		return nil, false, fmt.Errorf("map %q does not contain key %q", mk.mapType.Name(), mk.name)
 	}
-	return []reflect.Value{v}, nil
+	return []reflect.Value{v}, false, nil
 }
 
 // Desc returns a natural language description of the mapKey for use in error
@@ -130,14 +132,18 @@ func (f *structField) ArgType() reflect.Type {
 }
 
 // LocateParams locates the struct that contains the field in the typeToValue
-// map. It returns the value of this field. A slice with a single entry is
-// returned to fit the Input interface.
-func (f *structField) LocateParams(typeToValue TypeToValue) ([]reflect.Value, error) {
+// map. It returns the value of this field and the omitempty flag. A slice with
+// a single entry is returned to fit the Input interface.
+func (f *structField) LocateParams(typeToValue TypeToValue) (vals []reflect.Value, omitempty bool, err error) {
 	s, ok := typeToValue[f.structType]
 	if !ok {
-		return nil, valueNotFoundError(typeToValue, f.structType)
+		return nil, false, valueNotFoundError(typeToValue, f.structType)
 	}
-	return []reflect.Value{s.Field(f.index)}, nil
+	val := s.Field(f.index)
+	if val.IsZero() && f.omitEmpty {
+		omitempty = true
+	}
+	return []reflect.Value{s.Field(f.index)}, omitempty, nil
 }
 
 // Desc returns a natural language description of the struct field for use in
@@ -199,17 +205,17 @@ func (s *slice) ArgType() reflect.Type {
 // LocateParams locates the slice argument associated with the slice
 // ValueLocator in typeToValue and returns the reflect.Value objects generated
 // by reflecting on the elements of the slice.
-func (s *slice) LocateParams(typeToValue TypeToValue) ([]reflect.Value, error) {
+func (s *slice) LocateParams(typeToValue TypeToValue) (vals []reflect.Value, omit bool, err error) {
 	sv, ok := typeToValue[s.sliceType]
 	if !ok {
-		return nil, valueNotFoundError(typeToValue, s.sliceType)
+		return nil, false, valueNotFoundError(typeToValue, s.sliceType)
 	}
 
 	params := []reflect.Value{}
 	for i := 0; i < sv.Len(); i++ {
 		params = append(params, sv.Index(i))
 	}
-	return params, nil
+	return params, false, nil
 }
 
 // valueNotFoundError generates the arguments present and returns a typeMissingError

@@ -823,7 +823,7 @@ func (s *PackageSuite) TestRun(c *C) {
 	}
 
 	// Insert Jim.
-	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ($Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');", Person{})
+	insertStmt := sqlair.MustPrepare("INSERT INTO person (*) VALUES ($Person.*);", Person{})
 	err = db.Query(nil, insertStmt, &jim).Run()
 	c.Assert(err, IsNil)
 
@@ -839,7 +839,6 @@ func (s *PackageSuite) TestRun(c *C) {
 		PostalCode: 55555,
 	}
 	// Insert Joe.
-	insertStmt = sqlair.MustPrepare("INSERT INTO person (*) VALUES ($Person.*);", Person{})
 	err = db.Query(nil, insertStmt, &joe).Run()
 	c.Assert(err, IsNil)
 
@@ -1092,48 +1091,6 @@ func (s *PackageSuite) TestTransactionWithOneConn(c *C) {
 	c.Assert(iter.Close(), IsNil)
 }
 
-type JujuLeaseKey struct {
-	Namespace string `db:"type"`
-	ModelUUID string `db:"model_uuid"`
-	Lease     string `db:"name"`
-}
-
-type JujuLeaseInfo struct {
-	Holder string `db:"holder"`
-	Expiry int    `db:"expiry"`
-}
-
-func JujuStoreLeaseDB(c *C) ([]string, *sql.DB, error) {
-	createTables := `
-CREATE TABLE lease (
-	model_uuid text,
-	name text,
-	holder text,
-	expiry integer,
-	lease_type_id text
-);
-CREATE TABLE lease_type (
-	id text,
-	type text
-);
-
-`
-	tables := []string{`lease`, `lease_type`}
-
-	inserts := []string{
-		"INSERT INTO lease VALUES ('uuid1', 'name1', 'holder1', 1, 'type_id1');",
-		"INSERT INTO lease VALUES ('uuid2', 'name2', 'holder2', 4, 'type_id1');",
-		"INSERT INTO lease VALUES ('uuid3', 'name3', 'holder3', 7, 'type_id2');",
-		"INSERT INTO lease_type VALUES ('type_id1', 'type1');",
-		"INSERT INTO lease_type VALUES ('type_id2', 'type2');",
-	}
-
-	db, err := createExampleDB(c, createTables, inserts)
-	c.Assert(err, IsNil)
-	return tables, db, nil
-
-}
-
 func (s *PackageSuite) TestIterMethodOrder(c *C) {
 	tables, db, err := personAndAddressDB(c)
 	c.Assert(err, IsNil)
@@ -1187,56 +1144,41 @@ func (s *PackageSuite) TestIterMethodOrder(c *C) {
 	c.Assert(err, IsNil)
 }
 
-func (s *PackageSuite) TestJujuStore(c *C) {
-	var tests = []struct {
-		summary  string
-		query    string
-		types    []any
-		inputs   []any
-		outputs  [][]any
-		expected [][]any
-	}{{
-		summary: "juju store lease group query",
-		query: `
-SELECT (t.type, l.model_uuid, l.name) AS (&JujuLeaseKey.*), (l.holder, l.expiry) AS (&JujuLeaseInfo.*)
-FROM   lease l JOIN lease_type t ON l.lease_type_id = t.id
-WHERE  t.type = $JujuLeaseKey.type
-AND    l.model_uuid = $JujuLeaseKey.model_uuid`,
-		types:    []any{JujuLeaseKey{}, JujuLeaseInfo{}},
-		inputs:   []any{JujuLeaseKey{Namespace: "type1", ModelUUID: "uuid1"}},
-		outputs:  [][]any{{&JujuLeaseKey{}, &JujuLeaseInfo{}}},
-		expected: [][]any{{&JujuLeaseKey{Namespace: "type1", ModelUUID: "uuid1", Lease: "name1"}, &JujuLeaseInfo{Holder: "holder1", Expiry: 1}}},
-	}}
+func (s *PackageSuite) TestOmitOnEmpty(c *C) {
+	sqldb, err := setupDB()
+	db := sqlair.NewDB(sqldb)
+	c.Assert(err, IsNil)
+	createTables, err := sqlair.Prepare(`
+CREATE TABLE person (
+	name text,
+	id integer PRIMARY KEY AUTOINCREMENT,
+	address_id integer,
+	email text
+);
+`)
+	c.Assert(err, IsNil)
+	err = db.Query(nil, createTables).Run()
+	c.Assert(err, IsNil)
+	defer dropTables(c, db, "person")
 
-	tables, sqldb, err := JujuStoreLeaseDB(c)
+	type Person struct {
+		ID         int    `db:"id, omitempty"`
+		Fullname   string `db:"name"`
+		PostalCode int    `db:"address_id"`
+	}
+	var jim = Person{
+		Fullname:   "Jim",
+		PostalCode: 500,
+	}
+	// Insert Jim.
+	insertStmt := sqlair.MustPrepare("INSERT INTO person (*) VALUES ($Person.*);", Person{})
+	err = db.Query(nil, insertStmt, &jim).Run()
 	c.Assert(err, IsNil)
 
-	db := sqlair.NewDB(sqldb)
-	defer dropTables(c, db, tables...)
-
-	for _, t := range tests {
-
-		stmt, err := sqlair.Prepare(t.query, t.types...)
-		c.Assert(err, IsNil,
-			Commentf("\ntest %q failed (Prepare):\ninput: %s\n", t.summary, t.query))
-
-		iter := db.Query(nil, stmt, t.inputs...).Iter()
-		defer iter.Close()
-		i := 0
-		for iter.Next() {
-			if i >= len(t.outputs) {
-				c.Errorf("\ntest %q failed (Next):\ninput: %s\nerr: more rows that expected (%d > %d)\n", t.summary, t.query, i+1, len(t.outputs))
-				break
-			}
-			err := iter.Get(t.outputs[i]...)
-			c.Assert(err, IsNil,
-				Commentf("\ntest %q failed (Get):\ninput: %s\n", t.summary, t.query))
-
-			i++
-		}
-
-		err = iter.Close()
-		c.Assert(err, IsNil,
-			Commentf("\ntest %q failed (Close):\ninput: %s\n", t.summary, t.query))
-	}
+	// Check Jim is in the db.
+	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE name = $Person.name", Person{})
+	var jimCheck = Person{}
+	err = db.Query(nil, selectStmt, &jim).Get(&jimCheck)
+	c.Assert(err, IsNil)
+	c.Assert(jimCheck, Equals, Person{Fullname: "Jim", PostalCode: 500, ID: 1})
 }

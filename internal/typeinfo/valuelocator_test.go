@@ -142,8 +142,10 @@ func (s *typeInfoSuite) TestLocateParamsMap(c *C) {
 	input, err := argInfo.InputMember("M", "foo")
 	c.Assert(err, IsNil)
 
-	vals, err := input.LocateParams(typeToValue)
+	vals, omit, err := input.LocateParams(typeToValue)
 	c.Assert(err, IsNil)
+	c.Assert(omit, Equals, false)
+
 	c.Assert(vals, HasLen, 1)
 
 	c.Assert(vals[0].Interface(), Equals, "bar")
@@ -152,12 +154,13 @@ func (s *typeInfoSuite) TestLocateParamsMap(c *C) {
 func (s *typeInfoSuite) TestLocateParamsStruct(c *C) {
 	type T struct {
 		Foo string `db:"foo"`
+		Bar string `db:"bar, omitempty"`
 	}
 
 	argInfo, err := GenerateArgInfo([]any{T{}})
 	c.Assert(err, IsNil)
 
-	t := T{Foo: "bar"}
+	t := T{Foo: "foo", Bar: ""}
 	valOfT := reflect.ValueOf(&t).Elem()
 	typeToValue := map[reflect.Type]reflect.Value{
 		reflect.TypeOf(t): valOfT,
@@ -166,11 +169,20 @@ func (s *typeInfoSuite) TestLocateParamsStruct(c *C) {
 	input, err := argInfo.InputMember("T", "foo")
 	c.Assert(err, IsNil)
 
-	vals, err := input.LocateParams(typeToValue)
+	vals, omit, err := input.LocateParams(typeToValue)
 	c.Assert(err, IsNil)
 	c.Assert(vals, HasLen, 1)
+	c.Assert(omit, Equals, false)
+	c.Assert(vals[0].Interface(), Equals, "foo")
 
-	c.Assert(vals[0].Interface(), Equals, "bar")
+	input, err = argInfo.InputMember("T", "bar")
+	c.Assert(err, IsNil)
+
+	vals, omit, err = input.LocateParams(typeToValue)
+	c.Assert(err, IsNil)
+	c.Assert(vals, HasLen, 1)
+	c.Assert(omit, Equals, true)
+	c.Assert(vals[0].Interface(), Equals, "")
 }
 
 func (s *typeInfoSuite) TestLocateParamsStructError(c *C) {
@@ -185,7 +197,7 @@ func (s *typeInfoSuite) TestLocateParamsStructError(c *C) {
 	c.Assert(err, IsNil)
 
 	// Check missing type error.
-	_, err = input.LocateParams(map[reflect.Type]reflect.Value{})
+	_, _, err = input.LocateParams(map[reflect.Type]reflect.Value{})
 	c.Assert(err, ErrorMatches, `parameter with type "T" missing`)
 }
 
@@ -205,11 +217,11 @@ func (s *typeInfoSuite) TestLocateParamsMapError(c *C) {
 	c.Assert(err, IsNil)
 
 	// Check missing key error.
-	_, err = input.LocateParams(typeToValue)
+	_, _, err = input.LocateParams(typeToValue)
 	c.Assert(err, ErrorMatches, `map "M" does not contain key "baz"`)
 
 	// Check missing type error.
-	_, err = input.LocateParams(map[reflect.Type]reflect.Value{})
+	_, _, err = input.LocateParams(map[reflect.Type]reflect.Value{})
 	c.Assert(err, ErrorMatches, `parameter with type "M" missing`)
 }
 
@@ -243,8 +255,9 @@ func (*typeInfoSuite) TestLocateParamsSlice(c *C) {
 		input, err := argInfo.InputSlice(valOfSlice.Type().Name())
 		c.Assert(err, IsNil)
 
-		vals, err := input.LocateParams(typeToValue)
+		vals, omit, err := input.LocateParams(typeToValue)
 		c.Assert(err, IsNil)
+		c.Assert(omit, Equals, false)
 		c.Assert(vals, HasLen, len(test.expectedValues))
 
 		for i := 0; i < len(test.expectedValues); i++ {
@@ -264,12 +277,12 @@ func (*typeInfoSuite) TestLocateParamsSliceError(c *C) {
 	c.Assert(err, IsNil)
 
 	// Check missing type error.
-	_, err = input.LocateParams(map[reflect.Type]reflect.Value{})
+	_, _, err = input.LocateParams(map[reflect.Type]reflect.Value{})
 	c.Assert(err, NotNil)
 	c.Assert(err.Error(), Equals, `parameter with type "S" missing`)
 
 	// Check missing type error with one type present.
-	_, err = input.LocateParams(map[reflect.Type]reflect.Value{reflect.TypeOf(T{}): reflect.ValueOf(T{})})
+	_, _, err = input.LocateParams(map[reflect.Type]reflect.Value{reflect.TypeOf(T{}): reflect.ValueOf(T{})})
 	c.Assert(err, NotNil)
 	c.Assert(err.Error(), Equals, `parameter with type "S" missing (have "T")`)
 }
