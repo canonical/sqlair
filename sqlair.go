@@ -288,11 +288,6 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 	if q.err != nil {
 		return q.err
 	}
-	defer func() {
-		if err != nil {
-			err = fmt.Errorf("cannot populate slice: %s", err)
-		}
-	}()
 
 	if len(sliceArgs) > 0 {
 		if outcome, ok := sliceArgs[0].(*Outcome); ok {

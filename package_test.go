@@ -624,12 +624,14 @@ func (s *PackageSuite) TestErrNoRows(c *C) {
 
 	stmt := sqlair.MustPrepare("SELECT * AS &Person.* FROM person WHERE id=12312", Person{})
 	err = db.Query(nil, stmt).Get(&Person{})
-	errors.Is(err, sqlair.ErrNoRows)
-	errors.Is(err, sql.ErrNoRows)
+	c.Check(err, ErrorMatches, "sql: no rows in result set")
+	c.Check(errors.Is(err, sqlair.ErrNoRows), Equals, true)
+	c.Check(errors.Is(err, sql.ErrNoRows), Equals, true)
 
-	err = db.Query(nil, stmt).GetAll(&Person{})
-	errors.Is(err, sqlair.ErrNoRows)
-	errors.Is(err, sql.ErrNoRows)
+	err = db.Query(nil, stmt).GetAll(&[]Person{})
+	c.Check(err, ErrorMatches, "sql: no rows in result set")
+	c.Check(errors.Is(err, sqlair.ErrNoRows), Equals, true)
+	c.Check(errors.Is(err, sql.ErrNoRows), Equals, true)
 }
 
 func (s *PackageSuite) TestValidGetAll(c *C) {
@@ -718,70 +720,70 @@ func (s *PackageSuite) TestGetAllErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		slices:  []any{nil},
-		err:     "cannot populate slice: need pointer to slice, got invalid",
+		err:     "need pointer to slice, got invalid",
 	}, {
 		summary: "nil pointer argument",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
 		slices:  []any{(*[]Person)(nil)},
-		err:     "cannot populate slice: need pointer to slice, got nil",
+		err:     "need pointer to slice, got nil",
 	}, {
 		summary: "none slice argument",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
 		slices:  []any{Person{}},
-		err:     "cannot populate slice: need pointer to slice, got struct",
+		err:     "need pointer to slice, got struct",
 	}, {
 		summary: "none slice pointer argument",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
 		slices:  []any{&Person{}},
-		err:     "cannot populate slice: need pointer to slice, got pointer to struct",
+		err:     "need pointer to slice, got pointer to struct",
 	}, {
 		summary: "wrong slice type (struct)",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
 		slices:  []any{&[]*Address{}},
-		err:     `cannot populate slice: cannot get result: parameter with type "Person" missing \(have "Address"\)`,
+		err:     `cannot get result: parameter with type "Person" missing \(have "Address"\)`,
 	}, {
 		summary: "wrong slice type (int)",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
 		slices:  []any{&[]int{}},
-		err:     `cannot populate slice: need slice of structs/maps, got slice of int`,
+		err:     `need slice of structs/maps, got slice of int`,
 	}, {
 		summary: "wrong slice type (pointer to int)",
 		query:   "SELECT * AS &Person.* FROM person",
 		types:   []any{Person{}},
 		inputs:  []any{},
 		slices:  []any{&[]*int{}},
-		err:     `cannot populate slice: need slice of structs/maps, got slice of pointer to int`,
+		err:     `need slice of structs/maps, got slice of pointer to int`,
 	}, {
 		summary: "wrong slice type (pointer to map)",
 		query:   "SELECT &M.name FROM person",
 		types:   []any{sqlair.M{}},
 		inputs:  []any{},
 		slices:  []any{&[]*sqlair.M{}},
-		err:     `cannot populate slice: need slice of structs/maps, got slice of pointer to map`,
+		err:     `need slice of structs/maps, got slice of pointer to map`,
 	}, {
 		summary: "output not referenced in query",
 		query:   "SELECT name FROM person",
 		types:   []any{},
 		inputs:  []any{},
 		slices:  []any{&[]Person{}},
-		err:     `cannot populate slice: output variables provided but not referenced in query`,
+		err:     `output variables provided but not referenced in query`,
 	}, {
 		summary: "nothing returned",
 		query:   "SELECT &Person.* FROM person WHERE id = $Person.id",
 		types:   []any{Person{}},
 		inputs:  []any{Person{ID: 1243321}},
 		slices:  []any{&[]*Person{}},
-		err:     "cannot populate slice: sql: no rows in result set",
+		err:     "sql: no rows in result set",
 	}}
 
 	tables, db, err := personAndAddressDB(c)
