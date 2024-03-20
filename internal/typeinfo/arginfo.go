@@ -327,7 +327,7 @@ func parseTag(tag string) (string, bool, error) {
 		// If it starts with a digit, check the tag is a number.
 		checker = unicode.IsDigit
 	case unicode.IsLetter(char) || char == '_':
-		// Otherwise make sure it is alphanumeric plus underscore.
+		// Otherwise make sure it is made up of letters, digits and underscore.
 		checker = func(char rune) bool {
 			return unicode.IsLetter(char) || unicode.IsDigit(char) || char == '_'
 		}

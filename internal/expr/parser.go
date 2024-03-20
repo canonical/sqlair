@@ -19,7 +19,8 @@ type Parser struct {
 	pos   int
 	// nextPos is start of the next char.
 	nextPos int
-	// char is the rune starting at pos. char is set to 0 at the end of input.
+	// char is the rune starting at pos. char is set to 0 when pos reaches the
+	// end of input.
 	char rune
 	// prevExprEnd is the value of pos when we last finished parsing a
 	// expression.
@@ -27,8 +28,8 @@ type Parser struct {
 	// currentExprStart is the value of pos just before we started parsing the
 	// expression under pos. We maintain currentExprStart >= prevExprEnd.
 	currentExprStart int
-	// exprs are the output of the parser. The parsed expressions are added as
-	// they are parsed.
+	// exprs are the output of the parser. Expressions are added as they are
+	// parsed.
 	exprs []expression
 	// lineNum is the number of the current line of the input.
 	lineNum int
@@ -159,8 +160,9 @@ func (p *Parser) colNum() int {
 	return p.pos - p.lineStart + 1
 }
 
-// advanceChar moves the parser to the next rune in the input. It also takes
-// care of updating the line and column numbers if it encounters line breaks.
+// advanceChar moves the parser to the next character in the input. It also
+// takes care of updating the line and column numbers if it encounters line
+// breaks.
 func (p *Parser) advanceChar() bool {
 	if p.nextPos >= len(p.input) {
 		p.char = 0
@@ -294,8 +296,8 @@ func (p *Parser) skipComment() bool {
 // advanceToNextExpression advances the parser until it finds a character that
 // could be the start of an expression.
 func (p *Parser) advanceToNextExpression() error {
-	// If the first char of input is an InitalNameChar then return as it could
-	// be an expression. This case is not covered below.
+	// If very the first char of the whole input is a nameChar then return as
+	// it could be an expression. This case is not covered below.
 	if p.pos < len(p.input) && p.pos == 0 && isNameChar(p.char) {
 		return nil
 	}
@@ -311,7 +313,7 @@ loop:
 		}
 
 		switch p.char {
-		// These chars may be the start of an expression.
+		// These characters may be the start of an expression.
 		case '(', '*', '$', '&':
 			break loop
 		// An expression can also start with a name char, e.g. an expression
@@ -520,9 +522,9 @@ func (p *Parser) parseIdentifierAsterisk() (string, bool, error) {
 	return p.parseIdentifier()
 }
 
-// parseIdentifier parses either a name made up of alphanumeric chars and
-// underscores or any quoted name. This matches allowed SQL identifiers and
-// db tags allowed by SQLair.
+// parseIdentifier parses either a name made up of letters, digits and
+// underscores or any quoted name. This matches allowed SQL identifiers and db
+// tags allowed by SQLair.
 func (p *Parser) parseIdentifier() (string, bool, error) {
 	mark := p.pos
 
@@ -563,10 +565,8 @@ func (p *Parser) parseTypeName() (string, bool) {
 	return "", false
 }
 
-// parseColumnAccessor parses either a column made up of name chars optionally
-// dot-prefixed by its table name or a SQL function call used in place of a
-// column.
-// parseColumnAccessor returns an error so that it can be used with parseList.
+// parseColumnAccessor parses either a column optionally dot-prefixed by its
+// table name, or, a SQL function call used in place of a column.
 func (p *Parser) parseColumnAccessor() (columnAccessor, bool, error) {
 	cp := p.save()
 
