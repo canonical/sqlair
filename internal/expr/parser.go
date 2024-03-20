@@ -6,6 +6,8 @@ package expr
 import (
 	"fmt"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 func NewParser() *Parser {
@@ -15,16 +17,23 @@ func NewParser() *Parser {
 type Parser struct {
 	input string
 	pos   int
+	// nextPos is start of the next char.
+	nextPos int
+	// char is the rune starting at pos. char is set to 0 when pos reaches the
+	// end of input.
+	char rune
 	// prevExprEnd is the value of pos when we last finished parsing a
 	// expression.
 	prevExprEnd int
 	// currentExprStart is the value of pos just before we started parsing the
 	// expression under pos. We maintain currentExprStart >= prevExprEnd.
 	currentExprStart int
-	exprs            []expression
+	// exprs are the output of the parser. Expressions are added as they are
+	// parsed.
+	exprs []expression
 	// lineNum is the number of the current line of the input.
 	lineNum int
-	// lineStart is the position of the first byte of the current line in the
+	// lineStart is the position of the first char of the current line in the
 	// input.
 	lineStart int
 }
@@ -66,7 +75,7 @@ func (p *Parser) Parse(input string) (pe *ParsedExpr, err error) {
 
 		// No expression found, advance the parser. This prevents
 		// advanceToNextExpression finding the same char again.
-		p.advanceByte()
+		p.advanceChar()
 	}
 
 	// Add any remaining unparsed string input to the parser.
@@ -136,11 +145,14 @@ func (sfc sqlFunctionCall) String() string {
 func (p *Parser) init(input string) {
 	p.input = input
 	p.pos = 0
+	p.nextPos = 0
+	p.char = 0
 	p.prevExprEnd = 0
 	p.currentExprStart = 0
 	p.exprs = []expression{}
 	p.lineNum = 1
 	p.lineStart = 0
+	p.advanceChar()
 }
 
 // colNum calculates the current column number taking into account line breaks.
@@ -148,17 +160,24 @@ func (p *Parser) colNum() int {
 	return p.pos - p.lineStart + 1
 }
 
-// advanceByte moves the parser to the next byte in the input. It also takes
-// care of updating the line and column numbers if it encounters line breaks.
-func (p *Parser) advanceByte() {
-	if p.pos >= len(p.input) {
-		return
+// advanceChar moves the parser to the next character in the input. It also
+// takes care of updating the line and column numbers if it encounters line
+// breaks.
+func (p *Parser) advanceChar() bool {
+	if p.nextPos >= len(p.input) {
+		p.char = 0
+		p.pos = p.nextPos
+		return false
 	}
-	if p.input[p.pos] == '\n' {
-		p.lineStart = p.pos + 1
+	if p.char == '\n' {
+		p.lineStart = p.nextPos
 		p.lineNum++
 	}
-	p.pos++
+	var size int
+	p.char, size = utf8.DecodeRuneInString(p.input[p.nextPos:])
+	p.pos = p.nextPos
+	p.nextPos += size
+	return true
 }
 
 // errorAt wraps an error with line and column information.
@@ -176,6 +195,8 @@ func errorAt(err error, line int, column int, input string) error {
 type checkpoint struct {
 	parser           *Parser
 	pos              int
+	nextPos          int
+	char             rune
 	prevExprEnd      int
 	currentExprStart int
 	exprs            []expression
@@ -189,6 +210,8 @@ func (p *Parser) save() *checkpoint {
 	return &checkpoint{
 		parser:           p,
 		pos:              p.pos,
+		nextPos:          p.nextPos,
+		char:             p.char,
 		prevExprEnd:      p.prevExprEnd,
 		currentExprStart: p.currentExprStart,
 		exprs:            p.exprs,
@@ -201,6 +224,8 @@ func (p *Parser) save() *checkpoint {
 // checkpoint.
 func (cp *checkpoint) restore() {
 	cp.parser.pos = cp.pos
+	cp.parser.nextPos = cp.nextPos
+	cp.parser.char = cp.char
 	cp.parser.prevExprEnd = cp.prevExprEnd
 	cp.parser.currentExprStart = cp.currentExprStart
 	cp.parser.exprs = cp.exprs
@@ -237,27 +262,27 @@ func (p *Parser) add(expr expression) {
 // is found the parser state is left unchanged.
 func (p *Parser) skipComment() bool {
 	cp := p.save()
-	if p.skipByte('-') || p.skipByte('/') {
-		c := p.input[p.pos-1]
-		if (c == '-' && p.skipByte('-')) || (c == '/' && p.skipByte('*')) {
-			var end byte
+	c := p.char
+	if p.skipChar('-') || p.skipChar('/') {
+		if (c == '-' && p.skipChar('-')) || (c == '/' && p.skipChar('*')) {
+			var end rune
 			if c == '-' {
 				end = '\n'
 			} else {
 				end = '*'
 			}
 			for p.pos < len(p.input) {
-				if p.input[p.pos] == end {
+				if p.char == end {
 					// if end == '\n' (i.e. its a -- comment) dont consume the newline.
 					if end == '*' {
-						p.advanceByte()
-						if !p.skipByte('/') {
+						p.advanceChar()
+						if !p.skipChar('/') {
 							continue
 						}
 					}
 					return true
 				}
-				p.advanceByte()
+				p.advanceChar()
 			}
 			// Reached end of input (valid comment end).
 			return true
@@ -271,9 +296,9 @@ func (p *Parser) skipComment() bool {
 // advanceToNextExpression advances the parser until it finds a character that
 // could be the start of an expression.
 func (p *Parser) advanceToNextExpression() error {
-	// If the first char of input is an InitalNameByte then return as it could
-	// be an expression. This case is not covered below.
-	if p.pos < len(p.input) && p.pos == 0 && isInitialNameByte(p.input[p.pos]) {
+	// If very the first char of the whole input is a nameChar then return as
+	// it could be an expression. This case is not covered below.
+	if p.pos < len(p.input) && p.pos == 0 && isNameChar(p.char) {
 		return nil
 	}
 loop:
@@ -287,27 +312,26 @@ loop:
 			continue
 		}
 
-		switch p.input[p.pos] {
-		// These bytes may be the start of an expression.
+		switch p.char {
+		// These characters may be the start of an expression.
 		case '(', '*', '$', '&':
 			break loop
-		// An expression can also start with an initial name byte, e.g. a
-		// expression starting with a column name or a SQL function.
-		// Rather than testing for every initial name byte (we would stop at
-		// every letter of every word), we look for bytes that may precede the
-		// start of an expression and then check if the next byte is an initial
-		// name byte.
+		// An expression can also start with a name char, e.g. an expression
+		// starting with a column name or a SQL function. Rather than testing
+		// for every name char (we would stop at every letter of every word),
+		// we look for chars that may come before the start of an expression
+		// and then check if the next char is an name char.
 		case ' ', '\t', '\n', '\r', '=', ',', '[', '>', '<', '+', '-', '/', '|', '%':
-			p.advanceByte()
+			p.advanceChar()
 			if p.pos >= len(p.input) {
 				return nil
 			}
-			if isInitialNameByte(p.input[p.pos]) {
+			if isNameChar(p.char) {
 				break loop
 			}
 			continue
 		}
-		p.advanceByte()
+		p.advanceChar()
 	}
 
 	p.skipBlanks()
@@ -321,16 +345,16 @@ loop:
 func (p *Parser) skipStringLiteral() (bool, error) {
 	cp := p.save()
 
-	if p.skipByte('"') || p.skipByte('\'') {
-		c := p.input[p.pos-1]
+	c := p.char
+	if p.skipChar('"') || p.skipChar('\'') {
 
 		// We keep track of whether the next quote has been previously
 		// escaped. If not, it might be a closing quote.
 		maybeCloser := true
-		for p.skipByteFind(c) {
+		for p.skipCharFind(c) {
 			// If this looks like a closing quote, check if it might be an
 			// escape for a following quote. If not, we're done.
-			if maybeCloser && !p.peekByte(c) {
+			if maybeCloser && !p.peekChar(c) {
 				return true, nil
 			}
 			maybeCloser = !maybeCloser
@@ -343,34 +367,33 @@ func (p *Parser) skipStringLiteral() (bool, error) {
 	return false, nil
 }
 
-// peekByte returns true if the current byte equals the one passed as
-// parameter.
-func (p *Parser) peekByte(b byte) bool {
-	return p.pos < len(p.input) && p.input[p.pos] == b
+// peekChar returns true if the current char equals the one passed as parameter.
+func (p *Parser) peekChar(c rune) bool {
+	return p.pos < len(p.input) && p.char == c
 }
 
-// skipByte jumps over the current byte if it matches the byte passed as a
+// skipChar jumps over the current char if it matches the char passed as a
 // parameter. Returns true in that case, false otherwise.
-func (p *Parser) skipByte(b byte) bool {
-	if p.pos < len(p.input) && p.input[p.pos] == b {
-		p.advanceByte()
+func (p *Parser) skipChar(c rune) bool {
+	if p.pos < len(p.input) && p.char == c {
+		p.advanceChar()
 		return true
 	}
 	return false
 }
 
-// skipByteFind looks for a byte that matches the one passed as parameter and
+// skipCharFind looks for a char that matches the one passed as parameter and
 // then advances the parser to jump over it. In that case returns true. If the
-// end of the string is reached and no matching byte was found, it returns
+// end of the string is reached and no matching char was found, it returns
 // false and it does not change the parser.
-func (p *Parser) skipByteFind(b byte) bool {
+func (p *Parser) skipCharFind(c rune) bool {
 	cp := p.save()
 	for p.pos < len(p.input) {
-		if p.input[p.pos] == b {
-			p.advanceByte()
+		if p.char == c {
+			p.advanceChar()
 			return true
 		}
-		p.advanceByte()
+		p.advanceChar()
 	}
 	cp.restore()
 	return false
@@ -384,9 +407,9 @@ func (p *Parser) skipBlanks() bool {
 		if ok := p.skipComment(); ok {
 			continue
 		}
-		switch p.input[p.pos] {
+		switch p.char {
 		case ' ', '\t', '\r', '\n':
-			p.advanceByte()
+			p.advanceChar()
 		default:
 			return p.pos != mark
 		}
@@ -398,38 +421,43 @@ func (p *Parser) skipBlanks() bool {
 // In that case returns true, false otherwise.
 // This function is case insensitive.
 func (p *Parser) skipString(s string) bool {
+	// EqualFold is used here because it is case insensitive.
 	if p.pos+len(s) <= len(p.input) &&
 		strings.EqualFold(p.input[p.pos:p.pos+len(s)], s) {
+		// EqualFold does not advance the parser, so we must manually advance
+		// the parser to the end of the string.
 		p.pos += len(s)
+		var size int
+		p.char, size = utf8.DecodeRuneInString(p.input[p.pos:])
+		p.nextPos = p.pos + size
 		return true
 	}
 	return false
 }
 
-// isNameByte returns true if the given byte can be part of a name. It returns
+// isNameChar returns true if the given char can be part of a name. It returns
 // false otherwise.
-func isNameByte(c byte) bool {
-	return 'A' <= c && c <= 'Z' || 'a' <= c && c <= 'z' ||
-		'0' <= c && c <= '9' || c == '_'
+func isNameChar(c rune) bool {
+	return unicode.IsLetter(c) || unicode.IsDigit(c) || c == '_'
 }
 
-// isNameInitialByte returns true if the given byte can appear at the start of a
+// isInitialNameChar returns true if the given char can appear at the start of a
 // name. It returns false otherwise.
-func isInitialNameByte(c byte) bool {
-	return 'A' <= c && c <= 'Z' || 'a' <= c && c <= 'z' || c == '_'
+func isInitialNameChar(c rune) bool {
+	return unicode.IsLetter(c) || c == '_'
 }
 
-// skipName advances the parser until it is on the first non name byte and
-// returns true. If the p.pos does not start on a name byte it returns false.
+// skipName advances the parser until it is on the first non name char and
+// returns true. If the p.pos does not start on a name char it returns false.
 func (p *Parser) skipName() bool {
 	if p.pos >= len(p.input) {
 		return false
 	}
 	mark := p.pos
-	if isInitialNameByte(p.input[p.pos]) {
-		p.advanceByte()
-		for p.pos < len(p.input) && isNameByte(p.input[p.pos]) {
-			p.advanceByte()
+	if isInitialNameChar(p.char) {
+		p.advanceChar()
+		for p.pos < len(p.input) && isNameChar(p.char) {
+			p.advanceChar()
 		}
 	}
 	return p.pos > mark
@@ -441,7 +469,7 @@ func (p *Parser) skipName() bool {
 func (p *Parser) skipEnclosedParentheses() (bool, error) {
 	cp := p.save()
 
-	if !p.skipByte('(') {
+	if !p.skipChar('(') {
 		return false, nil
 	}
 
@@ -457,14 +485,14 @@ func (p *Parser) skipEnclosedParentheses() (bool, error) {
 			continue
 		}
 
-		if p.skipByte('(') {
+		if p.skipChar('(') {
 			parenCount++
 			continue
-		} else if p.skipByte(')') {
+		} else if p.skipChar(')') {
 			parenCount--
 			continue
 		}
-		p.advanceByte()
+		p.advanceChar()
 	}
 
 	if parenCount > 0 {
@@ -486,48 +514,80 @@ func (p *Parser) skipEnclosedParentheses() (bool, error) {
 //  - bool == false, err == nil
 //		The construct was not the one we are looking for
 
-// parseIdentifierAsterisk parses a name made up of only nameBytes or of a
-// single asterisk. On success it returns the parsed string and true. Otherwise,
-// it returns the empty string and false.
-func (p *Parser) parseIdentifierAsterisk() (string, bool) {
-	if p.skipByte('*') {
-		return "*", true
+// parseIdentifierAsterisk parses an identifier or an asterisk.
+func (p *Parser) parseIdentifierAsterisk() (string, bool, error) {
+	if p.skipChar('*') {
+		return "*", true, nil
 	}
 	return p.parseIdentifier()
 }
 
-// parseIdentifier parses a name made up of only nameBytes. On success it
-// returns the parsed string and true. Otherwise, it returns the empty string
-// and false.
-func (p *Parser) parseIdentifier() (string, bool) {
+// parseIdentifier parses either a name made up of letters, digits and
+// underscores or any quoted name. This matches allowed SQL identifiers and db
+// tags allowed by SQLair.
+func (p *Parser) parseIdentifier() (string, bool, error) {
 	mark := p.pos
-	if p.skipName() {
+
+	// parse quoted column names.
+	if ok, err := p.skipStringLiteral(); err != nil {
+		return "", false, err
+	} else if ok {
+		return p.input[mark:p.pos], true, nil
+	}
+
+	// parse regular column names, including numeric literals.
+	for p.pos < len(p.input) && isNameChar(p.char) {
+		p.advanceChar()
+	}
+
+	if p.pos > mark {
+		return p.input[mark:p.pos], true, nil
+	}
+	return "", false, nil
+}
+
+// parseTypeName parses a name starting with a letter or underscore and
+// followed by letters, digits and underscores. This matches the allowed
+// characters in Go type names.
+func (p *Parser) parseTypeName() (string, bool) {
+	mark := p.pos
+
+	if isInitialNameChar(p.char) {
+		p.advanceChar()
+		for p.pos < len(p.input) && isNameChar(p.char) {
+			p.advanceChar()
+		}
+	}
+
+	if p.pos > mark {
 		return p.input[mark:p.pos], true
 	}
 	return "", false
 }
 
-// parseColumnAccessor parses either a column made up of name bytes optionally
-// dot-prefixed by its table name or a SQL function call used in place of a
-// column.
-// parseColumnAccessor returns an error so that it can be used with parseList.
+// parseColumnAccessor parses either a column optionally dot-prefixed by its
+// table name, or, a SQL function call used in place of a column.
 func (p *Parser) parseColumnAccessor() (columnAccessor, bool, error) {
 	cp := p.save()
 
 	// asterisk cannot be followed by anything.
-	if p.skipByte('*') {
+	if p.skipChar('*') {
 		return basicColumn{column: "*"}, true, nil
 	}
 
-	id, ok := p.parseIdentifier()
+	// Parse a SQL identifier. This could be a column or table name.
+	id, ok, err := p.parseIdentifier()
 	if !ok {
 		cp.restore()
-		return nil, false, nil
+		return nil, false, err
 	}
 
-	// identifier.<> can only be followed by another identifier or an asterisk.
-	if p.skipByte('.') {
-		if idCol, ok := p.parseIdentifierAsterisk(); ok {
+	// If we find a '.' assume the previous was a table name, parse the column
+	// name.
+	if p.skipChar('.') {
+		if idCol, ok, err := p.parseIdentifierAsterisk(); err != nil {
+			return nil, false, err
+		} else if ok {
 			return basicColumn{table: id, column: idCol}, true, nil
 		}
 		cp.restore()
@@ -549,7 +609,7 @@ func (p *Parser) parseTargetType() (memberAccessor, bool, error) {
 	startLine := p.lineNum
 	startCol := p.colNum()
 
-	if p.skipByte('&') {
+	if p.skipChar('&') {
 		// Using a slice as an output is an error, we add the case here to
 		// improve the error message.
 		if st, ok, err := p.parseSliceAccessor(); ok {
@@ -568,20 +628,20 @@ func (p *Parser) parseTargetType() (memberAccessor, bool, error) {
 func (p *Parser) parseSliceAccessor() (typeName string, ok bool, err error) {
 	cp := p.save()
 
-	id, ok := p.parseIdentifier()
+	id, ok := p.parseTypeName()
 	if !ok {
 		return "", false, nil
 	}
-	if !p.skipByte('[') {
+	if !p.skipChar('[') {
 		cp.restore()
 		return "", false, nil
 	}
 	p.skipBlanks()
-	if !p.skipByte(':') {
+	if !p.skipChar(':') {
 		return "", false, errorAt(fmt.Errorf("invalid slice: expected '%s[:]'", id), cp.lineNum, cp.colNum(), p.input)
 	}
 	p.skipBlanks()
-	if !p.skipByte(']') {
+	if !p.skipChar(']') {
 		return "", false, errorAt(fmt.Errorf("invalid slice: expected '%s[:]'", id), cp.lineNum, cp.colNum(), p.input)
 	}
 	return id, true, nil
@@ -594,13 +654,15 @@ func (p *Parser) parseTypeAndMember() (memberAccessor, bool, error) {
 
 	// The error points to the skipped & or $.
 	identifierCol := p.colNum() - 1
-	if id, ok := p.parseIdentifier(); ok {
-		if !p.skipByte('.') {
+	if id, ok := p.parseTypeName(); ok {
+		if !p.skipChar('.') {
 			return memberAccessor{}, false, errorAt(fmt.Errorf("unqualified type, expected %s.* or %s.<db tag> or %s[:]", id, id, id), p.lineNum, identifierCol, p.input)
 		}
 
-		idField, ok := p.parseIdentifierAsterisk()
-		if !ok {
+		idField, ok, err := p.parseIdentifierAsterisk()
+		if err != nil {
+			return memberAccessor{}, false, err
+		} else if !ok {
 			return memberAccessor{}, false, errorAt(fmt.Errorf("invalid identifier suffix following %q", id), p.lineNum, p.colNum(), p.input)
 		}
 		return memberAccessor{typeName: id, memberName: idField}, true, nil
@@ -614,7 +676,7 @@ func (p *Parser) parseTypeAndMember() (memberAccessor, bool, error) {
 // bracketed, comma separated, list.
 func parseList[T any](p *Parser, parseFn func(p *Parser) (T, bool, error)) ([]T, bool, error) {
 	cp := p.save()
-	if !p.skipByte('(') {
+	if !p.skipChar('(') {
 		return nil, false, nil
 	}
 
@@ -639,11 +701,11 @@ func parseList[T any](p *Parser, parseFn func(p *Parser) (T, bool, error)) ([]T,
 		}
 
 		p.skipBlanks()
-		if p.skipByte(')') {
+		if p.skipChar(')') {
 			return objs, true, nil
 		}
 
-		nextItem = p.skipByte(',')
+		nextItem = p.skipChar(',')
 	}
 	err := errorAt(fmt.Errorf("missing closing parentheses"), cp.lineNum, cp.colNum(), p.input)
 	cp.restore()
@@ -689,14 +751,14 @@ func (p *Parser) parseTargetTypes() (types []memberAccessor, parentheses bool, o
 // parseInputMemberAccessor parses an accessor preceded by '$'.
 // e.g. "$Type.member".
 func (p *Parser) parseInputMemberAccessor() (memberAccessor, bool, error) {
-	if p.skipByte('$') {
+	if p.skipChar('$') {
 		return p.parseTypeAndMember()
 	}
 	return memberAccessor{}, false, nil
 }
 
 // parseOutputExpr requires that the ampersand before the identifiers must
-// be followed by a name byte.
+// be followed by a name char.
 func (p *Parser) parseOutputExpr() (*outputExpr, bool, error) {
 	start := p.pos
 
@@ -771,7 +833,7 @@ func (p *Parser) parseInputExpr() (expression, bool, error) {
 // parseSliceInputExpr parses an input expression of the form "$Type[:]".
 func (p *Parser) parseSliceInputExpr() (expression, bool, error) {
 	cp := p.save()
-	if !p.skipByte('$') {
+	if !p.skipChar('$') {
 		return nil, false, nil
 	}
 
@@ -806,16 +868,16 @@ func (p *Parser) parseMemberInputExpr() (expression, bool, error) {
 // It is of the form "(*) VALUES ($Type.*, $Type.member,...)".
 func (p *Parser) parseAsteriskInsertExpr() (expression, bool, error) {
 	cp := p.save()
-	if !p.skipByte('(') {
+	if !p.skipChar('(') {
 		return nil, false, nil
 	}
 	p.skipBlanks()
-	if !p.skipByte('*') {
+	if !p.skipChar('*') {
 		cp.restore()
 		return nil, false, nil
 	}
 	p.skipBlanks()
-	if !p.skipByte(')') {
+	if !p.skipChar(')') {
 		cp.restore()
 		return nil, false, nil
 	}

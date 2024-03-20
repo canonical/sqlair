@@ -41,7 +41,19 @@ type HardMaths struct {
 	Coef int `db:"coef"`
 }
 
+type QuotedColumnNames struct {
+	Ex int `db:"\"!!!\""`
+	Qu int `db:"'???'"`
+}
+
+type NumberLiteralColumn struct {
+	Zero int `db:"0"`
+	One  int `db:"1"`
+}
+
 type M map[string]any
+
+type unexportedMap map[string]any
 
 type IntMap map[string]int
 
@@ -50,6 +62,12 @@ type StringMap map[string]string
 type IntSlice []int
 
 type StringSlice []string
+
+type Unicode我Struct struct {
+	X人 int    `db:"საფოსტო"`
+	X我 int    `db:"住所"`
+	X这 string `db:"鑑別"`
+}
 
 var tests = []struct {
 	summary        string
@@ -507,6 +525,58 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	inputArgs:      []any{Person{ID: 34, Fullname: "John Doe"}},
 	expectedParams: []any{"John Doe", 34},
 	expectedSQL:    `INSERT INTO person VALUES (@sqlair_0, "random string", @sqlair_1)`,
+}, {
+	summary:        "insert sql array",
+	query:          "INSERT INTO arr VALUES (ARRAY[[1,2],[$HardMaths.x,4]], ARRAY[[5,6],[$HardMaths.y,8]]);",
+	expectedParsed: "[Bypass[INSERT INTO arr VALUES (ARRAY[[1,2],[] Input[HardMaths.x] Bypass[,4]], ARRAY[[5,6],[] Input[HardMaths.y] Bypass[,8]]);]]",
+	typeSamples:    []any{HardMaths{}},
+	inputArgs:      []any{HardMaths{X: 1, Y: 2}},
+	expectedParams: []any{1, 2},
+	expectedSQL:    "INSERT INTO arr VALUES (ARRAY[[1,2],[@sqlair_0,4]], ARRAY[[5,6],[@sqlair_1,8]]);",
+}, {
+	summary:        "lower case struct",
+	query:          "SELECT &unexportedMap.x FROM person",
+	expectedParsed: "[Bypass[SELECT ] Output[[] [unexportedMap.x]] Bypass[ FROM person]]",
+	typeSamples:    []any{unexportedMap{}},
+	expectedSQL:    "SELECT x AS _sqlair_0 FROM person",
+}, {
+	summary:        "unicode asterisk",
+	query:          "SELECT &Unicode我Struct.* FROM person WHERE id = 30",
+	expectedParsed: "[Bypass[SELECT ] Output[[] [Unicode我Struct.*]] Bypass[ FROM person WHERE id = 30]]",
+	typeSamples:    []any{Unicode我Struct{}},
+	expectedSQL:    "SELECT საფოსტო AS _sqlair_0, 住所 AS _sqlair_1, 鑑別 AS _sqlair_2 FROM person WHERE id = 30",
+}, {
+	summary:        "unicode explicit",
+	query:          "SELECT &Unicode我Struct.საფოსტო, &Unicode我Struct.住所, &Unicode我Struct.鑑別 FROM person WHERE id = $Unicode我Struct.鑑別",
+	expectedParsed: "[Bypass[SELECT ] Output[[] [Unicode我Struct.საფოსტო]] Bypass[, ] Output[[] [Unicode我Struct.住所]] Bypass[, ] Output[[] [Unicode我Struct.鑑別]] Bypass[ FROM person WHERE id = ] Input[Unicode我Struct.鑑別]]",
+	typeSamples:    []any{Unicode我Struct{}},
+	inputArgs:      []any{Unicode我Struct{X这: "საფოსტო"}},
+	expectedParams: []any{"საფოსტო"},
+	expectedSQL:    "SELECT საფოსტო AS _sqlair_0, 住所 AS _sqlair_1, 鑑別 AS _sqlair_2 FROM person WHERE id = @sqlair_0",
+}, {
+	summary:        "unicode rename",
+	query:          "SELECT (鑑別, мяч) AS (&Unicode我Struct.საფოსტო, &Unicode我Struct.鑑別) FROM person WHERE id = 30",
+	expectedParsed: "[Bypass[SELECT ] Output[[鑑別 мяч] [Unicode我Struct.საფოსტო Unicode我Struct.鑑別]] Bypass[ FROM person WHERE id = 30]]",
+	typeSamples:    []any{Unicode我Struct{}},
+	expectedSQL:    "SELECT 鑑別 AS _sqlair_0, мяч AS _sqlair_1 FROM person WHERE id = 30",
+}, {
+	summary:        "empty input",
+	query:          "",
+	expectedParsed: "[]",
+	typeSamples:    []any{},
+	expectedSQL:    "",
+}, {
+	summary:        "quoted column names",
+	query:          `SELECT ("!!!", '???') AS (&QuotedColumnNames.*) FROM person`,
+	expectedParsed: `[Bypass[SELECT ] Output[["!!!" '???'] [QuotedColumnNames.*]] Bypass[ FROM person]]`,
+	typeSamples:    []any{QuotedColumnNames{}},
+	expectedSQL:    `SELECT "!!!" AS _sqlair_0, '???' AS _sqlair_1 FROM person`,
+}, {
+	summary:        "literal numbers for columns",
+	query:          `SELECT 1 AS &M.rowExists, 0 AS &NumberLiteralColumn.*, &NumberLiteralColumn.1 FROM person`,
+	expectedParsed: `[Bypass[SELECT ] Output[[1] [M.rowExists]] Bypass[, ] Output[[0] [NumberLiteralColumn.*]] Bypass[, ] Output[[] [NumberLiteralColumn.1]] Bypass[ FROM person]]`,
+	typeSamples:    []any{NumberLiteralColumn{}, sqlair.M{}},
+	expectedSQL:    `SELECT 1 AS _sqlair_0, 0 AS _sqlair_1, 1 AS _sqlair_2 FROM person`,
 }}
 
 func (s *ExprSuite) TestExprPkg(c *C) {
@@ -522,7 +592,7 @@ func (s *ExprSuite) TestExprPkg(c *C) {
 		c.Assert(err, IsNil,
 			Commentf("test %d failed (Parse):\nsummary:  %s\nquery:    %s\nexpected: %s\nerr:      %s\n",
 				i, t.summary, t.query, t.expectedParsed, err))
-		c.Assert(parsedExpr.String(), Equals, t.expectedParsed,
+		c.Check(parsedExpr.String(), Equals, t.expectedParsed,
 			Commentf("test %d failed (Parse):\nsummary: %s\nquery:   %s\n", i, t.summary, t.query))
 
 		typedExpr, err = parsedExpr.BindTypes(t.typeSamples...)
@@ -535,8 +605,8 @@ func (s *ExprSuite) TestExprPkg(c *C) {
 			Commentf("test %d failed (BindInputs):\nsummary: %s\nquery: %s\nexpected: %s\nerr: %s\n",
 				i, t.summary, t.query, t.expectedSQL, err))
 
-		c.Assert(primedQuery.SQL(), Equals, t.expectedSQL, Commentf("test %d failed (SQL):\nsummary: %s\nquery: %s\n",
-			i, t.summary, t.query, t.expectedSQL, primedQuery.SQL()))
+		c.Check(primedQuery.SQL(), Equals, t.expectedSQL, Commentf("test %d failed (SQL):\nsummary: %s\nquery: %s\n",
+			i, t.summary, t.query))
 
 		if t.inputArgs != nil {
 			params := primedQuery.Params()
@@ -544,9 +614,9 @@ func (s *ExprSuite) TestExprPkg(c *C) {
 				Commentf("test %d failed (Query Params):\nsummary: %s\nquery: %s\n", i, t.summary, t.query))
 			for paramIndex, param := range params {
 				param := param.(sql.NamedArg)
-				c.Assert(param.Name, Equals, "sqlair_"+strconv.Itoa(paramIndex),
+				c.Check(param.Name, Equals, "sqlair_"+strconv.Itoa(paramIndex),
 					Commentf("test %d failed (Query Params):\nsummary: %s\nquery: %s\n", i, t.summary, t.query))
-				c.Assert(param.Value, Equals, t.expectedParams[paramIndex],
+				c.Check(param.Value, Equals, t.expectedParams[paramIndex],
 					Commentf("test %d failed (Query Params):\nsummary: %s\nquery: %s\n", i, t.summary, t.query))
 			}
 		}

@@ -25,6 +25,9 @@ func (s *typeInfoSuite) TestArgInfoStruct(c *C) {
 		Name      string `db:"name,omitempty"`
 		ValidTag1 int    `db:"_i_d_55_"`
 		ValidTag2 int    `db:"IdENT99"`
+		ValidTag3 int    `db:"\"£&**\""`
+		ValidTag4 int    `db:"'!£$%^&*('"`
+		ValidTag5 int    `db:"99"`
 		NotInDB   string
 	}
 
@@ -40,6 +43,21 @@ func (s *typeInfoSuite) TestArgInfoStruct(c *C) {
 		omitEmpty bool
 		tag       string
 	}{{
+		fieldName: "ValidTag3",
+		index:     4,
+		omitEmpty: false,
+		tag:       "\"£&**\"",
+	}, {
+		fieldName: "ValidTag4",
+		index:     5,
+		omitEmpty: false,
+		tag:       "'!£$%^&*('",
+	}, {
+		fieldName: "ValidTag5",
+		index:     6,
+		omitEmpty: false,
+		tag:       "99",
+	}, {
 		fieldName: "ValidTag2",
 		index:     3,
 		omitEmpty: false,
@@ -212,6 +230,18 @@ func (s *typeInfoSuite) TestGenerateArgInfoStructError(c *C) {
 	}
 	_, err = GenerateArgInfo([]any{S6{}})
 	c.Assert(err.Error(), Equals, `cannot parse tag for field S6.Foo: invalid column name in 'db' tag: "id$$"`)
+
+	type S7 struct {
+		Foo int `db:"\"!)*)£*("`
+	}
+	_, err = GenerateArgInfo([]any{S7{}})
+	c.Assert(err.Error(), Equals, `cannot parse tag for field S7.Foo: missing quotes at end of 'db' tag: "\"!)*)£*("`)
+
+	type S8 struct {
+		Foo int `db:"'!)*)£*("`
+	}
+	_, err = GenerateArgInfo([]any{S8{}})
+	c.Assert(err.Error(), Equals, `cannot parse tag for field S8.Foo: missing quotes at end of 'db' tag: "'!)*)£*("`)
 
 	type badMap map[int]any
 	_, err = GenerateArgInfo([]any{badMap{}})
