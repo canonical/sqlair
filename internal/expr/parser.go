@@ -422,7 +422,7 @@ func (p *Parser) skipString(s string) bool {
 	// EqualFold is used here because it is case insensitive.
 	if p.pos+len(s) <= len(p.input) &&
 		strings.EqualFold(p.input[p.pos:p.pos+len(s)], s) {
-		// EqualFold does not advnace the parser, so we must manually advance
+		// EqualFold does not advance the parser, so we must manually advance
 		// the parser to the end of the string.
 		p.pos += len(s)
 		var size int
@@ -512,12 +512,18 @@ func (p *Parser) skipEnclosedParentheses() (bool, error) {
 //  - bool == false, err == nil
 //		The construct was not the one we are looking for
 
-// parseColumnName parses an identifier or an asterisk.
-func (p *Parser) parseColumnName() (string, bool, error) {
+// parseIdentifierAsterisk parses an identifier or an asterisk.
+func (p *Parser) parseIdentifierAsterisk() (string, bool, error) {
 	if p.skipChar('*') {
 		return "*", true, nil
 	}
+	return p.parseIdentifier()
+}
 
+// parseIdentifier parses either a name made up of alphanumeric chars and
+// underscores or any quoted name. This matches allowed SQL identifiers and
+// db tags allowed by SQLair.
+func (p *Parser) parseIdentifier() (string, bool, error) {
 	mark := p.pos
 
 	// parse quoted column names.
@@ -569,8 +575,8 @@ func (p *Parser) parseColumnAccessor() (columnAccessor, bool, error) {
 		return basicColumn{column: "*"}, true, nil
 	}
 
-	// Parse a column or a table name.
-	id, ok, err := p.parseColumnName()
+	// Parse a SQL identifier. This could be a column or table name.
+	id, ok, err := p.parseIdentifier()
 	if !ok {
 		cp.restore()
 		return nil, false, err
@@ -579,7 +585,7 @@ func (p *Parser) parseColumnAccessor() (columnAccessor, bool, error) {
 	// If we find a '.' assume the previous was a table name, parse the column
 	// name.
 	if p.skipChar('.') {
-		if idCol, ok, err := p.parseColumnName(); err != nil {
+		if idCol, ok, err := p.parseIdentifierAsterisk(); err != nil {
 			return nil, false, err
 		} else if ok {
 			return basicColumn{table: id, column: idCol}, true, nil
@@ -653,7 +659,7 @@ func (p *Parser) parseTypeAndMember() (memberAccessor, bool, error) {
 			return memberAccessor{}, false, errorAt(fmt.Errorf("unqualified type, expected %s.* or %s.<db tag> or %s[:]", id, id, id), p.lineNum, identifierCol, p.input)
 		}
 
-		idField, ok, err := p.parseColumnName()
+		idField, ok, err := p.parseIdentifierAsterisk()
 		if err != nil {
 			return memberAccessor{}, false, err
 		} else if !ok {

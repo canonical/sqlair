@@ -322,16 +322,16 @@ func parseTag(tag string) (string, bool, error) {
 	char, size := utf8.DecodeRuneInString(name)
 	nextPos := size
 	var checker func(rune) bool
-	if unicode.IsDigit(char) {
+	switch {
+	case unicode.IsDigit(char):
 		// If it starts with a digit, check the tag is a number.
-		checker = func(char rune) bool {
-			return unicode.IsDigit(char)
-		}
-	} else if unicode.IsLetter(char) || char == '_' {
+		checker = unicode.IsDigit
+	case unicode.IsLetter(char) || char == '_':
+		// Otherwise make sure it is alphanumeric plus underscore.
 		checker = func(char rune) bool {
 			return unicode.IsLetter(char) || unicode.IsDigit(char) || char == '_'
 		}
-	} else {
+	default:
 		return "", false, fmt.Errorf("invalid column name in 'db' tag: %q", name)
 	}
 	for nextPos < len(name) {
