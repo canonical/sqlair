@@ -70,7 +70,7 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 				if len(vals) > 1 {
 					// Only slices return multiple values and they are not
 					// allowed in insert expressions.
-					return nil, fmt.Errorf("internal error: unexpected values")
+					return nil, fmt.Errorf("internal error: types in insert expressions cannot return multiple values")
 				}
 
 				argTypeUsed[ic.input.ArgType()] = true
@@ -142,6 +142,14 @@ type insertColumn struct {
 	explicit bool
 }
 
+func newInsertColumn(input typeinfo.Input, column string, explicit bool) insertColumn {
+	return insertColumn{
+		input:    input,
+		column:   column,
+		explicit: explicit,
+	}
+}
+
 // typedInsertExpr stores information about the Go values to use as inputs inside
 // an INSERT statement.
 type typedInsertExpr struct {
@@ -162,40 +170,39 @@ type sqlBuilder struct {
 func (b *sqlBuilder) writeInsert(inputCount int, columns []string) {
 	// Write out the columns.
 	b.buf.WriteString("(")
-	for i, col := range columns {
-		if i != 0 {
-			b.buf.WriteString(", ")
-		}
-		b.buf.WriteString(col)
-	}
+	b.writeCommaSeperatedList(columns, func(_ int, column string) string {
+		return column
+	})
 	b.buf.WriteString(") VALUES (")
 	// Write out the values.
-	for i := range columns {
-		if i != 0 {
-			b.buf.WriteString(", ")
-		}
-		b.buf.WriteString("@sqlair_" + strconv.Itoa(inputCount+i))
-	}
+	b.writeCommaSeperatedList(columns, func(i int, _ string) string {
+		return "@sqlair_" + strconv.Itoa(inputCount+i)
+	})
 	b.buf.WriteString(")")
 }
 
 // writeInput writes the SQL for input placeholders to the sqlBuilder.
 func (b *sqlBuilder) writeInput(inputCount, num int) {
-	for i := 0; i < num; i++ {
-		if i != 0 {
-			b.buf.WriteString(", ")
-		}
-		b.buf.WriteString("@sqlair_" + strconv.Itoa(inputCount+i))
-	}
+	b.writeCommaSeperatedList(make([]string, num), func(i int, column string) string {
+		return "@sqlair_" + strconv.Itoa(inputCount+i)
+	})
 }
 
 // writeOutput writes the SQL for output columns to the sqlBuilder.
 func (b *sqlBuilder) writeOutput(outputCount int, columns []string) {
-	for i, column := range columns {
+	b.writeCommaSeperatedList(columns, func(i int, column string) string {
+		return column + " AS " + markerName(outputCount+i)
+	})
+}
+
+// writeCommaSeperatedList writes out the provided list using the writer to
+// write each element into the SQL.
+func (b *sqlBuilder) writeCommaSeperatedList(list []string, writer func(i int, s string) string) {
+	for i, s := range list {
 		if i != 0 {
 			b.buf.WriteString(", ")
 		}
-		b.buf.WriteString(column + " AS " + markerName(outputCount+i))
+		b.buf.WriteString(writer(i, s))
 	}
 }
 

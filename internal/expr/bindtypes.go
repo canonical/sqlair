@@ -150,22 +150,16 @@ func (e *asteriskInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie any, err e
 				return nil, err
 			}
 			for i, input := range inputs {
-				cols = append(cols, insertColumn{
-					column:   tags[i],
-					input:    input,
-					explicit: false,
-				})
+				c := newInsertColumn(input, tags[i], false)
+				cols = append(cols, c)
 			}
 		} else {
 			input, err := argInfo.InputMember(source.typeName, source.memberName)
 			if err != nil {
 				return nil, err
 			}
-			cols = append(cols, insertColumn{
-				column:   source.memberName,
-				input:    input,
-				explicit: true,
-			})
+			c := newInsertColumn(input, source.memberName, true)
+			cols = append(cols, c)
 		}
 	}
 	return &typedInsertExpr{insertColumns: cols}, nil
@@ -258,11 +252,9 @@ func (e *columnsInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie any, err er
 		if len(input) > 1 {
 			return nil, fmt.Errorf("more than one type provides column %q", columnStr)
 		}
-		cols = append(cols, insertColumn{
-			column:   columnStr,
-			input:    input[0],
-			explicit: true,
-		})
+
+		c := newInsertColumn(input[0], columnStr, true)
+		cols = append(cols, c)
 	}
 	return &typedInsertExpr{insertColumns: cols}, nil
 }
