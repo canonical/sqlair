@@ -406,113 +406,6 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 	}
 }
 
-type ScannerInt struct {
-	SI int
-}
-
-func (si *ScannerInt) Scan(v any) error {
-	if _, ok := v.(int); ok {
-		si.SI = 42
-	} else {
-		si.SI = 666
-	}
-	return nil
-}
-
-type ScannerString struct {
-	SS string
-}
-
-func (ss *ScannerString) Scan(v any) error {
-	if _, ok := v.(string); ok {
-		ss.SS = "ScannerString scanned well!"
-	} else {
-		ss.SS = "ScannerString found a NULL"
-	}
-	return nil
-}
-
-func (s *PackageSuite) TestNulls(c *C) {
-	type I int
-	type J = int
-	type S = string
-	type PersonWithStrangeTypes struct {
-		ID       I `db:"id"`
-		Name     S `db:"name"`
-		Postcode J `db:"address_id"`
-	}
-	type NullGuy struct {
-		ID       sql.NullInt64  `db:"id"`
-		Name     sql.NullString `db:"name"`
-		Postcode sql.NullInt64  `db:"address_id"`
-	}
-	type ScannerDude struct {
-		ID       ScannerInt    `db:"id"`
-		Name     ScannerString `db:"name"`
-		Postcode ScannerInt    `db:"address_id"`
-	}
-
-	var tests = []struct {
-		summary  string
-		query    string
-		types    []any
-		inputs   []any
-		outputs  []any
-		expected []any
-	}{{
-		summary:  "reading nulls",
-		query:    `SELECT &Person.* FROM person WHERE name = "Nully"`,
-		types:    []any{Person{}},
-		inputs:   []any{},
-		outputs:  []any{&Person{ID: 5, Postcode: 10}},
-		expected: []any{&Person{Name: "Nully", ID: 0, Postcode: 0}},
-	}, {
-		summary:  "reading nulls with custom types",
-		query:    `SELECT &PersonWithStrangeTypes.* FROM person WHERE name = "Nully"`,
-		types:    []any{PersonWithStrangeTypes{}},
-		inputs:   []any{},
-		outputs:  []any{&PersonWithStrangeTypes{ID: 5, Postcode: 10}},
-		expected: []any{&PersonWithStrangeTypes{Name: "Nully", ID: 0, Postcode: 0}},
-	}, {
-		summary:  "regular nulls",
-		query:    `SELECT &NullGuy.* FROM person WHERE name = "Nully"`,
-		types:    []any{NullGuy{}},
-		inputs:   []any{},
-		outputs:  []any{&NullGuy{}},
-		expected: []any{&NullGuy{Name: sql.NullString{Valid: true, String: "Nully"}, ID: sql.NullInt64{Valid: false}, Postcode: sql.NullInt64{Valid: false}}},
-	}, {
-		summary:  "nulls with custom scan type",
-		query:    `SELECT &ScannerDude.* FROM person WHERE name = "Nully"`,
-		types:    []any{ScannerDude{}},
-		inputs:   []any{},
-		outputs:  []any{&ScannerDude{}},
-		expected: []any{&ScannerDude{Name: ScannerString{SS: "ScannerString scanned well!"}, ID: ScannerInt{SI: 666}, Postcode: ScannerInt{SI: 666}}},
-	}}
-
-	tables, db, err := personAndAddressDB(c)
-	c.Assert(err, IsNil)
-	defer dropTables(c, db, tables...)
-
-	insertNullPerson, err := sqlair.Prepare("INSERT INTO person VALUES ('Nully', NULL, NULL, NULL);")
-	c.Assert(err, IsNil)
-	c.Assert(db.Query(nil, insertNullPerson).Run(), IsNil)
-
-	for _, t := range tests {
-		stmt, err := sqlair.Prepare(t.query, t.types...)
-		c.Assert(err, IsNil,
-			Commentf("\ntest %q failed (Prepare):\ninput: %s\n", t.summary, t.query))
-
-		err = db.Query(nil, stmt, t.inputs...).Get(t.outputs...)
-		c.Assert(err, IsNil,
-			Commentf("\ntest %q failed (Get):\ninput: %s\n", t.summary, t.query))
-
-		for i, s := range t.expected {
-			c.Assert(t.outputs[i], DeepEquals, s,
-				Commentf("\ntest %q failed:\ninput: %s", t.summary, t.query))
-		}
-	}
-}
-
 func (s *PackageSuite) TestValidGet(c *C) {
 	var tests = []struct {
 		summary  string
@@ -624,22 +517,6 @@ func (s *PackageSuite) TestGetErrors(c *C) {
 		c.Assert(err, ErrorMatches, t.err,
 			Commentf("\ntest %q failed:\ninput: %s\noutputs: %s", t.summary, t.query, t.outputs))
 	}
-}
-func (s *PackageSuite) TestErrNoRows(c *C) {
-	tables, db, err := personAndAddressDB(c)
-	c.Assert(err, IsNil)
-	defer dropTables(c, db, tables...)
-
-	stmt := sqlair.MustPrepare("SELECT * AS &Person.* FROM person WHERE id=12312", Person{})
-	err = db.Query(nil, stmt).Get(&Person{})
-	c.Check(err, ErrorMatches, "sql: no rows in result set")
-	c.Check(errors.Is(err, sqlair.ErrNoRows), Equals, true)
-	c.Check(errors.Is(err, sql.ErrNoRows), Equals, true)
-
-	err = db.Query(nil, stmt).GetAll(&[]Person{})
-	c.Check(err, ErrorMatches, "sql: no rows in result set")
-	c.Check(errors.Is(err, sqlair.ErrNoRows), Equals, true)
-	c.Check(errors.Is(err, sql.ErrNoRows), Equals, true)
 }
 
 func (s *PackageSuite) TestValidGetAll(c *C) {
@@ -920,6 +797,130 @@ func (s *PackageSuite) TestOutcome(c *C) {
 	iter = db.Query(nil, selectStmt).Iter()
 	err = iter.Get()
 	c.Assert(err, ErrorMatches, "cannot get result: cannot call Get before Next unless getting outcome")
+}
+
+func (s *PackageSuite) TestErrNoRows(c *C) {
+	tables, db, err := personAndAddressDB(c)
+	c.Assert(err, IsNil)
+	defer dropTables(c, db, tables...)
+
+	stmt := sqlair.MustPrepare("SELECT * AS &Person.* FROM person WHERE id=12312", Person{})
+	err = db.Query(nil, stmt).Get(&Person{})
+	c.Check(err, ErrorMatches, "sql: no rows in result set")
+	c.Check(errors.Is(err, sqlair.ErrNoRows), Equals, true)
+	c.Check(errors.Is(err, sql.ErrNoRows), Equals, true)
+
+	err = db.Query(nil, stmt).GetAll(&[]Person{})
+	c.Check(err, ErrorMatches, "sql: no rows in result set")
+	c.Check(errors.Is(err, sqlair.ErrNoRows), Equals, true)
+	c.Check(errors.Is(err, sql.ErrNoRows), Equals, true)
+}
+
+type ScannerInt struct {
+	SI int
+}
+
+func (si *ScannerInt) Scan(v any) error {
+	if _, ok := v.(int); ok {
+		si.SI = 42
+	} else {
+		si.SI = 666
+	}
+	return nil
+}
+
+type ScannerString struct {
+	SS string
+}
+
+func (ss *ScannerString) Scan(v any) error {
+	if _, ok := v.(string); ok {
+		ss.SS = "ScannerString scanned well!"
+	} else {
+		ss.SS = "ScannerString found a NULL"
+	}
+	return nil
+}
+
+func (s *PackageSuite) TestNulls(c *C) {
+	type I int
+	type J = int
+	type S = string
+	type PersonWithStrangeTypes struct {
+		ID       I `db:"id"`
+		Name     S `db:"name"`
+		Postcode J `db:"address_id"`
+	}
+	type NullGuy struct {
+		ID       sql.NullInt64  `db:"id"`
+		Name     sql.NullString `db:"name"`
+		Postcode sql.NullInt64  `db:"address_id"`
+	}
+	type ScannerDude struct {
+		ID       ScannerInt    `db:"id"`
+		Name     ScannerString `db:"name"`
+		Postcode ScannerInt    `db:"address_id"`
+	}
+
+	var tests = []struct {
+		summary  string
+		query    string
+		types    []any
+		inputs   []any
+		outputs  []any
+		expected []any
+	}{{
+		summary:  "reading nulls",
+		query:    `SELECT &Person.* FROM person WHERE name = "Nully"`,
+		types:    []any{Person{}},
+		inputs:   []any{},
+		outputs:  []any{&Person{ID: 5, Postcode: 10}},
+		expected: []any{&Person{Name: "Nully", ID: 0, Postcode: 0}},
+	}, {
+		summary:  "reading nulls with custom types",
+		query:    `SELECT &PersonWithStrangeTypes.* FROM person WHERE name = "Nully"`,
+		types:    []any{PersonWithStrangeTypes{}},
+		inputs:   []any{},
+		outputs:  []any{&PersonWithStrangeTypes{ID: 5, Postcode: 10}},
+		expected: []any{&PersonWithStrangeTypes{Name: "Nully", ID: 0, Postcode: 0}},
+	}, {
+		summary:  "regular nulls",
+		query:    `SELECT &NullGuy.* FROM person WHERE name = "Nully"`,
+		types:    []any{NullGuy{}},
+		inputs:   []any{},
+		outputs:  []any{&NullGuy{}},
+		expected: []any{&NullGuy{Name: sql.NullString{Valid: true, String: "Nully"}, ID: sql.NullInt64{Valid: false}, Postcode: sql.NullInt64{Valid: false}}},
+	}, {
+		summary:  "nulls with custom scan type",
+		query:    `SELECT &ScannerDude.* FROM person WHERE name = "Nully"`,
+		types:    []any{ScannerDude{}},
+		inputs:   []any{},
+		outputs:  []any{&ScannerDude{}},
+		expected: []any{&ScannerDude{Name: ScannerString{SS: "ScannerString scanned well!"}, ID: ScannerInt{SI: 666}, Postcode: ScannerInt{SI: 666}}},
+	}}
+
+	tables, db, err := personAndAddressDB(c)
+	c.Assert(err, IsNil)
+	defer dropTables(c, db, tables...)
+
+	insertNullPerson, err := sqlair.Prepare("INSERT INTO person VALUES ('Nully', NULL, NULL, NULL);")
+	c.Assert(err, IsNil)
+	c.Assert(db.Query(nil, insertNullPerson).Run(), IsNil)
+
+	for _, t := range tests {
+		stmt, err := sqlair.Prepare(t.query, t.types...)
+		c.Assert(err, IsNil,
+			Commentf("\ntest %q failed (Prepare):\ninput: %s\n", t.summary, t.query))
+
+		err = db.Query(nil, stmt, t.inputs...).Get(t.outputs...)
+		c.Assert(err, IsNil,
+			Commentf("\ntest %q failed (Get):\ninput: %s\n", t.summary, t.query))
+
+		for i, s := range t.expected {
+			c.Assert(t.outputs[i], DeepEquals, s,
+				Commentf("\ntest %q failed:\ninput: %s", t.summary, t.query))
+		}
+	}
 }
 
 func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
