@@ -49,10 +49,10 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 			if err != nil {
 				return nil, err
 			}
-
 			if omit {
 				return nil, omitEmptyInputError(te.input.Desc())
 			}
+
 			argTypeUsed[te.input.ArgType()] = true
 			sqlBuilder.writeInput(inputCount, len(vals))
 			for _, val := range vals {
@@ -142,6 +142,7 @@ type insertColumn struct {
 	explicit bool
 }
 
+// newInsertColumn builds an insert column.
 func newInsertColumn(input typeinfo.Input, column string, explicit bool) insertColumn {
 	return insertColumn{
 		input:    input,
@@ -162,6 +163,8 @@ type typedOutputExpr struct {
 	outputColumns []outputColumn
 }
 
+// sqlBuilder is used to generate SQL string piece by piece using the struct
+// methods.
 type sqlBuilder struct {
 	buf bytes.Buffer
 }
@@ -211,7 +214,7 @@ func (b *sqlBuilder) write(sql string) {
 	b.buf.WriteString(sql)
 }
 
-// write writes the SQL to the sqlBuilder.
+// getSQL returns the generated SQL string
 func (b *sqlBuilder) getSQL() string {
 	return b.buf.String()
 }
