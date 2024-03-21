@@ -115,8 +115,8 @@ type structField struct {
 	// structType is the reflected type of the struct containing this field.
 	structType reflect.Type
 
-	// index for Type.Field.
-	index int
+	// index for Type.FieldByIndex.
+	index []int
 
 	// tag is the struct tag associated with this field.
 	tag string
@@ -139,11 +139,11 @@ func (f *structField) LocateParams(typeToValue TypeToValue) (vals []reflect.Valu
 	if !ok {
 		return nil, false, valueNotFoundError(typeToValue, f.structType)
 	}
-	val := s.Field(f.index)
+	val := s.FieldByIndex(f.index)
 	if val.IsZero() && f.omitEmpty {
 		omitempty = true
 	}
-	return []reflect.Value{s.Field(f.index)}, omitempty, nil
+	return []reflect.Value{val}, omitempty, nil
 }
 
 // Desc returns a natural language description of the struct field for use in
@@ -167,7 +167,7 @@ func (f *structField) LocateScanTarget(typeToValue TypeToValue) (any, *ScanProxy
 	if !ok {
 		return nil, nil, valueNotFoundError(typeToValue, f.structType)
 	}
-	val := s.Field(f.index)
+	val := s.FieldByIndex(f.index)
 	if !val.CanSet() {
 		return nil, nil, fmt.Errorf("internal error: cannot set field %s of struct %s", f.name, f.structType.Name())
 	}

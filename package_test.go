@@ -6,6 +6,7 @@ package sqlair_test
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"strconv"
@@ -63,6 +64,40 @@ type CustomMap map[string]any
 
 type unexportedStruct struct {
 	X int `db:"id"`
+}
+
+type ScannerValuerInt struct {
+	F int
+}
+
+func (sv *ScannerValuerInt) Scan(v any) error {
+	if i, ok := v.(int64); ok {
+		sv.F = int(i)
+	} else {
+		sv.F = 666
+	}
+	return nil
+}
+
+func (sv *ScannerValuerInt) Value() (driver.Value, error) {
+	return int64(sv.F), nil
+}
+
+type ScannerValuerString struct {
+	S string
+}
+
+func (svs *ScannerValuerString) Scan(v any) error {
+	if _, ok := v.(string); ok {
+		svs.S = "ScannerString scanned well!"
+	} else {
+		svs.S = "ScannerString found a NULL"
+	}
+	return nil
+}
+
+func (svs *ScannerValuerString) Value() (driver.Value, error) {
+	return svs.S, nil
 }
 
 var fred = Person{Name: "Fred", ID: 30, Postcode: 1000}
@@ -816,32 +851,6 @@ func (s *PackageSuite) TestErrNoRows(c *C) {
 	c.Check(errors.Is(err, sql.ErrNoRows), Equals, true)
 }
 
-type ScannerInt struct {
-	SI int
-}
-
-func (si *ScannerInt) Scan(v any) error {
-	if _, ok := v.(int); ok {
-		si.SI = 42
-	} else {
-		si.SI = 666
-	}
-	return nil
-}
-
-type ScannerString struct {
-	SS string
-}
-
-func (ss *ScannerString) Scan(v any) error {
-	if _, ok := v.(string); ok {
-		ss.SS = "ScannerString scanned well!"
-	} else {
-		ss.SS = "ScannerString found a NULL"
-	}
-	return nil
-}
-
 func (s *PackageSuite) TestNulls(c *C) {
 	type I int
 	type J = int
@@ -857,9 +866,9 @@ func (s *PackageSuite) TestNulls(c *C) {
 		Postcode sql.NullInt64  `db:"address_id"`
 	}
 	type ScannerDude struct {
-		ID       ScannerInt    `db:"id"`
-		Name     ScannerString `db:"name"`
-		Postcode ScannerInt    `db:"address_id"`
+		ID       ScannerValuerInt    `db:"id"`
+		Name     ScannerValuerString `db:"name"`
+		Postcode ScannerValuerInt    `db:"address_id"`
 	}
 
 	var tests = []struct {
@@ -896,7 +905,7 @@ func (s *PackageSuite) TestNulls(c *C) {
 		types:    []any{ScannerDude{}},
 		inputs:   []any{},
 		outputs:  []any{&ScannerDude{}},
-		expected: []any{&ScannerDude{Name: ScannerString{SS: "ScannerString scanned well!"}, ID: ScannerInt{SI: 666}, Postcode: ScannerInt{SI: 666}}},
+		expected: []any{&ScannerDude{Name: ScannerValuerString{S: "ScannerString scanned well!"}, ID: ScannerValuerInt{F: 666}, Postcode: ScannerValuerInt{F: 666}}},
 	}}
 
 	tables, db, err := personAndAddressDB(c)
@@ -1160,13 +1169,13 @@ CREATE TABLE person (
 	defer dropTables(c, db, "person")
 
 	type Person struct {
-		ID         int    `db:"id, omitempty"`
-		Fullname   string `db:"name"`
-		PostalCode int    `db:"address_id"`
+		ID       int    `db:"id, omitempty"`
+		Name     string `db:"name"`
+		Postcode int    `db:"address_id"`
 	}
 	var jim = Person{
-		Fullname:   "Jim",
-		PostalCode: 500,
+		Name:     "Jim",
+		Postcode: 500,
 	}
 	// Insert Jim.
 	insertStmt := sqlair.MustPrepare("INSERT INTO person (*) VALUES ($Person.*);", Person{})
@@ -1178,7 +1187,7 @@ CREATE TABLE person (
 	var jimCheck = Person{}
 	err = db.Query(nil, selectStmt, &jim).Get(&jimCheck)
 	c.Assert(err, IsNil)
-	c.Assert(jimCheck, Equals, Person{Fullname: "Jim", PostalCode: 500, ID: 1})
+	c.Assert(jimCheck, Equals, Person{Name: "Jim", Postcode: 500, ID: 1})
 }
 
 func (s *PackageSuite) TestInsert(c *C) {
@@ -1272,4 +1281,23 @@ func (s *PackageSuite) TestInsert(c *C) {
 	var a0 = Address{}
 	c.Assert(db.Query(nil, deleteAddressStmtReturning, a).Get(&a0), IsNil)
 	c.Assert(a, Equals, a0)
+}
+
+func (s *PackageSuite) TestScannerValuerInterfaces(c *C) {
+	type ScannerValuerStruct struct {
+		ScannerValuerInt *ScannerValuerInt `db:"id"`
+	}
+
+	tables, db, err := personAndAddressDB(c)
+	c.Assert(err, IsNil)
+
+	defer dropTables(c, db, tables...)
+
+	stmt, err := sqlair.Prepare("SELECT address_id AS &ScannerValuerStruct.id FROM person WHERE id = $ScannerValuerStruct.id", ScannerValuerStruct{})
+	c.Assert(err, IsNil)
+
+	svs := ScannerValuerStruct{ScannerValuerInt: &ScannerValuerInt{F: 30}}
+	err = db.Query(nil, stmt, svs).Get(&svs)
+	c.Assert(err, IsNil)
+	c.Check(svs, DeepEquals, ScannerValuerStruct{ScannerValuerInt: &ScannerValuerInt{F: 1000}})
 }
