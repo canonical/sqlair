@@ -5,6 +5,7 @@ package expr_test
 
 import (
 	"database/sql"
+	"database/sql/driver"
 	"strconv"
 	"testing"
 
@@ -73,6 +74,47 @@ type OmitEmptyPerson struct {
 	ID         int    `db:"id, omitempty"`
 	Fullname   string `db:"name"`
 	PostalCode int    `db:"address_id"`
+}
+
+type Embeddings struct {
+	Embedded1
+	Embedded2
+	F0 int `db:"col0"`
+}
+
+type Embedded1 struct {
+	F1 int `db:"col1"`
+}
+
+type Embedded2 struct {
+	F2 int `db:"col2"`
+	Embedded3
+}
+
+type Embedded3 struct {
+	F3            int `db:"col3"`
+	ScannerValuer `db:"col4"`
+}
+
+type ScannerValuer struct {
+	F int
+}
+
+func (sv *ScannerValuer) Scan(v any) error {
+	if _, ok := v.(int); ok {
+		sv.F = 42
+	} else {
+		sv.F = 666
+	}
+	return nil
+}
+
+func (sv *ScannerValuer) Value() (driver.Value, error) {
+	return int64(sv.F), nil
+}
+
+type ScannerValuerStruct struct {
+	ScannerValuer ScannerValuer `db:"col1"`
 }
 
 var tests = []struct {
@@ -591,6 +633,28 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	inputArgs:      []any{OmitEmptyPerson{ID: 0, Fullname: "John Doe", PostalCode: 42}},
 	expectedParams: []any{42, "John Doe"},
 	expectedSQL:    `INSERT INTO person (address_id, name) VALUES (@sqlair_0, @sqlair_1)`,
+}, {
+	summary:        "select into field containing struct with scanner and valuer interfaces",
+	query:          "SELECT &ScannerValuerStruct.* FROM person WHERE id = $ScannerValuerStruct.col1",
+	expectedParsed: "[Bypass[SELECT ] Output[[] [ScannerValuerStruct.*]] Bypass[ FROM person WHERE id = ] Input[ScannerValuerStruct.col1]]",
+	typeSamples:    []any{ScannerValuerStruct{}},
+	inputArgs:      []any{ScannerValuerStruct{ScannerValuer: ScannerValuer{F: 42}}},
+	expectedParams: []any{ScannerValuer{F: 42}},
+	expectedSQL:    "SELECT col1 AS _sqlair_0 FROM person WHERE id = @sqlair_0",
+}, {
+	summary:        "embedded struct asterisk output and inputs",
+	query:          "SELECT &Embeddings.* FROM address WHERE id = $Embeddings.col1 AND district = $Embeddings.col2 AND street = $Embeddings.col3 AND postcode = $Embeddings.col4",
+	expectedParsed: "[Bypass[SELECT ] Output[[] [Embeddings.*]] Bypass[ FROM address WHERE id = ] Input[Embeddings.col1] Bypass[ AND district = ] Input[Embeddings.col2] Bypass[ AND street = ] Input[Embeddings.col3] Bypass[ AND postcode = ] Input[Embeddings.col4]]",
+	typeSamples:    []any{Embeddings{}},
+	inputArgs:      []any{Embeddings{F0: 0, Embedded1: Embedded1{F1: 1}, Embedded2: Embedded2{F2: 2, Embedded3: Embedded3{F3: 3, ScannerValuer: ScannerValuer{F: 4}}}}},
+	expectedParams: []any{1, 2, 3, ScannerValuer{F: 4}},
+	expectedSQL:    "SELECT col0 AS _sqlair_0, col1 AS _sqlair_1, col2 AS _sqlair_2, col3 AS _sqlair_3, col4 AS _sqlair_4 FROM address WHERE id = @sqlair_0 AND district = @sqlair_1 AND street = @sqlair_2 AND postcode = @sqlair_3",
+}, {
+	summary:        "embedded struct columns output",
+	query:          "SELECT &Embeddings.col1, &Embeddings.col2, &Embeddings.col3, &Embeddings.col4 FROM address WHERE id = 1000",
+	expectedParsed: "[Bypass[SELECT ] Output[[] [Embeddings.col1]] Bypass[, ] Output[[] [Embeddings.col2]] Bypass[, ] Output[[] [Embeddings.col3]] Bypass[, ] Output[[] [Embeddings.col4]] Bypass[ FROM address WHERE id = 1000]]",
+	typeSamples:    []any{Embeddings{}},
+	expectedSQL:    "SELECT col1 AS _sqlair_0, col2 AS _sqlair_1, col3 AS _sqlair_2, col4 AS _sqlair_3 FROM address WHERE id = 1000",
 }}
 
 func (s *ExprSuite) TestExprPkg(c *C) {
@@ -804,7 +868,24 @@ func (s *ExprSuite) TestBindTypesErrors(c *C) {
 		S string
 	}
 	type myArray [10]any
+
 	type myMap map[string]any
+
+	type AmbiguousTags struct {
+		ID1 int `db:"id"`
+		ID2 int `db:"id"`
+	}
+	type A1 struct {
+		ID1 int `db:"id"`
+	}
+	type A2 struct {
+		ID2 int `db:"id"`
+	}
+	type AmbiguousEmbeddedTags struct {
+		A1
+		A2
+	}
+
 	tests := []struct {
 		query       string
 		typeSamples []any
@@ -961,6 +1042,14 @@ func (s *ExprSuite) TestBindTypesErrors(c *C) {
 		query:       "INSERT INTO t (id) VALUES ($Person.*, $Address.*)",
 		typeSamples: []any{Person{}, Address{}},
 		err:         `cannot prepare statement: input expression: more than one type provides column "id": (id) VALUES ($Person.*, $Address.*)`,
+	}, {
+		query:       "SELECT &AmbiguousTags.* FROM t",
+		typeSamples: []any{AmbiguousTags{}},
+		err:         `cannot prepare statement: db tag "id" appears in both field "ID2" and field "ID1" of struct "AmbiguousTags"`,
+	}, {
+		query:       "SELECT &AmbiguousEmbeddedTags.* FROM t",
+		typeSamples: []any{AmbiguousEmbeddedTags{}},
+		err:         `cannot prepare statement: db tag "id" appears in both field "ID2" and field "ID1" of struct "AmbiguousEmbeddedTags"`,
 	}}
 
 	for i, test := range tests {
