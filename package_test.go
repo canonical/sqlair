@@ -533,7 +533,7 @@ func (s *PackageSuite) TestValidGetAll(c *C) {
 		types:    []any{Person{}, Address{}},
 		inputs:   []any{},
 		slices:   []any{&[]*Person{}, &[]*Address{}},
-		expected: []any{&[]*Person{&Person{ID: fred.ID}, &Person{ID: fred.ID}, &Person{ID: fred.ID}, &Person{ID: mark.ID}, &Person{ID: mark.ID}, &Person{ID: mark.ID}, &Person{ID: mary.ID}, &Person{ID: mary.ID}, &Person{ID: mary.ID}, &Person{ID: dave.ID}, &Person{ID: dave.ID}, &Person{ID: dave.ID}}, &[]*Address{&Address{ID: mainStreet.ID}, &Address{ID: churchRoad.ID}, &Address{ID: stationLane.ID}, &Address{ID: mainStreet.ID}, &Address{ID: churchRoad.ID}, &Address{ID: stationLane.ID}, &Address{ID: mainStreet.ID}, &Address{ID: churchRoad.ID}, &Address{ID: stationLane.ID}, &Address{ID: mainStreet.ID}, &Address{ID: churchRoad.ID}, &Address{ID: stationLane.ID}}},
+		expected: []any{&[]*Person{{ID: fred.ID}, {ID: fred.ID}, {ID: fred.ID}, {ID: mark.ID}, {ID: mark.ID}, {ID: mark.ID}, {ID: mary.ID}, {ID: mary.ID}, {ID: mary.ID}, {ID: dave.ID}, {ID: dave.ID}, {ID: dave.ID}}, &[]*Address{{ID: mainStreet.ID}, {ID: churchRoad.ID}, {ID: stationLane.ID}, {ID: mainStreet.ID}, {ID: churchRoad.ID}, {ID: stationLane.ID}, {ID: mainStreet.ID}, {ID: churchRoad.ID}, {ID: stationLane.ID}, {ID: mainStreet.ID}, {ID: churchRoad.ID}, {ID: stationLane.ID}}},
 	}, {
 		summary:  "select all columns into person",
 		query:    "SELECT * AS &Person.* FROM person",
