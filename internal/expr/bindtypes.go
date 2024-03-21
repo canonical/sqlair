@@ -142,26 +142,27 @@ func (e *asteriskInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie any, err e
 		}
 	}()
 
-	var inputs []typeinfo.Input
-	var columns []string
+	var cols []insertColumn
 	for _, source := range e.sources {
 		if source.memberName == "*" {
-			inps, tags, err := argInfo.AllStructInputs(source.typeName)
+			inputs, tags, err := argInfo.AllStructInputs(source.typeName)
 			if err != nil {
 				return nil, err
 			}
-			columns = append(columns, tags...)
-			inputs = append(inputs, inps...)
+			for i, input := range inputs {
+				c := newInsertColumn(input, tags[i], false)
+				cols = append(cols, c)
+			}
 		} else {
-			inp, err := argInfo.InputMember(source.typeName, source.memberName)
+			input, err := argInfo.InputMember(source.typeName, source.memberName)
 			if err != nil {
 				return nil, err
 			}
-			columns = append(columns, source.memberName)
-			inputs = append(inputs, inp)
+			c := newInsertColumn(input, source.memberName, true)
+			cols = append(cols, c)
 		}
 	}
-	return &typedInsertExpr{inputs: inputs, columns: columns}, nil
+	return &typedInsertExpr{insertColumns: cols}, nil
 }
 
 // columnsInsertExpr is an input expression occurring within an INSERT statement
@@ -233,8 +234,7 @@ func (e *columnsInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie any, err er
 	// and match them against the columns provided by the types on the right.
 	// If a map with an asterisk is present, we use it to supply the spare
 	// columns. If it is not present, a spare column is an error.
-	var columns []string
-	var inputs []typeinfo.Input
+	var cols []insertColumn
 	for _, column := range e.columns {
 		columnStr := column.String()
 		input, ok := colToInput[columnStr]
@@ -252,10 +252,11 @@ func (e *columnsInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie any, err er
 		if len(input) > 1 {
 			return nil, fmt.Errorf("more than one type provides column %q", columnStr)
 		}
-		columns = append(columns, columnStr)
-		inputs = append(inputs, input[0])
+
+		c := newInsertColumn(input[0], columnStr, true)
+		cols = append(cols, c)
 	}
-	return &typedInsertExpr{inputs: inputs, columns: columns}, nil
+	return &typedInsertExpr{insertColumns: cols}, nil
 }
 
 // sliceInputExpr is an input expression of the form "$S[:]" that represents a

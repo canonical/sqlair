@@ -296,7 +296,7 @@ func parseTag(tag string) (string, bool, error) {
 	var omitEmpty bool
 	if len(options) > 1 {
 		for _, flag := range options[1:] {
-			if flag == "omitempty" {
+			if strings.TrimSpace(flag) == "omitempty" {
 				omitEmpty = true
 			} else {
 				return "", omitEmpty, fmt.Errorf("unsupported flag %q in tag %q", flag, tag)

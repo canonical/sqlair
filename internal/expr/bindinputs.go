@@ -41,66 +41,61 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 	argTypeUsed := map[reflect.Type]bool{}
 	inputCount := 0
 	outputCount := 0
-	sqlStr := bytes.Buffer{}
+	var sqlBuilder sqlBuilder
 	for _, te := range *tbe {
 		switch te := te.(type) {
 		case *typedInputExpr:
-			vals, err := te.input.LocateParams(typeToValue)
+			vals, omit, err := te.input.LocateParams(typeToValue)
 			if err != nil {
 				return nil, err
 			}
+			if omit {
+				return nil, omitEmptyInputError(te.input.Desc())
+			}
+
 			argTypeUsed[te.input.ArgType()] = true
-			for i, val := range vals {
-				if i != 0 {
-					sqlStr.WriteString(", ")
-				}
+			sqlBuilder.writeInput(inputCount, len(vals))
+			for _, val := range vals {
 				namedInput := sql.Named("sqlair_"+strconv.Itoa(inputCount), val.Interface())
 				params = append(params, namedInput)
-				sqlStr.WriteString("@sqlair_" + strconv.Itoa(inputCount))
 				inputCount++
 			}
 		case *typedInsertExpr:
-			// Write out the columns.
-			sqlStr.WriteString("(")
-			for i, col := range te.columns {
-				if i != 0 {
-					sqlStr.WriteString(", ")
-				}
-				sqlStr.WriteString(col)
-			}
-			sqlStr.WriteString(") VALUES (")
-			// Write out the values.
-			for i, input := range te.inputs {
-				if i != 0 {
-					sqlStr.WriteString(", ")
-				}
-				vals, err := input.LocateParams(typeToValue)
+			var columns []string
+			for _, ic := range te.insertColumns {
+				vals, omit, err := ic.input.LocateParams(typeToValue)
 				if err != nil {
 					return nil, err
 				}
-				argTypeUsed[input.ArgType()] = true
-				for j, val := range vals {
-					if j != 0 {
-						sqlStr.WriteString(", ")
+				if len(vals) > 1 {
+					// Only slices return multiple values and they are not
+					// allowed in insert expressions.
+					return nil, fmt.Errorf("internal error: types in insert expressions cannot return multiple values")
+				}
+
+				argTypeUsed[ic.input.ArgType()] = true
+				if omit {
+					if ic.explicit {
+						return nil, omitEmptyInputError(ic.input.Desc())
 					}
-					namedInput := sql.Named("sqlair_"+strconv.Itoa(inputCount), val.Interface())
-					params = append(params, namedInput)
-					sqlStr.WriteString("@sqlair_" + strconv.Itoa(inputCount))
-					inputCount++
+					continue
 				}
+				namedInput := sql.Named("sqlair_"+strconv.Itoa(inputCount), vals[0].Interface())
+				params = append(params, namedInput)
+				columns = append(columns, ic.column)
+				inputCount++
 			}
-			sqlStr.WriteString(")")
+			sqlBuilder.writeInsert(inputCount-len(columns), columns)
 		case *typedOutputExpr:
-			for i, oc := range te.outputColumns {
-				if i != 0 {
-					sqlStr.WriteString(", ")
-				}
-				sqlStr.WriteString(oc.sql(outputCount))
-				outputCount++
+			var columns []string
+			for _, oc := range te.outputColumns {
 				outputs = append(outputs, oc.output)
+				columns = append(columns, oc.column)
 			}
+			sqlBuilder.writeOutput(outputCount, columns)
+			outputCount += len(columns)
 		case *bypass:
-			sqlStr.WriteString(te.chunk)
+			sqlBuilder.write(te.chunk)
 		default:
 			return nil, fmt.Errorf("internal error: unknown expression type %T", te)
 		}
@@ -112,7 +107,7 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 		}
 	}
 
-	return &PrimedQuery{outputs: outputs, sql: sqlStr.String(), params: params}, nil
+	return &PrimedQuery{outputs: outputs, sql: sqlBuilder.getSQL(), params: params}, nil
 }
 
 // outputColumn stores the name of a column to fetch from the database and the
@@ -120,11 +115,6 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 type outputColumn struct {
 	output typeinfo.Output
 	column string
-}
-
-// sql generates the SQL for a single output column.
-func (oc *outputColumn) sql(outputCount int) string {
-	return oc.column + " AS " + markerName(outputCount)
 }
 
 // newOutputColumn generates an output column with the correct column string to
@@ -142,17 +132,91 @@ type typedInputExpr struct {
 	input typeinfo.Input
 }
 
+// insertColumn stores information about a single column of a row in an INSERT
+// statement.
+type insertColumn struct {
+	input  typeinfo.Input
+	column string
+	// explicit is true if the column is explicity inserted in the SQLair
+	// query. If the column is inserted via an asterisk type, it is false.
+	explicit bool
+}
+
+// newInsertColumn builds an insert column.
+func newInsertColumn(input typeinfo.Input, column string, explicit bool) insertColumn {
+	return insertColumn{
+		input:    input,
+		column:   column,
+		explicit: explicit,
+	}
+}
+
 // typedInsertExpr stores information about the Go values to use as inputs inside
 // an INSERT statement.
 type typedInsertExpr struct {
-	columns []string
-	inputs  []typeinfo.Input
+	insertColumns []insertColumn
 }
 
 // typedOutputExpr contains the columns to fetch from the database and
 // information about the Go values to read the query results into.
 type typedOutputExpr struct {
 	outputColumns []outputColumn
+}
+
+// sqlBuilder is used to generate SQL string piece by piece using the struct
+// methods.
+type sqlBuilder struct {
+	buf bytes.Buffer
+}
+
+// writeInsert writes the SQL for INSERT statements to the sqlBuilder.
+func (b *sqlBuilder) writeInsert(inputCount int, columns []string) {
+	// Write out the columns.
+	b.buf.WriteString("(")
+	b.writeCommaSeperatedList(columns, func(_ int, column string) string {
+		return column
+	})
+	b.buf.WriteString(") VALUES (")
+	// Write out the values.
+	b.writeCommaSeperatedList(columns, func(i int, _ string) string {
+		return "@sqlair_" + strconv.Itoa(inputCount+i)
+	})
+	b.buf.WriteString(")")
+}
+
+// writeInput writes the SQL for input placeholders to the sqlBuilder.
+func (b *sqlBuilder) writeInput(inputCount, num int) {
+	b.writeCommaSeperatedList(make([]string, num), func(i int, column string) string {
+		return "@sqlair_" + strconv.Itoa(inputCount+i)
+	})
+}
+
+// writeOutput writes the SQL for output columns to the sqlBuilder.
+func (b *sqlBuilder) writeOutput(outputCount int, columns []string) {
+	b.writeCommaSeperatedList(columns, func(i int, column string) string {
+		return column + " AS " + markerName(outputCount+i)
+	})
+}
+
+// writeCommaSeperatedList writes out the provided list using the writer to
+// write each element into the SQL.
+func (b *sqlBuilder) writeCommaSeperatedList(list []string, writer func(i int, s string) string) {
+	for i, s := range list {
+		if i != 0 {
+			b.buf.WriteString(", ")
+		}
+		b.buf.WriteString(writer(i, s))
+	}
+}
+
+// write writes the SQL to the sqlBuilder.
+func (b *sqlBuilder) write(sql string) {
+	b.buf.WriteString(sql)
+}
+
+// getSQL returns the generated SQL string
+func (b *sqlBuilder) getSQL() string {
+	return b.buf.String()
 }
 
 const markerPrefix = "_sqlair_"
@@ -170,4 +234,8 @@ func markerIndex(s string) (int, bool) {
 		}
 	}
 	return 0, false
+}
+
+func omitEmptyInputError(valueDesc string) error {
+	return fmt.Errorf("%s has zero value and has the omitempty flag but the value is explicitly input", valueDesc)
 }

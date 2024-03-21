@@ -69,6 +69,12 @@ type Unicode我Struct struct {
 	X这 string `db:"鑑別"`
 }
 
+type OmitEmptyPerson struct {
+	ID         int    `db:"id, omitempty"`
+	Fullname   string `db:"name"`
+	PostalCode int    `db:"address_id"`
+}
+
 var tests = []struct {
 	summary        string
 	query          string
@@ -577,6 +583,14 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	expectedParsed: `[Bypass[SELECT ] Output[[1] [M.rowExists]] Bypass[, ] Output[[0] [NumberLiteralColumn.*]] Bypass[, ] Output[[] [NumberLiteralColumn.1]] Bypass[ FROM person]]`,
 	typeSamples:    []any{NumberLiteralColumn{}, sqlair.M{}},
 	expectedSQL:    `SELECT 1 AS _sqlair_0, 0 AS _sqlair_1, 1 AS _sqlair_2 FROM person`,
+}, {
+	summary:        "insert with omit empty",
+	query:          `INSERT INTO person (*) VALUES ($OmitEmptyPerson.*)`,
+	expectedParsed: `[Bypass[INSERT INTO person ] AsteriskInsert[[*] [OmitEmptyPerson.*]]]`,
+	typeSamples:    []any{OmitEmptyPerson{}},
+	inputArgs:      []any{OmitEmptyPerson{ID: 0, Fullname: "John Doe", PostalCode: 42}},
+	expectedParams: []any{42, "John Doe"},
+	expectedSQL:    `INSERT INTO person (address_id, name) VALUES (@sqlair_0, @sqlair_1)`,
 }}
 
 func (s *ExprSuite) TestExprPkg(c *C) {
@@ -1075,6 +1089,26 @@ func (s *ExprSuite) TestBindInputsError(c *C) {
 		typeSamples: []any{sqlair.M{}},
 		inputArgs:   []any{(sqlair.M)(nil)},
 		err:         `invalid input parameter: got nil M`,
+	}, {
+		query:       "INSERT INTO person (*) VALUES ($OmitEmptyPerson.id)",
+		typeSamples: []any{OmitEmptyPerson{}},
+		inputArgs:   []any{OmitEmptyPerson{ID: 0}},
+		err:         `invalid input parameter: tag "id" of struct "OmitEmptyPerson" has zero value and has the omitempty flag but the value is explicitly input`,
+	}, {
+		query:       "INSERT INTO person (id, street) VALUES ($OmitEmptyPerson.id, $M.*)",
+		typeSamples: []any{OmitEmptyPerson{}, sqlair.M{}},
+		inputArgs:   []any{OmitEmptyPerson{ID: 0}, sqlair.M{}},
+		err:         `invalid input parameter: tag "id" of struct "OmitEmptyPerson" has zero value and has the omitempty flag but the value is explicitly input`,
+	}, {
+		query:       "INSERT INTO person (id) VALUES ($OmitEmptyPerson.id)",
+		typeSamples: []any{OmitEmptyPerson{}},
+		inputArgs:   []any{OmitEmptyPerson{ID: 0}},
+		err:         `invalid input parameter: tag "id" of struct "OmitEmptyPerson" has zero value and has the omitempty flag but the value is explicitly input`,
+	}, {
+		query:       "SELECT &OmitEmptyPerson.* FROM person WHERE id = $OmitEmptyPerson.id",
+		typeSamples: []any{OmitEmptyPerson{}},
+		inputArgs:   []any{OmitEmptyPerson{ID: 0}},
+		err:         `invalid input parameter: tag "id" of struct "OmitEmptyPerson" has zero value and has the omitempty flag but the value is explicitly input`,
 	}}
 
 	outerP := Person{}
