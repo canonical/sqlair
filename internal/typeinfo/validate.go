@@ -23,9 +23,19 @@ func ValidateInputs(args []any) (TypeToValue, error) {
 		v = reflect.Indirect(v)
 		t := v.Type()
 		switch k := v.Kind(); k {
-		case reflect.Map, reflect.Slice, reflect.Struct:
+		case reflect.Map, reflect.Struct:
 			if t.Name() == "" {
 				return nil, fmt.Errorf("cannot use anonymous %s", k)
+			}
+		case reflect.Slice:
+			switch t.Elem().Kind() {
+			case reflect.Map, reflect.Struct, reflect.Pointer:
+			// If it is a slice of structs or maps or pointers then it might be
+			// a bulk insert, and we do not mind if it has no name.
+			default:
+				if t.Name() == "" {
+					return nil, fmt.Errorf("cannot use anonymous slice outside bulk insert")
+				}
 			}
 		default:
 			return nil, fmt.Errorf("need supported value, got %s", k)

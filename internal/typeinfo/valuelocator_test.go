@@ -127,162 +127,266 @@ func (s *typeInfoSuite) TestLocateScanTargetError(c *C) {
 	}
 }
 
-func (s *typeInfoSuite) TestLocateParamsMap(c *C) {
-	type M map[string]any
-
-	argInfo, err := GenerateArgInfo([]any{M{}})
-	c.Assert(err, IsNil)
-
-	m := M{"foo": "bar"}
-	valOfM := reflect.ValueOf(m)
-	typeToValue := map[reflect.Type]reflect.Value{
-		reflect.TypeOf(m): valOfM,
-	}
-
-	input, err := argInfo.InputMember("M", "foo")
-	c.Assert(err, IsNil)
-
-	vals, omit, err := input.LocateParams(typeToValue)
-	c.Assert(err, IsNil)
-	c.Assert(omit, Equals, false)
-
-	c.Assert(vals, HasLen, 1)
-
-	c.Assert(vals[0].Interface(), Equals, "bar")
+type M map[string]any
+type N map[string]any
+type TS struct {
+	Foo string `db:"foo"`
+	Bar string `db:"bar, omitempty"`
 }
+type TT struct{}
+type S []any
+type Sint []int
 
-func (s *typeInfoSuite) TestLocateParamsStruct(c *C) {
-	type T struct {
-		Foo string `db:"foo"`
-		Bar string `db:"bar, omitempty"`
-	}
-
-	argInfo, err := GenerateArgInfo([]any{T{}})
-	c.Assert(err, IsNil)
-
-	t := T{Foo: "foo", Bar: ""}
-	valOfT := reflect.ValueOf(&t).Elem()
-	typeToValue := map[reflect.Type]reflect.Value{
-		reflect.TypeOf(t): valOfT,
-	}
-
-	input, err := argInfo.InputMember("T", "foo")
-	c.Assert(err, IsNil)
-
-	vals, omit, err := input.LocateParams(typeToValue)
-	c.Assert(err, IsNil)
-	c.Assert(vals, HasLen, 1)
-	c.Assert(omit, Equals, false)
-	c.Assert(vals[0].Interface(), Equals, "foo")
-
-	input, err = argInfo.InputMember("T", "bar")
-	c.Assert(err, IsNil)
-
-	vals, omit, err = input.LocateParams(typeToValue)
-	c.Assert(err, IsNil)
-	c.Assert(vals, HasLen, 1)
-	c.Assert(omit, Equals, true)
-	c.Assert(vals[0].Interface(), Equals, "")
-}
-
-func (s *typeInfoSuite) TestLocateParamsStructError(c *C) {
-	type T struct {
-		Foo string `db:"foo"`
-	}
-
-	argInfo, err := GenerateArgInfo([]any{T{}})
-	c.Assert(err, IsNil)
-
-	input, err := argInfo.InputMember("T", "foo")
-	c.Assert(err, IsNil)
-
-	// Check missing type error.
-	_, _, err = input.LocateParams(map[reflect.Type]reflect.Value{})
-	c.Assert(err, ErrorMatches, `parameter with type "T" missing`)
-}
-
-func (s *typeInfoSuite) TestLocateParamsMapError(c *C) {
-	type M map[string]any
-
-	argInfo, err := GenerateArgInfo([]any{M{}})
-	c.Assert(err, IsNil)
-
-	m := M{"foo": "bar"}
-	valOfM := reflect.ValueOf(m)
-	typeToValue := map[reflect.Type]reflect.Value{
-		reflect.TypeOf(m): valOfM,
-	}
-
-	input, err := argInfo.InputMember("M", "baz")
-	c.Assert(err, IsNil)
-
-	// Check missing key error.
-	_, _, err = input.LocateParams(typeToValue)
-	c.Assert(err, ErrorMatches, `map "M" does not contain key "baz"`)
-
-	// Check missing type error.
-	_, _, err = input.LocateParams(map[reflect.Type]reflect.Value{})
-	c.Assert(err, ErrorMatches, `parameter with type "M" missing`)
-}
-
-func (*typeInfoSuite) TestLocateParamsSlice(c *C) {
-	type S []any
-	type T []int
-
-	argInfo, err := GenerateArgInfo([]any{S{}, T{}})
-	c.Assert(err, IsNil)
-
+func (s *typeInfoSuite) TestLocateParams(c *C) {
 	tests := []struct {
-		slice          any
-		expectedValues []any
+		summary      string
+		typeSample   any
+		arg          any
+		input        func(ArgInfo) (Input, error)
+		expectedBulk bool
+		expectedOmit bool
+		expectedVals []any
 	}{{
-		slice:          T{1, 2},
-		expectedValues: []any{1, 2},
+		summary:    "map",
+		typeSample: M{},
+		arg:        M{"foo": "bar"},
+		input: func(ai ArgInfo) (Input, error) {
+			return ai.InputMember("M", "foo")
+		},
+		expectedBulk: false,
+		expectedOmit: false,
+		expectedVals: []any{"bar"},
 	}, {
-		slice:          S{1, "two", 3.0},
-		expectedValues: []any{1, "two", 3.0},
+		summary:    "struct",
+		typeSample: TS{},
+		arg:        TS{Foo: "foo"},
+		input: func(ai ArgInfo) (Input, error) {
+			return ai.InputMember("TS", "foo")
+		},
+		expectedBulk: false,
+		expectedOmit: false,
+		expectedVals: []any{"foo"},
 	}, {
-		slice:          S{},
-		expectedValues: []any{},
+		summary:    "struct omitempty",
+		typeSample: TS{},
+		arg:        TS{Foo: "foo", Bar: ""},
+		input: func(ai ArgInfo) (Input, error) {
+			return ai.InputMember("TS", "bar")
+		},
+		expectedBulk: false,
+		expectedOmit: true,
+		expectedVals: []any{""},
+	}, {
+		summary:    "int slice",
+		typeSample: Sint{},
+		arg:        Sint{1, 2},
+		input: func(ai ArgInfo) (Input, error) {
+			return ai.InputSlice("Sint")
+		},
+		expectedOmit: false,
+		expectedBulk: false,
+		expectedVals: []any{1, 2},
+	}, {
+		summary:    "any slice",
+		typeSample: S{},
+		arg:        S{1, "two", 3.0},
+		input: func(ai ArgInfo) (Input, error) {
+			return ai.InputSlice("S")
+		},
+		expectedOmit: false,
+		expectedBulk: false,
+		expectedVals: []any{1, "two", 3.0},
+	}, {
+		summary:    "empty slice",
+		typeSample: S{},
+		arg:        S{},
+		input: func(ai ArgInfo) (Input, error) {
+			return ai.InputSlice("S")
+		},
+		expectedOmit: false,
+		expectedBulk: false,
+		expectedVals: []any{},
+	}, {
+		summary:    "map bulk insert",
+		typeSample: M{},
+		arg:        []M{{"foo": "foo"}, {"foo": "bar"}, {"foo": "baz"}},
+		input: func(ai ArgInfo) (Input, error) {
+			return ai.InputMember("M", "foo")
+		},
+		expectedBulk: true,
+		expectedOmit: false,
+		expectedVals: []any{"foo", "bar", "baz"},
+	}, {
+		summary:    "map pointer bulk insert",
+		typeSample: M{},
+		arg:        []*M{{"foo": "foo"}, {"foo": "bar"}, {"foo": "baz"}},
+		input: func(ai ArgInfo) (Input, error) {
+			return ai.InputMember("M", "foo")
+		},
+		expectedBulk: true,
+		expectedOmit: false,
+		expectedVals: []any{"foo", "bar", "baz"},
+	}, {
+		summary:    "struct bulk insert",
+		typeSample: TS{},
+		arg:        []TS{{Foo: "foo1"}, {Foo: "foo2"}, {Foo: "foo3"}},
+		input: func(ai ArgInfo) (Input, error) {
+			return ai.InputMember("TS", "foo")
+		},
+		expectedBulk: true,
+		expectedOmit: false,
+		expectedVals: []any{"foo1", "foo2", "foo3"},
+	}, {
+		summary:    "struct pointer bulk insert",
+		typeSample: TS{},
+		arg:        []*TS{{Foo: "foo1"}, {Foo: "foo2"}, {Foo: "foo3"}},
+		input: func(ai ArgInfo) (Input, error) {
+			return ai.InputMember("TS", "foo")
+		},
+		expectedBulk: true,
+		expectedOmit: false,
+		expectedVals: []any{"foo1", "foo2", "foo3"},
+	}}
+	for _, t := range tests {
+		c.Logf("starting test: %s", t.summary)
+		argInfo, err := GenerateArgInfo([]any{t.typeSample})
+		c.Assert(err, IsNil)
+
+		typeToValue := map[reflect.Type]reflect.Value{
+			reflect.TypeOf(t.arg): reflect.ValueOf(t.arg),
+		}
+		input, err := t.input(argInfo)
+		c.Assert(err, IsNil)
+
+		params, err := input.LocateParams(typeToValue)
+		c.Assert(err, IsNil)
+		c.Check(params.Omit, Equals, t.expectedOmit)
+		c.Check(params.Bulk, Equals, t.expectedBulk)
+		c.Assert(params.Vals, HasLen, len(t.expectedVals))
+		for i, v := range t.expectedVals {
+			c.Check(params.Vals[i].Interface(), Equals, v)
+		}
+	}
+}
+
+func (s *typeInfoSuite) TestLocateParamsError(c *C) {
+	tests := []struct {
+		summary    string
+		typeSample any
+		arg        any
+		input      func(ArgInfo) (Input, error)
+		err        string
+	}{{
+		summary:    "invalid map key",
+		typeSample: M{},
+		arg:        M{"foo": "bar"},
+		input: func(ai ArgInfo) (Input, error) {
+			return ai.InputMember("M", "baz")
+		},
+		err: `map "M" does not contain key "baz"`,
+	}, {
+		summary:    "missing map type",
+		typeSample: M{},
+		arg:        N{"foo": "bar"},
+		input: func(ai ArgInfo) (Input, error) {
+			return ai.InputMember("M", "baz")
+		},
+		err: `parameter with type "M" missing (have "N")`,
+	}, {
+		summary:    "missing struct type",
+		typeSample: TS{},
+		arg:        TT{},
+		input: func(ai ArgInfo) (Input, error) {
+			return ai.InputMember("TS", "foo")
+		},
+		err: `parameter with type "TS" missing (have "TT")`,
+	}, {
+		summary:    "slice not found",
+		typeSample: Sint{},
+		arg:        S{},
+		input: func(ai ArgInfo) (Input, error) {
+			return ai.InputSlice("Sint")
+		},
+		err: `parameter with type "Sint" missing (have "S")`,
+	}, {
+		summary:    "map bulk insert invalid key",
+		typeSample: M{},
+		arg:        []M{{"foo": "bar"}},
+		input: func(ai ArgInfo) (Input, error) {
+			return ai.InputMember("M", "baz")
+		},
+		err: `map "M" does not contain key "baz"`,
+	}, {
+		summary:    "map bulk insert nil map in slice",
+		typeSample: M{},
+		arg:        []M{{"foo": "bar"}, nil},
+		input: func(ai ArgInfo) (Input, error) {
+			return ai.InputMember("M", "foo")
+		},
+		err: `got nil map in slice of "M" at position 1`,
+	}, {
+		summary:    "map bulk insert nil pointer to map in slice",
+		typeSample: M{},
+		arg:        []*M{{"foo": "bar"}, nil},
+		input: func(ai ArgInfo) (Input, error) {
+			return ai.InputMember("M", "foo")
+		},
+		err: `got nil pointer in slice of "M" at position 1`,
+	}, {
+		summary:    "map bulk insert empty slice",
+		typeSample: M{},
+		arg:        []M{},
+		input: func(ai ArgInfo) (Input, error) {
+			return ai.InputMember("M", "foo")
+		},
+		err: `got slice of "M" with length 0`,
+	}, {
+		summary:    "map bulk insert nil slice",
+		typeSample: M{},
+		arg:        ([]M)(nil),
+		input: func(ai ArgInfo) (Input, error) {
+			return ai.InputMember("M", "foo")
+		},
+		err: `got slice of "M" with length 0`,
+	}, {
+		summary:    "struct bulk nil pointer in slice",
+		typeSample: TS{},
+		arg:        []*TS{nil},
+		input: func(ai ArgInfo) (Input, error) {
+			return ai.InputMember("TS", "foo")
+		},
+		err: `got nil pointer in slice of "TS" at position 0`,
+	}, {
+		summary:    "struct bulk insert empty slice",
+		typeSample: TS{},
+		arg:        []TS{},
+		input: func(ai ArgInfo) (Input, error) {
+			return ai.InputMember("TS", "foo")
+		},
+		err: `got slice of "TS" with length 0`,
+	}, {
+		summary:    "struct bulk insert nil slice",
+		typeSample: TS{},
+		arg:        ([]TS)(nil),
+		input: func(ai ArgInfo) (Input, error) {
+			return ai.InputMember("TS", "foo")
+		},
+		err: `got slice of "TS" with length 0`,
 	}}
 
-	for _, test := range tests {
-		valOfSlice := reflect.ValueOf(test.slice)
+	for _, t := range tests {
+		c.Logf("starting test: %s", t.summary)
+		argInfo, err := GenerateArgInfo([]any{t.typeSample})
+		c.Assert(err, IsNil)
+
 		typeToValue := map[reflect.Type]reflect.Value{
-			reflect.TypeOf(test.slice): valOfSlice,
+			reflect.TypeOf(t.arg): reflect.ValueOf(t.arg),
 		}
-
-		input, err := argInfo.InputSlice(valOfSlice.Type().Name())
+		input, err := t.input(argInfo)
 		c.Assert(err, IsNil)
 
-		vals, omit, err := input.LocateParams(typeToValue)
-		c.Assert(err, IsNil)
-		c.Assert(omit, Equals, false)
-		c.Assert(vals, HasLen, len(test.expectedValues))
-
-		for i := 0; i < len(test.expectedValues); i++ {
-			c.Assert(vals[i].Interface(), Equals, test.expectedValues[i])
-		}
+		_, err = input.LocateParams(typeToValue)
+		c.Assert(err, NotNil)
+		c.Check(err.Error(), Equals, t.err)
 	}
-}
-
-func (*typeInfoSuite) TestLocateParamsSliceError(c *C) {
-	type S []any
-	type T []int
-
-	argInfo, err := GenerateArgInfo([]any{S{}})
-	c.Assert(err, IsNil)
-
-	input, err := argInfo.InputSlice("S")
-	c.Assert(err, IsNil)
-
-	// Check missing type error.
-	_, _, err = input.LocateParams(map[reflect.Type]reflect.Value{})
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, `parameter with type "S" missing`)
-
-	// Check missing type error with one type present.
-	_, _, err = input.LocateParams(map[reflect.Type]reflect.Value{reflect.TypeOf(T{}): reflect.ValueOf(T{})})
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, `parameter with type "S" missing (have "T")`)
 }

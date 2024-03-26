@@ -117,6 +117,10 @@ type ScannerValuerStruct struct {
 	ScannerValuer ScannerValuer `db:"col1"`
 }
 
+type OmitEmptyID struct {
+	ID int `db:"id, omitempty"`
+}
+
 var tests = []struct {
 	summary        string
 	query          string
@@ -228,6 +232,14 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	inputArgs:      []any{Person{Fullname: "Foo"}, Address{ID: 1}},
 	expectedParams: []any{1, "Foo"},
 	expectedSQL:    `SELECT p.*, a.district FROM person AS p JOIN address AS a ON p.address_id=@sqlair_0 WHERE p.name = @sqlair_1`,
+}, {
+	summary:        "pointer input",
+	query:          "SELECT foo FROM bar WHERE a=$Address.id AND b=$Person.name",
+	expectedParsed: "[Bypass[SELECT foo FROM bar WHERE a=] Input[Address.id] Bypass[ AND b=] Input[Person.name]]",
+	typeSamples:    []any{Person{}, Address{}},
+	inputArgs:      []any{&Person{Fullname: "Foo"}, &Address{ID: 1}},
+	expectedParams: []any{1, "Foo"},
+	expectedSQL:    `SELECT foo FROM bar WHERE a=@sqlair_0 AND b=@sqlair_1`,
 }, {
 	summary:        "output and input",
 	query:          "SELECT &Person.* FROM table WHERE foo = $Address.id",
@@ -551,12 +563,12 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	expectedSQL:    "INSERT INTO address(district, id, street) VALUES (@sqlair_0, @sqlair_1, @sqlair_2) RETURNING (district AS _sqlair_0, id AS _sqlair_1, street AS _sqlair_2)",
 }, {
 	summary:        "insert rename columns with standalone inputs",
-	query:          `INSERT INTO person (id, random_string, random_thing, street) VALUES ($Person.address_id, "random string", rand(), $Address.street)`,
-	expectedParsed: `[Bypass[INSERT INTO person (id, random_string, random_thing, street) VALUES (] Input[Person.address_id] Bypass[, "random string", rand(), ] Input[Address.street] Bypass[)]]`,
+	query:          `INSERT INTO person (id, random_string, random_thing, number, street) VALUES ($Person.address_id, "random string", rand(), 1000, $Address.street)`,
+	expectedParsed: `[Bypass[INSERT INTO person (id, random_string, random_thing, number, street) VALUES (] Input[Person.address_id] Bypass[, "random string", rand(), 1000, ] Input[Address.street] Bypass[)]]`,
 	typeSamples:    []any{Address{}, Person{}},
 	inputArgs:      []any{Address{Street: "Wallaby Way"}, Person{PostalCode: 11111}},
 	expectedParams: []any{11111, "Wallaby Way"},
-	expectedSQL:    `INSERT INTO person (id, random_string, random_thing, street) VALUES (@sqlair_0, "random string", rand(), @sqlair_1)`,
+	expectedSQL:    `INSERT INTO person (id, random_string, random_thing, number, street) VALUES (@sqlair_0, "random string", rand(), 1000, @sqlair_1)`,
 }, {
 	summary:        "insert single value",
 	query:          "INSERT INTO person (name) VALUES ($Person.name)",
@@ -655,6 +667,64 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	expectedParsed: "[Bypass[SELECT ] Output[[] [Embeddings.col1]] Bypass[, ] Output[[] [Embeddings.col2]] Bypass[, ] Output[[] [Embeddings.col3]] Bypass[, ] Output[[] [Embeddings.col4]] Bypass[ FROM address WHERE id = 1000]]",
 	typeSamples:    []any{Embeddings{}},
 	expectedSQL:    "SELECT col1 AS _sqlair_0, col2 AS _sqlair_1, col3 AS _sqlair_2, col4 AS _sqlair_3 FROM address WHERE id = 1000",
+}, {
+	summary:        "bulk insert",
+	query:          `INSERT INTO person (*) VALUES ($Person.*)`,
+	expectedParsed: `[Bypass[INSERT INTO person ] AsteriskInsert[[*] [Person.*]]]`,
+	typeSamples:    []any{Person{}},
+	inputArgs:      []any{[]Person{{ID: 0, Fullname: "Al", PostalCode: 1000}, {ID: 1, Fullname: "Albert", PostalCode: 2000}, {ID: 2, Fullname: "Joe", PostalCode: 3000}}},
+	expectedParams: []any{1000, 0, "Al", 2000, 1, "Albert", 3000, 2, "Joe"},
+	expectedSQL:    `INSERT INTO person (address_id, id, name) VALUES (@sqlair_0, @sqlair_1, @sqlair_2), (@sqlair_3, @sqlair_4, @sqlair_5), (@sqlair_6, @sqlair_7, @sqlair_8)`,
+}, {
+	summary:        "bulk insert with explicit columns and constants",
+	query:          `INSERT INTO person (name, mapKey, street) VALUES ($Person.*, $Address.*, $M.*)`,
+	expectedParsed: `[Bypass[INSERT INTO person ] ColumnInsert[[name mapKey street] [Person.* Address.* M.*]]]`,
+	typeSamples:    []any{Person{}, Address{}, M{}},
+	inputArgs:      []any{[]Person{{Fullname: "Al"}, {Fullname: "Albert"}}, M{"mapKey": "const map"}, Address{Street: "const street"}},
+	expectedParams: []any{"Al", "const map", "const street", "Albert", "const map", "const street"},
+	expectedSQL:    `INSERT INTO person (name, mapKey, street) VALUES (@sqlair_0, @sqlair_1, @sqlair_2), (@sqlair_3, @sqlair_4, @sqlair_5)`,
+}, {
+	summary:        "bulk insert with omit empty struct not inserted at all",
+	query:          `INSERT INTO person (*) VALUES ($OmitEmptyID.*, $M.key)`,
+	expectedParsed: `[Bypass[INSERT INTO person ] AsteriskInsert[[*] [OmitEmptyID.* M.key]]]`,
+	typeSamples:    []any{OmitEmptyID{}, M{}},
+	inputArgs:      []any{[]OmitEmptyID{{ID: 0}, {ID: 0}}, M{"key": "val"}},
+	expectedParams: []any{"val", "val"},
+	expectedSQL:    `INSERT INTO person (key) VALUES (@sqlair_0), (@sqlair_1)`,
+}, {
+	summary:        "bulk insert with multiple bulk inputs",
+	query:          `INSERT INTO person (*) VALUES ($Person.id, $M.key, $Address.street)`,
+	expectedParsed: `[Bypass[INSERT INTO person ] AsteriskInsert[[*] [Person.id M.key Address.street]]]`,
+	typeSamples:    []any{Person{}, M{}, Address{}},
+	inputArgs:      []any{[]Person{{ID: 1}, {ID: 2}}, M{"key": "val"}, []Address{{Street: "Main Street"}, {Street: "Church Road"}}},
+	expectedParams: []any{1, "val", "Main Street", 2, "val", "Church Road"},
+	expectedSQL:    `INSERT INTO person (id, key, street) VALUES (@sqlair_0, @sqlair_1, @sqlair_2), (@sqlair_3, @sqlair_4, @sqlair_5)`,
+}, {
+	summary:        "bulk insert with pointers",
+	query:          `INSERT INTO person (*) VALUES ($Person.id, $M.key)`,
+	expectedParsed: `[Bypass[INSERT INTO person ] AsteriskInsert[[*] [Person.id M.key]]]`,
+	typeSamples:    []any{Person{}, M{}},
+	inputArgs:      []any{[]*Person{{ID: 1}, {ID: 2}}, []*M{{"key": "val1"}, {"key": "val2"}}},
+	expectedParams: []any{1, "val1", 2, "val2"},
+	expectedSQL:    `INSERT INTO person (id, key) VALUES (@sqlair_0, @sqlair_1), (@sqlair_2, @sqlair_3)`,
+}, {
+	summary:        "bulk insert with slices of length 1",
+	query:          `INSERT INTO person (*) VALUES ($Person.id, $M.key, $Address.street)`,
+	expectedParsed: `[Bypass[INSERT INTO person ] AsteriskInsert[[*] [Person.id M.key Address.street]]]`,
+	typeSamples:    []any{Person{}, M{}, Address{}},
+	inputArgs:      []any{[]Person{{ID: 1}}, M{"key": "val"}, []Address{{Street: "Church Road"}}},
+	expectedParams: []any{1, "val", "Church Road"},
+	expectedSQL:    `INSERT INTO person (id, key, street) VALUES (@sqlair_0, @sqlair_1, @sqlair_2)`,
+	/*
+		}, {
+			summary:        "bulk insert with explicit columns and literal",
+			query:          `INSERT INTO person (col1, col2, col3) VALUES ($Person.name, "literally", $Person.id)`,
+			expectedParsed: `[Bypass[INSERT INTO person ] ColumnInsert[[col1 col2 col3] [Person.name "literally" M.id]]]`,
+			typeSamples:    []any{Person{}},
+			inputArgs:      []any{[]Person{{ID: 0, Fullname: "Al"}, {ID: 1, Fullname: "Albert"}}},
+			expectedParams: []any{"Al", "literally", 0, "Albert", "literally", 1},
+			expectedSQL:    `INSERT INTO person (col1, col2, col3) VALUES (@sqlair_0, @sqlair_1, @sqlair_2), (@sqlair_3, @sqlair_4, @sqlair_5)`,
+	*/
 }}
 
 func (s *ExprSuite) TestExprPkg(c *C) {
@@ -1172,7 +1242,7 @@ func (s *ExprSuite) TestBindInputsError(c *C) {
 		query:       "SELECT street FROM t WHERE x IN ($S[:])",
 		typeSamples: []any{sqlair.S{}},
 		inputArgs:   []any{[]any{}},
-		err:         `invalid input parameter: cannot use anonymous slice`,
+		err:         `invalid input parameter: cannot use anonymous slice outside bulk insert`,
 	}, {
 		query:       "SELECT street FROM t WHERE x = $M.street",
 		typeSamples: []any{sqlair.M{}},
@@ -1198,6 +1268,26 @@ func (s *ExprSuite) TestBindInputsError(c *C) {
 		typeSamples: []any{OmitEmptyPerson{}},
 		inputArgs:   []any{OmitEmptyPerson{ID: 0}},
 		err:         `invalid input parameter: tag "id" of struct "OmitEmptyPerson" has zero value and has the omitempty flag but the value is explicitly input`,
+	}, {
+		query:       "INSERT INTO person (*) VALUES ($Person.id, $Address.street)",
+		typeSamples: []any{Person{}, Address{}},
+		inputArgs:   []any{[]Person{{ID: 0}}, []Address{{Street: "S1"}, {Street: "S2"}}},
+		err:         `invalid input parameter: different slices sizes in bulk insert: slice of "Person" has length 1 but slice of "Address" has length 2`,
+	}, {
+		query:       "INSERT INTO person (*) VALUES ($Person.id, $M.key, $Address.street)",
+		typeSamples: []any{Person{}, Address{}, M{}},
+		inputArgs:   []any{[]Address{{Street: "S2"}}, []Person{{ID: 0}, {ID: 1}}, M{"key": "value"}},
+		err:         `invalid input parameter: different slices sizes in bulk insert: slice of "Person" has length 2 but slice of "Address" has length 1`,
+	}, {
+		query:       "INSERT INTO person (*) VALUES ($Person.id)",
+		typeSamples: []any{Person{}},
+		inputArgs:   []any{[]*Person{nil}},
+		err:         `invalid input parameter: got nil pointer in slice of "Person" at position 0`,
+	}, {
+		query:       "INSERT INTO person (*) VALUES ($Person.id)",
+		typeSamples: []any{Person{}},
+		inputArgs:   []any{[]Person{}},
+		err:         `invalid input parameter: got slice of "Person" with length 0`,
 	}}
 
 	outerP := Person{}

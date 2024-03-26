@@ -34,7 +34,7 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 	}
 
 	// Generate SQL and query parameters.
-	var params []any
+	var namedInputs []any
 	var outputs []typeinfo.Output
 	// argTypeUsed is used to check that all the query parameters are
 	// referenced in the query.
@@ -45,47 +45,80 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 	for _, te := range *tbe {
 		switch te := te.(type) {
 		case *typedInputExpr:
-			vals, omit, err := te.input.LocateParams(typeToValue)
+			params, err := te.input.LocateParams(typeToValue)
 			if err != nil {
 				return nil, err
 			}
-			if omit {
+			if params.Omit {
 				return nil, omitEmptyInputError(te.input.Desc())
 			}
+			if params.Bulk {
+				return nil, fmt.Errorf("cannot use bulk inputs outside an insert statement")
+			}
 
-			argTypeUsed[te.input.ArgType()] = true
-			sqlBuilder.writeInput(inputCount, len(vals))
-			for _, val := range vals {
+			argTypeUsed[params.ArgTypeUsed] = true
+			sqlBuilder.writeInput(inputCount, len(params.Vals))
+			for _, val := range params.Vals {
 				namedInput := sql.Named("sqlair_"+strconv.Itoa(inputCount), val.Interface())
-				params = append(params, namedInput)
+				namedInputs = append(namedInputs, namedInput)
 				inputCount++
 			}
 		case *typedInsertExpr:
-			var columns []string
+			var columnNames []string
+			var paramsToInsert []*typeinfo.Params
+			bulk := false
+			// bulkRows is the number of rows in the bulk insert. If it is not a
+			// bulk insert, it remains 1.
+			bulkRows := 1
+			// firstBulkColumn stores the type name of the first inputs that are
+			// part of a bulk insert. This is used for error messages.
+			var firstBulkColumn string
 			for _, ic := range te.insertColumns {
-				vals, omit, err := ic.input.LocateParams(typeToValue)
+				params, err := ic.input.LocateParams(typeToValue)
 				if err != nil {
 					return nil, err
 				}
-				if len(vals) > 1 {
-					// Only slices return multiple values and they are not
-					// allowed in insert expressions.
+				argTypeUsed[params.ArgTypeUsed] = true
+
+				if params.Bulk {
+					if bulk {
+						if len(params.Vals) != bulkRows {
+							return nil, mismatchedBulkLengthsError(firstBulkColumn, bulkRows, ic.input.ArgType(), len(params.Vals))
+						}
+					} else {
+						bulk = true
+						firstBulkColumn = ic.input.ArgType().Name()
+						bulkRows = len(params.Vals)
+					}
+				} else if len(params.Vals) > 1 {
+					// Only slices and bulk inserts return multiple values and
+					// slices are not allowed in insert expressions.
 					return nil, fmt.Errorf("internal error: types in insert expressions cannot return multiple values")
 				}
 
-				argTypeUsed[ic.input.ArgType()] = true
-				if omit {
+				// We check for params.Omit after params.Bulk because we still
+				// want to do a bulk insert even if all bulk inputs are omitted.
+				if params.Omit {
 					if ic.explicit {
 						return nil, omitEmptyInputError(ic.input.Desc())
 					}
 					continue
 				}
-				namedInput := sql.Named("sqlair_"+strconv.Itoa(inputCount), vals[0].Interface())
-				params = append(params, namedInput)
-				columns = append(columns, ic.column)
-				inputCount++
+				columnNames = append(columnNames, ic.column)
+				paramsToInsert = append(paramsToInsert, params)
 			}
-			sqlBuilder.writeInsert(inputCount-len(columns), columns)
+
+			sqlBuilder.writeInsert(inputCount, bulkRows, columnNames)
+			for i := 0; i < bulkRows; i++ {
+				for _, params := range paramsToInsert {
+					index := i
+					if !params.Bulk {
+						index = 0
+					}
+					namedInputs = append(namedInputs, sql.Named("sqlair_"+strconv.Itoa(inputCount), params.Vals[index].Interface()))
+					inputCount++
+				}
+			}
 		case *typedOutputExpr:
 			var columns []string
 			for _, oc := range te.outputColumns {
@@ -103,11 +136,11 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 
 	for argType := range typeToValue {
 		if !argTypeUsed[argType] {
-			return nil, fmt.Errorf("%q not referenced in query", argType.Name())
+			return nil, notReferencedInQueryError(argType)
 		}
 	}
 
-	return &PrimedQuery{outputs: outputs, sql: sqlBuilder.getSQL(), params: params}, nil
+	return &PrimedQuery{outputs: outputs, sql: sqlBuilder.getSQL(), params: namedInputs}, nil
 }
 
 // outputColumn stores the name of a column to fetch from the database and the
@@ -170,18 +203,24 @@ type sqlBuilder struct {
 }
 
 // writeInsert writes the SQL for INSERT statements to the sqlBuilder.
-func (b *sqlBuilder) writeInsert(inputCount int, columns []string) {
+func (b *sqlBuilder) writeInsert(inputCount, bulkRows int, columns []string) {
 	// Write out the columns.
 	b.buf.WriteString("(")
 	b.writeCommaSeperatedList(columns, func(_ int, column string) string {
 		return column
 	})
-	b.buf.WriteString(") VALUES (")
+	b.buf.WriteString(") VALUES ")
 	// Write out the values.
-	b.writeCommaSeperatedList(columns, func(i int, _ string) string {
-		return "@sqlair_" + strconv.Itoa(inputCount+i)
-	})
-	b.buf.WriteString(")")
+	for i := 0; i < bulkRows; i++ {
+		if i != 0 {
+			b.buf.WriteString(", ")
+		}
+		b.buf.WriteString("(")
+		b.writeCommaSeperatedList(columns, func(j int, _ string) string {
+			return "@sqlair_" + strconv.Itoa(inputCount+(i*len(columns))+j)
+		})
+		b.buf.WriteString(")")
+	}
 }
 
 // writeInput writes the SQL for input placeholders to the sqlBuilder.
@@ -238,4 +277,21 @@ func markerIndex(s string) (int, bool) {
 
 func omitEmptyInputError(valueDesc string) error {
 	return fmt.Errorf("%s has zero value and has the omitempty flag but the value is explicitly input", valueDesc)
+}
+
+func mismatchedBulkLengthsError(firstBulkColumn string, expectedNumRows int, badType reflect.Type, badRowLength int) error {
+	return fmt.Errorf("different slices sizes in bulk insert: slice of %q has length %d but slice of %q has length %d",
+		firstBulkColumn, expectedNumRows, badType.Name(), badRowLength)
+}
+
+func notReferencedInQueryError(t reflect.Type) error {
+	name := t.Name()
+	if name == "" && (t.Kind() == reflect.Slice || t.Kind() == reflect.Pointer) {
+		t = t.Elem()
+		name = t.Name()
+		if name == "" && t.Kind() == reflect.Pointer {
+			name = t.Elem().Name()
+		}
+	}
+	return fmt.Errorf(`%q not referenced in query`, name)
 }
