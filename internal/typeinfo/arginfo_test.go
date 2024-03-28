@@ -139,7 +139,9 @@ func (s *typeInfoSuite) TestArgInfoMap(c *C) {
 
 func (s *typeInfoSuite) TestArgInfoEmbeddedStruct(c *C) {
 	type EmbeddedString string
-	type StructWithTag struct{}
+	type TaggedStruct struct {
+		FX int `db:"shouldntberead"`
+	}
 	type Embedded3 struct {
 		F3 int `db:"col3"`
 	}
@@ -152,7 +154,7 @@ func (s *typeInfoSuite) TestArgInfoEmbeddedStruct(c *C) {
 	}
 	type Embeddings struct {
 		EmbeddedString
-		StructWithTag `db:"col4"`
+		TaggedStruct `db:"col4"`
 		Embedded1
 		Embedded2
 		F0 int `db:"col0"`
@@ -190,7 +192,7 @@ func (s *typeInfoSuite) TestArgInfoEmbeddedStruct(c *C) {
 		tag:        "col3",
 		omitEmpty:  false,
 	}, {
-		name:       "StructWithTag",
+		name:       "TaggedStruct",
 		structType: structType,
 		index:      []int{1},
 		tag:        "col4",
