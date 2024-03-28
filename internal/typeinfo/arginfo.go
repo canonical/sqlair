@@ -345,8 +345,11 @@ func getStructFields(structType reflect.Type) ([]*structField, error) {
 		tag := field.Tag.Get("db")
 
 		// If Anonymous is true, the field is embedded.
-		// If the embedded struct is tagged, treat it as a regular field.
 		if field.Anonymous && tag == "" {
+			// If the embedded struct is tagged then we do not look inside it and
+			// we pass it straight to the driver. This means it must implement the
+			// Valuer or Scanner interface (for inputs/outputs respectively) or the
+			// driver will reject it with a panic.
 			if !field.IsExported() {
 				continue
 			}
