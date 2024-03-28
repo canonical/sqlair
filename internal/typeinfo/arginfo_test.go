@@ -39,42 +39,42 @@ func (s *typeInfoSuite) TestArgInfoStruct(c *C) {
 	// AllStructOutputs.
 	structFields := []struct {
 		fieldName string
-		index     int
+		index     []int
 		omitEmpty bool
 		tag       string
 	}{{
 		fieldName: "ValidTag3",
-		index:     4,
+		index:     []int{4},
 		omitEmpty: false,
 		tag:       "\"£&**\"",
 	}, {
 		fieldName: "ValidTag4",
-		index:     5,
+		index:     []int{5},
 		omitEmpty: false,
 		tag:       "'!£$%^&*('",
 	}, {
 		fieldName: "ValidTag5",
-		index:     6,
+		index:     []int{6},
 		omitEmpty: false,
 		tag:       "99",
 	}, {
 		fieldName: "ValidTag2",
-		index:     3,
+		index:     []int{3},
 		omitEmpty: false,
 		tag:       "IdENT99",
 	}, {
 		fieldName: "ValidTag1",
-		index:     2,
+		index:     []int{2},
 		omitEmpty: false,
 		tag:       "_i_d_55_",
 	}, {
 		fieldName: "ID",
-		index:     0,
+		index:     []int{0},
 		omitEmpty: false,
 		tag:       "id",
 	}, {
 		fieldName: "Name",
-		index:     1,
+		index:     []int{1},
 		omitEmpty: true,
 		tag:       "name",
 	}}
@@ -135,6 +135,78 @@ func (s *typeInfoSuite) TestArgInfoMap(c *C) {
 	kind, err := argInfo.Kind("myMap")
 	c.Assert(err, IsNil)
 	c.Check(kind, DeepEquals, reflect.Map)
+}
+
+func (s *typeInfoSuite) TestArgInfoEmbeddedStruct(c *C) {
+	type EmbeddedString string
+	type TaggedStruct struct {
+		FX int `db:"shouldntberead"`
+	}
+	type Embedded3 struct {
+		F3 int `db:"col3"`
+	}
+	type Embedded2 struct {
+		F2 int `db:"col2"`
+		Embedded3
+	}
+	type Embedded1 struct {
+		F1 int `db:"col1"`
+	}
+	type Embeddings struct {
+		EmbeddedString
+		TaggedStruct `db:"col4"`
+		Embedded1
+		Embedded2
+		F0 int `db:"col0"`
+	}
+	structType := reflect.TypeOf(Embeddings{})
+
+	argInfo, err := GenerateArgInfo([]any{Embeddings{}})
+	c.Assert(err, IsNil)
+
+	// The struct fields in this list are ordered according to how sort.Strings
+	// orders the tag names. This matches the order of the tags in
+	// structInfo.tags
+	expectedStructFields := []*structField{{
+		name:       "F0",
+		structType: structType,
+		index:      []int{4},
+		tag:        "col0",
+		omitEmpty:  false,
+	}, {
+		name:       "F1",
+		structType: structType,
+		index:      []int{2, 0},
+		tag:        "col1",
+		omitEmpty:  false,
+	}, {
+		name:       "F2",
+		structType: structType,
+		index:      []int{3, 0},
+		tag:        "col2",
+		omitEmpty:  false,
+	}, {
+		name:       "F3",
+		structType: structType,
+		index:      []int{3, 1, 0},
+		tag:        "col3",
+		omitEmpty:  false,
+	}, {
+		name:       "TaggedStruct",
+		structType: structType,
+		index:      []int{1},
+		tag:        "col4",
+		omitEmpty:  false,
+	}}
+
+	si, err := argInfo.getAllStructMembers("Embeddings")
+	var fields []*structField
+	for _, tag := range si.tags {
+		fields = append(fields, si.tagToField[tag])
+	}
+	c.Assert(err, IsNil)
+	c.Check(fields, HasLen, len(expectedStructFields))
+	c.Check(fields, DeepEquals, expectedStructFields)
 }
 
 // This struct is used to test shadowed types in TestGenerateArgInfoInvalidTypeErrors
