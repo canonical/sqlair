@@ -142,7 +142,7 @@ func (e *asteriskInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie any, err e
 		}
 	}()
 
-	var cols []insertColumn
+	var cols []typedColumn
 	for _, source := range e.sources {
 		if source.memberName == "*" {
 			inputs, tags, err := argInfo.AllStructInputs(source.typeName)
@@ -234,7 +234,7 @@ func (e *columnsInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie any, err er
 	// and match them against the columns provided by the types on the right.
 	// If a map with an asterisk is present, we use it to supply the spare
 	// columns. If it is not present, a spare column is an error.
-	var cols []insertColumn
+	var cols []typedColumn
 	for _, column := range e.columns {
 		columnStr := column.String()
 		input, ok := colToInput[columnStr]
@@ -255,6 +255,37 @@ func (e *columnsInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie any, err er
 
 		c := newInsertColumn(input[0], columnStr, true)
 		cols = append(cols, c)
+	}
+	return &typedInsertExpr{insertColumns: cols}, nil
+}
+
+type renamingInsertExpr struct {
+	columns []columnAccessor
+	sources []valueAccessor
+	raw     string
+}
+
+// String returns a text representation for debugging and testing purposes.
+func (e *renamingInsertExpr) String() string {
+	return fmt.Sprintf("RenamingInsert[%v %v]", e.columns, e.sources)
+}
+
+func (e *renamingInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie any, err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("input expression: %s: %s", err, e.raw)
+		}
+	}()
+	if len(e.columns) != len(e.sources) {
+		return nil, fmt.Errorf("mismatched number of columns and values (%d!=%d)", len(e.columns), len(e.sources))
+	}
+	var cols []typedColumn
+	for i, source := range e.sources {
+		col, err := source.renamedColumn(argInfo, e.columns[i].columnName())
+		if err != nil {
+			return nil, err
+		}
+		cols = append(cols, col)
 	}
 	return &typedInsertExpr{insertColumns: cols}, nil
 }
@@ -376,6 +407,43 @@ func (e *outputExpr) bindTypes(argInfo typeinfo.ArgInfo) (te any, err error) {
 	}
 
 	return toe, nil
+}
+
+type valueAccessor interface {
+	renamedColumn(argInfo typeinfo.ArgInfo, columnName string) (typedColumn, error)
+}
+
+// memberAccessor stores information for accessing a keyed Go value. It consists
+// of a type name and some value within it to be accessed. For example: a field
+// of a struct, or a key of a map.
+type memberAccessor struct {
+	typeName, memberName string
+}
+
+type literal struct {
+	value string
+}
+
+func (l literal) String() string {
+	return l.value
+}
+
+func (l literal) renamedColumn(_ typeinfo.ArgInfo, columnName string) (typedColumn, error) {
+	lc := newLiteralColumn(columnName, l.value)
+	return lc, nil
+}
+
+func (ma memberAccessor) String() string {
+	return ma.typeName + "." + ma.memberName
+}
+
+func (ma memberAccessor) renamedColumn(argInfo typeinfo.ArgInfo, columnName string) (typedColumn, error) {
+	input, err := argInfo.InputMember(ma.typeName, ma.memberName)
+	if err != nil {
+		return nil, err
+	}
+	ic := newInsertColumn(input, columnName, true)
+	return ic, nil
 }
 
 // starCountColumns counts the number of asterisks in a list of columns.

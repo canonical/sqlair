@@ -564,7 +564,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 }, {
 	summary:        "insert rename columns with standalone inputs",
 	query:          `INSERT INTO person (id, random_string, random_thing, number, street) VALUES ($Person.address_id, "random string", rand(), 1000, $Address.street)`,
-	expectedParsed: `[Bypass[INSERT INTO person (id, random_string, random_thing, number, street) VALUES (] Input[Person.address_id] Bypass[, "random string", rand(), 1000, ] Input[Address.street] Bypass[)]]`,
+	expectedParsed: `[Bypass[INSERT INTO person ] RenamingInsert[[id random_string random_thing number street] [Person.address_id "random string" rand() 1000 Address.street]]]`,
 	typeSamples:    []any{Address{}, Person{}},
 	inputArgs:      []any{Address{Street: "Wallaby Way"}, Person{PostalCode: 11111}},
 	expectedParams: []any{11111, "Wallaby Way"},
@@ -572,7 +572,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 }, {
 	summary:        "insert single value",
 	query:          "INSERT INTO person (name) VALUES ($Person.name)",
-	expectedParsed: "[Bypass[INSERT INTO person (name) VALUES (] Input[Person.name] Bypass[)]]",
+	expectedParsed: "[Bypass[INSERT INTO person ] RenamingInsert[[name] [Person.name]]]",
 	typeSamples:    []any{Person{}},
 	inputArgs:      []any{Person{Fullname: "John Doe"}},
 	expectedParams: []any{"John Doe"},
@@ -715,16 +715,14 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	inputArgs:      []any{[]Person{{ID: 1}}, M{"key": "val"}, []Address{{Street: "Church Road"}}},
 	expectedParams: []any{1, "val", "Church Road"},
 	expectedSQL:    `INSERT INTO person (id, key, street) VALUES (@sqlair_0, @sqlair_1, @sqlair_2)`,
-	/*
-		}, {
-			summary:        "bulk insert with explicit columns and literal",
-			query:          `INSERT INTO person (col1, col2, col3) VALUES ($Person.name, "literally", $Person.id)`,
-			expectedParsed: `[Bypass[INSERT INTO person ] ColumnInsert[[col1 col2 col3] [Person.name "literally" M.id]]]`,
-			typeSamples:    []any{Person{}},
-			inputArgs:      []any{[]Person{{ID: 0, Fullname: "Al"}, {ID: 1, Fullname: "Albert"}}},
-			expectedParams: []any{"Al", "literally", 0, "Albert", "literally", 1},
-			expectedSQL:    `INSERT INTO person (col1, col2, col3) VALUES (@sqlair_0, @sqlair_1, @sqlair_2), (@sqlair_3, @sqlair_4, @sqlair_5)`,
-	*/
+}, {
+	summary:        "bulk insert with explicit columns and literal",
+	query:          `INSERT INTO person (col1, col2, col3) VALUES ($Person.name, "literally", $Person.id)`,
+	expectedParsed: `[Bypass[INSERT INTO person ] RenamingInsert[[col1 col2 col3] [Person.name "literally" Person.id]]]`,
+	typeSamples:    []any{Person{}},
+	inputArgs:      []any{[]Person{{ID: 0, Fullname: "Al"}, {ID: 1, Fullname: "Albert"}}},
+	expectedParams: []any{"Al", 0, "Albert", 1},
+	expectedSQL:    `INSERT INTO person (col1, col2, col3) VALUES (@sqlair_0, "literally", @sqlair_1), (@sqlair_2, "literally", @sqlair_3)`,
 }}
 
 func (s *ExprSuite) TestExprPkg(c *C) {

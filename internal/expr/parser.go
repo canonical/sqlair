@@ -83,21 +83,6 @@ func (p *Parser) Parse(input string) (pe *ParsedExpr, err error) {
 	return &ParsedExpr{exprs: p.exprs}, nil
 }
 
-// memberAccessor stores information for accessing a keyed Go value. It consists
-// of a type name and some value within it to be accessed. For example: a field
-// of a struct, or a key of a map.
-type memberAccessor struct {
-	typeName, memberName string
-}
-
-func (ma memberAccessor) String() string {
-	return ma.typeName + "." + ma.memberName
-}
-
-func (ma memberAccessor) getTypeName() string {
-	return ma.typeName
-}
-
 type columnAccessor interface {
 	String() string
 	tableName() string
@@ -333,11 +318,8 @@ loop:
 		}
 		p.advanceChar()
 	}
-
 	p.skipBlanks()
-
 	return nil
-
 }
 
 // skipStringLiteral jumps over single and double quoted sections of input.
@@ -433,6 +415,32 @@ func (p *Parser) skipString(s string) bool {
 		return true
 	}
 	return false
+}
+
+// skipLiteralInList advances the parser to the next comma or closing bracket
+// skipping string literals, comments and matching sets of parentheses.
+func (p *Parser) skipLiteralInList() (bool, error) {
+	for p.pos < len(p.input) {
+		if ok, err := p.skipStringLiteral(); err != nil {
+			return false, err
+		} else if ok {
+			continue
+		}
+		if ok, err := p.skipEnclosedParentheses(); err != nil {
+			return false, err
+		} else if ok {
+			continue
+		}
+		if ok := p.skipComment(); ok {
+			continue
+		}
+
+		if p.char == ',' || p.char == ')' {
+			return true, nil
+		}
+		p.advanceChar()
+	}
+	return false, nil
 }
 
 // isNameChar returns true if the given char can be part of a name. It returns
@@ -922,6 +930,26 @@ func (p *Parser) parseColumnsInsertExpr() (expression, bool, error) {
 	}
 	p.skipBlanks()
 
+	if sources, ok, err := p.parseColumnsInsertValues(); err != nil {
+		cp.restore()
+		return nil, false, err
+	} else if ok {
+		return &columnsInsertExpr{columns: columns, sources: sources, raw: p.input[cp.pos:p.pos]}, true, nil
+	}
+
+	if sources, ok, err := p.parseRenamingInsertValues(); err != nil {
+		cp.restore()
+		return nil, false, err
+	} else if ok {
+		return &renamingInsertExpr{columns: columns, sources: sources, raw: p.input[cp.pos:p.pos]}, true, nil
+	}
+
+	cp.restore()
+	return nil, false, nil
+}
+
+func (p *Parser) parseColumnsInsertValues() ([]memberAccessor, bool, error) {
+	cp := p.save()
 	parenCol := p.colNum()
 	parenLine := p.lineNum
 	// Ignore errors and leave them to be handled by
@@ -942,6 +970,57 @@ func (p *Parser) parseColumnsInsertExpr() (expression, bool, error) {
 		cp.restore()
 		return nil, false, nil
 	}
+	return sources, true, nil
+}
 
-	return &columnsInsertExpr{columns: columns, sources: sources, raw: p.input[cp.pos:p.pos]}, true, nil
+func (p *Parser) parseRenamingInsertValues() ([]valueAccessor, bool, error) {
+	cp := p.save()
+	if !p.skipChar('(') {
+		return nil, false, nil
+	}
+	p.skipBlanks()
+	inputParsed := false
+	itemStart := p.pos
+
+	// Error points to first parentheses skipped above.
+	nextItem := true
+	var vs []valueAccessor
+	// Invariant:
+	// 	The previous char excluding blanks is ',' or ')'.
+	for nextItem {
+		p.skipBlanks()
+		if ma, ok, err := p.parseInputMemberAccessor(); err != nil {
+			return nil, false, err
+		} else if ok {
+			inputParsed = true
+			if ma.memberName == "*" {
+				return nil, false, fmt.Errorf("internal error: cannot have asterisk accessor in renaming expression")
+			}
+			vs = append(vs, ma)
+		} else if ok, err = p.skipLiteralInList(); err != nil {
+			return nil, false, err
+		} else if ok {
+			lit := literal{p.input[itemStart:p.pos]}
+			vs = append(vs, lit)
+		} else {
+			cp.restore()
+			return nil, false, nil
+		}
+
+		p.skipBlanks()
+		if p.skipChar(')') {
+			// If we only parsed literals, and not SQLair inputs then ignore
+			// them.
+			if !inputParsed {
+				return nil, false, nil
+			}
+			return vs, true, nil
+		}
+
+		nextItem = p.skipChar(',')
+		p.skipBlanks()
+		itemStart = p.pos
+	}
+	cp.restore()
+	return nil, false, nil
 }

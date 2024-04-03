@@ -306,3 +306,49 @@ func (s parseSuite) TestAdvanceToNextExpr(c *C) {
 		}
 	}
 }
+
+func (s parseSuite) TestParseRenamingInsertValues(c *C) {
+	tests := []struct {
+		input    string
+		expected []valueAccessor
+	}{{
+		input: `($S.col1, "literal", $S.col2)`,
+		expected: []valueAccessor{
+			memberAccessor{typeName: "S", memberName: "col1"},
+			literal{value: `"literal"`},
+			memberAccessor{typeName: "S", memberName: "col2"},
+		},
+	}, {
+		input: `( CAST(1 as text) , $S.col1 , 1+7/2)`,
+		expected: []valueAccessor{
+			literal{value: `CAST(1 as text) `},
+			memberAccessor{typeName: "S", memberName: "col1"},
+			literal{value: `1+7/2`},
+		},
+	}, {
+		input: `((sub, list, (sub, sub, list)), NULL, TRUE, $S.col1)`,
+		expected: []valueAccessor{
+			literal{value: `(sub, list, (sub, sub, list))`},
+			literal{value: `NULL`},
+			literal{value: `TRUE`},
+			memberAccessor{typeName: "S", memberName: "col1"},
+		},
+	}}
+
+	var p = NewParser()
+	for _, t := range tests {
+		p.init(t.input)
+		vs, ok, err := p.parseRenamingInsertValues()
+		c.Assert(err, IsNil)
+		c.Assert(ok, Equals, true)
+		c.Assert(vs, DeepEquals, t.expected)
+	}
+}
+
+func (s parseSuite) TestParseRenamingInsertValuesFalse(c *C) {
+	var p = NewParser()
+	p.init(`( CAST(1 as text) , "literal" , 1+7/2)`)
+	_, ok, err := p.parseRenamingInsertValues()
+	c.Assert(err, IsNil)
+	c.Assert(ok, Equals, false)
+}
