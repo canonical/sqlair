@@ -562,13 +562,14 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	expectedParams: []any{"Sydney", 34, "Wallaby Way"},
 	expectedSQL:    "INSERT INTO address(district, id, street) VALUES (@sqlair_0, @sqlair_1, @sqlair_2) RETURNING (district AS _sqlair_0, id AS _sqlair_1, street AS _sqlair_2)",
 }, {
-	summary:        "insert rename columns with standalone inputs",
-	query:          `INSERT INTO person (id, random_string, random_thing, number, street) VALUES ($Person.address_id, "random string", rand(), 1000, $Address.street)`,
-	expectedParsed: `[Bypass[INSERT INTO person ] RenamingInsert[[id random_string random_thing number street] [Person.address_id "random string" rand() 1000 Address.street]]]`,
+	summary: "insert rename columns with standalone inputs",
+	query: `INSERT INTO person (id, random_string, random_thing, number, equation, street) VALUES ($Person.address_id, "random string", rand(), 1000, 
+						1+2+3, $Address.street)`,
+	expectedParsed: `[Bypass[INSERT INTO person ] RenamingInsert[[id random_string random_thing number equation street] [Person.address_id "random string" rand() 1000 1+2+3 Address.street]]]`,
 	typeSamples:    []any{Address{}, Person{}},
 	inputArgs:      []any{Address{Street: "Wallaby Way"}, Person{PostalCode: 11111}},
 	expectedParams: []any{11111, "Wallaby Way"},
-	expectedSQL:    `INSERT INTO person (id, random_string, random_thing, number, street) VALUES (@sqlair_0, "random string", rand(), 1000, @sqlair_1)`,
+	expectedSQL:    `INSERT INTO person (id, random_string, random_thing, number, equation, street) VALUES (@sqlair_0, "random string", rand(), 1000, 1+2+3, @sqlair_1)`,
 }, {
 	summary:        "insert single value",
 	query:          "INSERT INTO person (name) VALUES ($Person.name)",
@@ -723,6 +724,14 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	inputArgs:      []any{[]Person{{ID: 0, Fullname: "Al"}, {ID: 1, Fullname: "Albert"}}},
 	expectedParams: []any{"Al", 0, "Albert", 1},
 	expectedSQL:    `INSERT INTO person (col1, col2, col3) VALUES (@sqlair_0, "literally", @sqlair_1), (@sqlair_2, "literally", @sqlair_3)`,
+}, {
+	summary:        "bulk insert rename columns with standalone inputs",
+	query:          `INSERT INTO person (id, random_string, random_thing, number, street) VALUES ($Person.address_id, "random string", rand(), 1000, $Address.street)`,
+	expectedParsed: `[Bypass[INSERT INTO person ] RenamingInsert[[id random_string random_thing number street] [Person.address_id "random string" rand() 1000 Address.street]]]`,
+	typeSamples:    []any{Address{}, Person{}},
+	inputArgs:      []any{[]Address{{Street: "Wallaby Way"}, {Street: "Platypus Place"}}, []Person{{PostalCode: 11111}, {PostalCode: 22222}}},
+	expectedParams: []any{11111, "Wallaby Way", 22222, "Platypus Place"},
+	expectedSQL:    `INSERT INTO person (id, random_string, random_thing, number, street) VALUES (@sqlair_0, "random string", rand(), 1000, @sqlair_1), (@sqlair_2, "random string", rand(), 1000, @sqlair_3)`,
 }}
 
 func (s *ExprSuite) TestExprPkg(c *C) {

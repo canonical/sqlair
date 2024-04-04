@@ -264,7 +264,7 @@ func (s *typeInfoSuite) TestLocateParams(c *C) {
 		c.Check(params.Bulk, Equals, t.expectedBulk)
 		c.Assert(params.Vals, HasLen, len(t.expectedVals))
 		for i, v := range t.expectedVals {
-			c.Check(params.Vals[i].Interface(), Equals, v)
+			c.Check(params.Vals[i], Equals, v)
 		}
 	}
 }

@@ -36,7 +36,7 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 	// Generate SQL and query parameters.
 	var namedInputs []any
 	var outputs []typeinfo.Output
-	// argType is used to check that all the query parameters are
+	// argTypeUsed is used to check that all the query parameters are
 	// referenced in the query.
 	argTypeUsed := map[reflect.Type]bool{}
 	inputCount := 0
@@ -59,12 +59,13 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 			argTypeUsed[params.ArgTypeUsed] = true
 			sqlBuilder.writeInput(inputCount, len(params.Vals))
 			for _, val := range params.Vals {
-				namedInput := sql.Named("sqlair_"+strconv.Itoa(inputCount), val.Interface())
+				namedInput := sql.Named("sqlair_"+strconv.Itoa(inputCount), val)
 				namedInputs = append(namedInputs, namedInput)
 				inputCount++
 			}
 		case *typedInsertExpr:
 			var boundColumns []*boundColumn
+			var columnNames []string
 			bulk := false
 			numRows := 1
 			// firstBulkColumn stores the type name of the first column used in
@@ -78,21 +79,16 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 				bc.markArgUsed(argTypeUsed)
 
 				if bc.bulk {
-					if bulk {
-						if len(bc.vals) != numRows {
-							return nil, mismatchedBulkLengthsError(firstBulkColumn, numRows, bc.inputName, len(bc.vals))
-						}
-					} else {
+					if !bulk {
+						// First bulk row.
 						bulk = true
 						firstBulkColumn = bc.inputName
 						numRows = len(bc.vals)
+					} else if len(bc.vals) != numRows {
+						return nil, mismatchedBulkLengthsError(firstBulkColumn, numRows, bc.inputName, len(bc.vals))
 					}
 				}
 				boundColumns = append(boundColumns, bc)
-			}
-
-			var columnNames []string
-			for _, bc := range boundColumns {
 				if !bc.omit {
 					columnNames = append(columnNames, bc.column)
 				}
@@ -100,16 +96,16 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 
 			var rowsSQL [][]string
 			for rowNum := 0; rowNum < numRows; rowNum++ {
-				rowSQL := []string{}
+				var rowSQL []string
 				for _, bc := range boundColumns {
 					if !bc.omit {
-						valueSQL, value, literal, err := bc.parameter(rowNum, inputCount)
+						valueSQL, namedInput, literal, err := bc.parameter(rowNum, inputCount)
 						if err != nil {
 							return nil, err
 						}
 						rowSQL = append(rowSQL, valueSQL)
 						if !literal {
-							namedInputs = append(namedInputs, value)
+							namedInputs = append(namedInputs, namedInput)
 							inputCount++
 						}
 					}
@@ -163,15 +159,17 @@ type typedInputExpr struct {
 	input typeinfo.Input
 }
 
+// typedColumn represents a column and input locator in an insert statement.
 type typedColumn interface {
+	// bindInputs binds a concrete value to a typedColumn to generate a
+	// boundColumn.
 	bindInputs(typeinfo.TypeToValue) (*boundColumn, error)
 }
 
-// insertColumn stores information about a single column of a row in an INSERT
+// insertColumn stores information about a single column of a row in an insert
 // statement.
 type insertColumn struct {
-	input typeinfo.Input
-	// literal is "" if it is not a literal value.
+	input  typeinfo.Input
 	column string
 	// explicit is true if the column is explicity inserted in the SQLair
 	// query. If the column is inserted via an asterisk type, it is false.
@@ -187,6 +185,8 @@ func newInsertColumn(input typeinfo.Input, column string, explicit bool) insertC
 	}
 }
 
+// bindInputs generates and verifies the query parameters corresponding to the
+// insertColumn and returns them as a boundColumn.
 func (ic insertColumn) bindInputs(tv typeinfo.TypeToValue) (*boundColumn, error) {
 	params, err := ic.input.LocateParams(tv)
 	if err != nil {
@@ -197,8 +197,6 @@ func (ic insertColumn) bindInputs(tv typeinfo.TypeToValue) (*boundColumn, error)
 		// slices are not allowed in insert expressions.
 		return nil, fmt.Errorf("internal error: types in insert expressions cannot return multiple values")
 	}
-	// We check for params.Omit after params.Bulk because we still
-	// want to do a bulk insert even if all bulk inputs are omitted.
 	if params.Omit {
 		if ic.explicit {
 			return nil, omitEmptyInputError(ic.input.Desc())
@@ -216,15 +214,19 @@ func (ic insertColumn) bindInputs(tv typeinfo.TypeToValue) (*boundColumn, error)
 	return bc, nil
 }
 
+// literalColumn represents a column in an insert statement populated with a
+// literal value.
 type literalColumn struct {
 	column  string
 	literal string
 }
 
+// bindInputs creates a boundColumn from a literalColumn. It is part of the
+// typedColumn interface.
 func (lc literalColumn) bindInputs(_ typeinfo.TypeToValue) (*boundColumn, error) {
 	bc := &boundColumn{
 		column:    lc.column,
-		vals:      []reflect.Value{},
+		vals:      []any{},
 		omit:      false,
 		bulk:      false,
 		literal:   lc.literal,
@@ -242,10 +244,12 @@ func newLiteralColumn(column, literal string) literalColumn {
 	}
 }
 
+// boundColumn represents a column in an insert statement along with the values
+// to be inserted into it.
 type boundColumn struct {
 	// vals contains the query parameters. There may be multiple for a bulk
 	// insert, or none for a literal.
-	vals []reflect.Value
+	vals []any
 	// omit indicates if the column and values should be ommited.
 	omit bool
 	// bulk is true if the list of values should be inserted in a bulk insert
@@ -262,27 +266,28 @@ type boundColumn struct {
 	column string
 }
 
+// markArgUsed marks the argument type passed to SQL as used in the argUsed map.
 func (bc *boundColumn) markArgUsed(argUsed map[reflect.Type]bool) {
 	if bc.argType != nil {
 		argUsed[bc.argType] = true
 	}
 }
 
+// parameter returns the value to be inserted into the boundColumn in the given
+// row. The inputCount it used to generate the parameter name.
 func (bc *boundColumn) parameter(row, inputCount int) (string, any, bool, error) {
 	if bc.literal != "" {
 		return bc.literal, nil, true, nil
 	}
 	name := "sqlair_" + strconv.Itoa(inputCount)
 	if !bc.bulk {
-		val := bc.vals[0].Interface()
-		return "@" + name, sql.Named(name, val), false, nil
+		return "@" + name, sql.Named(name, bc.vals[0]), false, nil
 	}
 
 	if row >= len(bc.vals) {
 		return "", nil, false, fmt.Errorf("internal error: no bulk insert value for row %d, only have %d values", row, len(bc.vals))
 	}
-	val := bc.vals[row].Interface()
-	return "@" + name, sql.Named(name, val), false, nil
+	return "@" + name, sql.Named(name, bc.vals[row]), false, nil
 }
 
 // typedInsertExpr stores information about the Go values to use as inputs inside

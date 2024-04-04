@@ -338,7 +338,7 @@ func (s parseSuite) TestParseRenamingInsertValues(c *C) {
 	var p = NewParser()
 	for _, t := range tests {
 		p.init(t.input)
-		vs, ok, err := p.parseRenamingInsertValues()
+		vs, ok, err := p.parseBasicInsertValues()
 		c.Assert(err, IsNil)
 		c.Assert(ok, Equals, true)
 		c.Assert(vs, DeepEquals, t.expected)
@@ -348,7 +348,7 @@ func (s parseSuite) TestParseRenamingInsertValues(c *C) {
 func (s parseSuite) TestParseRenamingInsertValuesFalse(c *C) {
 	var p = NewParser()
 	p.init(`( CAST(1 as text) , "literal" , 1+7/2)`)
-	_, ok, err := p.parseRenamingInsertValues()
+	_, ok, err := p.parseBasicInsertValues()
 	c.Assert(err, IsNil)
 	c.Assert(ok, Equals, false)
 }

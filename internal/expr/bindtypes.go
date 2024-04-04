@@ -259,18 +259,25 @@ func (e *columnsInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie any, err er
 	return &typedInsertExpr{insertColumns: cols}, nil
 }
 
-type renamingInsertExpr struct {
+// basicInsertExpr is an input expression occurring within an INSERT statement
+// that consists of columns on the left and type accessors or literals on the
+// right. Unlike the columnInsertExpr, the values on the right are independent
+// of the columns on the left and are matched by position rather than by name.
+// e.g. (col1, col2, col3) VALUES ($M.key, "literal value", $T.value).
+type basicInsertExpr struct {
 	columns []columnAccessor
 	sources []valueAccessor
 	raw     string
 }
 
 // String returns a text representation for debugging and testing purposes.
-func (e *renamingInsertExpr) String() string {
+func (e *basicInsertExpr) String() string {
 	return fmt.Sprintf("RenamingInsert[%v %v]", e.columns, e.sources)
 }
 
-func (e *renamingInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie any, err error) {
+// bindTypes generates a *typedInsertExpr containing type information about the
+// values to be inserted in the basicInsertExpr.
+func (e *basicInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie any, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("input expression: %s: %s", err, e.raw)
@@ -281,7 +288,7 @@ func (e *renamingInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie any, err e
 	}
 	var cols []typedColumn
 	for i, source := range e.sources {
-		col, err := source.renamedColumn(argInfo, e.columns[i].columnName())
+		col, err := source.typedColumn(argInfo, e.columns[i].columnName())
 		if err != nil {
 			return nil, err
 		}
@@ -409,8 +416,10 @@ func (e *outputExpr) bindTypes(argInfo typeinfo.ArgInfo) (te any, err error) {
 	return toe, nil
 }
 
+// valueAccessor defines an accessor that can be used to generate a typedColumn
+// with the given column name.
 type valueAccessor interface {
-	renamedColumn(argInfo typeinfo.ArgInfo, columnName string) (typedColumn, error)
+	typedColumn(argInfo typeinfo.ArgInfo, columnName string) (typedColumn, error)
 }
 
 // memberAccessor stores information for accessing a keyed Go value. It consists
@@ -420,6 +429,8 @@ type memberAccessor struct {
 	typeName, memberName string
 }
 
+// literal represents a literal expression be pasted verbatim as the value in an
+// insert column.
 type literal struct {
 	value string
 }
@@ -428,7 +439,8 @@ func (l literal) String() string {
 	return l.value
 }
 
-func (l literal) renamedColumn(_ typeinfo.ArgInfo, columnName string) (typedColumn, error) {
+// typedColumn generates a typedColumn with the given name from a literal.
+func (l literal) typedColumn(_ typeinfo.ArgInfo, columnName string) (typedColumn, error) {
 	lc := newLiteralColumn(columnName, l.value)
 	return lc, nil
 }
@@ -437,7 +449,9 @@ func (ma memberAccessor) String() string {
 	return ma.typeName + "." + ma.memberName
 }
 
-func (ma memberAccessor) renamedColumn(argInfo typeinfo.ArgInfo, columnName string) (typedColumn, error) {
+// typedColumn generates a typedColumn with the input specified by the member
+// accessor and the given column name.
+func (ma memberAccessor) typedColumn(argInfo typeinfo.ArgInfo, columnName string) (typedColumn, error) {
 	input, err := argInfo.InputMember(ma.typeName, ma.memberName)
 	if err != nil {
 		return nil, err

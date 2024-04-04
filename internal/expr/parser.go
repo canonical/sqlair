@@ -937,21 +937,21 @@ func (p *Parser) parseColumnsInsertExpr() (expression, bool, error) {
 		return &columnsInsertExpr{columns: columns, sources: sources, raw: p.input[cp.pos:p.pos]}, true, nil
 	}
 
-	if sources, ok, err := p.parseRenamingInsertValues(); err != nil {
+	if sources, ok, err := p.parseBasicInsertValues(); err != nil {
 		cp.restore()
 		return nil, false, err
 	} else if ok {
-		return &renamingInsertExpr{columns: columns, sources: sources, raw: p.input[cp.pos:p.pos]}, true, nil
+		return &basicInsertExpr{columns: columns, sources: sources, raw: p.input[cp.pos:p.pos]}, true, nil
 	}
 
 	cp.restore()
 	return nil, false, nil
 }
 
+// parseColumnsInsertValues parses insert expressions that are value on the
+// right hand side of a columns insert expression.
 func (p *Parser) parseColumnsInsertValues() ([]memberAccessor, bool, error) {
 	cp := p.save()
-	parenCol := p.colNum()
-	parenLine := p.lineNum
 	// Ignore errors and leave them to be handled by
 	// parseMemberInputExpr later.
 	sources, ok, _ := parseList(p, (*Parser).parseInputMemberAccessor)
@@ -959,7 +959,7 @@ func (p *Parser) parseColumnsInsertValues() ([]memberAccessor, bool, error) {
 		// Check for types with missing parentheses.
 		if _, ok, _ := p.parseTypeAndMember(); ok {
 			cp.restore()
-			return nil, false, errorAt(fmt.Errorf(`missing parentheses around types after "VALUES"`), parenLine, parenCol, p.input)
+			return nil, false, errorAt(fmt.Errorf(`missing parentheses around types after "VALUES"`), cp.lineNum, cp.colNum(), p.input)
 		}
 		cp.restore()
 		return nil, false, nil
@@ -973,22 +973,24 @@ func (p *Parser) parseColumnsInsertValues() ([]memberAccessor, bool, error) {
 	return sources, true, nil
 }
 
-func (p *Parser) parseRenamingInsertValues() ([]valueAccessor, bool, error) {
+// parseBasicInsertValues parses insert expressions that are value on the
+// right hand side of a basic insert expression.
+func (p *Parser) parseBasicInsertValues() ([]valueAccessor, bool, error) {
 	cp := p.save()
 	if !p.skipChar('(') {
 		return nil, false, nil
 	}
-	p.skipBlanks()
+
 	inputParsed := false
 	itemStart := p.pos
-
-	// Error points to first parentheses skipped above.
-	nextItem := true
 	var vs []valueAccessor
 	// Invariant:
-	// 	The previous char excluding blanks is ',' or ')'.
-	for nextItem {
+	// - The previous char excluding blanks is ',' or '('.
+	// - The loop parser will not pass the matching ')'.
+	for {
 		p.skipBlanks()
+		itemStart = p.pos
+
 		if ma, ok, err := p.parseInputMemberAccessor(); err != nil {
 			return nil, false, err
 		} else if ok {
@@ -1009,17 +1011,17 @@ func (p *Parser) parseRenamingInsertValues() ([]valueAccessor, bool, error) {
 
 		p.skipBlanks()
 		if p.skipChar(')') {
-			// If we only parsed literals, and not SQLair inputs then ignore
-			// them.
+			// If we only parsed literals, and not SQLair inputs, then bypass
+			// the parsed expression.
 			if !inputParsed {
 				return nil, false, nil
 			}
 			return vs, true, nil
 		}
 
-		nextItem = p.skipChar(',')
-		p.skipBlanks()
-		itemStart = p.pos
+		if !p.skipChar(',') {
+			break
+		}
 	}
 	cp.restore()
 	return nil, false, nil

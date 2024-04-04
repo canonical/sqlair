@@ -35,9 +35,10 @@ type Input interface {
 	LocateParams(typeToValue TypeToValue) (params *Params, err error)
 }
 
+// Params contains query parameters and metadata generated from an input value.
 type Params struct {
 	// Vals contains the query parameters.
-	Vals []reflect.Value
+	Vals []any
 	// Omit indicates if the params have an omitempty flag set and should be
 	// ommited from input.
 	Omit bool
@@ -49,7 +50,8 @@ type Params struct {
 	ArgTypeUsed reflect.Type
 }
 
-func NewParams(vals []reflect.Value, omit bool, bulk bool, argType reflect.Type) *Params {
+// newParams generates a new Params struct.
+func newParams(vals []any, omit bool, bulk bool, argType reflect.Type) *Params {
 	return &Params{
 		Vals:        vals,
 		Omit:        omit,
@@ -86,21 +88,20 @@ func (mk *mapKey) ArgType() reflect.Type {
 	return mk.mapType
 }
 
-// LocateParams locates the map in typeToValue and then gets value associated
-// with the key specified in mapKey. An error is returned if the map does not
-// contain this key. A slice with a single entry is returned to fit the Input
-// interface.
+// LocateParams locates the map (or slice of maps for a bulk insert) in
+// typeToValue and then gets value associated with the key specified in mapKey.
+// An error is returned if any map does not contain this key.
 func (mk *mapKey) LocateParams(typeToValue TypeToValue) (*Params, error) {
 	bulk := false
 	var argType reflect.Type
-	var vals []reflect.Value
+	var vals []any
 	if m, ok := typeToValue[mk.mapType]; ok {
 		v := m.MapIndex(reflect.ValueOf(mk.name))
 		if v.Kind() == reflect.Invalid {
 			return nil, fmt.Errorf("map %q does not contain key %q", mk.mapType.Name(), mk.name)
 		}
 		argType = m.Type()
-		vals = append(vals, v)
+		vals = append(vals, v.Interface())
 	} else if ms, ok := locateBulkType(typeToValue, mk.mapType); ok {
 		bulk = true
 		if ms.Len() == 0 {
@@ -123,13 +124,13 @@ func (mk *mapKey) LocateParams(typeToValue TypeToValue) (*Params, error) {
 			if v.Kind() == reflect.Invalid {
 				return nil, fmt.Errorf("map %q does not contain key %q", mk.mapType.Name(), mk.name)
 			}
-			vals = append(vals, v)
+			vals = append(vals, v.Interface())
 		}
 		argType = ms.Type()
 	} else {
 		return nil, valueNotFoundError(typeToValue, mk.mapType)
 	}
-	return NewParams(vals, false, bulk, argType), nil
+	return newParams(vals, false, bulk, argType), nil
 }
 
 // Desc returns a natural language description of the mapKey for use in error
@@ -182,21 +183,21 @@ func (f *structField) ArgType() reflect.Type {
 	return f.structType
 }
 
-// LocateParams locates the struct that contains the field in the typeToValue
-// map. It returns the value of this field and the omitempty flag. A slice with
-// a single entry is returned to fit the Input interface.
+// LocateParams locates the struct (or slice of structs for a bulk insert) that
+// contains the field in the TypeToValue map. It returns Params containing the
+// value of this field.
 func (f *structField) LocateParams(typeToValue TypeToValue) (*Params, error) {
 	omit := false
 	bulk := false
 	var argType reflect.Type
-	var vals []reflect.Value
+	var vals []any
 	if s, ok := typeToValue[f.structType]; ok {
 		val := s.FieldByIndex(f.index)
 		if val.IsZero() && f.omitEmpty {
 			omit = true
 		}
 		argType = s.Type()
-		vals = append(vals, val)
+		vals = append(vals, val.Interface())
 	} else if ss, ok := locateBulkType(typeToValue, f.structType); ok {
 		bulk = true
 		if ss.Len() == 0 {
@@ -220,17 +221,17 @@ func (f *structField) LocateParams(typeToValue TypeToValue) (*Params, error) {
 				// mix then throw an error.
 				if i == 0 && val.IsZero() {
 					omit = true
-				} else if val.IsZero() && !omit || !val.IsZero() && omit {
+				} else if val.IsZero() != omit {
 					return nil, fmt.Errorf("got mix of zero and none zero values in %s which has the omitempty flag set, in a bulk insert, values must be all zero or all none zero", f.Desc())
 				}
 			}
 			argType = ss.Type()
-			vals = append(vals, val)
+			vals = append(vals, val.Interface())
 		}
 	} else {
 		return nil, valueNotFoundError(typeToValue, f.structType)
 	}
-	return NewParams(vals, omit, bulk, argType), nil
+	return newParams(vals, omit, bulk, argType), nil
 }
 
 // Desc returns a natural language description of the struct field for use in
@@ -289,6 +290,7 @@ func (s *slice) ArgType() reflect.Type {
 	return s.sliceType
 }
 
+// locateBulk type looks for a slice of t in typeToValue.
 func locateBulkType(typeToValue TypeToValue, t reflect.Type) (reflect.Value, bool) {
 	if bt, ok := typeToValue[reflect.SliceOf(t)]; ok {
 		return bt, true
@@ -298,7 +300,7 @@ func locateBulkType(typeToValue TypeToValue, t reflect.Type) (reflect.Value, boo
 }
 
 // LocateParams locates the slice argument associated with the slice
-// ValueLocator in typeToValue and returns the reflect.Value objects generated
+// ValueLocator in typeToValue and returns the values objects generated
 // by reflecting on the elements of the slice.
 func (s *slice) LocateParams(typeToValue TypeToValue) (*Params, error) {
 	sv, ok := typeToValue[s.sliceType]
@@ -306,11 +308,11 @@ func (s *slice) LocateParams(typeToValue TypeToValue) (*Params, error) {
 		return nil, valueNotFoundError(typeToValue, s.sliceType)
 	}
 
-	vals := []reflect.Value{}
+	var vals []any
 	for i := 0; i < sv.Len(); i++ {
-		vals = append(vals, sv.Index(i))
+		vals = append(vals, sv.Index(i).Interface())
 	}
-	return NewParams(vals, false, false, s.sliceType), nil
+	return newParams(vals, false, false, s.sliceType), nil
 }
 
 // valueNotFoundError generates the arguments present and returns a typeMissingError
