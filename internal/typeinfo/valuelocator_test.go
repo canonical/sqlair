@@ -323,7 +323,7 @@ func (s *typeInfoSuite) TestLocateParamsError(c *C) {
 		input: func(ai ArgInfo) (Input, error) {
 			return ai.InputMember("M", "foo")
 		},
-		err: `got nil map in slice of "M" at position 1`,
+		err: `got nil map in slice of "M" at index 1`,
 	}, {
 		summary:    "map bulk insert nil pointer to map in slice",
 		typeSample: M{},
@@ -331,7 +331,7 @@ func (s *typeInfoSuite) TestLocateParamsError(c *C) {
 		input: func(ai ArgInfo) (Input, error) {
 			return ai.InputMember("M", "foo")
 		},
-		err: `got nil pointer in slice of "M" at position 1`,
+		err: `got nil pointer in slice of "M" at index 1`,
 	}, {
 		summary:    "map bulk insert empty slice",
 		typeSample: M{},
@@ -355,7 +355,7 @@ func (s *typeInfoSuite) TestLocateParamsError(c *C) {
 		input: func(ai ArgInfo) (Input, error) {
 			return ai.InputMember("TS", "foo")
 		},
-		err: `got nil pointer in slice of "TS" at position 0`,
+		err: `got nil pointer in slice of "TS" at index 0`,
 	}, {
 		summary:    "struct bulk insert empty slice",
 		typeSample: TS{},

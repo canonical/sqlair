@@ -742,6 +742,7 @@ func (s *PackageSuite) TestRun(c *C) {
 	var jimCheck = Person{}
 	err = db.Query(nil, selectStmt, &jim).Get(&jimCheck)
 	c.Assert(err, IsNil)
+	c.Check(jimCheck, Equals, jim)
 
 	joe := Person{
 		ID:       34,
@@ -758,6 +759,75 @@ func (s *PackageSuite) TestRun(c *C) {
 	err = db.Query(nil, selectStmt, &joe).Get(&joeCheck)
 	c.Assert(err, IsNil)
 	c.Check(joeCheck, Equals, joe)
+}
+
+func (s *PackageSuite) TestRunBulkInsert(c *C) {
+	db, err := openTestDB()
+	c.Assert(err, IsNil)
+	createPerson, err := sqlair.Prepare(`
+		CREATE TABLE person (
+			name text,
+			id integer,
+			address_id integer,
+			email text
+		);
+	`)
+	c.Assert(err, IsNil)
+	err = db.Query(nil, createPerson).Run()
+	c.Assert(err, IsNil)
+	createAddress, err := sqlair.Prepare(`
+		CREATE TABLE address (
+			id integer,
+			district text,
+			street text
+		);
+	`)
+	c.Assert(err, IsNil)
+
+	err = db.Query(nil, createAddress).Run()
+	c.Assert(err, IsNil)
+	defer dropTables(c, db, "person", "address")
+
+	// Insert all people in a bulk insert.
+	insertPeopleStmt, err := sqlair.Prepare("INSERT INTO person (*) VALUES ($Person.*);", Person{})
+	c.Assert(err, IsNil)
+	err = db.Query(nil, insertPeopleStmt, allPeople).Run()
+	c.Assert(err, IsNil)
+
+	// Check all people are in the db.
+	selectPeopleStmt, err := sqlair.Prepare("SELECT &Person.* FROM person", Person{})
+	c.Assert(err, IsNil)
+	var checkPeople []Person
+	err = db.Query(nil, selectPeopleStmt).GetAll(&checkPeople)
+	c.Assert(err, IsNil)
+	c.Check(checkPeople, DeepEquals, allPeople)
+
+	// Insert all address in db and check outcome to confirm 3 rows inserted.
+	insertAddressStmt, err := sqlair.Prepare(
+		`INSERT INTO address (id, street, district) VALUES ($Person.address_id, $Address.street, "const district")`,
+		Person{},
+		Address{},
+	)
+	c.Assert(err, IsNil)
+	outcome := sqlair.Outcome{}
+	err = db.Query(nil, insertAddressStmt, []Person{fred, mark, mary}, []Address{mainStreet, churchRoad, stationLane}).Get(&outcome)
+	c.Assert(err, IsNil)
+	rowsAffected, err := outcome.Result().RowsAffected()
+	c.Assert(err, IsNil)
+	c.Assert(rowsAffected, Equals, int64(3))
+
+	// Check all added addresses are in the db.
+	selectAddressStmt, err := sqlair.Prepare("SELECT &Address.* FROM address", Address{})
+	c.Assert(err, IsNil)
+	checkAddresses := []Address{
+		{ID: 1000, Street: "Main Street", District: "const district"},
+		{ID: 1500, Street: "Church Road", District: "const district"},
+		{ID: 3500, Street: "Station Lane", District: "const district"},
+	}
+	var addresses []Address
+	err = db.Query(nil, selectAddressStmt).GetAll(&addresses)
+	c.Assert(err, IsNil)
+	c.Check(checkAddresses, DeepEquals, addresses)
 }
 
 func (s *PackageSuite) TestOutcome(c *C) {

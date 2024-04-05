@@ -272,7 +272,7 @@ type basicInsertExpr struct {
 
 // String returns a text representation for debugging and testing purposes.
 func (e *basicInsertExpr) String() string {
-	return fmt.Sprintf("RenamingInsert[%v %v]", e.columns, e.sources)
+	return fmt.Sprintf("BasicInsert[%v %v]", e.columns, e.sources)
 }
 
 // bindTypes generates a *typedInsertExpr containing type information about the
@@ -284,7 +284,7 @@ func (e *basicInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie any, err erro
 		}
 	}()
 	if len(e.columns) != len(e.sources) {
-		return nil, fmt.Errorf("mismatched number of columns and values (%d!=%d)", len(e.columns), len(e.sources))
+		return nil, fmt.Errorf("mismatched number of columns and values: %d != %d", len(e.columns), len(e.sources))
 	}
 	var cols []typedColumn
 	for i, source := range e.sources {
@@ -419,6 +419,8 @@ func (e *outputExpr) bindTypes(argInfo typeinfo.ArgInfo) (te any, err error) {
 // valueAccessor defines an accessor that can be used to generate a typedColumn
 // with the given column name.
 type valueAccessor interface {
+	// typedColumn generates a typedColumn that associates the given colum name
+	// with the value specified by the valueAccessor.
 	typedColumn(argInfo typeinfo.ArgInfo, columnName string) (typedColumn, error)
 }
 

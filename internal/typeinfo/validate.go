@@ -27,12 +27,28 @@ func ValidateInputs(args []any) (TypeToValue, error) {
 			if t.Name() == "" {
 				return nil, fmt.Errorf("cannot use anonymous %s", k)
 			}
+			if _, ok := typeToValue[reflect.SliceOf(t)]; ok {
+				return nil, typeAndSliceProvidedError(
+					reflect.SliceOf(t), t)
+			} else if _, ok := typeToValue[reflect.SliceOf(reflect.PointerTo(t))]; ok {
+				return nil, typeAndSliceProvidedError(
+					reflect.SliceOf(reflect.PointerTo(t)), t)
+			}
 		case reflect.Slice:
+			// If the slice has no name and its element type is map, struct or
+			// pointer then we assume it is for a bulk insert.
 			switch t.Elem().Kind() {
-			case reflect.Map, reflect.Struct, reflect.Pointer:
-			// If it is a slice of structs or maps or pointers then it might be
-			// a bulk insert, and we do not mind if it has no name.
+			case reflect.Map, reflect.Struct:
+				if _, ok := typeToValue[t.Elem()]; t.Name() == "" && ok {
+					return nil, typeAndSliceProvidedError(t, t.Elem())
+				}
+			case reflect.Pointer:
+				if _, ok := typeToValue[t.Elem().Elem()]; t.Name() == "" && ok {
+					return nil, typeAndSliceProvidedError(t, t.Elem().Elem())
+				}
 			default:
+				// We only care if a slice has no name it is not going to be
+				// used for a bulk insert.
 				if t.Name() == "" {
 					return nil, fmt.Errorf("cannot use anonymous slice outside bulk insert")
 				}
@@ -46,6 +62,27 @@ func ValidateInputs(args []any) (TypeToValue, error) {
 		typeToValue[t] = v
 	}
 	return typeToValue, nil
+}
+
+func checkDuplicate(tv TypeToValue, t reflect.Type) error {
+	switch t.Kind() {
+	case reflect.Slice:
+		// If the slice has no name and its element type is map, struct or
+		// pointer then we assume it is for a bulk insert.
+		switch t.Elem().Kind() {
+		case reflect.Map, reflect.Struct:
+			if _, ok := tv[t.Elem()]; t.Name() == "" && ok {
+				return typeAndSliceProvidedError(t, t.Elem())
+			}
+		case reflect.Pointer:
+			if _, ok := tv[t.Elem().Elem()]; t.Name() == "" && ok {
+				return typeAndSliceProvidedError(t, t.Elem().Elem())
+			}
+		}
+	case reflect.Map, reflect.Struct:
+
+	}
+	return nil
 }
 
 // ValidateOutputs takes the raw SQLair output arguments from the user and uses
@@ -92,4 +129,9 @@ func validateValue(v reflect.Value) error {
 		}
 	}
 	return nil
+}
+
+func typeAndSliceProvidedError(slice reflect.Type, elem reflect.Type) error {
+	return fmt.Errorf("type %q and its slice type %q provided, unclear if bulk insert intended",
+		PrettyTypeName(slice), PrettyTypeName(elem))
 }

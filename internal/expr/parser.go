@@ -824,8 +824,7 @@ func (p *Parser) parseInputExpr() (expression, bool, error) {
 	inputExprParsers := []func(*Parser) (expression, bool, error){
 		(*Parser).parseSliceInputExpr,
 		(*Parser).parseMemberInputExpr,
-		(*Parser).parseAsteriskInsertExpr,
-		(*Parser).parseColumnsInsertExpr,
+		(*Parser).parseInsertExpr,
 	}
 	for _, inputExprParser := range inputExprParsers {
 		if expr, ok, err := inputExprParser(p); err != nil {
@@ -896,28 +895,25 @@ func (p *Parser) parseAsteriskInsertExpr() (expression, bool, error) {
 	}
 	p.skipBlanks()
 
-	sources, ok, err := parseList(p, (*Parser).parseInputMemberAccessor)
-	if err != nil {
-		cp.restore()
-		return nil, false, err
-	} else if !ok {
-		// Check for types with missing parentheses.
-		if _, ok, _ := p.parseInputMemberAccessor(); ok {
-			err = errorAt(fmt.Errorf(`missing parentheses around types after "VALUES"`), cp.lineNum, cp.colNum(), p.input)
-		}
-		cp.restore()
-		return nil, false, err
+	sources, ok, err := p.parseComplexInsertValues()
+	if ok {
+		return &asteriskInsertExpr{sources: sources, raw: p.input[cp.pos:p.pos]}, true, nil
 	}
-
-	return &asteriskInsertExpr{sources: sources, raw: p.input[cp.pos:p.pos]}, true, nil
+	return nil, false, err
 }
 
-// parseColumnsInsertExpr parses an INSERT statement input expression where the
-// user specifies the columns to insert from a single type.
-// It is of the form "(col1, col2,...) VALUES ($Type.*)".
-func (p *Parser) parseColumnsInsertExpr() (expression, bool, error) {
-	cp := p.save()
+// parseInsertExpr parses an INSERT statement input expression.
+// e.g. (col1, col2, ...) VALUES (&Type.col1, &Type.*, ...)
+func (p *Parser) parseInsertExpr() (expression, bool, error) {
+	if expr, ok, err := p.parseAsteriskInsertExpr(); err != nil {
+		return nil, false, err
+	} else if ok {
+		return expr, true, nil
+	}
 
+	// Try and parse an insert expression with explict columns.
+	cp := p.save()
+	// TODO: columns should really be []basicColumn not []columnAccessor
 	columns, paren, ok := p.parseColumns()
 	if !(ok && paren) {
 		cp.restore()
@@ -930,12 +926,13 @@ func (p *Parser) parseColumnsInsertExpr() (expression, bool, error) {
 	}
 	p.skipBlanks()
 
-	if sources, ok, err := p.parseColumnsInsertValues(); err != nil {
-		cp.restore()
-		return nil, false, err
-	} else if ok {
+	colcp := p.save()
+	// Ignore the errors here, let parseBasicInsertValues handle them
+	if sources, ok, _ := p.parseComplexInsertValues(); ok && starCountTypes(sources) != 0 {
+		// If there are no stars in the sources then it is a basicInsertExpr.
 		return &columnsInsertExpr{columns: columns, sources: sources, raw: p.input[cp.pos:p.pos]}, true, nil
 	}
+	colcp.restore()
 
 	if sources, ok, err := p.parseBasicInsertValues(); err != nil {
 		cp.restore()
@@ -948,37 +945,38 @@ func (p *Parser) parseColumnsInsertExpr() (expression, bool, error) {
 	return nil, false, nil
 }
 
-// parseColumnsInsertValues parses insert expressions that are value on the
-// right hand side of a columns insert expression.
-func (p *Parser) parseColumnsInsertValues() ([]memberAccessor, bool, error) {
+// parseComplexInsertValues parses the values on the right hand side of insert
+// expressions. This includes asterisk accessors but not literals.
+// e.g. "($Type.*, $Type.col2)"
+func (p *Parser) parseComplexInsertValues() ([]memberAccessor, bool, error) {
 	cp := p.save()
-	// Ignore errors and leave them to be handled by
-	// parseMemberInputExpr later.
-	sources, ok, _ := parseList(p, (*Parser).parseInputMemberAccessor)
-	if !ok {
+	sources, ok, err := parseList(p, (*Parser).parseInputMemberAccessor)
+	if err != nil {
+		cp.restore()
+		return nil, false, err
+	} else if !ok {
 		// Check for types with missing parentheses.
-		if _, ok, _ := p.parseTypeAndMember(); ok {
-			cp.restore()
-			return nil, false, errorAt(fmt.Errorf(`missing parentheses around types after "VALUES"`), cp.lineNum, cp.colNum(), p.input)
+		if _, ok, _ := p.parseInputMemberAccessor(); ok {
+			err = errorAt(fmt.Errorf(`missing parentheses around types after "VALUES"`), cp.lineNum, cp.colNum(), p.input)
 		}
 		cp.restore()
-		return nil, false, nil
-	}
-	if starCountTypes(sources) == 0 {
-		// If there are no asterisk accessors then leave the accessors to be
-		// handled elsewhere.
-		cp.restore()
-		return nil, false, nil
+		return nil, false, err
 	}
 	return sources, true, nil
 }
 
-// parseBasicInsertValues parses insert expressions that are value on the
-// right hand side of a basic insert expression.
+// parseBasicInsertValues parses the right hand side of a basic insert
+// expression, this includes literals, but not asterisk accessors.
 func (p *Parser) parseBasicInsertValues() ([]valueAccessor, bool, error) {
 	cp := p.save()
 	if !p.skipChar('(') {
-		return nil, false, nil
+		var err error
+		// Check for types with missing parentheses.
+		if _, ok, _ := p.parseInputMemberAccessor(); ok {
+			err = errorAt(fmt.Errorf(`missing parentheses around types after "VALUES"`), cp.lineNum, cp.colNum(), p.input)
+		}
+		cp.restore()
+		return nil, false, err
 	}
 
 	inputParsed := false
