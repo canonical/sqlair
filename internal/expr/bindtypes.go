@@ -97,8 +97,8 @@ func (b *bypass) bindTypes(typeinfo.ArgInfo) (typedExpr, error) {
 	return b, nil
 }
 
-// addToQueryBuilder adds the bypass part to the query builder.
-func (b *bypass) addToQueryBuilder(qb *queryBuilder) error {
+// addToQuery adds the bypass part to the query builder.
+func (b *bypass) addToQuery(qb *queryBuilder, _ typeinfo.TypeToValue) error {
 	return qb.addBypass(b)
 }
 

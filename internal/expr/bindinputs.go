@@ -4,15 +4,16 @@
 package expr
 
 import (
-	"bytes"
-	"database/sql"
 	"fmt"
-	"reflect"
-	"strconv"
-	"strings"
 
 	"github.com/canonical/sqlair/internal/typeinfo"
 )
+
+// typedExpr represents a SQLair expression bound to a type that can be added to
+// a query.
+type typedExpr interface {
+	addToQuery(*queryBuilder, typeinfo.TypeToValue) error
+}
 
 // TypeBoundExpr represents a SQLair statement bound to concrete Go types. It
 // contains information used to generate the underlying SQL query and map it to
@@ -35,38 +36,18 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 		return nil, err
 	}
 
-	qb := newQueryBuilder(typeToValue)
+	qb := newQueryBuilder()
 	for _, te := range tbe.typedExprs {
-		if err := te.addToQueryBuilder(qb); err != nil {
+		if err := te.addToQuery(qb, typeToValue); err != nil {
 			return nil, err
 		}
 	}
 
-	if err := qb.checkAllArgsUsed(); err != nil {
+	if err := qb.checkAllArgsUsed(typeToValue); err != nil {
 		return nil, err
 	}
 
 	return &PrimedQuery{outputs: qb.outputs, sql: qb.sqlBuilder.getSQL(), params: qb.namedInputs}, nil
-}
-
-// outputColumn stores the name of a column to fetch from the database and the
-// output type location specifying the value to scan the result into.
-type outputColumn struct {
-	output typeinfo.Output
-	column string
-}
-
-// newOutputColumn generates an output column with the correct column string to
-// write in the generated query.
-func newOutputColumn(tableName string, columnName string, output typeinfo.Output) outputColumn {
-	if tableName == "" {
-		return outputColumn{column: columnName, output: output}
-	}
-	return outputColumn{column: tableName + "." + columnName, output: output}
-}
-
-type typedExpr interface {
-	addToQueryBuilder(*queryBuilder) error
 }
 
 // typedInputExpr stores information about a Go value to use as a standalone query
@@ -75,9 +56,22 @@ type typedInputExpr struct {
 	input typeinfo.Input
 }
 
-// addToQueryBuilder adds the typed input expressions to the query builder.
-func (te *typedInputExpr) addToQueryBuilder(qb *queryBuilder) error {
-	return qb.addInput(te)
+// addToQuery adds the typed input expressions to the query builder.
+func (te *typedInputExpr) addToQuery(qb *queryBuilder, typeToValue typeinfo.TypeToValue) error {
+	params, err := te.input.LocateParams(typeToValue)
+	if err != nil {
+		return err
+	}
+	if params.Omit {
+		return omitEmptyInputError(te.input.Desc())
+	}
+	if params.Bulk {
+		return fmt.Errorf("cannot use bulk inputs outside an insert statement")
+	}
+	qb.markArgUsed(params.ArgTypeUsed)
+
+	qb.addInputs(params.Vals)
+	return nil
 }
 
 // typedColumn represents a column and input locator in an insert statement.
@@ -87,12 +81,73 @@ type typedColumn interface {
 	bindInputs(tv typeinfo.TypeToValue, inputCount int) (*boundInsertColumn, error)
 }
 
+// typedInsertExpr stores information about the Go values to use as inputs inside
+// an INSERT statement.
+type typedInsertExpr struct {
+	insertColumns []typedColumn
+}
+
+// addToQuery adds the typed insert expressions to the query builder.
+func (te *typedInsertExpr) addToQuery(qb *queryBuilder, typeToValue typeinfo.TypeToValue) error {
+	var boundColumns []*boundInsertColumn
+	bulk := false
+	numRows := 1
+	// firstBulkColumn stores the type name of the first column used in
+	// a bulk insert. This is used for error messages.
+	var firstBulkColumn string
+	for _, ic := range te.insertColumns {
+		bc, err := ic.bindInputs(typeToValue, qb.getInputCount())
+		if err != nil {
+			return err
+		}
+		if !bc.omit {
+			qb.incrementInputCount(len(bc.vals))
+		}
+
+		if bc.bulk {
+			if !bulk {
+				// First bulk row.
+				bulk = true
+				firstBulkColumn = bc.inputName
+				numRows = len(bc.vals)
+			} else if len(bc.vals) != numRows {
+				return mismatchedBulkLengthsError(firstBulkColumn, numRows, bc.inputName, len(bc.vals))
+			}
+		}
+
+		if bc.argType != nil {
+			qb.markArgUsed(bc.argType)
+		}
+
+		boundColumns = append(boundColumns, bc)
+	}
+	return qb.addInsert(boundColumns, numRows)
+}
+
+// typedOutputExpr contains the columns to fetch from the database and
+// information about the Go values to read the query results into.
+type typedOutputExpr struct {
+	outputColumns []outputColumn
+}
+
+// addToQuery adds the typed output expressions to the query builder.
+func (te *typedOutputExpr) addToQuery(qb *queryBuilder, _ typeinfo.TypeToValue) error {
+	var columns []string
+	var outputs []typeinfo.Output
+	for _, oc := range te.outputColumns {
+		outputs = append(outputs, oc.output)
+		columns = append(columns, oc.column)
+	}
+	qb.addOutput(columns, outputs)
+	return nil
+}
+
 // insertColumn stores information about a single column of a row in an insert
 // statement.
 type insertColumn struct {
 	input  typeinfo.Input
 	column string
-	// explicit is true if the column is explicity inserted in the SQLair
+	// explicit is true if the column is explicitly inserted in the SQLair
 	// query. If the column is inserted via an asterisk type, it is false.
 	explicit bool
 }
@@ -165,297 +220,20 @@ func newLiteralColumn(column, literal string) literalColumn {
 	}
 }
 
-// boundInsertColumn represents a column in an insert statement along with the values
-// to be inserted into it.
-type boundInsertColumn struct {
-	// vals contains the query parameters. There may be multiple for a bulk
-	// insert, or none for a literal.
-	vals []any
-	// inputNum is the number associated with the first named input for this
-	// column. The numbers inputNum to inputNum + len(vals) can be used by this
-	// boundInsertColumn.
-	inputNum int
-	// omit indicates if the column and values should be ommited.
-	omit bool
-	// bulk is true if the list of values should be inserted in a bulk insert
-	// expression.
-	bulk bool
-	// argType is the type of the argument that was used to generate the
-	// params.
-	argType reflect.Type
-	// inputName is the type name of the input parameter.
-	inputName string
-	// literal is set if the value to insert is a literal.
-	literal string
-	// column is the column name.
+// outputColumn stores the name of a column to fetch from the database and the
+// output type location specifying the value to scan the result into.
+type outputColumn struct {
+	output typeinfo.Output
 	column string
 }
 
-// parameter returns the value to be inserted into the boundInsertColumn in the given
-// row. The inputCount it used to generate the parameter name.
-func (bc *boundInsertColumn) parameter(row int) (name string, v any, newParam bool, err error) {
-	switch {
-	case len(bc.vals) == 0:
-		return bc.literal, nil, false, nil
-	case len(bc.vals) == 1:
-		name = "sqlair_" + strconv.Itoa(bc.inputNum)
-		newParam = false
-		if row == 0 {
-			newParam = true
-		}
-		return "@" + name, sql.Named(name, bc.vals[0]), newParam, nil
-	case row < len(bc.vals):
-		name = "sqlair_" + strconv.Itoa(bc.inputNum+row)
-		return "@" + name, sql.Named(name, bc.vals[row]), true, nil
-	default:
-		return "", nil, false, fmt.Errorf("internal error: no bulk insert value for row %d, only have %d values", row, len(bc.vals))
+// newOutputColumn generates an output column with the correct column string to
+// write in the generated query.
+func newOutputColumn(tableName string, columnName string, output typeinfo.Output) outputColumn {
+	if tableName == "" {
+		return outputColumn{column: columnName, output: output}
 	}
-}
-
-// typedInsertExpr stores information about the Go values to use as inputs inside
-// an INSERT statement.
-type typedInsertExpr struct {
-	insertColumns []typedColumn
-}
-
-// addToQueryBuilder adds the typed insert expressions to the query builder.
-func (te *typedInsertExpr) addToQueryBuilder(qb *queryBuilder) error {
-	return qb.addInsert(te)
-}
-
-// typedOutputExpr contains the columns to fetch from the database and
-// information about the Go values to read the query results into.
-type typedOutputExpr struct {
-	outputColumns []outputColumn
-}
-
-// addToQueryBuilder adds the typed output expressions to the query builder.
-func (te *typedOutputExpr) addToQueryBuilder(qb *queryBuilder) error {
-	return qb.addOutput(te)
-}
-
-// queryBuilder is used to build up a query to be passed to the database from a
-// type bound expression
-type queryBuilder struct {
-	// typeToValue is stores the type and value of the arguments passed by the
-	// caller of BindInputs.
-	typeToValue typeinfo.TypeToValue
-
-	// inputCount tracks the number of query inputs.
-	inputCount int
-	// outputCount tracks the number of query outputs.
-	outputCount int
-	// argUsed is used to check that all the arguments provided by the caller of
-	// BindInputs are referenced in the query.
-	argUsed map[reflect.Type]bool
-
-	// sqlBuilder is used to accumulate the generated SQL.
-	sqlBuilder sqlBuilder
-	// namedInputs are the named input values corresponding to the placeholders
-	// in the SQL. They will be passed to the database at query time.
-	namedInputs []any
-	// outputs are the output value locators to be used when the SQL is scanned.
-	outputs []typeinfo.Output
-}
-
-// newQueryBuilder builds a new queryBuilder with the inputs in typeToValue.
-func newQueryBuilder(typeToValue typeinfo.TypeToValue) *queryBuilder {
-	return &queryBuilder{
-		sqlBuilder:  sqlBuilder{},
-		inputCount:  0,
-		outputCount: 0,
-		typeToValue: typeToValue,
-		argUsed:     map[reflect.Type]bool{},
-		namedInputs: []any{},
-		outputs:     []typeinfo.Output{},
-	}
-}
-
-// addInput adds a typedInputExpr to the queryBuilder
-func (qb *queryBuilder) addInput(te *typedInputExpr) error {
-	params, err := te.input.LocateParams(qb.typeToValue)
-	if err != nil {
-		return err
-	}
-	if params.Omit {
-		return omitEmptyInputError(te.input.Desc())
-	}
-	if params.Bulk {
-		return fmt.Errorf("cannot use bulk inputs outside an insert statement")
-	}
-
-	qb.argUsed[params.ArgTypeUsed] = true
-	qb.sqlBuilder.writeInput(qb.inputCount, len(params.Vals))
-	for _, val := range params.Vals {
-		namedInput := sql.Named("sqlair_"+strconv.Itoa(qb.inputCount), val)
-		qb.namedInputs = append(qb.namedInputs, namedInput)
-		qb.inputCount++
-	}
-	return nil
-}
-
-// addInput adds a typedInsertExpr to the queryBuilder
-func (qb *queryBuilder) addInsert(te *typedInsertExpr) error {
-	var boundColumns []*boundInsertColumn
-	var columnNames []string
-	bulk := false
-	numRows := 1
-	// firstBulkColumn stores the type name of the first column used in
-	// a bulk insert. This is used for error messages.
-	var firstBulkColumn string
-	for _, ic := range te.insertColumns {
-		bc, err := ic.bindInputs(qb.typeToValue, qb.inputCount)
-		if err != nil {
-			return err
-		}
-		if bc.argType != nil {
-			qb.argUsed[bc.argType] = true
-		}
-
-		if bc.bulk {
-			if !bulk {
-				// First bulk row.
-				bulk = true
-				firstBulkColumn = bc.inputName
-				numRows = len(bc.vals)
-			} else if len(bc.vals) != numRows {
-				return mismatchedBulkLengthsError(firstBulkColumn, numRows, bc.inputName, len(bc.vals))
-			}
-		}
-		boundColumns = append(boundColumns, bc)
-		if !bc.omit {
-			columnNames = append(columnNames, bc.column)
-			qb.inputCount += len(bc.vals)
-		}
-	}
-
-	var rowsSQL [][]string
-	for rowNum := 0; rowNum < numRows; rowNum++ {
-		var rowSQL []string
-		for _, bc := range boundColumns {
-			if !bc.omit {
-				valueSQL, namedInput, newParam, err := bc.parameter(rowNum)
-				if err != nil {
-					return err
-				}
-				rowSQL = append(rowSQL, valueSQL)
-				if newParam {
-					qb.namedInputs = append(qb.namedInputs, namedInput)
-				}
-			}
-		}
-		rowsSQL = append(rowsSQL, rowSQL)
-	}
-	qb.sqlBuilder.writeInsert(columnNames, rowsSQL)
-	return nil
-}
-
-// addOutput adds a typedOutputExpr to the queryBuilder
-func (qb *queryBuilder) addOutput(te *typedOutputExpr) error {
-	var columns []string
-	for _, oc := range te.outputColumns {
-		qb.outputs = append(qb.outputs, oc.output)
-		columns = append(columns, oc.column)
-	}
-	qb.sqlBuilder.writeOutput(qb.outputCount, columns)
-	qb.outputCount += len(columns)
-	return nil
-}
-
-// addBypass adds a bypass part to the queryBuilder
-func (qb *queryBuilder) addBypass(b *bypass) error {
-	qb.sqlBuilder.write(b.chunk)
-	return nil
-}
-
-// checkAllArgsUsed goes through all the arguments contained in typeToValue and
-// checks that they were used somewhere during the building of the query.
-func (qb *queryBuilder) checkAllArgsUsed() error {
-	for argType := range qb.typeToValue {
-		if !qb.argUsed[argType] {
-			return notReferencedInQueryError(argType)
-		}
-	}
-	return nil
-}
-
-// sqlBuilder is used to generate SQL string piece by piece using the struct
-// methods.
-type sqlBuilder struct {
-	buf bytes.Buffer
-}
-
-// writeInsert writes the SQL for INSERT statements to the sqlBuilder.
-func (b *sqlBuilder) writeInsert(columns []string, rows [][]string) {
-	// Write out the columns.
-	b.buf.WriteString("(")
-	b.writeCommaSeparatedList(columns, func(_ int, column string) string {
-		return column
-	})
-	b.buf.WriteString(") VALUES ")
-	// Write out the values.
-	for i, row := range rows {
-		if i != 0 {
-			b.buf.WriteString(", ")
-		}
-		b.buf.WriteString("(")
-		b.writeCommaSeparatedList(row, func(_ int, value string) string {
-			return value
-		})
-		b.buf.WriteString(")")
-	}
-}
-
-// writeInput writes the SQL for input placeholders to the sqlBuilder.
-func (b *sqlBuilder) writeInput(inputCount, num int) {
-	b.writeCommaSeparatedList(make([]string, num), func(i int, column string) string {
-		return "@sqlair_" + strconv.Itoa(inputCount+i)
-	})
-}
-
-// writeOutput writes the SQL for output columns to the sqlBuilder.
-func (b *sqlBuilder) writeOutput(outputCount int, columns []string) {
-	b.writeCommaSeparatedList(columns, func(i int, column string) string {
-		return column + " AS " + markerName(outputCount+i)
-	})
-}
-
-// writeCommaSeparatedList writes out the provided list using the writer to
-// write each element into the SQL.
-func (b *sqlBuilder) writeCommaSeparatedList(list []string, writer func(i int, s string) string) {
-	for i, s := range list {
-		if i != 0 {
-			b.buf.WriteString(", ")
-		}
-		b.buf.WriteString(writer(i, s))
-	}
-}
-
-// write writes the SQL to the sqlBuilder.
-func (b *sqlBuilder) write(sql string) {
-	b.buf.WriteString(sql)
-}
-
-// getSQL returns the generated SQL string
-func (b *sqlBuilder) getSQL() string {
-	return b.buf.String()
-}
-
-const markerPrefix = "_sqlair_"
-
-func markerName(n int) string {
-	return markerPrefix + strconv.Itoa(n)
-}
-
-// markerIndex returns the int X from the string "_sqlair_X".
-func markerIndex(s string) (int, bool) {
-	if strings.HasPrefix(s, markerPrefix) {
-		n, err := strconv.Atoi(s[len(markerPrefix):])
-		if err == nil {
-			return n, true
-		}
-	}
-	return 0, false
+	return outputColumn{column: tableName + "." + columnName, output: output}
 }
 
 func omitEmptyInputError(valueDesc string) error {
@@ -465,8 +243,4 @@ func omitEmptyInputError(valueDesc string) error {
 func mismatchedBulkLengthsError(firstBulkColumn string, expectedNumRows int, badTypeName string, badRowLength int) error {
 	return fmt.Errorf("expected slices of matching length in bulk insert: slice of %q has length %d but slice of %q has length %d",
 		firstBulkColumn, expectedNumRows, badTypeName, badRowLength)
-}
-
-func notReferencedInQueryError(t reflect.Type) error {
-	return fmt.Errorf(`argument of type %q not used by query`, typeinfo.PrettyTypeName(t))
 }
