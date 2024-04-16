@@ -18,7 +18,7 @@ import (
 // type bound expression
 type queryBuilder struct {
 	// inputCount tracks the number of query inputs.
-	inputCount int
+	inputAssigner *inputAssigner
 	// outputCount tracks the number of query outputs.
 	outputCount int
 	// argUsed is used to check that all the arguments provided by the caller of
@@ -37,12 +37,12 @@ type queryBuilder struct {
 // newQueryBuilder builds a new queryBuilder with the inputs in typeToValue.
 func newQueryBuilder() *queryBuilder {
 	return &queryBuilder{
-		sqlBuilder:  sqlBuilder{},
-		inputCount:  0,
-		outputCount: 0,
-		argUsed:     map[reflect.Type]bool{},
-		namedInputs: []any{},
-		outputs:     []typeinfo.Output{},
+		sqlBuilder:    sqlBuilder{},
+		inputAssigner: &inputAssigner{},
+		outputCount:   0,
+		argUsed:       map[reflect.Type]bool{},
+		namedInputs:   []any{},
+		outputs:       []typeinfo.Output{},
 	}
 }
 
@@ -51,22 +51,14 @@ func (qb *queryBuilder) markArgUsed(t reflect.Type) {
 	qb.argUsed[t] = true
 }
 
-func (qb *queryBuilder) getInputCount() int {
-	return qb.inputCount
-}
-
-func (qb *queryBuilder) incrementInputCount(i int) {
-	qb.inputCount += i
-}
-
 // addInputs adds input placeholders and argument values to the query.
 func (qb *queryBuilder) addInputs(inputVals []any) {
-	qb.sqlBuilder.writeInputs(qb.inputCount, len(inputVals))
-	for _, val := range inputVals {
-		namedInput := sql.Named("sqlair_"+strconv.Itoa(qb.inputCount), val)
+	firstInputNum := qb.inputAssigner.assignInputs(len(inputVals))
+	for i, val := range inputVals {
+		namedInput := sql.Named("sqlair_"+strconv.Itoa(firstInputNum+i), val)
 		qb.namedInputs = append(qb.namedInputs, namedInput)
-		qb.inputCount++
 	}
+	qb.sqlBuilder.writeInputs(firstInputNum, len(inputVals))
 }
 
 // addInput adds a typedInsertExpr to the queryBuilder
@@ -122,6 +114,18 @@ func (qb *queryBuilder) checkAllArgsUsed(typeToValue typeinfo.TypeToValue) error
 	return nil
 }
 
+// inputAssigner assigns input numbers to input expressions.
+type inputAssigner struct {
+	inputCount int
+}
+
+// assignInputs assigns the next n inputs to the caller. The number of the first
+// of these inputs is returned.
+func (ia *inputAssigner) assignInputs(n int) int {
+	ia.inputCount += n
+	return ia.inputCount - n
+}
+
 // boundInsertColumn represents a column in an insert statement along with the values
 // to be inserted into it.
 type boundInsertColumn struct {
@@ -129,9 +133,9 @@ type boundInsertColumn struct {
 	// insert, or none for a literal.
 	vals []any
 	// inputNum is the number associated with the first named input for this
-	// column. The numbers inputNum to inputNum + len(vals) can be used by this
-	// boundInsertColumn.
-	inputNum int
+	// column. The numbers firstInputNum to firstInputNum + len(vals) can be
+	// used by this boundInsertColumn.
+	firstInputNum int
 	// omit indicates if the column and values should be omitted.
 	omit bool
 	// bulk is true if the list of values should be inserted in a bulk insert
@@ -155,14 +159,14 @@ func (bc *boundInsertColumn) parameter(row int) (name string, v any, newParam bo
 	case len(bc.vals) == 0:
 		return bc.literal, nil, false, nil
 	case len(bc.vals) == 1:
-		name = "sqlair_" + strconv.Itoa(bc.inputNum)
+		name = "sqlair_" + strconv.Itoa(bc.firstInputNum)
 		newParam = false
 		if row == 0 {
 			newParam = true
 		}
 		return "@" + name, sql.Named(name, bc.vals[0]), newParam, nil
 	case row < len(bc.vals):
-		name = "sqlair_" + strconv.Itoa(bc.inputNum+row)
+		name = "sqlair_" + strconv.Itoa(bc.firstInputNum+row)
 		return "@" + name, sql.Named(name, bc.vals[row]), true, nil
 	default:
 		return "", nil, false, fmt.Errorf("internal error: no bulk insert value for row %d, only have %d values", row, len(bc.vals))
