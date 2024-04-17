@@ -175,6 +175,8 @@ func (ic insertColumn) bindInputs(tv typeinfo.TypeToValue, ia *inputAssigner) (*
 	}
 	var firstInputNum int
 	if !params.Omit {
+		// Reserve input numbers for all values that are getting inserted in the
+		// boundColumn.
 		firstInputNum = ia.assignInputs(len(params.Vals))
 	}
 	bc := &boundInsertColumn{

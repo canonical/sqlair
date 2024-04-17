@@ -61,7 +61,7 @@ func (qb *queryBuilder) addInputs(inputVals []any) {
 	qb.sqlBuilder.writeInputs(firstInputNum, len(inputVals))
 }
 
-// addInput adds a typedInsertExpr to the queryBuilder
+// addInsert adds a typedInsertExpr to the queryBuilder
 func (qb *queryBuilder) addInsert(boundColumns []*boundInsertColumn, numRows int) error {
 	var rowsSQL [][]string
 	var columnNames []string
@@ -114,8 +114,11 @@ func (qb *queryBuilder) checkAllArgsUsed(typeToValue typeinfo.TypeToValue) error
 	return nil
 }
 
-// inputAssigner assigns input numbers to input expressions.
+// inputAssigner assigns input numbers to input expressions. SQLair query inputs
+// are assigned unique number to use in their name. The inputAssigner keeps
+// track of which inputs have already been used in the query.
 type inputAssigner struct {
+	// inputCount stores the next unused input number.
 	inputCount int
 }
 
