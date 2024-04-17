@@ -48,15 +48,15 @@ func (pe *ParsedExpr) BindTypes(args ...any) (tbe *TypeBoundExpr, err error) {
 	}
 
 	// Bind types to each expression.
-	var typedExprs TypeBoundExpr
+	var typedExprs []typedExpr
 	outputUsed := map[string]bool{}
 	for _, expr := range pe.exprs {
-		te, err := expr.bindTypes(argInfo)
+		typedExpr, err := expr.bindTypes(argInfo)
 		if err != nil {
 			return nil, err
 		}
 
-		if toe, ok := te.(*typedOutputExpr); ok {
+		if toe, ok := typedExpr.(*typedOutputExpr); ok {
 			for _, oc := range toe.outputColumns {
 				if ok := outputUsed[oc.output.Identifier()]; ok {
 					return nil, fmt.Errorf("%s appears more than once in output expressions", oc.output.Desc())
@@ -64,10 +64,10 @@ func (pe *ParsedExpr) BindTypes(args ...any) (tbe *TypeBoundExpr, err error) {
 				outputUsed[oc.output.Identifier()] = true
 			}
 		}
-		typedExprs = append(typedExprs, te)
+		typedExprs = append(typedExprs, typedExpr)
 	}
 
-	return &typedExprs, nil
+	return &TypeBoundExpr{typedExprs: typedExprs}, nil
 }
 
 // expression represents a parsed node of the SQLair query's AST.
@@ -77,7 +77,7 @@ type expression interface {
 
 	// bindTypes binds the types to the expression to generate either a
 	// *typedInputExpr or *typedOutputExpr.
-	bindTypes(typeinfo.ArgInfo) (any, error)
+	bindTypes(typeinfo.ArgInfo) (typedExpr, error)
 }
 
 // bypass represents part of the expression that we want to pass to the backend
@@ -93,8 +93,13 @@ func (b *bypass) String() string {
 
 // bindTypes returns the bypass part itself since it contains no references to
 // types.
-func (b *bypass) bindTypes(typeinfo.ArgInfo) (any, error) {
+func (b *bypass) bindTypes(typeinfo.ArgInfo) (typedExpr, error) {
 	return b, nil
+}
+
+// addToQuery adds the bypass part to the query builder.
+func (b *bypass) addToQuery(qb *queryBuilder, _ typeinfo.TypeToValue) error {
+	return qb.addBypass(b)
 }
 
 // memberInputExpr is an input expression of the form "$Type.member" which
@@ -111,7 +116,7 @@ func (e *memberInputExpr) String() string {
 
 // bindTypes generates a *typedInputExpr containing type information about the
 // Go object and its member.
-func (e *memberInputExpr) bindTypes(argInfo typeinfo.ArgInfo) (any, error) {
+func (e *memberInputExpr) bindTypes(argInfo typeinfo.ArgInfo) (typedExpr, error) {
 	input, err := argInfo.InputMember(e.ma.typeName, e.ma.memberName)
 	if err != nil {
 		return nil, fmt.Errorf("input expression: %s: %s", err, e.raw)
@@ -135,14 +140,14 @@ func (e *asteriskInsertExpr) String() string {
 
 // bindTypes generates a *typedInsertExpr containing type information about the
 // asteriskInsertExpr.
-func (e *asteriskInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie any, err error) {
+func (e *asteriskInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie typedExpr, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("input expression: %s: %s", err, e.raw)
 		}
 	}()
 
-	var cols []insertColumn
+	var cols []typedColumn
 	for _, source := range e.sources {
 		if source.memberName == "*" {
 			inputs, tags, err := argInfo.AllStructInputs(source.typeName)
@@ -183,7 +188,7 @@ func (e *columnsInsertExpr) String() string {
 // columnsInsertExpr. It checks that all the listed columns are provided by the
 // supplied types. If a map with an asterisk is passed, the spare columns are
 // taken from that map.
-func (e *columnsInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie any, err error) {
+func (e *columnsInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie typedExpr, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("input expression: %s: %s", err, e.raw)
@@ -234,7 +239,7 @@ func (e *columnsInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie any, err er
 	// and match them against the columns provided by the types on the right.
 	// If a map with an asterisk is present, we use it to supply the spare
 	// columns. If it is not present, a spare column is an error.
-	var cols []insertColumn
+	var cols []typedColumn
 	for _, column := range e.columns {
 		columnStr := column.String()
 		input, ok := colToInput[columnStr]
@@ -259,6 +264,44 @@ func (e *columnsInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie any, err er
 	return &typedInsertExpr{insertColumns: cols}, nil
 }
 
+// basicInsertExpr is an input expression occurring within an INSERT statement
+// that consists of columns on the left and type accessors or literals on the
+// right. Unlike the columnInsertExpr, the values on the right are independent
+// of the columns on the left and are matched by position rather than by name.
+// e.g. (col1, col2, col3) VALUES ($M.key, "literal value", $T.value).
+type basicInsertExpr struct {
+	columns []columnAccessor
+	sources []valueAccessor
+	raw     string
+}
+
+// String returns a text representation for debugging and testing purposes.
+func (e *basicInsertExpr) String() string {
+	return fmt.Sprintf("BasicInsert[%v %v]", e.columns, e.sources)
+}
+
+// bindTypes generates a *typedInsertExpr containing type information about the
+// values to be inserted in the basicInsertExpr.
+func (e *basicInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie typedExpr, err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("input expression: %s: %s", err, e.raw)
+		}
+	}()
+	if len(e.columns) != len(e.sources) {
+		return nil, fmt.Errorf("mismatched number of columns and values: %d != %d", len(e.columns), len(e.sources))
+	}
+	var cols []typedColumn
+	for i, source := range e.sources {
+		col, err := source.typedColumn(argInfo, e.columns[i].columnName())
+		if err != nil {
+			return nil, err
+		}
+		cols = append(cols, col)
+	}
+	return &typedInsertExpr{insertColumns: cols}, nil
+}
+
 // sliceInputExpr is an input expression of the form "$S[:]" that represents a
 // slice of query parameters.
 type sliceInputExpr struct {
@@ -273,7 +316,7 @@ func (e *sliceInputExpr) String() string {
 
 // bindTypes generates a *typedInputExpr containing type information about the
 // slice.
-func (e *sliceInputExpr) bindTypes(argInfo typeinfo.ArgInfo) (any, error) {
+func (e *sliceInputExpr) bindTypes(argInfo typeinfo.ArgInfo) (typedExpr, error) {
 	input, err := argInfo.InputSlice(e.sliceTypeName)
 	if err != nil {
 		return nil, fmt.Errorf("input expression: %s: %s", err, e.raw)
@@ -297,7 +340,7 @@ func (e *outputExpr) String() string {
 // bindTypes binds the output expression to concrete types. It then checks the
 // expression is valid with respect to its bound types and returns a
 // *typedOutputExpr.
-func (e *outputExpr) bindTypes(argInfo typeinfo.ArgInfo) (te any, err error) {
+func (e *outputExpr) bindTypes(argInfo typeinfo.ArgInfo) (te typedExpr, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("output expression: %s: %s", err, e.raw)
@@ -376,6 +419,52 @@ func (e *outputExpr) bindTypes(argInfo typeinfo.ArgInfo) (te any, err error) {
 	}
 
 	return toe, nil
+}
+
+// valueAccessor defines an accessor that can be used to generate a typedColumn
+// with the given column name.
+type valueAccessor interface {
+	// typedColumn generates a typedColumn that associates the given colum name
+	// with the value specified by the valueAccessor.
+	typedColumn(argInfo typeinfo.ArgInfo, columnName string) (typedColumn, error)
+}
+
+// memberAccessor stores information for accessing a keyed Go value. It consists
+// of a type name and some value within it to be accessed. For example: a field
+// of a struct, or a key of a map.
+type memberAccessor struct {
+	typeName, memberName string
+}
+
+// literal represents a literal expression be pasted verbatim as the value in an
+// insert column.
+type literal struct {
+	value string
+}
+
+func (l literal) String() string {
+	return l.value
+}
+
+// typedColumn generates a typedColumn with the given name from a literal.
+func (l literal) typedColumn(_ typeinfo.ArgInfo, columnName string) (typedColumn, error) {
+	lc := newLiteralColumn(columnName, l.value)
+	return lc, nil
+}
+
+func (ma memberAccessor) String() string {
+	return ma.typeName + "." + ma.memberName
+}
+
+// typedColumn generates a typedColumn with the input specified by the member
+// accessor and the given column name.
+func (ma memberAccessor) typedColumn(argInfo typeinfo.ArgInfo, columnName string) (typedColumn, error) {
+	input, err := argInfo.InputMember(ma.typeName, ma.memberName)
+	if err != nil {
+		return nil, err
+	}
+	ic := newInsertColumn(input, columnName, true)
+	return ic, nil
 }
 
 // starCountColumns counts the number of asterisks in a list of columns.

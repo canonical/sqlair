@@ -32,9 +32,32 @@ type Input interface {
 	// the typeToValue map and then returns the Go values within the input
 	// argument that are to be used in query parameters. An error is returned
 	// if typeToValue does not contain the input argument.
-	// The omit flag indicates if the params have an omitempty flag set and
-	// should be ommited from input.
-	LocateParams(typeToValue TypeToValue) (vals []reflect.Value, omit bool, err error)
+	LocateParams(typeToValue TypeToValue) (params *Params, err error)
+}
+
+// Params contains query parameters and metadata generated from an input value.
+type Params struct {
+	// Vals contains the query parameters.
+	Vals []any
+	// Omit indicates if the params have an omitempty flag set and should be
+	// omitted from input.
+	Omit bool
+	// Bulk is true if the list of values should be inserted in a bulk insert
+	// expression.
+	Bulk bool
+	// ArgTypeUsed is the type of the argument that was used to generate the
+	// params.
+	ArgTypeUsed reflect.Type
+}
+
+// newParams generates a new Params struct.
+func newParams(vals []any, omit bool, bulk bool, argType reflect.Type) *Params {
+	return &Params{
+		Vals:        vals,
+		Omit:        omit,
+		Bulk:        bulk,
+		ArgTypeUsed: argType,
+	}
 }
 
 // Output is a locator for a target to scan results to in the SQLair output
@@ -65,20 +88,48 @@ func (mk *mapKey) ArgType() reflect.Type {
 	return mk.mapType
 }
 
-// LocateParams locates the map in typeToValue and then gets value associated
-// with the key specified in mapKey. An error is returned if the map does not
-// contain this key. A slice with a single entry is returned to fit the Input
-// interface.
-func (mk *mapKey) LocateParams(typeToValue TypeToValue) (vals []reflect.Value, omit bool, err error) {
-	m, ok := typeToValue[mk.mapType]
-	if !ok {
-		return nil, false, valueNotFoundError(typeToValue, mk.mapType)
+// LocateParams locates the map (or slice of maps for a bulk insert) in
+// typeToValue and then gets value associated with the key specified in mapKey.
+// An error is returned if any map does not contain this key.
+func (mk *mapKey) LocateParams(typeToValue TypeToValue) (*Params, error) {
+	var argType reflect.Type
+	var vals []any
+	if m, ok := typeToValue[mk.mapType]; ok {
+		v := m.MapIndex(reflect.ValueOf(mk.name))
+		if v.Kind() == reflect.Invalid {
+			return nil, fmt.Errorf("map %q does not contain key %q", mk.mapType.Name(), mk.name)
+		}
+		argType = m.Type()
+		vals = append(vals, v.Interface())
+		return newParams(vals, false, false, argType), nil
 	}
-	v := m.MapIndex(reflect.ValueOf(mk.name))
-	if v.Kind() == reflect.Invalid {
-		return nil, false, fmt.Errorf("map %q does not contain key %q", mk.mapType.Name(), mk.name)
+	if ms, ok := locateBulkType(typeToValue, mk.mapType); ok {
+		if ms.Len() == 0 {
+			return nil, fmt.Errorf("got slice of %q with length 0", mk.mapType.Name())
+		}
+		for i := 0; i < ms.Len(); i++ {
+			m := ms.Index(i)
+			if m.Kind() == reflect.Pointer {
+				if m.IsNil() {
+					return nil, fmt.Errorf("got nil pointer in slice of %q at index %d", mk.mapType.Name(), i)
+				}
+				m = m.Elem()
+			}
+			// The slice has the correct type so there is no need to check the
+			// type of each element.
+			if m.IsNil() {
+				return nil, fmt.Errorf("got nil map in slice of %q at index %d", m.Type().Name(), i)
+			}
+			v := m.MapIndex(reflect.ValueOf(mk.name))
+			if v.Kind() == reflect.Invalid {
+				return nil, fmt.Errorf("map %q does not contain key %q", mk.mapType.Name(), mk.name)
+			}
+			vals = append(vals, v.Interface())
+		}
+		argType = ms.Type()
+		return newParams(vals, false, true, argType), nil
 	}
-	return []reflect.Value{v}, false, nil
+	return nil, valueNotFoundError(typeToValue, mk.mapType)
 }
 
 // Desc returns a natural language description of the mapKey for use in error
@@ -131,19 +182,54 @@ func (f *structField) ArgType() reflect.Type {
 	return f.structType
 }
 
-// LocateParams locates the struct that contains the field in the typeToValue
-// map. It returns the value of this field and the omitempty flag. A slice with
-// a single entry is returned to fit the Input interface.
-func (f *structField) LocateParams(typeToValue TypeToValue) (vals []reflect.Value, omitempty bool, err error) {
-	s, ok := typeToValue[f.structType]
-	if !ok {
-		return nil, false, valueNotFoundError(typeToValue, f.structType)
+// LocateParams locates the struct (or slice of structs for a bulk insert) that
+// contains the field in the TypeToValue map. It returns Params containing the
+// value of this field.
+func (f *structField) LocateParams(typeToValue TypeToValue) (*Params, error) {
+	omit := false
+	var argType reflect.Type
+	var vals []any
+	if s, ok := typeToValue[f.structType]; ok {
+		val := s.FieldByIndex(f.index)
+		if val.IsZero() && f.omitEmpty {
+			omit = true
+		}
+		argType = s.Type()
+		vals = append(vals, val.Interface())
+		return newParams(vals, omit, false, argType), nil
 	}
-	val := s.FieldByIndex(f.index)
-	if val.IsZero() && f.omitEmpty {
-		omitempty = true
+	if ss, ok := locateBulkType(typeToValue, f.structType); ok {
+		if ss.Len() == 0 {
+			return nil, fmt.Errorf("got slice of %q with length 0", f.structType.Name())
+		}
+
+		for i := 0; i < ss.Len(); i++ {
+			s := ss.Index(i)
+			if s.Kind() == reflect.Pointer {
+				if s.IsNil() {
+					return nil, fmt.Errorf("got nil pointer in slice of %q at index %d", f.structType.Name(), i)
+				}
+				s = s.Elem()
+			}
+			// The slice has the correct type so there is no need to check the
+			// type of each element.
+			val := s.FieldByIndex(f.index)
+			if f.omitEmpty {
+				// If the omitemtpy flag is present, we expect either all rows to
+				// have a zero value, or all have a none zero value. If we have a
+				// mix then throw an error.
+				if i == 0 && val.IsZero() {
+					omit = true
+				} else if val.IsZero() != omit {
+					return nil, fmt.Errorf("got mix of zero and none zero values in %s which has the omitempty flag set, in a bulk insert, values must be all zero or all none zero", f.Desc())
+				}
+			}
+			argType = ss.Type()
+			vals = append(vals, val.Interface())
+		}
+		return newParams(vals, omit, true, argType), nil
 	}
-	return []reflect.Value{val}, omitempty, nil
+	return nil, valueNotFoundError(typeToValue, f.structType)
 }
 
 // Desc returns a natural language description of the struct field for use in
@@ -202,20 +288,42 @@ func (s *slice) ArgType() reflect.Type {
 	return s.sliceType
 }
 
+// locateBulkType type looks for a slice of t in typeToValue.
+func locateBulkType(typeToValue TypeToValue, t reflect.Type) (reflect.Value, bool) {
+	if bt, ok := typeToValue[reflect.SliceOf(t)]; ok {
+		return bt, true
+	}
+	bt, ok := typeToValue[reflect.SliceOf(reflect.PointerTo(t))]
+	return bt, ok
+}
+
 // LocateParams locates the slice argument associated with the slice
-// ValueLocator in typeToValue and returns the reflect.Value objects generated
+// ValueLocator in typeToValue and returns the values objects generated
 // by reflecting on the elements of the slice.
-func (s *slice) LocateParams(typeToValue TypeToValue) (vals []reflect.Value, omit bool, err error) {
+func (s *slice) LocateParams(typeToValue TypeToValue) (*Params, error) {
 	sv, ok := typeToValue[s.sliceType]
 	if !ok {
-		return nil, false, valueNotFoundError(typeToValue, s.sliceType)
+		return nil, valueNotFoundError(typeToValue, s.sliceType)
 	}
 
-	params := []reflect.Value{}
+	var vals []any
 	for i := 0; i < sv.Len(); i++ {
-		params = append(params, sv.Index(i))
+		vals = append(vals, sv.Index(i).Interface())
 	}
-	return params, false, nil
+	return newParams(vals, false, false, s.sliceType), nil
+}
+
+// PrettyTypeName returns a human readable name for slices and pointers.
+func PrettyTypeName(t reflect.Type) string {
+	if t.Name() == "" {
+		switch t.Kind() {
+		case reflect.Slice:
+			return "[]" + PrettyTypeName(t.Elem())
+		case reflect.Pointer:
+			return "*" + PrettyTypeName(t.Elem())
+		}
+	}
+	return t.Name()
 }
 
 // valueNotFoundError generates the arguments present and returns a typeMissingError
@@ -226,9 +334,9 @@ func valueNotFoundError(typeToValue TypeToValue, missingType reflect.Type) error
 		if argType.Name() == missingType.Name() {
 			return fmt.Errorf("parameter with type %q missing, have type with same name: %q", missingType.String(), argType.String())
 		}
-		argNames = append(argNames, argType.Name())
+		argNames = append(argNames, PrettyTypeName(argType))
 	}
 	// Sort for consistent error messages.
 	sort.Strings(argNames)
-	return typeMissingError(missingType.Name(), argNames)
+	return typeMissingError(PrettyTypeName(missingType), argNames)
 }
