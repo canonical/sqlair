@@ -35,9 +35,16 @@ type S []any
 var ErrNoRows = sql.ErrNoRows
 var ErrTXDone = sql.ErrTxDone
 
+// stmtCache stores the driver prepared statements associated to the SQLair
+// Statement objects
+var stmtCache = newStatementCache()
+
 // Statement represents a parsed SQLair statement ready to be run on a database.
 // A statement can be used with any [DB].
 type Statement struct {
+	// cacheID is used to look up the driver prepared statements associated with
+	// this SQLair statement.
+	cacheID uint64
 	// te is the type bound SQLair query. It contains information used to
 	// generate query values from the input arguments when the Statement is run
 	// on a database.
@@ -59,7 +66,7 @@ func Prepare(query string, typeSamples ...any) (*Statement, error) {
 		return nil, err
 	}
 
-	return &Statement{te: typedExpr}, nil
+	return stmtCache.newStatement(typedExpr), nil
 }
 
 // MustPrepare is the same as [Prepare] except that it panics on error.
@@ -72,12 +79,19 @@ func MustPrepare(query string, typeSamples ...any) *Statement {
 }
 
 type DB struct {
+	// cacheID is used to look up the cached driver prepared statements prepared
+	// on this database.
+	cacheID uint64
+	// sqldb is the underlying database/sql DB object.
 	sqldb *sql.DB
 }
 
 // NewDB creates a new [sqlair.DB] from a [sql.DB].
 func NewDB(sqldb *sql.DB) *DB {
-	return &DB{sqldb: sqldb}
+	if sqldb == nil {
+		return nil
+	}
+	return stmtCache.newDB(sqldb)
 }
 
 // PlainDB returns the underlying database object.
@@ -118,10 +132,18 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 	}
 
 	run := func(innerCtx context.Context) (rows *sql.Rows, result sql.Result, err error) {
+		sqlstmt, ok := stmtCache.lookupStmt(db, s)
+		if !ok {
+			sqlstmt, err = stmtCache.driverPrepareStmt(ctx, db, s, pq.SQL())
+			if err != nil {
+				return nil, nil, err
+			}
+		}
+
 		if pq.HasOutputs() {
-			rows, err = db.sqldb.QueryContext(innerCtx, pq.SQL(), pq.Params()...)
+			rows, err = sqlstmt.QueryContext(innerCtx, pq.Params()...)
 		} else {
-			result, err = db.sqldb.ExecContext(innerCtx, pq.SQL(), pq.Params()...)
+			result, err = sqlstmt.ExecContext(innerCtx, pq.Params()...)
 		}
 		return rows, result, err
 	}
@@ -376,6 +398,7 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 // TX represents a transaction on the database.
 type TX struct {
 	sqltx *sql.Tx
+	db    *DB
 	done  int32
 }
 
@@ -400,7 +423,7 @@ func (db *DB) Begin(ctx context.Context, opts *TXOptions) (*TX, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &TX{sqltx: sqltx}, nil
+	return &TX{sqltx: sqltx, db: db}, nil
 }
 
 // Commit commits the transaction.
@@ -453,6 +476,21 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 	}
 
 	run := func(innerCtx context.Context) (rows *sql.Rows, result sql.Result, err error) {
+		sqlstmt, ok := stmtCache.lookupStmt(tx.db, s)
+		if ok {
+			// Register the prepared statement on the transaction. Note that
+			// this does not re-prepare the statement on the driver.
+			// The txstmt is closed by database/sql when the transaction is
+			// commited or rolled back.
+			txstmt := tx.sqltx.Stmt(sqlstmt)
+			if pq.HasOutputs() {
+				rows, err = txstmt.QueryContext(innerCtx, pq.Params()...)
+			} else {
+				result, err = txstmt.ExecContext(innerCtx, pq.Params()...)
+			}
+			return rows, result, err
+		}
+
 		if pq.HasOutputs() {
 			rows, err = tx.sqltx.QueryContext(innerCtx, pq.SQL(), pq.Params()...)
 		} else {

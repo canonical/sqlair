@@ -21,17 +21,24 @@ import (
 // Hook up gocheck into the "go test" runner.
 func TestPackage(t *testing.T) { TestingT(t) }
 
-type PackageSuite struct{}
+type PackageSuite struct {
+	db *sql.DB
+}
 
 var _ = Suite(&PackageSuite{})
 
-func openTestDB() (*sqlair.DB, error) {
-	sqldb, err := sql.Open("sqlite3", "file:test.db?cache=shared&mode=memory")
-	if err != nil {
-		return nil, err
-	}
-	db := sqlair.NewDB(sqldb)
-	return db, nil
+func (s *PackageSuite) SetUpTest(c *C) {
+	c.Assert(s.db, IsNil)
+	db, err := sql.Open("sqlite3", "file:test.db?cache=shared&mode=memory")
+	c.Assert(err, IsNil)
+	s.db = db
+}
+
+func (s *PackageSuite) TearDownTest(c *C) {
+	// Close and forget DB.
+	err := s.db.Close()
+	c.Assert(err, IsNil)
+	s.db = nil
 }
 
 func dropTables(c *C, db *sqlair.DB, tables ...string) error {
@@ -111,9 +118,8 @@ var churchRoad = Address{Street: "Church Road", District: "Sad World", ID: 1500}
 var stationLane = Address{Street: "Station Lane", District: "Ambivalent Commons", ID: 3500}
 var allAddresses = []Address{mainStreet, churchRoad, stationLane}
 
-func personAndAddressDB(c *C) ([]string, *sqlair.DB, error) {
-	db, err := openTestDB()
-	c.Assert(err, IsNil)
+func (s *PackageSuite) personAndAddressDB(c *C) (db *sqlair.DB, tables []string) {
+	db = sqlair.NewDB(s.db)
 
 	createPerson, err := sqlair.Prepare(`
 		CREATE TABLE person (
@@ -150,7 +156,7 @@ func personAndAddressDB(c *C) ([]string, *sqlair.DB, error) {
 		c.Assert(err, IsNil)
 	}
 
-	return []string{"person", "address"}, db, nil
+	return db, []string{"person", "address"}
 }
 
 func (s *PackageSuite) TestValidIterGet(c *C) {
@@ -293,8 +299,7 @@ func (s *PackageSuite) TestValidIterGet(c *C) {
 
 	tests = append(tests, testsWithShadowPerson...)
 
-	tables, db, err := personAndAddressDB(c)
-	c.Assert(err, IsNil)
+	db, tables := s.personAndAddressDB(c)
 	defer dropTables(c, db, tables...)
 
 	for _, t := range tests {
@@ -418,8 +423,7 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		err:     `cannot get result: query uses "&Person" outside of result context`,
 	}}
 
-	tables, db, err := personAndAddressDB(c)
-	c.Assert(err, IsNil)
+	db, tables := s.personAndAddressDB(c)
 	defer dropTables(c, db, tables...)
 
 	for _, t := range tests {
@@ -486,8 +490,7 @@ func (s *PackageSuite) TestValidGet(c *C) {
 		expected: []any{sqlair.M{"avg": float64(2625), "name": "Fred"}},
 	}}
 
-	tables, db, err := personAndAddressDB(c)
-	c.Assert(err, IsNil)
+	db, tables := s.personAndAddressDB(c)
 	defer dropTables(c, db, tables...)
 
 	for _, t := range tests {
@@ -539,8 +542,7 @@ func (s *PackageSuite) TestGetErrors(c *C) {
 		err:     `invalid input parameter: map "M" does not contain key "p1"`,
 	}}
 
-	tables, db, err := personAndAddressDB(c)
-	c.Assert(err, IsNil)
+	db, tables := s.personAndAddressDB(c)
 	defer dropTables(c, db, tables...)
 
 	for _, t := range tests {
@@ -606,8 +608,7 @@ func (s *PackageSuite) TestValidGetAll(c *C) {
 		expected: []any{},
 	}}
 
-	tables, db, err := personAndAddressDB(c)
-	c.Assert(err, IsNil)
+	db, tables := s.personAndAddressDB(c)
 	defer dropTables(c, db, tables...)
 
 	for _, t := range tests {
@@ -706,8 +707,7 @@ func (s *PackageSuite) TestGetAllErrors(c *C) {
 		err:     "sql: no rows in result set",
 	}}
 
-	tables, db, err := personAndAddressDB(c)
-	c.Assert(err, IsNil)
+	db, tables := s.personAndAddressDB(c)
 	defer dropTables(c, db, tables...)
 
 	for _, t := range tests {
@@ -722,8 +722,7 @@ func (s *PackageSuite) TestGetAllErrors(c *C) {
 }
 
 func (s *PackageSuite) TestRun(c *C) {
-	tables, db, err := personAndAddressDB(c)
-	c.Assert(err, IsNil)
+	db, tables := s.personAndAddressDB(c)
 	defer dropTables(c, db, tables...)
 
 	var jim = Person{
@@ -734,7 +733,7 @@ func (s *PackageSuite) TestRun(c *C) {
 
 	// Insert Jim.
 	insertStmt := sqlair.MustPrepare("INSERT INTO person (*) VALUES ($Person.*);", Person{})
-	err = db.Query(nil, insertStmt, &jim).Run()
+	err := db.Query(nil, insertStmt, &jim).Run()
 	c.Assert(err, IsNil)
 
 	// Check Jim is in the db.
@@ -762,8 +761,7 @@ func (s *PackageSuite) TestRun(c *C) {
 }
 
 func (s *PackageSuite) TestRunBulkInsert(c *C) {
-	db, err := openTestDB()
-	c.Assert(err, IsNil)
+	db := sqlair.NewDB(s.db)
 	createPerson, err := sqlair.Prepare(`
 		CREATE TABLE person (
 			name text,
@@ -831,8 +829,7 @@ func (s *PackageSuite) TestRunBulkInsert(c *C) {
 }
 
 func (s *PackageSuite) TestOutcome(c *C) {
-	tables, db, err := personAndAddressDB(c)
-	c.Assert(err, IsNil)
+	db, tables := s.personAndAddressDB(c)
 	defer dropTables(c, db, tables...)
 
 	var jim = Person{
@@ -848,7 +845,7 @@ func (s *PackageSuite) TestOutcome(c *C) {
 		INSERT INTO person 
 		VALUES ($Person.name, $Person.id, $Person.address_id, 'jimmy@email.com');
 	`, Person{})
-	err = db.Query(nil, insertStmt, &jim).Get(&outcome)
+	err := db.Query(nil, insertStmt, &jim).Get(&outcome)
 	c.Assert(err, IsNil)
 
 	res := outcome.Result()
@@ -905,12 +902,11 @@ func (s *PackageSuite) TestOutcome(c *C) {
 }
 
 func (s *PackageSuite) TestErrNoRows(c *C) {
-	tables, db, err := personAndAddressDB(c)
-	c.Assert(err, IsNil)
+	db, tables := s.personAndAddressDB(c)
 	defer dropTables(c, db, tables...)
 
 	stmt := sqlair.MustPrepare("SELECT * AS &Person.* FROM person WHERE id=12312", Person{})
-	err = db.Query(nil, stmt).Get(&Person{})
+	err := db.Query(nil, stmt).Get(&Person{})
 	c.Check(err, ErrorMatches, "sql: no rows in result set")
 	c.Check(errors.Is(err, sqlair.ErrNoRows), Equals, true)
 	c.Check(errors.Is(err, sql.ErrNoRows), Equals, true)
@@ -978,8 +974,7 @@ func (s *PackageSuite) TestNulls(c *C) {
 		expected: []any{&ScannerDude{Name: ScannerValuerString{S: "ScannerString scanned well!"}, ID: ScannerValuerInt{F: 666}, Postcode: ScannerValuerInt{F: 666}}},
 	}}
 
-	tables, db, err := personAndAddressDB(c)
-	c.Assert(err, IsNil)
+	db, tables := s.personAndAddressDB(c)
 	defer dropTables(c, db, tables...)
 
 	insertNullPerson, err := sqlair.Prepare("INSERT INTO person VALUES ('Nully', NULL, NULL, NULL);")
@@ -1014,15 +1009,14 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 	oneOutput := &Person{}
 	oneExpected := &fred
 
-	tables, db, err := personAndAddressDB(c)
-	c.Assert(err, IsNil)
+	db, tables := s.personAndAddressDB(c)
 	defer dropTables(c, db, tables...)
 
 	stmt := sqlair.MustPrepare("SELECT &Person.* FROM person", Person{})
 
 	// Run different Query methods.
 	q := db.Query(nil, stmt)
-	err = q.Get(oneOutput)
+	err := q.Get(oneOutput)
 	c.Assert(err, IsNil)
 	c.Assert(oneExpected, DeepEquals, oneOutput)
 
@@ -1048,8 +1042,7 @@ func (s *PackageSuite) TestQueryMultipleRuns(c *C) {
 }
 
 func (s *PackageSuite) TestTransactions(c *C) {
-	tables, db, err := personAndAddressDB(c)
-	c.Assert(err, IsNil)
+	db, tables := s.personAndAddressDB(c)
 	defer dropTables(c, db, tables...)
 
 	selectStmt := sqlair.MustPrepare("SELECT &Person.* FROM person WHERE address_id = $Person.address_id", Person{})
@@ -1094,8 +1087,7 @@ func (s *PackageSuite) TestTransactions(c *C) {
 }
 
 func (s *PackageSuite) TestTransactionErrors(c *C) {
-	tables, db, err := personAndAddressDB(c)
-	c.Assert(err, IsNil)
+	db, tables := s.personAndAddressDB(c)
 	defer dropTables(c, db, tables...)
 
 	insertStmt := sqlair.MustPrepare("INSERT INTO person VALUES ($Person.name, $Person.id, $Person.address_id, 'fred@email.com');", Person{})
@@ -1138,8 +1130,7 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 }
 
 func (s *PackageSuite) TestTransactionWithOneConn(c *C) {
-	tables, db, err := personAndAddressDB(c)
-	c.Assert(err, IsNil)
+	db, tables := s.personAndAddressDB(c)
 	defer dropTables(c, db, tables...)
 	db.PlainDB().SetMaxOpenConns(1)
 	ctx := context.Background()
@@ -1170,8 +1161,7 @@ func (s *PackageSuite) TestTransactionWithOneConn(c *C) {
 }
 
 func (s *PackageSuite) TestIterMethodOrder(c *C) {
-	tables, db, err := personAndAddressDB(c)
-	c.Assert(err, IsNil)
+	db, tables := s.personAndAddressDB(c)
 	defer dropTables(c, db, tables...)
 
 	var p = Person{}
@@ -1179,7 +1169,7 @@ func (s *PackageSuite) TestIterMethodOrder(c *C) {
 
 	// Check immediate Get.
 	iter := db.Query(nil, stmt).Iter()
-	err = iter.Get(&p)
+	err := iter.Get(&p)
 	c.Assert(err, ErrorMatches, "cannot get result: cannot call Get before Next unless getting outcome")
 	err = iter.Close()
 	c.Assert(err, IsNil)
@@ -1223,8 +1213,7 @@ func (s *PackageSuite) TestIterMethodOrder(c *C) {
 }
 
 func (s *PackageSuite) TestOmitOnEmpty(c *C) {
-	db, err := openTestDB()
-	c.Assert(err, IsNil)
+	db := sqlair.NewDB(s.db)
 	createTables, err := sqlair.Prepare(`
 CREATE TABLE person (
 	name text,
@@ -1295,8 +1284,7 @@ func (s *PackageSuite) TestInsert(c *C) {
 	deleteAddressStmtReturning, err := sqlair.Prepare("DELETE FROM address WHERE id = $Address.id RETURNING &Address.*", Address{})
 	c.Assert(err, IsNil)
 
-	tables, db, err := personAndAddressDB(c)
-	c.Assert(err, IsNil)
+	db, tables := s.personAndAddressDB(c)
 	defer dropTables(c, db, tables...)
 
 	p := Person{}
@@ -1358,9 +1346,7 @@ func (s *PackageSuite) TestScannerValuerInterfaces(c *C) {
 		ScannerValuerInt *ScannerValuerInt `db:"id"`
 	}
 
-	tables, db, err := personAndAddressDB(c)
-	c.Assert(err, IsNil)
-
+	db, tables := s.personAndAddressDB(c)
 	defer dropTables(c, db, tables...)
 
 	stmt, err := sqlair.Prepare("SELECT address_id AS &ScannerValuerStruct.id FROM person WHERE id = $ScannerValuerStruct.id", ScannerValuerStruct{})
