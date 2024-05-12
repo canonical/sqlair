@@ -37,7 +37,7 @@ The SQL syntax is expanded with SQLair input and output expressions (indicated w
 This package also provides an alternative API for reading the rows from the database.
 SQLair relies on [database/sql](https://pkg.go.dev/database/sql) for all the underlying operations.
 
-For more details please see the [Go package documentation](https://pkg.go.dev/github.com/canonical/sqlair).
+For more details please see the [SQLair introduction](https://github.com/canonical/sqlair/wiki/SQLair-Introduction) and the [Go package documentation](https://pkg.go.dev/github.com/canonical/sqlair).
 
 ## Contributing
 
