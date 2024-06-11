@@ -14,7 +14,8 @@ import (
 	. "gopkg.in/check.v1"
 )
 
-func TestCache(t *testing.T) { TestingT(t) }
+// Hook up gocheck into the "go test" runner.
+func TestPackage(t *testing.T) { TestingT(t) }
 
 type CacheSuite struct{}
 
@@ -83,6 +84,9 @@ func (s *CacheSuite) TestClosingDB(c *C) {
 	c.Assert(err, IsNil)
 
 	var dbID uint64
+	// For a Statement or DB to be removed from the cache it needs to go out of
+	// scope and be garbage collected. A function is used to "forget" the
+	// statement.
 	func() {
 		db := s.openDB(c)
 		dbID = db.cacheID
@@ -217,6 +221,7 @@ func (s *CacheSuite) TestLateQuery(c *C) {
 // Statement does not throw a statement is closed error.
 func (s *CacheSuite) TestLateQueryTX(c *C) {
 	var q *Query
+
 	// Drop all the values except the query itself.
 	func() {
 		db := s.openDB(c)
@@ -232,6 +237,53 @@ func (s *CacheSuite) TestLateQueryTX(c *C) {
 
 	// Assert that sql.Stmt was not closed early.
 	c.Assert(q.Run(), IsNil)
+}
+
+// TestQueryWithBulkAndSlice checks that a sqlair.Statements that generate
+// different SQL strings when given different arguments work with the cache.
+func (s *CacheSuite) TestQueryWithBulkAndSlice(c *C) {
+	db := s.openDB(c)
+	createStmt, err := Prepare(`
+CREATE TABLE t (
+	col integer
+);`)
+	c.Assert(err, IsNil)
+	err = db.Query(context.Background(), createStmt).Run()
+	createStmt = nil
+	c.Assert(err, IsNil)
+
+	type dbCol struct {
+		Col int `db:"col"`
+	}
+
+	insertStmt, err := Prepare(`INSERT INTO t (*) VALUES ($dbCol.*)`, dbCol{})
+	c.Assert(err, IsNil)
+
+	// Bulk insert some columns
+	insertCols := []dbCol{{Col: 1}, {Col: 2}}
+	err = db.Query(context.Background(), insertStmt, insertCols).Run()
+	c.Assert(err, IsNil)
+
+	// Bulk insert a different number of columns using the same statement.
+	insertCols = []dbCol{{Col: 3}, {Col: 4}, {Col: 5}}
+	err = db.Query(context.Background(), insertStmt, insertCols).Run()
+	c.Assert(err, IsNil)
+
+	type dbCols []int
+	selectStmt, err := Prepare(`SELECT col AS &dbCol.* FROM t WHERE col IN ($dbCols[:])`, dbCols{}, dbCol{})
+	c.Assert(err, IsNil)
+
+	cols := dbCols{1, 3, 5}
+	colsFromDB := []dbCol{}
+	err = db.Query(context.Background(), selectStmt, cols).GetAll(&colsFromDB)
+	c.Assert(err, IsNil)
+	c.Assert(colsFromDB, DeepEquals, []dbCol{{Col: 1}, {Col: 3}, {Col: 5}})
+
+	cols = dbCols{2, 4}
+	colsFromDB = []dbCol{}
+	err = db.Query(context.Background(), selectStmt, cols).GetAll(&colsFromDB)
+	c.Assert(err, IsNil)
+	c.Assert(colsFromDB, DeepEquals, []dbCol{{Col: 2}, {Col: 4}})
 }
 
 func (s *CacheSuite) openDB(c *C) *DB {

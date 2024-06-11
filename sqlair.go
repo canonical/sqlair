@@ -36,7 +36,7 @@ var ErrNoRows = sql.ErrNoRows
 var ErrTXDone = sql.ErrTxDone
 
 // stmtCache stores the driver prepared statements associated to the SQLair
-// Statement objects
+// Statement objects.
 var stmtCache = newStatementCache()
 
 // Statement represents a parsed SQLair statement ready to be run on a database.
@@ -132,9 +132,10 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 	}
 
 	run := func(innerCtx context.Context) (rows *sql.Rows, result sql.Result, err error) {
-		sqlstmt, ok := stmtCache.lookupStmt(db, s)
+		primedSQL := pq.SQL()
+		sqlstmt, ok := stmtCache.lookupStmt(db, s, primedSQL)
 		if !ok {
-			sqlstmt, err = stmtCache.driverPrepareStmt(ctx, db, s, pq.SQL())
+			sqlstmt, err = stmtCache.driverPrepareStmt(ctx, db, s, primedSQL)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -476,10 +477,10 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 	}
 
 	run := func(innerCtx context.Context) (rows *sql.Rows, result sql.Result, err error) {
-		sqlstmt, ok := stmtCache.lookupStmt(tx.db, s)
+		sqlstmt, ok := stmtCache.lookupStmt(tx.db, s, pq.SQL())
 		if ok {
-			// Register the prepared statement on the transaction. Note that
-			// this does not re-prepare the statement on the driver.
+			// Register the prepared statement on the transaction. This function
+			// does not resend the prepare request to the database.
 			// The txstmt is closed by database/sql when the transaction is
 			// commited or rolled back.
 			txstmt := tx.sqltx.Stmt(sqlstmt)

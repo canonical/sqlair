@@ -13,24 +13,37 @@ import (
 	"github.com/canonical/sqlair/internal/expr"
 )
 
-// statementCache caches the driver prepared sql.Stmt objects associated with
-// each sqlair.Statement. A sqlair.Statement can correspond to multiple sql.Stmt
-// objects prepared on different databases. Entries in the cache are therefore
-// indexed by the sqlair.Statement cache ID and the sqlair.DB cache ID.
+// statementCache caches driver prepared sql.Stmt objects associated with
+// sqlair.Statement objects. The driver prepared sql.Stmt objects corresponding
+// to a single sqlair.Statement can be prepared on different database and have
+// different generated SQL (depending on query arguments).
+//
+// Entries in the cache are indexed by the sqlair.Statement cache ID and the
+// sqlair.DB cache ID. Each entry contains the sql.Stmt and the SQL string that
+// was used to create it.
 //
 // A finalizer is set on sqlair.Statement objects to close the associated
-// sql.Stmt objects. Similarly, a finalizer is set on sqlair.DB objects to close
-// all sql.Stmt objects prepared on the DB, close the DB, and remove the DB
-// cache ID from the cache.
+// sql.Stmt objects and remove them from the cache. Similarly, a finalizer is
+// set on sqlair.DB objects to close all sql.Stmt objects prepared on the DB,
+// close the DB, and remove the DB cache ID from the cache.
+//
+// Only a single driver prepared sql.Stmt is cached for each sqlair.DB/
+// sqlair.Statement pair. If the sqlair.Statement is re-prepared with different
+// generated SQL then the previous sql.Stmt is evicted from the cache. A
+// finalizer is set on the evicted sql.Stmt to ensure it is closed once all
+// references die.
 //
 // The mutex must be locked when accessing either the stmtDBCache or the
 // dbStmtCache.
 type statementCache struct {
-	// stmtDBCache stores sql.Stmt objects addressed via the cache ID of the
-	// sqlair.Statement they built from and the sqlair.DB they are prepared on.
-	stmtDBCache map[uint64]map[uint64]*sql.Stmt
+	// stmtDBCache stores driverStmt objects containing a sql.Stmt and the sql
+	// used to generate it. These are addressed via the cache ID of the
+	// corresponding sqlair.Statement and the cache ID of the sqlair.DB they are
+	// prepared against.
+	stmtDBCache map[uint64]map[uint64]*driverStmt
 
-	// dbStmtCache indicates when a sqlair.Statement has been prepared on a particular sqlair.DB.
+	// dbStmtCache indicates when a sqlair.Statement has been prepared on a
+	// particular sqlair.DB.
 	dbStmtCache map[uint64]map[uint64]bool
 
 	// stmtIDCount and dbIDCount are monotonically increasing counters used to
@@ -41,6 +54,12 @@ type statementCache struct {
 	mutex sync.RWMutex
 }
 
+// driverStmt represents a SQL statement prepared against a database driver.
+type driverStmt struct {
+	stmt *sql.Stmt
+	sql  string
+}
+
 var once sync.Once
 var singleStmtCache *statementCache
 
@@ -48,7 +67,7 @@ var singleStmtCache *statementCache
 func newStatementCache() *statementCache {
 	once.Do(func() {
 		singleStmtCache = &statementCache{
-			stmtDBCache: map[uint64]map[uint64]*sql.Stmt{},
+			stmtDBCache: map[uint64]map[uint64]*driverStmt{},
 			dbStmtCache: map[uint64]map[uint64]bool{},
 		}
 	})
@@ -61,7 +80,7 @@ func newStatementCache() *statementCache {
 func (sc *statementCache) newStatement(te *expr.TypeBoundExpr) *Statement {
 	cacheID := atomic.AddUint64(&sc.stmtIDCount, 1)
 	sc.mutex.Lock()
-	sc.stmtDBCache[cacheID] = map[uint64]*sql.Stmt{}
+	sc.stmtDBCache[cacheID] = map[uint64]*driverStmt{}
 	sc.mutex.Unlock()
 	s := &Statement{te: te, cacheID: cacheID}
 	// This finalizer is run after the Statement is garbage collected.
@@ -83,40 +102,40 @@ func (sc *statementCache) newDB(sqldb *sql.DB) *DB {
 	return db
 }
 
-// lookupStmt checks if a *sql.Stmt corresponding to s has been prepared on db
-// and stored in the cache.
-func (sc *statementCache) lookupStmt(db *DB, s *Statement) (*sql.Stmt, bool) {
+// lookupStmt checks if a Statement has been prepared on the db driver with the
+// given primedSQL. If it has, the driver prepared sql.Stmt is returned.
+func (sc *statementCache) lookupStmt(db *DB, s *Statement, primedSQL string) (stmt *sql.Stmt, ok bool) {
 	// The Statement cache ID is only removed from stmtDBCache when the
 	// finalizer is run. The Statements cache ID must be in the stmtDBCache
 	// since we hold a reference to the Statement. It is therefore safe to
 	// access in it in the map without first checking it exists.
 	sc.mutex.RLock()
-	sqlstmt, ok := sc.stmtDBCache[s.cacheID][db.cacheID]
+	ds, ok := sc.stmtDBCache[s.cacheID][db.cacheID]
 	sc.mutex.RUnlock()
-	return sqlstmt, ok
+	// Check if the sql of the driver statement matches the requested primedSQL.
+	if !ok || ds.sql != primedSQL {
+		return nil, false
+	}
+	return ds.stmt, ok
 }
 
 // driverPrepareStatement prepares a statement on the database and then stores
 // the prepared *sql.Stmt in the cache.
-func (sc *statementCache) driverPrepareStmt(ctx context.Context, db *DB, s *Statement, sql string) (*sql.Stmt, error) {
-	sqlstmt, err := db.sqldb.PrepareContext(ctx, sql)
+func (sc *statementCache) driverPrepareStmt(ctx context.Context, db *DB, s *Statement, primedSQL string) (*sql.Stmt, error) {
+	sqlstmt, err := db.sqldb.PrepareContext(ctx, primedSQL)
 	if err != nil {
 		return nil, err
 	}
 	sc.mutex.Lock()
 	defer sc.mutex.Unlock()
-	// Check if sqlstmt has been inserted by another process else already.
-	sqlstmtAlt, ok := sc.stmtDBCache[s.cacheID][db.cacheID]
-	if ok {
-		err = sqlstmt.Close()
-		if err != nil {
-			return nil, err
-		}
-		sqlstmt = sqlstmtAlt
-	} else {
-		sc.stmtDBCache[s.cacheID][db.cacheID] = sqlstmt
-		sc.dbStmtCache[db.cacheID][s.cacheID] = true
+	// If there is already a statement in the cache, replace it with ours.
+	if driverStmt, ok := sc.stmtDBCache[s.cacheID][db.cacheID]; ok {
+		// Set a finalizer on the statement we evict from the cache to close it
+		// once current users have finished with it.
+		runtime.SetFinalizer(driverStmt.stmt, (*sql.Stmt).Close)
 	}
+	sc.stmtDBCache[s.cacheID][db.cacheID] = &driverStmt{sql: primedSQL, stmt: sqlstmt}
+	sc.dbStmtCache[db.cacheID][s.cacheID] = true
 	return sqlstmt, nil
 }
 
@@ -126,8 +145,8 @@ func (sc *statementCache) removeAndCloseStmtFunc(s *Statement) {
 	sc.mutex.Lock()
 	defer sc.mutex.Unlock()
 	dbCache := sc.stmtDBCache[s.cacheID]
-	for dbCacheID, sqlstmt := range dbCache {
-		sqlstmt.Close()
+	for dbCacheID, ds := range dbCache {
+		ds.stmt.Close()
 		delete(sc.dbStmtCache[dbCacheID], s.cacheID)
 	}
 	delete(sc.stmtDBCache, s.cacheID)
@@ -139,10 +158,10 @@ func (sc *statementCache) removeAndCloseStmtFunc(s *Statement) {
 func (sc *statementCache) removeAndCloseDBFunc(db *DB) {
 	sc.mutex.Lock()
 	defer sc.mutex.Unlock()
-	statementCache := sc.dbStmtCache[db.cacheID]
-	for statementCacheID := range statementCache {
+	stmtCache := sc.dbStmtCache[db.cacheID]
+	for statementCacheID := range stmtCache {
 		dbCache := sc.stmtDBCache[statementCacheID]
-		dbCache[db.cacheID].Close()
+		dbCache[db.cacheID].stmt.Close()
 		delete(dbCache, db.cacheID)
 	}
 	delete(sc.dbStmtCache, db.cacheID)

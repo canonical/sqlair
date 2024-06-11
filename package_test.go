@@ -10,16 +10,12 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"testing"
 
 	_ "github.com/mattn/go-sqlite3"
 	. "gopkg.in/check.v1"
 
 	"github.com/canonical/sqlair"
 )
-
-// Hook up gocheck into the "go test" runner.
-func TestPackage(t *testing.T) { TestingT(t) }
 
 type PackageSuite struct {
 	db *sql.DB

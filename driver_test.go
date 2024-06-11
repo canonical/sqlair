@@ -63,6 +63,9 @@ func (s *Stmt) Close() error {
 
 func (c *Conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
 	s, err := c.SQLiteConn.PrepareContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
 	if sm, ok := s.(*sqlite3.SQLiteStmt); ok {
 		sPtr := &Stmt{SQLiteStmt: sm, testName: c.testName}
 
@@ -76,7 +79,7 @@ func (c *Conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, e
 
 		return sPtr, err
 	} else {
-		panic(fmt.Sprintf("internal error: base driver is not SQLite, got %T", s))
+		return nil, fmt.Errorf("internal error: base driver is not SQLite, got %T", s)
 	}
 }
 
@@ -183,7 +186,6 @@ func (s *Stmt) Exec(args []driver.Value) (driver.Result, error) {
 }
 
 func (s *Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
-	fmt.Println(s.SQLiteStmt)
 	res, err := s.SQLiteStmt.ExecContext(ctx, args)
 	if err == nil {
 		queriesRunMutex.Lock()
