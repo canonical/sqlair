@@ -326,7 +326,7 @@ func PrettyTypeName(t reflect.Type) string {
 	return t.Name()
 }
 
-// valueNotFoundError generates the arguments present and returns a typeMissingError
+// valueNotFoundError generates the arguments present and returns a TypeMissingError
 func valueNotFoundError(typeToValue TypeToValue, missingType reflect.Type) error {
 	// Get the argument names from typeToValue map.
 	argNames := []string{}
@@ -338,5 +338,5 @@ func valueNotFoundError(typeToValue TypeToValue, missingType reflect.Type) error
 	}
 	// Sort for consistent error messages.
 	sort.Strings(argNames)
-	return typeMissingError(PrettyTypeName(missingType), argNames)
+	return TypeMissingError(PrettyTypeName(missingType), argNames)
 }

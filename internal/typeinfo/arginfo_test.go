@@ -10,8 +10,8 @@ import (
 	. "gopkg.in/check.v1"
 )
 
-var _ arg = &structInfo{}
-var _ arg = &mapInfo{}
+var _ ArgInfo = &structInfo{}
+var _ ArgInfo = &mapInfo{}
 
 func TestTypeInfo(t *testing.T) { TestingT(t) }
 
@@ -79,14 +79,9 @@ func (s *typeInfoSuite) TestArgInfoStruct(c *C) {
 		tag:       "name",
 	}}
 
-	allOutputs, outputNames, err := argInfo.AllStructOutputs("myStruct")
+	allMembers, memberNames, err := argInfo["myStruct"].GetAllStructMembers()
 	c.Assert(err, IsNil)
-	c.Check(allOutputs, HasLen, len(structFields))
-
-	allInputs, inputNames, err := argInfo.AllStructInputs("myStruct")
-	c.Assert(err, IsNil)
-	c.Check(allInputs, HasLen, len(structFields))
-	c.Check(outputNames, DeepEquals, inputNames)
+	c.Check(allMembers, HasLen, len(structFields))
 
 	structType := reflect.TypeOf(myStruct{})
 	for i, t := range structFields {
@@ -98,21 +93,12 @@ func (s *typeInfoSuite) TestArgInfoStruct(c *C) {
 			omitEmpty:  t.omitEmpty,
 		}
 
-		input, err := argInfo.InputMember("myStruct", t.tag)
+		input, err := argInfo["myStruct"].GetMember(t.tag)
 		c.Assert(err, IsNil)
 		c.Check(input, DeepEquals, expectedStructField)
 
-		output, err := argInfo.OutputMember("myStruct", t.tag)
-		c.Assert(err, IsNil)
-		c.Check(output, DeepEquals, expectedStructField)
-
-		kind, err := argInfo.Kind("myStruct")
-		c.Assert(err, IsNil)
-		c.Check(kind, DeepEquals, reflect.Struct)
-
-		c.Check(allOutputs[i], DeepEquals, expectedStructField)
-		c.Check(allInputs[i], DeepEquals, expectedStructField)
-		c.Check(outputNames[i], Equals, t.tag)
+		c.Check(allMembers[i], DeepEquals, expectedStructField)
+		c.Check(memberNames[i], Equals, t.tag)
 	}
 }
 
@@ -124,17 +110,9 @@ func (s *typeInfoSuite) TestArgInfoMap(c *C) {
 
 	expectedMapKey := &mapKey{mapType: reflect.TypeOf(myMap{}), name: "key"}
 
-	input, err := argInfo.InputMember("myMap", expectedMapKey.name)
+	input, err := argInfo["myMap"].GetMember(expectedMapKey.name)
 	c.Assert(err, IsNil)
 	c.Check(input, DeepEquals, expectedMapKey)
-
-	output, err := argInfo.OutputMember("myMap", expectedMapKey.name)
-	c.Assert(err, IsNil)
-	c.Check(output, DeepEquals, expectedMapKey)
-
-	kind, err := argInfo.Kind("myMap")
-	c.Assert(err, IsNil)
-	c.Check(kind, DeepEquals, reflect.Map)
 }
 
 func (s *typeInfoSuite) TestArgInfoEmbeddedStruct(c *C) {
@@ -167,46 +145,48 @@ func (s *typeInfoSuite) TestArgInfoEmbeddedStruct(c *C) {
 	// The struct fields in this list are ordered according to how sort.Strings
 	// orders the tag names. This matches the order of the tags in
 	// structInfo.tags
-	expectedStructFields := []*structField{{
-		name:       "F0",
-		structType: structType,
-		index:      []int{4},
-		tag:        "col0",
-		omitEmpty:  false,
-	}, {
-		name:       "F1",
-		structType: structType,
-		index:      []int{2, 0},
-		tag:        "col1",
-		omitEmpty:  false,
-	}, {
-		name:       "F2",
-		structType: structType,
-		index:      []int{3, 0},
-		tag:        "col2",
-		omitEmpty:  false,
-	}, {
-		name:       "F3",
-		structType: structType,
-		index:      []int{3, 1, 0},
-		tag:        "col3",
-		omitEmpty:  false,
-	}, {
-		name:       "TaggedStruct",
-		structType: structType,
-		index:      []int{1},
-		tag:        "col4",
-		omitEmpty:  false,
-	}}
+	expectedStructFields := []ValueLocator{
+		&structField{
+			name:       "F0",
+			structType: structType,
+			index:      []int{4},
+			tag:        "col0",
+			omitEmpty:  false,
+		}, &structField{
+			name:       "F1",
+			structType: structType,
+			index:      []int{2, 0},
+			tag:        "col1",
+			omitEmpty:  false,
+		}, &structField{
+			name:       "F2",
+			structType: structType,
+			index:      []int{3, 0},
+			tag:        "col2",
+			omitEmpty:  false,
+		}, &structField{
+			name:       "F3",
+			structType: structType,
+			index:      []int{3, 1, 0},
+			tag:        "col3",
+			omitEmpty:  false,
+		}, &structField{
+			name:       "TaggedStruct",
+			structType: structType,
+			index:      []int{1},
+			tag:        "col4",
+			omitEmpty:  false,
+		}}
 
-	si, err := argInfo.getAllStructMembers("Embeddings")
-	var fields []*structField
-	for _, tag := range si.tags {
-		fields = append(fields, si.tagToField[tag])
-	}
+	fields, names, err := argInfo["Embeddings"].GetAllStructMembers()
 	c.Assert(err, IsNil)
 	c.Check(fields, HasLen, len(expectedStructFields))
 	c.Check(fields, DeepEquals, expectedStructFields)
+	var expectedNames []string
+	for _, f := range expectedStructFields {
+		expectedNames = append(expectedNames, f.(*structField).tag)
+	}
+	c.Check(names, DeepEquals, expectedNames)
 }
 
 // This struct is used to test shadowed types in TestGenerateArgInfoInvalidTypeErrors
@@ -323,7 +303,7 @@ func (s *typeInfoSuite) TestGenerateArgInfoStructError(c *C) {
 	c.Assert(err, ErrorMatches, "cannot use anonymous slice")
 }
 
-func (*typeInfoSuite) TestInputAndOutputMemberError(c *C) {
+func (*typeInfoSuite) TestGetMemberError(c *C) {
 	type mySlice []any
 	type myMap map[string]any
 	type myStruct struct {
@@ -344,18 +324,10 @@ func (*typeInfoSuite) TestInputAndOutputMemberError(c *C) {
 		typeName:   "myStruct",
 		memberName: "bar",
 		err:        `type "myStruct" has no "bar" db tag`,
-	}, {
-		typeName:   "wrongStruct",
-		memberName: "foo",
-		err:        `parameter with type "wrongStruct" missing (have "myMap", "mySlice", "myStruct")`,
 	}}
 
 	for i, test := range tests {
-		_, err = argInfo.InputMember(test.typeName, test.memberName)
-		c.Assert(err, NotNil, Commentf("test %d failed", i+1))
-		c.Check(err.Error(), Equals, test.err)
-
-		_, err = argInfo.OutputMember(test.typeName, test.memberName)
+		_, err = argInfo[test.typeName].GetMember(test.memberName)
 		c.Assert(err, NotNil, Commentf("test %d failed", i+1))
 		c.Check(err.Error(), Equals, test.err)
 	}
@@ -376,17 +348,10 @@ func (*typeInfoSuite) TestAllMemberError(c *C) {
 	}, {
 		typeName: "myMap",
 		err:      "cannot use map with asterisk unless columns are specified",
-	}, {
-		typeName: "wrongStruct",
-		err:      `parameter with type "wrongStruct" missing (have "myMap", "mySlice")`,
 	}}
 
 	for i, test := range tests {
-		_, _, err = argInfo.AllStructOutputs(test.typeName)
-		c.Assert(err, NotNil, Commentf("test %d failed", i+1))
-		c.Check(err.Error(), Equals, test.err)
-
-		_, _, err = argInfo.AllStructInputs(test.typeName)
+		_, _, err = argInfo[test.typeName].GetAllStructMembers()
 		c.Assert(err, NotNil, Commentf("test %d failed", i+1))
 		c.Check(err.Error(), Equals, test.err)
 	}
@@ -405,17 +370,14 @@ func (*typeInfoSuite) TestSliceInputError(c *C) {
 		err      string
 	}{{
 		typeName: "myStruct",
-		err:      "cannot use slice syntax with struct",
+		err:      "cannot use slice syntax with a struct",
 	}, {
 		typeName: "myMap",
-		err:      "cannot use slice syntax with map",
-	}, {
-		typeName: "wrongSlice",
-		err:      `parameter with type "wrongSlice" missing (have "myMap", "myStruct")`,
+		err:      "cannot use slice syntax with a map",
 	}}
 
 	for i, test := range tests {
-		_, err = argInfo.InputSlice(test.typeName)
+		_, err = argInfo[test.typeName].GetSlice()
 		c.Assert(err, NotNil, Commentf("test %d failed", i+1))
 		c.Check(err.Error(), Equals, test.err)
 	}
