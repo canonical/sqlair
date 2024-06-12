@@ -525,7 +525,7 @@ func (s *PackageSuite) TestGetErrors(c *C) {
 	}, {
 		summary: "no outputs",
 		query:   "UPDATE person SET id=300 WHERE id=30",
-		types:   []any{Person{}},
+		types:   []any{},
 		inputs:  []any{},
 		outputs: []any{&Person{}},
 		err:     "cannot get results: output variables provided but not referenced in query",
@@ -1255,12 +1255,12 @@ func (s *PackageSuite) TestInsert(c *C) {
 	insertAddressIDStmt, err := sqlair.Prepare("INSERT INTO address (id) VALUES ($Person.address_id)", Person{})
 	c.Assert(err, IsNil)
 
-	insertAddressStmt, err := sqlair.Prepare("INSERT INTO address (*) VALUES ($Address.id, $Address.street, $Address.district)", Person{}, Address{})
+	insertAddressStmt, err := sqlair.Prepare("INSERT INTO address (*) VALUES ($Address.id, $Address.street, $Address.district)", Address{})
 	c.Assert(err, IsNil)
 
 	// RETURNING clauses are supported by SQLite with syntax taken from
 	// postgresql. The inserted values are returned as query results.
-	returningStmt, err := sqlair.Prepare("INSERT INTO address(*) VALUES($Address.*) RETURNING &Address.*", Person{}, Address{})
+	returningStmt, err := sqlair.Prepare("INSERT INTO address(*) VALUES($Address.*) RETURNING &Address.*", Address{})
 	c.Assert(err, IsNil)
 
 	// SELECT statements to check the inserts have worked correctly.

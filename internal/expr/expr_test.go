@@ -973,6 +973,10 @@ func (s *ExprSuite) TestBindTypesErrors(c *C) {
 		typeSamples []any
 		err         string
 	}{{
+		query:       "SELECT (&M.id, &M.id) FROM t",
+		typeSamples: []any{sqlair.M{}},
+		err:         `cannot prepare statement: output expression: key "id" of map "M" is used in multiple output expressions including: &M.id`,
+	}, {
 		query:       "SELECT (p.name, t.id) AS (&Address.id) FROM t",
 		typeSamples: []any{Address{}},
 		err:         "cannot prepare statement: output expression: mismatched number of columns and target types: (p.name, t.id) AS (&Address.id)",
@@ -983,11 +987,7 @@ func (s *ExprSuite) TestBindTypesErrors(c *C) {
 	}, {
 		query:       "SELECT (&Address.*, &Address.id) FROM t",
 		typeSamples: []any{Address{}, Person{}},
-		err:         `cannot prepare statement: tag "id" of struct "Address" appears more than once in output expressions`,
-	}, {
-		query:       "SELECT (&M.id, &M.id) FROM t",
-		typeSamples: []any{sqlair.M{}},
-		err:         `cannot prepare statement: key "id" of map "M" appears more than once in output expressions`,
+		err:         `cannot prepare statement: output expression: tag "id" of struct "Address" is used in multiple output expressions including: &Address.id`,
 	}, {
 		query:       "SELECT (p.*, t.name) AS (&Address.*) FROM t",
 		typeSamples: []any{Address{}},
@@ -999,7 +999,7 @@ func (s *ExprSuite) TestBindTypesErrors(c *C) {
 	}, {
 		query:       "SELECT (&Person.*, &Person.*) FROM t",
 		typeSamples: []any{Address{}, Person{}},
-		err:         `cannot prepare statement: tag "address_id" of struct "Person" appears more than once in output expressions`,
+		err:         `cannot prepare statement: output expression: tag "address_id" of struct "Person" is used in multiple output expressions including: &Person.*`,
 	}, {
 		query:       "SELECT (p.*, t.*) AS (&Address.*) FROM t",
 		typeSamples: []any{Address{}},
@@ -1071,11 +1071,11 @@ func (s *ExprSuite) TestBindTypesErrors(c *C) {
 	}, {
 		query:       "SELECT street FROM t WHERE x = $Address[:]",
 		typeSamples: []any{Person{}, Manager{}, Address{}},
-		err:         `cannot prepare statement: input expression: cannot use slice syntax with struct: $Address[:]`,
+		err:         `cannot prepare statement: input expression: cannot use slice syntax with a struct: $Address[:]`,
 	}, {
 		query:       "SELECT name FROM person WHERE id IN ($M[:])",
 		typeSamples: []any{M{}},
-		err:         `cannot prepare statement: input expression: cannot use slice syntax with map: $M[:]`,
+		err:         `cannot prepare statement: input expression: cannot use slice syntax with a map: $M[:]`,
 	}, {
 		query:       "SELECT &S.* FROM person",
 		typeSamples: []any{sqlair.S{}},
@@ -1140,6 +1140,10 @@ func (s *ExprSuite) TestBindTypesErrors(c *C) {
 		query:       "INSERT INTO t (id, street) VALUES ($Person.id)",
 		typeSamples: []any{Person{}, Address{}},
 		err:         `cannot prepare statement: input expression: mismatched number of columns and values: 2 != 1: (id, street) VALUES ($Person.id)`,
+	}, {
+		query:       "SELECT dist AS &Address.district FROM t",
+		typeSamples: []any{Address{}, Person{}},
+		err:         `cannot prepare statement: type "Person" not found in statement`,
 	}}
 
 	for i, test := range tests {
