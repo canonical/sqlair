@@ -13,18 +13,10 @@ import (
 	"unicode/utf8"
 )
 
-// ArgInfo is used to access type information about SQLair input and output
-// arguments. Methods on ArgInfo can be used to generate input and output value
-// locators.
-//
-// ArgInfo should only be accessed using it methods, not used directly as a
-// map.
-type ArgInfo map[string]arg
-
 // GenerateArgInfo takes sample instantiations of argument types and uses
 // reflection to generate an ArgInfo containing the types.
-func GenerateArgInfo(typeSamples []any) (ArgInfo, error) {
-	argInfo := ArgInfo{}
+func GenerateArgInfo(typeSamples []any) (map[string]ArgInfo, error) {
+	argInfo := map[string]ArgInfo{}
 	for _, typeSample := range typeSamples {
 		if typeSample == nil {
 			return nil, fmt.Errorf("need supported value, got nil")
@@ -40,10 +32,10 @@ func GenerateArgInfo(typeSamples []any) (ArgInfo, error) {
 				return nil, err
 			}
 			if dupeArg, ok := argInfo[t.Name()]; ok {
-				if dupeArg.typ() == t {
+				if dupeArg.Typ() == t {
 					return nil, fmt.Errorf("found multiple instances of type %q", t.Name())
 				}
-				return nil, fmt.Errorf("two types found with name %q: %q and %q", t.Name(), dupeArg.typ().String(), t.String())
+				return nil, fmt.Errorf("two types found with name %q: %q and %q", t.Name(), dupeArg.Typ().String(), t.String())
 			}
 			argInfo[t.Name()] = info
 		case reflect.Pointer:
@@ -55,134 +47,17 @@ func GenerateArgInfo(typeSamples []any) (ArgInfo, error) {
 	return argInfo, nil
 }
 
-// Kind looks up the type name and returns its kind.
-func (argInfo ArgInfo) Kind(typeName string) (reflect.Kind, error) {
-	arg, ok := argInfo[typeName]
-	if !ok {
-		return 0, nameNotFoundError(argInfo, typeName)
-	}
-	return arg.typ().Kind(), nil
-}
-
-// InputMember returns an input locator for a member of a struct or map.
-func (argInfo ArgInfo) InputMember(typeName string, memberName string) (Input, error) {
-	vl, err := argInfo.getMember(typeName, memberName)
-	if err != nil {
-		return nil, err
-	}
-	input, ok := vl.(Input)
-	if !ok {
-		return nil, fmt.Errorf("internal error: %s cannot be used as input", vl.ArgType().Kind())
-	}
-	return input, nil
-}
-
-// AllStructInputs returns a list of inputs locators that locate every member
-// of the named type along with the names of the members. If the type is not a
-// struct an error is returned.
-func (argInfo ArgInfo) AllStructInputs(typeName string) ([]Input, []string, error) {
-	si, err := argInfo.getAllStructMembers(typeName)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	var inputs []Input
-	for _, tag := range si.tags {
-		inputs = append(inputs, si.tagToField[tag])
-	}
-	return inputs, si.tags, nil
-}
-
-// OutputMember returns an output locator for a member of a struct or map.
-func (argInfo ArgInfo) OutputMember(typeName string, memberName string) (Output, error) {
-	vl, err := argInfo.getMember(typeName, memberName)
-	if err != nil {
-		return nil, err
-	}
-	output, ok := vl.(Output)
-	if !ok {
-		return nil, fmt.Errorf("internal error: %s cannot be used as output", vl.ArgType().Kind())
-	}
-	return output, nil
-}
-
-// AllStructOutputs returns a list of output locators that locate every member
-// of the named type along with the names of the members. If the type is not a
-// struct an error is returned.
-func (argInfo ArgInfo) AllStructOutputs(typeName string) ([]Output, []string, error) {
-	si, err := argInfo.getAllStructMembers(typeName)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	var outputs []Output
-	for _, tag := range si.tags {
-		outputs = append(outputs, si.tagToField[tag])
-	}
-	return outputs, si.tags, nil
-}
-
-// getMember finds a type and a member of it and returns a locator for the
-// member. If the type does not have members it returns an error.
-func (argInfo ArgInfo) getMember(typeName string, memberName string) (ValueLocator, error) {
-	arg, ok := argInfo[typeName]
-	if !ok {
-		return nil, nameNotFoundError(argInfo, typeName)
-	}
-	switch arg := arg.(type) {
-	case *structInfo:
-		structField, ok := arg.tagToField[memberName]
-		if !ok {
-			return nil, fmt.Errorf(`type %q has no %q db tag`, arg.structType.Name(), memberName)
-		}
-		return structField, nil
-	case *mapInfo:
-		return &mapKey{name: memberName, mapType: arg.mapType}, nil
-	default:
-		return nil, fmt.Errorf("cannot get named member of %s", arg.typ().Kind())
-	}
-}
-
-// getAllStructMembers returns a information about every member of the named type
-// along with their names.
-func (argInfo ArgInfo) getAllStructMembers(typeName string) (*structInfo, error) {
-	arg, ok := argInfo[typeName]
-	if !ok {
-		return nil, nameNotFoundError(argInfo, typeName)
-	}
-	si, ok := arg.(*structInfo)
-	if !ok {
-		switch k := arg.typ().Kind(); k {
-		case reflect.Map:
-			return nil, fmt.Errorf("cannot use %s with asterisk unless columns are specified", k)
-		case reflect.Slice:
-			return nil, fmt.Errorf("cannot use %s with asterisk", k)
-		default:
-			return nil, fmt.Errorf("internal error: invalid arg type %s", k)
-		}
-	}
-	if len(si.tags) == 0 {
-		return nil, fmt.Errorf(`no "db" tags found in struct %q`, si.structType.Name())
-	}
-	return si, nil
-}
-
-// InputSlice returns an input locator for a slice.
-func (argInfo ArgInfo) InputSlice(typeName string) (Input, error) {
-	arg, ok := argInfo[typeName]
-	if !ok {
-		return nil, nameNotFoundError(argInfo, typeName)
-	}
-	si, ok := arg.(*sliceInfo)
-	if !ok {
-		return nil, fmt.Errorf("cannot use slice syntax with %s", arg.typ().Kind())
-	}
-	return &slice{sliceType: si.sliceType}, nil
-}
-
-// arg exposes useful information about SQLair input/output argument types.
-type arg interface {
-	typ() reflect.Type
+// ArgInfo exposes useful information about SQLair input/output argument types.
+type ArgInfo interface {
+	Typ() reflect.Type
+	// GetMember finds a type and a member of it and returns a locator for the
+	// member. If the type does not have members it returns an error.
+	GetMember(memberName string) (ValueLocator, error)
+	// GetAllStructMembers returns information about every struct member of the
+	// arg along with their names. If the arg is not a struct an error is
+	// returned.
+	GetAllStructMembers() ([]ValueLocator, []string, error)
+	GetSlice() (ValueLocator, error)
 }
 
 // structInfo stores information useful for SQLair about struct types.
@@ -195,8 +70,36 @@ type structInfo struct {
 	tagToField map[string]*structField
 }
 
-func (si *structInfo) typ() reflect.Type {
+func (si *structInfo) Typ() reflect.Type {
 	return si.structType
+}
+
+// GetMember returns a value locator for the specified field of the struct.
+func (si *structInfo) GetMember(memberName string) (ValueLocator, error) {
+	structField, ok := si.tagToField[memberName]
+	if !ok {
+		return nil, fmt.Errorf(`type %q has no %q db tag`, si.structType.Name(), memberName)
+	}
+	return structField, nil
+}
+
+// GetAllStructMembers returns information about every member of the struct type
+// along with their names.
+func (si *structInfo) GetAllStructMembers() ([]ValueLocator, []string, error) {
+	if len(si.tags) == 0 {
+		return nil, nil, fmt.Errorf(`no "db" tags found in struct %q`, si.structType.Name())
+	}
+
+	var vls []ValueLocator
+	for _, tag := range si.tags {
+		vls = append(vls, si.tagToField[tag])
+	}
+	return vls, si.tags, nil
+}
+
+// GetSlice returns a an error.
+func (si *structInfo) GetSlice() (ValueLocator, error) {
+	return nil, fmt.Errorf("cannot use slice syntax with a struct")
 }
 
 // mapInfo stores a map type.
@@ -204,8 +107,23 @@ type mapInfo struct {
 	mapType reflect.Type
 }
 
-func (mi *mapInfo) typ() reflect.Type {
+func (mi *mapInfo) Typ() reflect.Type {
 	return mi.mapType
+}
+
+// GetMember returns a value locator for the specified key of the map
+func (mi *mapInfo) GetMember(memberName string) (ValueLocator, error) {
+	return &mapKey{name: memberName, mapType: mi.mapType}, nil
+}
+
+// GetAllStructMembers returns an error since maps do not have struct members
+func (mi *mapInfo) GetAllStructMembers() ([]ValueLocator, []string, error) {
+	return nil, nil, fmt.Errorf("cannot use map with asterisk unless columns are specified")
+}
+
+// GetSlice returns a an error.
+func (mi *mapInfo) GetSlice() (ValueLocator, error) {
+	return nil, fmt.Errorf("cannot use slice syntax with a map")
 }
 
 // sliceInfo stores a slice type
@@ -213,17 +131,32 @@ type sliceInfo struct {
 	sliceType reflect.Type
 }
 
-func (si *sliceInfo) typ() reflect.Type {
+func (si *sliceInfo) Typ() reflect.Type {
 	return si.sliceType
+}
+
+// GetMember returns an error since slices do not have named members.
+func (si *sliceInfo) GetMember(_ string) (ValueLocator, error) {
+	return nil, fmt.Errorf("cannot get named member of slice")
+}
+
+// GetAllStructMembers returns an error since slices do not have struct members
+func (si *sliceInfo) GetAllStructMembers() ([]ValueLocator, []string, error) {
+	return nil, nil, fmt.Errorf("cannot use slice with asterisk")
+}
+
+// GetSlice returns a locator for a slice.
+func (si *sliceInfo) GetSlice() (ValueLocator, error) {
+	return &slice{sliceType: si.sliceType}, nil
 }
 
 // argInfoCache caches type reflection information across queries.
 var argInfoCacheMutex sync.RWMutex
-var argInfoCache = make(map[reflect.Type]arg)
+var argInfoCache = make(map[reflect.Type]ArgInfo)
 
 // getArgInfo returns type information useful for SQLair from a sample
 // instantiation of an argument type.
-func getArgInfo(t reflect.Type) (arg, error) {
+func getArgInfo(t reflect.Type) (ArgInfo, error) {
 	// Check cache for type
 	argInfoCacheMutex.RLock()
 	typeInfo, found := argInfoCache[t]
@@ -397,21 +330,9 @@ func getStructFields(structType reflect.Type) ([]*structField, error) {
 	return fields, nil
 }
 
-// nameNotFoundError generates the arguments present and returns a typeMissingError
-func nameNotFoundError(argInfo ArgInfo, missingTypeName string) error {
-	// Get names of the arguments we have from the ArgInfo keys.
-	argNames := []string{}
-	for argName := range argInfo {
-		argNames = append(argNames, argName)
-	}
-	// Sort for consistent error messages.
-	sort.Strings(argNames)
-	return typeMissingError(missingTypeName, argNames)
-}
-
-// typeMissingError returns an error specifying the missing type and types
+// TypeMissingError returns an error specifying the missing type and types
 // that are present.
-func typeMissingError(missingType string, existingTypes []string) error {
+func TypeMissingError(missingType string, existingTypes []string) error {
 	if len(existingTypes) == 0 {
 		return fmt.Errorf(`parameter with type %q missing`, missingType)
 	}
