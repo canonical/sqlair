@@ -13,9 +13,9 @@ import (
 	"github.com/canonical/sqlair/internal/expr"
 )
 
-// statementCache caches driver prepared sql.Stmt objects associated with
-// sqlair.Statement objects. The driver prepared sql.Stmt objects corresponding
-// to a single sqlair.Statement can be prepared on different database and have
+// statementCache caches driver-prepared sql.Stmt objects associated with
+// sqlair.Statement objects. The driver-prepared sql.Stmt objects corresponding
+// to a single sqlair.Statement can be prepared on different databases and have
 // different generated SQL (depending on query arguments).
 //
 // Entries in the cache are indexed by the sqlair.Statement cache ID and the
@@ -27,7 +27,7 @@ import (
 // set on sqlair.DB objects to close all sql.Stmt objects prepared on the DB,
 // close the DB, and remove the DB cache ID from the cache.
 //
-// Only a single driver prepared sql.Stmt is cached for each sqlair.DB/
+// Only a single driver-prepared sql.Stmt is cached for each sqlair.DB/
 // sqlair.Statement pair. If the sqlair.Statement is re-prepared with different
 // generated SQL then the previous sql.Stmt is evicted from the cache. A
 // finalizer is set on the evicted sql.Stmt to ensure it is closed once all
@@ -103,10 +103,10 @@ func (sc *statementCache) newDB(sqldb *sql.DB) *DB {
 }
 
 // lookupStmt checks if a Statement has been prepared on the db driver with the
-// given primedSQL. If it has, the driver prepared sql.Stmt is returned.
+// given primedSQL. If it has, the driver-prepared sql.Stmt is returned.
 func (sc *statementCache) lookupStmt(db *DB, s *Statement, primedSQL string) (stmt *sql.Stmt, ok bool) {
 	// The Statement cache ID is only removed from stmtDBCache when the
-	// finalizer is run. The Statements cache ID must be in the stmtDBCache
+	// finalizer is run. The Statement's cache ID must be in the stmtDBCache
 	// since we hold a reference to the Statement. It is therefore safe to
 	// access in it in the map without first checking it exists.
 	sc.mutex.RLock()
