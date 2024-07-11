@@ -1,12 +1,14 @@
 (input-expression-syntax)=
 # Input expression syntax
 
+TODO add verbal descriptions of each of these.
+
 This is the [BNF](https://en.wikipedia.org/wiki/Backus%E2%80%93Naur_form) description of the syntax of input expressions:
 
 ```bnf
 <input-expression> ::= <member-input-type> | <slice-input-type> | <insert-expression>
 
-<member-input-type> ::= "$" <type-name> ".*" <type-member>
+<member-input-type> ::= "$" <type-name> "." <column-name>
 
 <slice-input-type> ::= "$" <slice-name> "[:]"
 
@@ -15,7 +17,6 @@ This is the [BNF](https://en.wikipedia.org/wiki/Backus%E2%80%93Naur_form) descri
 
 <input-types> ::= <input-type> | ", " <input-types>
 <input-type> ::= <asterisk-input-type> | <member-input-type>
-<member-input-type> ::= "$" <type-name> ".*" <type-member>
 <asterisk-input-type> ::= "$" <struct-name> ".*"
 
 <type-name> ::= <struct-name> | <map-name>

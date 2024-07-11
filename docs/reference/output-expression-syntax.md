@@ -1,6 +1,8 @@
 (output-expression-syntax)=
 # Output expression syntax
 
+TODO add verbal descriptions of each of these.
+
 This is the [BNF](https://en.wikipedia.org/wiki/Backus%E2%80%93Naur_form) description of the syntax of output expressions:
 
 ```bnf

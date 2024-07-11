@@ -1,15 +1,14 @@
 (SQLair documentation root file)=
 # SQLair
 
-SQLair is a package for Go that provides type mapping between structs/maps and
-SQL databases by allowing references to the Go types within the SQL query
-itself. 
-
+```{note}
 The project is still under development and there may be still be major changes
 to the API.
+```
 
-SQLair is designed to be a light weight convinience layer that smooths the
-encoding of database query results into Golang types. It is not an ORM.
+SQLair is a Go package that extends SQL to allow mapping between Go types and
+SQL databases by allowing references to the Go types within the SQL query
+itself. 
 
 SQLair allows you to:
 
@@ -21,15 +20,20 @@ Things SQLair does not do:
 - Restrict the SQL that can be used
 - Optimise queries
 
+SQLair is designed to be a lightweight convenience layer that smooths the
+encoding of database query results into Golang types. It is not an
+Object-Relational Mapping tool (ORM).
+
+TODO: Go developers will find this useful for interacting with databases.
 
 ```{toctree}
-   :maxdepth: 2
-   :hidden:
+:maxdepth: 2
+:hidden:
 
-   tutorial/tutorial
-   howto/index
-   reference/index
-   explanation/index
+tutorial/tutorial
+howto/index
+reference/index
+explanation/index
 ```
 
 ````{grid} 1 1 2 2 

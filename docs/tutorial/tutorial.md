@@ -6,7 +6,7 @@ This tutorial will take you through the basics of writing queries with SQLair an
 
 As a simple example, given Go structs `Employee` and `Team`, instead of the SQL query:
 
-```plaintext
+```
 SELECT id, team_id, name
 FROM employee
 WHERE team_id = ?
@@ -14,7 +14,7 @@ WHERE team_id = ?
 
 With SQLair you could write:
 
-```plaintext
+```
 SELECT &Employee.*
 FROM employee
 WHERE team_id = $Location.team_id
