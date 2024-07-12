@@ -12,7 +12,7 @@ build:
     python: "3.11"
   jobs:
     pre_install:
-      - python3 .sphinx/build_requirements.py
+      - cd docs && python3 .sphinx/build_requirements.py && cd ..
       - git fetch --unshallow || true
     post_checkout: 
       - cd docs && python3 .sphinx/build_requirements.py
