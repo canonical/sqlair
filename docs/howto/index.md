@@ -7,7 +7,6 @@ These how-to guides cover key operations and processes in SQLair.
 :titlesonly:
 
 custom-types-in-structs
-insert-statements
 input-expressions
 output-expressions
 ```
