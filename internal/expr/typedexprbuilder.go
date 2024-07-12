@@ -13,15 +13,15 @@ import (
 
 // typedExprBuild is used to build up typed expressions.
 type typedExprBuilder struct {
-	argInfo    map[string]typeinfo.ArgInfo
+	argInfos   map[string]typeinfo.ArgInfo
 	argUsed    map[typeinfo.ArgInfo]bool
 	outputUsed map[string]bool
 	typedExprs []typedExpr
 }
 
-func newTypedExprBuilder(argInfo map[string]typeinfo.ArgInfo) *typedExprBuilder {
+func newTypedExprBuilder(argInfos map[string]typeinfo.ArgInfo) *typedExprBuilder {
 	return &typedExprBuilder{
-		argInfo:    argInfo,
+		argInfos:   argInfos,
 		argUsed:    map[typeinfo.ArgInfo]bool{},
 		outputUsed: map[string]bool{},
 	}
@@ -135,33 +135,13 @@ func (teb *typedExprBuilder) InputSlice(typeName string) (typeinfo.Input, error)
 	return input, nil
 }
 
-func (teb *typedExprBuilder) getArg(typeName string) (typeinfo.ArgInfo, error) {
-	arg, ok := teb.argInfo[typeName]
-	if !ok {
-		return nil, nameNotFoundError(teb.argInfo, typeName)
-	}
-	teb.argUsed[arg] = true
-	return arg, nil
-}
-
 // Kind looks up the type name and returns its kind.
 func (teb *typedExprBuilder) Kind(typeName string) (reflect.Kind, error) {
-	arg, ok := teb.argInfo[typeName]
+	arg, ok := teb.argInfos[typeName]
 	if !ok {
-		return 0, nameNotFoundError(teb.argInfo, typeName)
+		return 0, teb.nameNotFoundError(typeName)
 	}
 	return arg.Typ().Kind(), nil
-}
-
-// checkAllArgsUsed goes through all the arguments contained in typeToValue and
-// checks that they were used when building the typed expression.
-func (teb *typedExprBuilder) checkAllArgsUsed(typeToValue map[string]typeinfo.ArgInfo) error {
-	for _, argInfo := range typeToValue {
-		if !teb.argUsed[argInfo] {
-			return fmt.Errorf("type %q not found in statement", argInfo.Typ().Name())
-		}
-	}
-	return nil
 }
 
 // AddTypedInsertExpr wraps and adds the columns of an insert expression to the
@@ -185,12 +165,41 @@ func (teb *typedExprBuilder) AddBypass(b *bypass) {
 	teb.typedExprs = append(teb.typedExprs, b)
 }
 
+// Build returns a validated and built TypeBoundExpr.
+func (teb *typedExprBuilder) Build() (*TypeBoundExpr, error) {
+	if err := teb.checkAllArgsUsed(); err != nil {
+		return nil, err
+	}
+
+	return &TypeBoundExpr{typedExprs: teb.typedExprs}, nil
+}
+
+// checkAllArgsUsed goes through all the arguments contained in typeToValue and
+// checks that they were used when building the typed expression.
+func (teb *typedExprBuilder) checkAllArgsUsed() error {
+	for _, argInfo := range teb.argInfos {
+		if !teb.argUsed[argInfo] {
+			return fmt.Errorf("type %q not found in statement", argInfo.Typ().Name())
+		}
+	}
+	return nil
+}
+
+func (teb *typedExprBuilder) getArg(typeName string) (typeinfo.ArgInfo, error) {
+	arg, ok := teb.argInfos[typeName]
+	if !ok {
+		return nil, teb.nameNotFoundError(typeName)
+	}
+	teb.argUsed[arg] = true
+	return arg, nil
+}
+
 // nameNotFoundError generates the arguments present and returns a missing type
 // error.
-func nameNotFoundError(argInfo map[string]typeinfo.ArgInfo, missingTypeName string) error {
+func (teb *typedExprBuilder) nameNotFoundError(missingTypeName string) error {
 	// Get names of the arguments we have from the ArgInfo keys.
 	var argNames []string
-	for argName := range argInfo {
+	for argName := range teb.argInfos {
 		argNames = append(argNames, argName)
 	}
 	// Sort for consistent error messages.

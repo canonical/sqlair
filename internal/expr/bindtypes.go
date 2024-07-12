@@ -55,11 +55,7 @@ func (pe *ParsedExpr) BindTypes(args ...any) (tbe *TypeBoundExpr, err error) {
 		}
 	}
 
-	if err := teb.checkAllArgsUsed(argInfo); err != nil {
-		return nil, err
-	}
-
-	return &TypeBoundExpr{typedExprs: teb.typedExprs}, nil
+	return teb.Build()
 }
 
 // expression represents a parsed node of the SQLair query's AST.
@@ -67,7 +63,8 @@ type expression interface {
 	// String returns a text representation for debugging and testing purposes.
 	String() string
 
-	// bindTypes binds the types to the expression to generate a typedExpr.
+	// bindTypes binds the types to the expression to generate a typedExpr and
+	// adds it to the typedExprBuilder.
 	bindTypes(*typedExprBuilder) error
 }
 
@@ -82,8 +79,7 @@ func (b *bypass) String() string {
 	return "Bypass[" + b.chunk + "]"
 }
 
-// bindTypes returns the bypass part itself since it contains no references to
-// types.
+// bindTypes adds the bypass part, unchanged, to the typedExprBuilder.
 func (b *bypass) bindTypes(teb *typedExprBuilder) error {
 	teb.AddBypass(b)
 	return nil
@@ -106,8 +102,9 @@ func (e *memberInputExpr) String() string {
 	return fmt.Sprintf("Input[%+v]", e.ma)
 }
 
-// bindTypes generates a *typedInputExpr containing type information about the
-// Go object and its member.
+// bindTypes generates a typed input expression containing type information
+// about the Go object and its member. This is then added to the
+// typedExprBuilder.
 func (e *memberInputExpr) bindTypes(teb *typedExprBuilder) error {
 	input, err := teb.InputMember(e.ma.typeName, e.ma.memberName)
 	if err != nil {
@@ -131,8 +128,8 @@ func (e *asteriskInsertExpr) String() string {
 	return fmt.Sprintf("AsteriskInsert[[*] %v]", e.sources)
 }
 
-// bindTypes generates a *typedInsertExpr containing type information about the
-// asteriskInsertExpr.
+// bindTypes generates a typed insert expression containing type information
+// about the asteriskInsertExpr. This is added to the typedExprBuilder.
 func (e *asteriskInsertExpr) bindTypes(teb *typedExprBuilder) (err error) {
 	defer func() {
 		if err != nil {
@@ -178,10 +175,12 @@ func (e *columnsInsertExpr) String() string {
 	return fmt.Sprintf("ColumnInsert[%v %v]", e.columns, e.sources)
 }
 
-// bindTypes generates a *typedInsertExpr containing type information about the
-// columnsInsertExpr. It checks that all the listed columns are provided by the
-// supplied types. If a map with an asterisk is passed, the spare columns are
-// taken from that map.
+// bindTypes generates a typed insert expression containing type information
+// about the columnsInsertExpr. It checks that all the listed columns are
+// provided by the supplied types. If a map with an asterisk is passed, the
+// spare columns are taken from that map.
+//
+// The generated typed expression is then added to the typedExprBuilder.
 func (e *columnsInsertExpr) bindTypes(teb *typedExprBuilder) (err error) {
 	defer func() {
 		if err != nil {
@@ -275,8 +274,9 @@ func (e *basicInsertExpr) String() string {
 	return fmt.Sprintf("BasicInsert[%v %v]", e.columns, e.sources)
 }
 
-// bindTypes generates a *typedInsertExpr containing type information about the
-// values to be inserted in the basicInsertExpr.
+// bindTypes generates a typed insert expression containing type information
+// about the values to be inserted in the basicInsertExpr. The typed expression
+// is added to the typedExprBuilder.
 func (e *basicInsertExpr) bindTypes(teb *typedExprBuilder) (err error) {
 	defer func() {
 		if err != nil {
@@ -310,8 +310,8 @@ func (e *sliceInputExpr) String() string {
 	return fmt.Sprintf("Input[%s[:]]", e.sliceTypeName)
 }
 
-// bindTypes generates a *typedInputExpr containing type information about the
-// slice.
+// bindTypes generates a typed input expression containing type information
+// about the slice. This is then added to the typedExprBuilder.
 func (e *sliceInputExpr) bindTypes(teb *typedExprBuilder) error {
 	input, err := teb.InputSlice(e.sliceTypeName)
 	if err != nil {
@@ -335,8 +335,8 @@ func (e *outputExpr) String() string {
 }
 
 // bindTypes binds the output expression to concrete types. It then checks the
-// expression is valid with respect to its bound types and returns a
-// *typedOutputExpr.
+// expression is valid with respect to its bound types and adds the typed
+// expression to the typedExprBuilder.
 func (e *outputExpr) bindTypes(teb *typedExprBuilder) (err error) {
 	defer func() {
 		if err != nil {

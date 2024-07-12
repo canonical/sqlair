@@ -1055,7 +1055,7 @@ func (s *PackageSuite) TestTransactions(c *C) {
 	err = tx.Rollback()
 	c.Assert(err, IsNil)
 
-	// Check Derek isnt in db.
+	// Check Derek isn't in db.
 	tx, err = db.Begin(ctx, nil)
 	c.Assert(err, IsNil)
 	var derekCheck = Person{}

@@ -177,7 +177,7 @@ func getArgInfo(t reflect.Type) (ArgInfo, error) {
 			tagToField: make(map[string]*structField),
 			structType: t,
 		}
-		tags := []string{}
+		var tags []string
 
 		fields, err := getStructFields(t)
 		if err != nil {
@@ -280,10 +280,10 @@ func getStructFields(structType reflect.Type) ([]*structField, error) {
 
 		// If Anonymous is true, the field is embedded.
 		if field.Anonymous && tag == "" {
-			// If the embedded struct is tagged then we do not look inside it and
-			// we pass it straight to the driver. This means it must implement the
-			// Valuer or Scanner interface (for inputs/outputs respectively) or the
-			// driver will reject it with a panic.
+			// If the embedded struct is tagged then we do not look inside it,
+			// and we pass it straight to the driver. This means it must
+			// implement the Valuer or Scanner interface (for inputs/outputs
+			// respectively) or the driver will reject it with a panic.
 			if !field.IsExported() {
 				continue
 			}
