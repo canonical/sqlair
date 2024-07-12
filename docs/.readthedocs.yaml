@@ -14,7 +14,8 @@ build:
     pre_install:
       - python3 .sphinx/build_requirements.py
       - git fetch --unshallow || true
-    post_checkout: cd docs && python3 .sphinx/build_requirements.py
+    post_checkout: 
+      - cd docs && python3 .sphinx/build_requirements.py
 
 # Build documentation in the docs/ directory with Sphinx
 sphinx:
