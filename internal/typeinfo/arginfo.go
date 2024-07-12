@@ -13,8 +13,22 @@ import (
 	"unicode/utf8"
 )
 
+// ArgInfo exposes useful information about SQLair input/output argument types.
+type ArgInfo interface {
+	Typ() reflect.Type
+	// GetMember finds a type and a member of it and returns a locator for the
+	// member. If the type does not have members it returns an error.
+	GetMember(memberName string) (ValueLocator, error)
+	// GetAllStructMembers returns information about every struct member of the
+	// arg along with their names. If the arg is not a struct an error is
+	// returned.
+	GetAllStructMembers() ([]ValueLocator, []string, error)
+	GetSlice() (ValueLocator, error)
+}
+
 // GenerateArgInfo takes sample instantiations of argument types and uses
-// reflection to generate an ArgInfo containing the types.
+// reflection to generate an ArgInfo for each. These ArgInfo objects are
+// returned in a map keyed by the type names.
 func GenerateArgInfo(typeSamples []any) (map[string]ArgInfo, error) {
 	argInfo := map[string]ArgInfo{}
 	for _, typeSample := range typeSamples {
@@ -45,19 +59,6 @@ func GenerateArgInfo(typeSamples []any) (map[string]ArgInfo, error) {
 		}
 	}
 	return argInfo, nil
-}
-
-// ArgInfo exposes useful information about SQLair input/output argument types.
-type ArgInfo interface {
-	Typ() reflect.Type
-	// GetMember finds a type and a member of it and returns a locator for the
-	// member. If the type does not have members it returns an error.
-	GetMember(memberName string) (ValueLocator, error)
-	// GetAllStructMembers returns information about every struct member of the
-	// arg along with their names. If the arg is not a struct an error is
-	// returned.
-	GetAllStructMembers() ([]ValueLocator, []string, error)
-	GetSlice() (ValueLocator, error)
 }
 
 // structInfo stores information useful for SQLair about struct types.
