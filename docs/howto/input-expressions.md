@@ -1,6 +1,6 @@
 (input-expressions)=
 # How to input 
-SQLair input expressions can be used anywhere in a SQL query you would normally use an input placeholder (such as `?`, or `$1`). They always start with a doller sign (`$`). For example:
+SQLair input expressions can be used anywhere in a SQL query you would normally use an input placeholder (such as `?`, or `$1`). They always start with a dollar sign (`$`). For example:
 ```
 INSERT INTO Person (name, age) 
 VALUES ($Person.*)
@@ -36,9 +36,9 @@ WHERE  name IN ($Names[:])
 ```
 
 ## Insert all columns of objects
-The syntax `INSERT INTO table (*) VALUES ($Type1.*, $Type2.col_name2, ...)` can be used to insert columns from structs into the database. SQLair will expand the asterisk on the left hand side into all the column names specified on the right. If a struct on the left is followed by an asterisk it will insert all tagged fields on the struct. Types with a single field/key specifed will only have just that member inserted.
+The syntax `INSERT INTO table (*) VALUES ($Type1.*, $Type2.col_name2, ...)` can be used to insert columns from structs into the database. SQLair will expand the asterisk on the left hand side into all the column names specified on the right. If a struct on the left is followed by an asterisk it will insert all tagged fields on the struct. Types with a single field/key specified will only have just that member inserted.
 
-It will also insert the corrent number of parameter palceholders on the right. The values specified on the right will then be passed to the database as query arguments and be inserted into the database.
+It will also insert the current number of parameter placeholders on the right. The values specified on the right will then be passed to the database as query arguments and be inserted into the database.
 
 Example:
 ```
@@ -47,7 +47,7 @@ VALUES ($Struct1.*, $Struct2.col_name1, $Struct2.col_name2, $Map.key)
 ```
 
 ## Insert particular columns from objects
-The syntax `(col_name1, col_name2, ...) VALUES ($Type1.*, $Type2.col_name2, ...)` can be used to insert specified columns from the collection of objects on the right. It works the same way as inserting all the columns of objects (above) excepet it will only insert those specified on the left.
+The syntax `(col_name1, col_name2, ...) VALUES ($Type1.*, $Type2.col_name2, ...)` can be used to insert specified columns from the collection of objects on the right. It works the same way as inserting all the columns of objects (above) except it will only insert those specified on the left.
 
 Example:
 ```

@@ -19,7 +19,7 @@ the tables to Go structs without the overhead of an Object-Relational Mapping
 library (ORM). SQLair concerns itself only with the mapping from the Go objects
 to the database tables. It allows you to run any SQL you wish.
 
-The library is perfect for anyone who is looking for the convinence of
+The library is perfect for anyone who is looking for the convenience of
 automatic mapping between database tables to Go types and who just wants to
 write SQL instead of dealing with an ORM.
 
@@ -68,7 +68,7 @@ explanation/index
 
 ## Project and community
 
-SQLair is an an open source project that warmly welcomes community projects,
+SQLair is an open source project that warmly welcomes community projects,
 contributions, suggestions, fixes and constructive feedback. We welcome any
 improvements to the documentation or SQLair itself. Please see our contributing
 guide if you would like to get involved!
@@ -76,9 +76,12 @@ guide if you would like to get involved!
 - [SQLair GitHub page](https://github.com/canonical/sqlair)
 - [SQLair contributing guide](https://github.com/canonical/sqlair/blob/main/CONTRIBUTING.md)
 
-The SQLair project is currently under the care of the Juju team at Canonical. If you have any questions or would just like to say hi you can find us on the Charmhub Discorse Forum. Just mention SQLair in the subject of your post and we will see it.
+The SQLair project is currently under the care of the Juju team at Canonical. If
+you have any questions or would just like to say hi you can find us on the
+Charmhub Discourse Forum. Just mention SQLair in the subject of your post, and we
+will see it.
 
-- [Charmhub Discorse Forum](https://discourse.charmhub.io/)
+- [Charmhub Discourse Forum](https://discourse.charmhub.io/)
 
 If you have any issues or bugs to raise, please see our GitHub issues page.
 
