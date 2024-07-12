@@ -75,7 +75,7 @@ In the SQLair expressions, the characters `$` and `&` are used to specify input 
 
 SQLair Input expressions replace the question mark placeholders in the SQL statement. An input expression is made up of the struct type name and a column name taken from the `db` tag of a struct field. For example:
 
-```plaintext
+```
 UPDATE employee 
 SET name = $Empolyee.name
 WHERE id = $Employee.id
