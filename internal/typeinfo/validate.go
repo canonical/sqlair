@@ -64,27 +64,6 @@ func ValidateInputs(args []any) (TypeToValue, error) {
 	return typeToValue, nil
 }
 
-func checkDuplicate(tv TypeToValue, t reflect.Type) error {
-	switch t.Kind() {
-	case reflect.Slice:
-		// If the slice has no name and its element type is map, struct or
-		// pointer then we assume it is for a bulk insert.
-		switch t.Elem().Kind() {
-		case reflect.Map, reflect.Struct:
-			if _, ok := tv[t.Elem()]; t.Name() == "" && ok {
-				return typeAndSliceProvidedError(t, t.Elem())
-			}
-		case reflect.Pointer:
-			if _, ok := tv[t.Elem().Elem()]; t.Name() == "" && ok {
-				return typeAndSliceProvidedError(t, t.Elem().Elem())
-			}
-		}
-	case reflect.Map, reflect.Struct:
-
-	}
-	return nil
-}
-
 // ValidateOutputs takes the raw SQLair output arguments from the user and uses
 // reflection to check that they are valid. It returns a TypeToValue containing
 // the reflect.Value of the output arguments.

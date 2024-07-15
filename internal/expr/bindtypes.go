@@ -48,26 +48,14 @@ func (pe *ParsedExpr) BindTypes(args ...any) (tbe *TypeBoundExpr, err error) {
 	}
 
 	// Bind types to each expression.
-	var typedExprs []typedExpr
-	outputUsed := map[string]bool{}
+	teb := newTypedExprBuilder(argInfo)
 	for _, expr := range pe.exprs {
-		typedExpr, err := expr.bindTypes(argInfo)
-		if err != nil {
+		if err := expr.bindTypes(teb); err != nil {
 			return nil, err
 		}
-
-		if toe, ok := typedExpr.(*typedOutputExpr); ok {
-			for _, oc := range toe.outputColumns {
-				if ok := outputUsed[oc.output.Identifier()]; ok {
-					return nil, fmt.Errorf("%s appears more than once in output expressions", oc.output.Desc())
-				}
-				outputUsed[oc.output.Identifier()] = true
-			}
-		}
-		typedExprs = append(typedExprs, typedExpr)
 	}
 
-	return &TypeBoundExpr{typedExprs: typedExprs}, nil
+	return teb.Build()
 }
 
 // expression represents a parsed node of the SQLair query's AST.
@@ -75,9 +63,9 @@ type expression interface {
 	// String returns a text representation for debugging and testing purposes.
 	String() string
 
-	// bindTypes binds the types to the expression to generate either a
-	// *typedInputExpr or *typedOutputExpr.
-	bindTypes(typeinfo.ArgInfo) (typedExpr, error)
+	// bindTypes binds the types to the expression to generate a typedExpr and
+	// adds it to the typedExprBuilder.
+	bindTypes(*typedExprBuilder) error
 }
 
 // bypass represents part of the expression that we want to pass to the backend
@@ -91,10 +79,10 @@ func (b *bypass) String() string {
 	return "Bypass[" + b.chunk + "]"
 }
 
-// bindTypes returns the bypass part itself since it contains no references to
-// types.
-func (b *bypass) bindTypes(typeinfo.ArgInfo) (typedExpr, error) {
-	return b, nil
+// bindTypes adds the bypass part, unchanged, to the typedExprBuilder.
+func (b *bypass) bindTypes(teb *typedExprBuilder) error {
+	teb.AddBypass(b)
+	return nil
 }
 
 // addToQuery adds the bypass part to the query builder.
@@ -114,14 +102,16 @@ func (e *memberInputExpr) String() string {
 	return fmt.Sprintf("Input[%+v]", e.ma)
 }
 
-// bindTypes generates a *typedInputExpr containing type information about the
-// Go object and its member.
-func (e *memberInputExpr) bindTypes(argInfo typeinfo.ArgInfo) (typedExpr, error) {
-	input, err := argInfo.InputMember(e.ma.typeName, e.ma.memberName)
+// bindTypes generates a typed input expression containing type information
+// about the Go object and its member. This is then added to the
+// typedExprBuilder.
+func (e *memberInputExpr) bindTypes(teb *typedExprBuilder) error {
+	input, err := teb.InputMember(e.ma.typeName, e.ma.memberName)
 	if err != nil {
-		return nil, fmt.Errorf("input expression: %s: %s", err, e.raw)
+		return fmt.Errorf("input expression: %s: %s", err, e.raw)
 	}
-	return &typedInputExpr{input: input}, nil
+	teb.AddTypedInputExpr(input)
+	return nil
 }
 
 // asteriskInsertExpr is an input expression occurring within an INSERT
@@ -138,9 +128,9 @@ func (e *asteriskInsertExpr) String() string {
 	return fmt.Sprintf("AsteriskInsert[[*] %v]", e.sources)
 }
 
-// bindTypes generates a *typedInsertExpr containing type information about the
-// asteriskInsertExpr.
-func (e *asteriskInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie typedExpr, err error) {
+// bindTypes generates a typed insert expression containing type information
+// about the asteriskInsertExpr. This is added to the typedExprBuilder.
+func (e *asteriskInsertExpr) bindTypes(teb *typedExprBuilder) (err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("input expression: %s: %s", err, e.raw)
@@ -150,24 +140,25 @@ func (e *asteriskInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie typedExpr,
 	var cols []typedColumn
 	for _, source := range e.sources {
 		if source.memberName == "*" {
-			inputs, tags, err := argInfo.AllStructInputs(source.typeName)
+			inputs, tags, err := teb.AllStructInputs(source.typeName)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			for i, input := range inputs {
 				c := newInsertColumn(input, tags[i], false)
 				cols = append(cols, c)
 			}
 		} else {
-			input, err := argInfo.InputMember(source.typeName, source.memberName)
+			input, err := teb.InputMember(source.typeName, source.memberName)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			c := newInsertColumn(input, source.memberName, true)
 			cols = append(cols, c)
 		}
 	}
-	return &typedInsertExpr{insertColumns: cols}, nil
+	teb.AddTypedInsertExpr(cols)
+	return nil
 }
 
 // columnsInsertExpr is an input expression occurring within an INSERT statement
@@ -184,11 +175,13 @@ func (e *columnsInsertExpr) String() string {
 	return fmt.Sprintf("ColumnInsert[%v %v]", e.columns, e.sources)
 }
 
-// bindTypes generates a *typedInsertExpr containing type information about the
-// columnsInsertExpr. It checks that all the listed columns are provided by the
-// supplied types. If a map with an asterisk is passed, the spare columns are
-// taken from that map.
-func (e *columnsInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie typedExpr, err error) {
+// bindTypes generates a typed insert expression containing type information
+// about the columnsInsertExpr. It checks that all the listed columns are
+// provided by the supplied types. If a map with an asterisk is passed, the
+// spare columns are taken from that map.
+//
+// The generated typed expression is then added to the typedExprBuilder.
+func (e *columnsInsertExpr) bindTypes(teb *typedExprBuilder) (err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("input expression: %s: %s", err, e.raw)
@@ -207,29 +200,29 @@ func (e *columnsInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie typedExpr, 
 	var remainingMap *string
 	for _, source := range e.sources {
 		if source.memberName == "*" {
-			kind, err := argInfo.Kind(source.typeName)
+			kind, err := teb.Kind(source.typeName)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			// If we find a map save it for later to match the spare columns.
 			if kind == reflect.Map {
 				if remainingMap != nil {
-					return nil, fmt.Errorf("cannot use more than one map with asterisk")
+					return fmt.Errorf("cannot use more than one map with asterisk")
 				}
 				remainingMap = &source.typeName
 				continue
 			}
-			inps, tags, err := argInfo.AllStructInputs(source.typeName)
+			inps, tags, err := teb.AllStructInputs(source.typeName)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			for i := range tags {
 				colToInput[tags[i]] = append(colToInput[tags[i]], inps[i])
 			}
 		} else {
-			inp, err := argInfo.InputMember(source.typeName, source.memberName)
+			inp, err := teb.InputMember(source.typeName, source.memberName)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			colToInput[source.memberName] = []typeinfo.Input{inp}
 		}
@@ -245,23 +238,24 @@ func (e *columnsInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie typedExpr, 
 		input, ok := colToInput[columnStr]
 		if !ok && remainingMap != nil {
 			// The spare columns must belong to the map.
-			inp, err := argInfo.InputMember(*remainingMap, columnStr)
+			inp, err := teb.InputMember(*remainingMap, columnStr)
 			if err != nil {
 				// unreachable
-				return nil, err
+				return err
 			}
 			input = []typeinfo.Input{inp}
 		} else if !ok {
-			return nil, fmt.Errorf("missing type that provides column %q", columnStr)
+			return fmt.Errorf("missing type that provides column %q", columnStr)
 		}
 		if len(input) > 1 {
-			return nil, fmt.Errorf("more than one type provides column %q", columnStr)
+			return fmt.Errorf("more than one type provides column %q", columnStr)
 		}
 
 		c := newInsertColumn(input[0], columnStr, true)
 		cols = append(cols, c)
 	}
-	return &typedInsertExpr{insertColumns: cols}, nil
+	teb.AddTypedInsertExpr(cols)
+	return nil
 }
 
 // basicInsertExpr is an input expression occurring within an INSERT statement
@@ -280,26 +274,28 @@ func (e *basicInsertExpr) String() string {
 	return fmt.Sprintf("BasicInsert[%v %v]", e.columns, e.sources)
 }
 
-// bindTypes generates a *typedInsertExpr containing type information about the
-// values to be inserted in the basicInsertExpr.
-func (e *basicInsertExpr) bindTypes(argInfo typeinfo.ArgInfo) (tie typedExpr, err error) {
+// bindTypes generates a typed insert expression containing type information
+// about the values to be inserted in the basicInsertExpr. The typed expression
+// is added to the typedExprBuilder.
+func (e *basicInsertExpr) bindTypes(teb *typedExprBuilder) (err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("input expression: %s: %s", err, e.raw)
 		}
 	}()
 	if len(e.columns) != len(e.sources) {
-		return nil, fmt.Errorf("mismatched number of columns and values: %d != %d", len(e.columns), len(e.sources))
+		return fmt.Errorf("mismatched number of columns and values: %d != %d", len(e.columns), len(e.sources))
 	}
 	var cols []typedColumn
 	for i, source := range e.sources {
-		col, err := source.typedColumn(argInfo, e.columns[i].columnName())
+		col, err := source.typedColumn(teb, e.columns[i].columnName())
 		if err != nil {
-			return nil, err
+			return err
 		}
 		cols = append(cols, col)
 	}
-	return &typedInsertExpr{insertColumns: cols}, nil
+	teb.AddTypedInsertExpr(cols)
+	return nil
 }
 
 // sliceInputExpr is an input expression of the form "$S[:]" that represents a
@@ -314,14 +310,15 @@ func (e *sliceInputExpr) String() string {
 	return fmt.Sprintf("Input[%s[:]]", e.sliceTypeName)
 }
 
-// bindTypes generates a *typedInputExpr containing type information about the
-// slice.
-func (e *sliceInputExpr) bindTypes(argInfo typeinfo.ArgInfo) (typedExpr, error) {
-	input, err := argInfo.InputSlice(e.sliceTypeName)
+// bindTypes generates a typed input expression containing type information
+// about the slice. This is then added to the typedExprBuilder.
+func (e *sliceInputExpr) bindTypes(teb *typedExprBuilder) error {
+	input, err := teb.InputSlice(e.sliceTypeName)
 	if err != nil {
-		return nil, fmt.Errorf("input expression: %s: %s", err, e.raw)
+		return fmt.Errorf("input expression: %s: %s", err, e.raw)
 	}
-	return &typedInputExpr{input}, nil
+	teb.AddTypedInputExpr(input)
+	return nil
 }
 
 // outputExpr represents columns to be read from the database and Go values to
@@ -338,9 +335,9 @@ func (e *outputExpr) String() string {
 }
 
 // bindTypes binds the output expression to concrete types. It then checks the
-// expression is valid with respect to its bound types and returns a
-// *typedOutputExpr.
-func (e *outputExpr) bindTypes(argInfo typeinfo.ArgInfo) (te typedExpr, err error) {
+// expression is valid with respect to its bound types and adds the typed
+// expression to the typedExprBuilder.
+func (e *outputExpr) bindTypes(teb *typedExprBuilder) (err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("output expression: %s: %s", err, e.raw)
@@ -352,7 +349,7 @@ func (e *outputExpr) bindTypes(argInfo typeinfo.ArgInfo) (te typedExpr, err erro
 	starTypes := starCountTypes(e.targetTypes)
 	starColumns := starCountColumns(e.sourceColumns)
 
-	toe := &typedOutputExpr{}
+	var outputColumns []outputColumn
 
 	// Case 1: Generated columns e.g. "* AS (&P.*, &A.id)" or "&P.*".
 	if numColumns == 0 || (numColumns == 1 && starColumns == 1) {
@@ -365,60 +362,63 @@ func (e *outputExpr) bindTypes(argInfo typeinfo.ArgInfo) (te typedExpr, err erro
 		for _, t := range e.targetTypes {
 			if t.memberName == "*" {
 				// Generate asterisk columns.
-				outputs, memberNames, err := argInfo.AllStructOutputs(t.typeName)
+				outputs, memberNames, err := teb.AllStructOutputs(t.typeName)
 				if err != nil {
-					return nil, err
+					return err
 				}
 				for i, output := range outputs {
 					oc := newOutputColumn(pref, memberNames[i], output)
-					toe.outputColumns = append(toe.outputColumns, oc)
+					outputColumns = append(outputColumns, oc)
 				}
 			} else {
 				// Generate explicit columns.
-				output, err := argInfo.OutputMember(t.typeName, t.memberName)
+				output, err := teb.OutputMember(t.typeName, t.memberName)
 				if err != nil {
-					return nil, err
+					return err
 				}
 				oc := newOutputColumn(pref, t.memberName, output)
-				toe.outputColumns = append(toe.outputColumns, oc)
+				outputColumns = append(outputColumns, oc)
 			}
 		}
-		return toe, nil
+		teb.AddTypedOutputExpr(outputColumns)
+		return nil
 	} else if numColumns > 1 && starColumns > 0 {
-		return nil, fmt.Errorf("invalid asterisk in columns")
+		return fmt.Errorf("invalid asterisk in columns")
 	}
 
 	// Case 2: Explicit columns, single asterisk type e.g. "(col1, t.col2) AS &P.*".
 	if starTypes == 1 && numTypes == 1 {
 		for _, c := range e.sourceColumns {
-			output, err := argInfo.OutputMember(e.targetTypes[0].typeName, c.columnName())
+			output, err := teb.OutputMember(e.targetTypes[0].typeName, c.columnName())
 			if err != nil {
-				return nil, err
+				return err
 			}
 			oc := newOutputColumn(c.tableName(), c.columnName(), output)
-			toe.outputColumns = append(toe.outputColumns, oc)
+			outputColumns = append(outputColumns, oc)
 		}
-		return toe, nil
+		teb.AddTypedOutputExpr(outputColumns)
+		return nil
 	} else if starTypes > 0 && numTypes > 1 {
-		return nil, fmt.Errorf("invalid asterisk in types")
+		return fmt.Errorf("invalid asterisk in types")
 	}
 
 	// Case 3: Explicit columns and types e.g. "(col1, col2) AS (&P.name, &P.id)".
 	if numColumns == numTypes {
 		for i, c := range e.sourceColumns {
 			t := e.targetTypes[i]
-			output, err := argInfo.OutputMember(t.typeName, t.memberName)
+			output, err := teb.OutputMember(t.typeName, t.memberName)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			oc := newOutputColumn(c.tableName(), c.columnName(), output)
-			toe.outputColumns = append(toe.outputColumns, oc)
+			outputColumns = append(outputColumns, oc)
 		}
 	} else {
-		return nil, fmt.Errorf("mismatched number of columns and target types")
+		return fmt.Errorf("mismatched number of columns and target types")
 	}
 
-	return toe, nil
+	teb.AddTypedOutputExpr(outputColumns)
+	return nil
 }
 
 // valueAccessor defines an accessor that can be used to generate a typedColumn
@@ -426,7 +426,7 @@ func (e *outputExpr) bindTypes(argInfo typeinfo.ArgInfo) (te typedExpr, err erro
 type valueAccessor interface {
 	// typedColumn generates a typedColumn that associates the given colum name
 	// with the value specified by the valueAccessor.
-	typedColumn(argInfo typeinfo.ArgInfo, columnName string) (typedColumn, error)
+	typedColumn(teb *typedExprBuilder, columnName string) (typedColumn, error)
 }
 
 // memberAccessor stores information for accessing a keyed Go value. It consists
@@ -447,7 +447,7 @@ func (l literal) String() string {
 }
 
 // typedColumn generates a typedColumn with the given name from a literal.
-func (l literal) typedColumn(_ typeinfo.ArgInfo, columnName string) (typedColumn, error) {
+func (l literal) typedColumn(_ *typedExprBuilder, columnName string) (typedColumn, error) {
 	lc := newLiteralColumn(columnName, l.value)
 	return lc, nil
 }
@@ -458,8 +458,8 @@ func (ma memberAccessor) String() string {
 
 // typedColumn generates a typedColumn with the input specified by the member
 // accessor and the given column name.
-func (ma memberAccessor) typedColumn(argInfo typeinfo.ArgInfo, columnName string) (typedColumn, error) {
-	input, err := argInfo.InputMember(ma.typeName, ma.memberName)
+func (ma memberAccessor) typedColumn(teb *typedExprBuilder, columnName string) (typedColumn, error) {
+	input, err := teb.InputMember(ma.typeName, ma.memberName)
 	if err != nil {
 		return nil, err
 	}
