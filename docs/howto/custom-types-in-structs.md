@@ -11,7 +11,7 @@ type MyKey [32]int
 ```
 For this example, `MyKey` could be any use defined type that can be serialised to a database row type. The problem is, that SQLair and its underlying libraries do not know how to serialise the `MyKey` type.
 
-Luckily, there are two very useful interfaces you can use to get around this problem. The [Valuer](https://pkg.go.dev/database/sql/driver#Valuer) and [Scanner](https://pkg.go.dev/database/sql#Scanner). The `Valuer` interface tells the driver how to serialise the type for putting in the database and the Scanner tells it how to de-serialise it.
+Luckily, there are two very useful interfaces you can use to get around this problem. The [Valuer](https://pkg.go.dev/database/sql/driver#Valuer) and [Scanner](https://pkg.go.dev/database/sql#Scanner). The `Valuer` interface tells the driver how to serialise the type for putting in the database and the Scanner tells it how to deserialise it.
 
 For example:
 ```go

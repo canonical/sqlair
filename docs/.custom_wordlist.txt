@@ -1,0 +1,14 @@
+SQLair
+struct
+structs
+TODO
+BNF
+Golang
+dev
+DSL
+ORM
+untagged
+variadic
+Alastair
+prepends
+deserialise

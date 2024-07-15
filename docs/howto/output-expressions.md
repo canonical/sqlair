@@ -9,7 +9,7 @@ The `Person` object here should be tagged with the column names. SQLair will the
 
 There are several different forms of output expression. Their forms and functions are described below.
 
-See {ref}`output-expression-syntax` for the exact valid sytnax.
+See {ref}`output-expression-syntax` for the exact valid syntax.
 
 ## Get a single column in an object
 The syntax `&Struct.col_name` with fetch and set the field of the type `Struct` tagged with `col_name`. This can also be done with maps, `&Map.key` will fetch the column key from the database and insert it into the map with the key `"key"`.
@@ -22,7 +22,7 @@ FROM   table
 ```
 
 ## Get all the columns in a struct
-The syntax `&Struct.*` fetches and sets all the tagged fields of `Struct`. SQLair will expand the type into all of the tagged column names and insert the results into the struct when it gets the results.
+The syntax `&Struct.*` fetches and sets all the tagged fields of `Struct`. SQLair will expand the type into all the tagged column names and insert the results into the struct when it gets the results.
 
 Example:
 ```

@@ -22,9 +22,7 @@ WHERE team_id = $Location.team_id
 
 SQLair adds special *expressions* to your SQL statements. These expressions allow you to use Go types directly in the query to reference the source of the parameters and the destination of the results. The purpose of a query in the context of your program can be worked out from a single glance.
 
-SQLair uses the [`database/sql`](https://pkg.go.dev/database/sql) package to interact with the raw database and provides a convenience layer on top. This convinience layer provides a very different API to `database/sql`.
-
-The full API docs can be found at [pkg.go.dev/github.com/canonical/sqlair](https://pkg.go.dev/github.com/canonical/sqlair).
+SQLair uses the [`database/sql`](https://pkg.go.dev/database/sql) package to interact with the raw database and provides a convenience layer on top. This convenience layer provides a very different API to `database/sql`.
 
 In this introduction we will use the example of a company's database containing employees and the teams they belong to. A full example code listing is given at the end of this post.
 
@@ -43,7 +41,7 @@ type Employee struct {
 }
 ```
 
-All struct fields that correspond to a column and are used with SQLair should be tagged with the `db` tag. If a field of the struct does not correspond to a database column it can be left untagged and it will be ignored by SQLair.
+All struct fields that correspond to a column and are used with SQLair should be tagged with the `db` tag. If a field of the struct does not correspond to a database column it can be left untagged, and it will be ignored by SQLair.
 
 It is important to note that SQLair *needs* the struct fields to be public in to order read from them and write to them.
 
@@ -63,7 +61,7 @@ stmt, err := sqlair.Prepare(`
 )
 ```
 
-The `Prepare` function needs a sample of every struct mentioned in the query. It uses the struct's reflection information to generate the columns and check that the expressions make sense. These type samples are only used for reflection information, their content is disregarded.
+The `Prepare` function needs a sample of every struct mentioned in the query. It uses reflection information from the struct to generate the columns and check that the expressions make sense. These type samples are only used for reflection information, their content is disregarded.
 
 There is also a function `sqlair.MustPrepare` that does not return an error and panics if it encounters one.
 
@@ -124,13 +122,13 @@ stmt, err := sqlair.Prepare(`
 )
 ```
 
-As with input expressions, it is important to note that the we always use the column names found in the `db` tags of the struct in the output expression rather than the field name.
+As with input expressions, it is important to note that we always use the column names found in the `db` tags of the struct in the output expression rather than the field name.
 
 See {ref}`output-expressions` for more.
 
 ##### Insert statements
 
-Input expressions can also be used inside insert statements with sytax similar to output expressions. Below is a simple example of using an insert statement to insert a struct into a database:
+Input expressions can also be used inside insert statements with syntax similar to output expressions. Below is a simple example of using an insert statement to insert a struct into a database:
 ```go
 type Person struct {
 	ID       int    `db:"id"`
