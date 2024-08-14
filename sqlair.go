@@ -99,7 +99,8 @@ func (db *DB) PlainDB() *sql.DB {
 	return db.sqldb
 }
 
-// Query represents a query on a database. It is designed to be run once.
+// Query represents a query on a database. It is designed to be run once and
+// used immediately since it contains the query context.
 type Query struct {
 	// run executes the Query against the DB or the TX.
 	run func(context.Context) (*sql.Rows, sql.Result, error)
@@ -121,6 +122,9 @@ type Iterator struct {
 // Query builds a new query from a context, a [Statement] and the input
 // arguments. The query is run on the database when one of [Query.Iter],
 // [Query.Run], [Query.Get] or [Query.GetAll] is executed.
+//
+// A new [Query] object should be created every time the statement is run against
+// the database. The [Query] is designed to be used immediately and run once.
 func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query {
 	if ctx == nil {
 		ctx = context.Background()
@@ -463,6 +467,9 @@ func (txopts *TXOptions) plainTXOptions() *sql.TxOptions {
 // Query builds a new query from a context, a [Statement] and the input
 // arguments. The query is run on the database when one of [Query.Iter],
 // [Query.Run], [Query.Get] or [Query.GetAll] is executed.
+//
+// A new [Query] object should be created every time the statement is run against
+// the transaction. The [Query] is designed to be used immediately and run once.
 func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query {
 	if ctx == nil {
 		ctx = context.Background()

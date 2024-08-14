@@ -1,5 +1,5 @@
 (input-expressions)=
-# How to input 
+# How to write input expressions
 SQLair input expressions can be used anywhere in a SQL query you would normally use an input placeholder (such as `?`, or `$1`). They always start with a dollar sign (`$`). For example:
 ```
 INSERT INTO Person (name, age) 
@@ -10,7 +10,7 @@ The `Person` object here should be tagged with the column names. SQLair will the
 
 This is not the only form of input expression. There are several ways you can input values with SQLair. This how-to guide takes you through the different forms.
 
-See {ref}`output-expression-syntax` for the exact valid syntax.
+> See more {ref}`output-expression-syntax`
 
 ## Input a single parameter
 The syntax `$Struct.col_name` can be used to input the field of the struct tagged with `col_name` in the query. This also works with key of maps. 

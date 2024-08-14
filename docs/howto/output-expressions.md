@@ -1,5 +1,5 @@
 (output-expressions)=
-# How to output
+# How to write output expressions
 SQLair output expressions are designed to replace the column selection part of a SQL query. They always start with an ampersand (`&`). For example:
 ```
 SELECT &Person.*
@@ -9,7 +9,16 @@ The `Person` object here should be tagged with the column names. SQLair will the
 
 There are several different forms of output expression. Their forms and functions are described below.
 
-See {ref}`output-expression-syntax` for the exact valid syntax.
+> See more {ref}`output-expression-syntax`
+
+```{note}
+If a query contains no output expressions then SQLair will not fetch any
+results from the database. This means that you will not get any no rows error if
+you run a `SELECT` statement with no output expressions. If you only want to
+check a row exists you will still need to include a placeholder output
+expression.
+```
+
 
 ## Get a single column in an object
 The syntax `&Struct.col_name` with fetch and set the field of the type `Struct` tagged with `col_name`. This can also be done with maps, `&Map.key` will fetch the column key from the database and insert it into the map with the key `"key"`.
