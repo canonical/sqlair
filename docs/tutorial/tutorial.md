@@ -146,7 +146,7 @@ err := db.Query(ctx, stmt, fred).Run()
 The `Person` struct is tagged with the columns that the fields correspond to. These are used to generate the SQL that is sent to the database when the SQLair query is prepared. 
 The query is created on the database with `db.Query` and then executed with `Run`. The variable `fred` which is of the type `Person` is passed as a parameter to the query. When the query is run it will insert `1` into column the `id`, `"Fred"` into the column name, and `1000` into the column `postal_code`.  
 
-See more in {ref}`input-expressions`.
+> See more {ref}`input-expressions`.
 
 
 ### Wrapping the database

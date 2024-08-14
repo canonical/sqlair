@@ -6,7 +6,7 @@ The project is still under development and there may be still be major changes
 to the API.
 ```
 
-SQLair is a Go package that maps between Go types and SQL databases.
+SQLair is a Go package that maps between Go types and SQL queries.
 
 SQLair provides an API for interacting with SQL databases from within Go
 programs. It prepares and runs SQL queries containing special SQLair syntax.

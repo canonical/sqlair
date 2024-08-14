@@ -6,7 +6,9 @@ These how-to guides cover key operations and processes in SQLair.
 ```{toctree}
 :titlesonly:
 
-custom-types-in-structs
+prepare-and-run
+types
 input-expressions
 output-expressions
+custom-types-in-structs
 ```
