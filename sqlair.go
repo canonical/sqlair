@@ -51,10 +51,13 @@ type Statement struct {
 	te *expr.TypeBoundExpr
 }
 
-// Prepare validates SQLair expressions in the query and generates a
-// [Statement].
-// The type samples must contain an instance of every type mentioned in the
-// SQLair expressions in the query. These are used only for type information.
+// Prepare takes a query containing SQLair expressions along with samples of all
+// the types referenced in these SQLair expressions. It generates a [Statement]
+// which can be run on the database.
+//
+// The type samples passed after the query must contain an instance of every
+// type mentioned in the SQLair expressions in the query. These are used only
+// for type information and can be the zero value of the type.
 func Prepare(query string, typeSamples ...any) (*Statement, error) {
 	parser := expr.NewParser()
 	parsedExpr, err := parser.Parse(query)
