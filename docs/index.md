@@ -30,7 +30,6 @@ write SQL instead of dealing with an ORM.
 tutorial/tutorial
 howto/index
 reference/index
-explanation/index
 ```
 
 ````{grid} 1 1 2 2 
@@ -49,18 +48,12 @@ explanation/index
 
 ````
 
-````{grid} 1 1 2 2
+````{grid} 1 1 1 1
 :reverse:
 
 ```{grid-item-card} [Reference](reference/index)
 
 **Technical information** about SQLair
-
-```
-
-```{grid-item-card} [Explanation](explanation/index)
-
-**Discussion and clarification** of key topics
 
 ```
 
