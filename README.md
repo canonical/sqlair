@@ -1,5 +1,5 @@
 # SQLair
-[![Go Reference](https://pkg.go.dev/badge/github.com/canonical/sqlair)](https://pkg.go.dev/github.com/canonical/sqlair) [![Go Report Card](https://goreportcard.com/badge/github.com/canonical/sqlair)](https://goreportcard.com/report/github.com/canonical/sqlair) [![CI](https://github.com/canonical/sqlair/actions/workflows/go-test.yml/badge.svg)](https://github.com/canonical/sqlair/actions/workflows/go-test.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/canonical/sqlair)](https://pkg.go.dev/github.com/canonical/sqlair) [![Documentation Status](https://readthedocs.com/projects/canonical-sqlair/badge/?version=latest)](https://canonical-sqlair.readthedocs-hosted.com/en/latest/?badge=latest) [![Go Report Card](https://goreportcard.com/badge/github.com/canonical/sqlair)](https://goreportcard.com/report/github.com/canonical/sqlair) [![CI](https://github.com/canonical/sqlair/actions/workflows/go-test.yml/badge.svg)](https://github.com/canonical/sqlair/actions/workflows/go-test.yml)
 
 _Friendly type mapping in Go for SQL databases._
 
@@ -37,9 +37,13 @@ The SQL syntax is expanded with SQLair input and output expressions (indicated w
 This package also provides an alternative API for reading the rows from the database.
 SQLair relies on [database/sql](https://pkg.go.dev/database/sql) for all the underlying operations.
 
-For more details please see the [SQLair introduction](https://github.com/canonical/sqlair/wiki/SQLair-Introduction) and the [Go package documentation](https://pkg.go.dev/github.com/canonical/sqlair).
+## Documentation
+
+See the
+[Project Documentation](https://canonical-sqlair.readthedocs-hosted.com/en/latest/) and
+the [Go Package Reference](https://pkg.go.dev/github.com/canonical/sqlair).
 
 ## Contributing
 
-See our [code and contribution guidelines](CONTRIBUTING.md)
+See our [code and contribution guidelines](CONTRIBUTING.md).
 
