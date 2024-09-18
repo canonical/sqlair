@@ -1,305 +1,495 @@
 (tutorial)=
-# SQLair tutorial
-SQLair is a package for Go that provides type mapping between structs/maps and SQL databases by allowing references to the Go types within the SQL query itself.
+# Get started with SQLair
 
-This tutorial will take you through the basics of writing queries with SQLair and give you a taste of what is possible.
+Imagine you are writing a Go program that handles your customers and their
+orders. The business logic is contained in the Go program but the customer and
+order data is stored in a SQL database. In this tutorial, you'll see how easy
+SQLair makes it to map between the database and the Go program.
+Let's get started!
 
-As a simple example, given Go structs `Employee` and `Team`, instead of the SQL query:
 
+## Set up
+For this tutorial you will need Go version 1.18. To use SQLair you will need and
+a Go project that sets up a database. To create the project run:
+```bash
+mkdir tutorial 
+cd tutorial
+go mod init sqlair-tutorial
 ```
-SELECT id, team_id, name
-FROM employee
-WHERE team_id = ?
-```
-
-With SQLair you could write:
-
-```
-SELECT &Employee.*
-FROM employee
-WHERE team_id = $Location.team_id
-```
-
-SQLair adds special *expressions* to your SQL statements. These expressions allow you to use Go types directly in the query to reference the source of the parameters and the destination of the results. The purpose of a query in the context of your program can be worked out from a single glance.
-
-SQLair uses the [`database/sql`](https://pkg.go.dev/database/sql) package to interact with the raw database and provides a convenience layer on top. This convenience layer provides a very different API to `database/sql`.
-
-In this introduction we will use the example of a company's database containing employees and the teams they belong to. A full example code listing is given at the end of this post.
-
-## Getting Started
-### Tagging structs
-
-To use a struct type with SQLair the first step is to tag the fields your structs with column names. The `db` tag is used to indicate which database column a struct field corresponds to.
-
-For example:
-
+To set up the database, in the tutorial folder, create a new `main.go` file,
+open it in your favourite editor and copy in the code below:
 ```go
-type Employee struct {
-	Name   string `db:"name"`
-	ID     int    `db:"id"`
-	TeamID int    `db:"team_id"`
-}
-```
+package main
 
-All struct fields that correspond to a column and are used with SQLair should be tagged with the `db` tag. If a field of the struct does not correspond to a database column it can be left untagged, and it will be ignored by SQLair.
+import (
+    // database/sql is used to open the database and set up the schema.
+    "database/sql"
+    "fmt"
 
-It is important to note that SQLair *needs* the struct fields to be public in to order read from them and write to them.
-
-### Writing the SQL
-#### SQLair Prepare
-
-A SQLair statement is built by preparing a query string. The `sqlair.Prepare` function turns a query with SQLair expressions into a `sqlair.Statement`. These statements are not tied to any database and can be created at the start of the program for use later on.
-
-*Note:* `sqlair.Prepare` does not prepare the statement on the database. This is done automatically behind the scenes when the query is built on a `DB`.
-
-```go
-stmt, err := sqlair.Prepare(`
-		SELECT &Employee.*
-		FROM person
-		WHERE team = $Manager.team_id`,
-		Employee{}, Manager{},
+    // go-sqlite3 provides the SQLite driver. Importing it registers the driver 
+    // so that sql.Open can find it.
+    // SQLair can be used with any database/driver that works with the 
+    // database/sql package.
+    _ "github.com/mattn/go-sqlite3"
 )
-```
 
-The `Prepare` function needs a sample of every struct mentioned in the query. It uses reflection information from the struct to generate the columns and check that the expressions make sense. These type samples are only used for reflection information, their content is disregarded.
+// CreateDB opens a SQLite database and adds a customer and order schema.
+func CreateDB() (*sql.DB, error) {
+    // sql.Open will create an in process, in memory database that will disappear 
+    // when the program finishes running.
+    sqlDB, err := sql.Open(
+        "sqlite3", 
+        "file:sqlair-tutorial.db?cache=shared&mode=memory",
+    )
+    if err != nil {
+        return nil, fmt.Errorf("opening SQLite database: %w", err)
+    }
 
-There is also a function `sqlair.MustPrepare` that does not return an error and panics if it encounters one.
+    // Use database/sql to create the database schema.
+    _, err = sqlDB.Exec(`
+    CREATE TABLE customers (
+        id integer PRIMARY KEY,
+        name text,
+        address text,
+        city text, 
+        postal_code text,
+        country text
+    );
 
-#### Input and output expressions
-
-In the SQLair expressions, the characters `$` and `&` are used to specify input and outputs respectively. The dollar `$` specifies a struct to fetch an argument from and the ampersand `&` specifies a struct to read query results into.
-
-##### Input expressions
-
-SQLair Input expressions replace the question mark placeholders in the SQL statement. An input expression is made up of the struct type name and a column name taken from the `db` tag of a struct field. For example:
-
-```
-UPDATE employee 
-SET name = $Empolyee.name
-WHERE id = $Employee.id
-```
-
-The expression `$Employee.name` tells SQLair that when we create the query we will give it an `Employee` struct and that the `Name` field is passed as a query argument.
-
-*Note:* we use the column name from the `db` tag, *not* the struct field name after the type.
-
-See {ref}`input-expressions` for how to use all the input expressions, including slices.
-
-##### Output expressions
-
-Output expressions replace the columns in a SQL query string. Because the struct has been tagged, you can use an asterisk (`*`) to tell SQLair that you want to fetch and fill *all* of the tagged the columns in that struct. If not every columns is needed then there are other forms of output expression that can be used.
-
-In the code below, SQLair will use the reflection information of the sample `Employee` struct and substitute in all the columns mentioned in its `db` tags:
-
-```go
-stmt, err := sqlair.Prepare(`
-		SELECT &Employee.*
-		FROM employee`,
-		Employee{},
-)
-```
-
-There are other forms of output expressions as well. You can specify exactly which columns you want, and which table to get them from.
-
-In the statement below there are two output expressions. The first instructs SQLair to fetch and fill all tagged fields in `Employee`, prefixed with the table `e`, and the second tells SQLair that the columns `t.team_name` and `t.id` should be substituted into the query and scanned into the `Team` struct when the results are fetched:
-
-```go
-stmt, err := sqlair.Prepare(`
-		SELECT e.* AS &Employee.*, (t.team_name, t.id) AS (&Team.*)
-		FROM employees AS e, teams AS t
-		WHERE t.room_id = $Location.room_id AND t.id = e.team_id`,
-	Location{}, Employee{},
-)
-```
-
-If the columns on a particular table don't match the tags on the structs, you can also rename the columns. This query tells SQLair to put the columns `manager_name` and `manager_team` in the fields of `Employee` tagged with `name` and `team` once the results are fetched:
-
-```go
-stmt, err := sqlair.Prepare(`
-	SELECT (manager_name, manager_team) AS (&Employee.name, &Employee.team)
-	FROM managers`,
-	Employee{},
-)
-```
-
-As with input expressions, it is important to note that we always use the column names found in the `db` tags of the struct in the output expression rather than the field name.
-
-See {ref}`output-expressions` for more.
-
-##### Insert statements
-
-Input expressions can also be used inside insert statements with syntax similar to output expressions. Below is a simple example of using an insert statement to insert a struct into a database:
-```go
-type Person struct {
-	ID       int    `db:"id"`
-	Name     string `db:"name"`
-	Postcode int    `db:"postal_code"`
+    CREATE TABLE orders (
+        id integer PRIMARY KEY,
+        customer_id integer,
+        order_date timestamp,
+        FOREIGN KEY (customer_id) REFERENCES customer (id)
+    );
+`)
+    if err != nil {
+        return nil, fmt.Errorf("creating tables: %w", err)
+    }
+    
+    return sqlDB, nil
 }
 
-stmt, err := sqlair.Prepare(
-	"INSERT INTO person (*) VALUES ($Person.*)",
-	Person{},
-)
-fred := Person{ID: 1, Name: "Fred", Postcode: 1000}
-err := db.Query(ctx, stmt, fred).Run()
+func tutorial() error {
+    // Create the database.
+    _, err := CreateDB()
+    if err != nil {
+        return err
+    }
+    
+    return nil
+}
+
+func main() {
+    err := tutorial()
+    if err != nil {
+        fmt.Printf("ERROR: %s\n", err)
+    }
+    fmt.Println("Finished without errors!")
+}
 ```
-The `Person` struct is tagged with the columns that the fields correspond to. These are used to generate the SQL that is sent to the database when the SQLair query is prepared. 
-The query is created on the database with `db.Query` and then executed with `Run`. The variable `fred` which is of the type `Person` is passed as a parameter to the query. When the query is run it will insert `1` into column the `id`, `"Fred"` into the column name, and `1000` into the column `postal_code`.  
+Now, to test the program, install the dependencies and run:
+```bash
+go mod tidy
+go run .
+```
+You should get the output: `"Finished without errors!"`.
 
-> See more {ref}`input-expressions`.
+## Wrap the database with SQLair
 
+To get started with SQLair, wrap your `database/sql` database with SQLair. In
+`main.go`, replace the `tutorial` function with the new version below:
+```go
+func tutorial() error {
+    // Create the database.
+    sqlDB, err := CreateDB()
+    if err != nil {
+    return err
+    }
 
-### Wrapping the database
+    // Wrap the DB with SQLair
+    db := sqlair.NewDB(sqlDB)
 
-SQLair does not handle configuring and opening a connection to the database. For this, you need to use `database/sql`. Once you have created a database object of type `*sql.DB` this can be wrapped with `sqlair.NewDB`.
-
-If you want to quickly try out SQLair the Go `sqlite3` driver makes it very easy to set up an in memory database:
-
+    return nil
+}
+```
+In `main.go`, at the top of the file, add SQLair to the imported functions.
 ```go
 import (
-	"database/sql"
-	"github.com/canonical/sqlair"
-	_ "github.com/mattn/go-sqlite3"
+    ...
+    "github.com/canonical/sqlair"
+    ...
 )
+```
+Install the dependencies and run:
+```bash
+go mod tidy
+go run .
+```
+Again, you should get the output: `"Finished without errors!"`.
 
-sqldb, err := sql.Open("sqlite3", "file:test.db?cache=shared&mode=memory")
+## SQL-air proof your types
+
+Next, define structs to represent customers and orders. These correspond to the
+rows of the tables in the database. 
+
+In the tutorial project, in the `main.go` file add these types at the top of the
+file, below the imports. Note the db tags (e.g., `db:"id"`) -- SQLair will use
+them to work out how the struct fields map to the table columns in the database.
+```go
+type Customer struct {
+    ID         int    `db:"id"`
+    Name       string `db:"name"`
+    Address    string `db:"address"`
+    City       string `db:"city"`
+    PostalCode string `db:"postal_code"`
+    Country    string `db:"country"`
+}
+
+type Order struct {
+    ID         int       `db:"id,omitempty"`
+    CustomerID int       `db:"customer_id"`
+    OrderDate  time.Time `db:"order_date"`
+}
+```
+
+> See more {ref}`types`, [Go | Struct Tags](https://go.dev/wiki/Well-known-struct-tags)
+
+## Put your struct in the database
+
+Now that you have the scaffolding let's populate our database with some data. To
+do this build an insert statement. 
+
+To insert a `Customer` struct you can write the following SQLair query:
+```
+INSERT INTO customers (*) VALUES ($Customer.*)
+```
+The special syntax `$Customer.*` is called a SQLair input expression. These are
+marked by the dollar sign (`$`). This tells SQLair that we want to insert all
+tagged fields from the `Customer` struct. The asterisk (`*`) on the left had
+side of the `VALUES` keyword tells SQLair that you want to insert all the values
+listed on the right.
+
+Now that we have written our query the next stage is to prepare it for execution
+with [`sqlair.Prepare`](https://pkg.go.dev/github.com/canonical/sqlair#Prepare).
+
+
+In the `main.go` file, just above the `tutorial` function definition, paste the
+code below. Note that
+[`sqlair.Prepare`](https://pkg.go.dev/github.com/canonical/sqlair#Prepare) also
+takes samples of all the Go types mentioned in the query. 
+```go
+func populateDB(db *sqlair.DB) error {
+    // Prepare uses the reflection information from type samples to verify the
+    // SQLair expressions and generate the SQL to send to the database.    
+    insertCustomerStmt, err := sqlair.Prepare(`
+        INSERT INTO customers (*) 
+        VALUES ($Customer.*)
+        `, Customer{},
+    )
+    if err != nil {
+        return fmt.Errorf("preparing insert customer statement: %w", err)
+    }
+    
+    return nil
+}
+```
+
+> See more {ref}`input-expression-syntax`, {ref}`prepare-and-run`
+
+To insert the data into the database, create a `Query` on the database using the
+[`DB.Query`](https://pkg.go.dev/github.com/canonical/sqlair#Query) method and
+run it with
+[`Query.Run`](https://pkg.go.dev/github.com/canonical/sqlair#Query.Run).
+
+In the `populateDB` function, under the previous code but above the
+`return nil`, paste the code below:
+
+```go
+// Define a customer to insert.
+customer := Customer{
+    ID:         1,
+    Name:       "Joe",
+    Address:    "15 Westmeade Road",
+    City:       "Hounslow",
+    PostalCode: "TW4 7EY",
+    Country:    "England",
+}
+
+// Create the query object on the database and Run it without expecting any 
+// results back.
+err = db.Query(context.Background(), insertCustomerStmt, customer).Run()
 if err != nil {
-	panic(err)
+    return fmt.Errorf("inserting initial customer: %w", err)
 }
-
-db := sqlair.NewDB(sqldb)
 ```
+Congratulations! You have just learnt how to insert a struct into a database
+with SQLair.
 
-### Querying the database
+## Put all the structs in the database
 
-Now you have your database its time to run a query. This is done with `DB.Query`. The arguments to `DB.Query` are:
-- The context  (`context.Context`).  This can be `nil` if no context is needed for the query.
-- The statement (`sqlair.Statement`) to be run on the database.
-- Any structs mentioned in input expressions that contain query arguments (`DB.Query` is variadic).
+To fill up our database, you don't just want to insert a single customer, you
+want to insert ALL the customers. Instead of passing a single customer struct as
+an argument to `DB.Query`, you can pass a slice of customer structs, and SQLair
+will automatically turn your query into a bulk insert.
 
-The `Query` object returned by `DB.Query` does not actually execute the query on the database. That is done when we get the results. `Query.Get` fetches a single row from the database and populates the output structs of the query.
-
-In the example below, the `Employee` struct, `res`, will be filled with the first employee in the managers team:
-
+In `main.go` in the `populateDB` function, replace the `customer` variable
+declaration with the slices of customers below, and change the `customer` in the
+query to `customers`.
 
 ```go
-//  stmt:
-//	    SELECT &Employee.*
-//	    FROM employees
-//	    WHERE team_id = $Manager.team_id
+// Define the customers to insert.
+customers := []Customer{{
+    ID:         1,
+    Name:       "Joe",
+    Address:    "15 Westmeade Road",
+    City:       "Hounslow",
+    PostalCode: "TW4 7EY",
+    Country:    "England",
+}, {
+    ID:         2,
+    Name:       "Simon",
+    Address:    "11 Pearch Avenue",
+    City:       "Birmingham",
+    PostalCode: "B37 5NA",
+    Country:    "England",
+}, {
+    ID:         3,
+    Name:       "Heather",
+    Address:    "6 Moorland Close",
+    City:       "Inverness",
+    PostalCode: "IV1 6PA",
+    Country:    "Scotland",
+}}
 
-arg := Manager{Name: "Pedro", TeamID: 1}
-res := Employee{}
-
-err := db.Query(ctx, stmt, arg).Get(&res)
-```
-
-#### Getting the results
-
-The `Get` method is one of several options for fetching results from the database. The others are `Run`, `GetAll` and `Iter`. 
-
-`GetAll` fetches all the result rows from the database. It takes a slice of structs for each argument. This query (the same query as the previous example) will fetch all employees in team 1 and append them to `res`:
-
-```go
-arg := Manager{Name: "Pedro", TeamID: 1}
-res := []Employee{}
-err := db.Query(ctx, stmt, arg).GetAll(&es)
-// res == []Employee{
-//          Employee{ID: 1, TeamID: 1, Name: "Alastair"},
-//          Employee{ID: 2, TeamID: 1, Name: "Ed"},
-//          ...
-// }
-```
-
-
-`Iter` returns an `Iterator` that fetches one row at a time. `Iter.Next` returns true if there is a next row, the row can be read with `iter.Get`, and once the iteration has finished `Iter.Close` must be called. `Iter.Close` will also return any errors that happened during iteration. For example:
-
-```go
-arg := Manager{Name: "Pedro", TeamID: 1}
-iter := db.Query(ctx, stmt, arg).Iter()
-for iter.Next() {
-	res := Employee{}
-	err := iter.Get(&e)
-	// res == Employee{Name: "Alastair", ID: 1, TeamID: 1} 
-	if err != nil {
-		// Handle error.
-	}
-	// Do something with res.
-}
-err := iter.Close()
-```
-
-
-`Run` runs a query on the DB. It is the same as `Get` with no arguments. This query will insert the employee named "Alastair" into the database:
-
-```go
-//  stmt:
-//	    INSERT INTO person (name, id, team_id)
-//	    VALUES ($Employee.name, $Employee.id, $Employee.team_id);`,
-
-var arg = Employee{Name: "Alastair", ID: 1, TeamID: 1} 
-err := db.Query(ctx, stmt, arg).Run()
-```
-
-*Note:* If the query has no output expressions then it is executed on the database meaning that no rows are returned. This can be confusing for new users because SQL statements such as `SELECT name FROM person` will not work if executed with SQLair; an output expression is needed: `SELECT &Person.name FROM person`.
-
-### Maps
-
-SQLair supports maps as well as structs. So far in this introduction, all examples have used structs to keep it simple, but in nearly all cases maps can be used as well.
-
-This query will fetch the columns `name` and `team_id` from the database and put the results into the map `m` at key `"name"` and `"team_id"`:
-
-```go
-stmt := sqlair.MustPrepare(`
-	SELECT (name, team_id) AS &M.*
-	FROM employee
-	WHERE id = $M.pid
-`, sqlair.M{})
-
-var m = sqlair.M{}
-err := db.Query(ctx, stmt, sqlair.M{"pid": 1}).Get(m)
-// m == sqlair.M{"name": "Alastair", "team_id": 1}
-```
-
-The type `sqlair.M` seen here is simply the type `map[string]any`. To reference it in the query however, it needs a name which is why SQLair provides this builtin. The `sqlair.M` type is not special in any way; any named map with a key type of `string` can be used with a SQLair query.
-
-When using a map in an output expression, the query results are stored in the map with the column name as the key. In input expressions, the argument is specified by the map key.
-
-It is not permitted to use a map with an asterisk and no columns specified e.g. `SELECT &M.* FROM employee`. The columns always have to be specified. 
-
-### Transactions
-
-Transactions are also supported by SQLair. A transaction can be started with:
-```go
-tx, err := db.Begin(ctx, txOpts)
+// Insert the slice of customers.
+err = db.Query(context.Background(), insertCustomerStmt, customers).Run()
 if err != nil {
-	// Handle error.
+    return fmt.Errorf("inserting initial customers: %w", err)
 }
 ```
 
-The second argument to `Begin` contains the optional settings for the transaction. It is a pointer to a `sqlair.TXOptions` which can be created with the desired settings:
-
+To compile the code, in at the top of `main.go` in the `import` section, add the
+`time` and `context` packages.
 ```go
-tx, err := db.Begin(ctx, &sqlair.TXOptions{Isolation: 0, ReadOnly: false})
+import (
+    // database/sql is used to open the database and set up the schema.
+    "database/sql"
+    "fmt"
+    "time"
+    "context"
+    ...
+)
 ```
+Now delete the old `tutorial` function and replace it with the one below: 
+```
+func tutorial() error {
+    db, err := NewDB()
+    if err != nil {
+        return err
+    }
 
-To use the default settings set `nil` can be passed as the second parameter.
+    err = populateDB(db)
+    if err != nil {
+        return fmt.Errorf("populating database %w", err)
+    }
 
-Queries are run on a transaction just like they are run on the database. The transaction is finished with a `tx.Commit` or a `tx.Rollback`.
-
+    return nil
+}
+```
+Now let's check it works:
 ```go
-err = tx.Query(ctx, stmt, e).Run()
-if err != nil {
-	// Handle error.
-}
-err = tx.Commit()
-if err != nil {
-	// Handle error.
-}
+go run .
+```
+You should get the output: `"Finished without errors!"`.
+### Put the orders in the database
+Now you've added your customers, it's time to add some orders! 
+
+At the bottom of the `populateDB` function but before the `return nil` add the
+order data.
+```go
+orders = []Order{{
+    CustomerID: 1,
+    OrderDate:  time.Date(2024, time.January, 10, 0, 0, 0, 0, time.UTC),
+}, {
+    CustomerID: 1,
+    OrderDate:  time.Date(2024, time.September, 20, 0, 0, 0, 0, time.UTC),
+}, {
+    CustomerID: 2,
+    OrderDate:  time.Date(2024, time.August, 23, 0, 0, 0, 0, time.UTC),
+}, {
+    CustomerID: 3,
+    OrderDate:  time.Date(2024, time.January, 3, 0, 0, 0, 0, time.UTC),
+}, {
+    CustomerID: 3,
+    OrderDate:  time.Date(2024, time.April, 11, 0, 0, 0, 0, time.UTC),
+}, {
+    CustomerID: 3,
+    OrderDate:  time.Date(2024, time.June, 8, 0, 0, 0, 0, time.UTC),
+}}
 ```
 
-Remember to always commit or rollback a transaction to finish it and apply it to the database.
+**It's your turn now!** Have a go at adding the orders to the database. It should
+look very similar to the adding the customers.
 
-### Wrapping up
+If you want to see the answer, click below.
+```{dropdown} How to insert the orders
+```go
+orders = []Order{{
+    CustomerID: 1,
+    OrderDate:  time.Date(2024, time.January, 10, 0, 0, 0, 0, time.UTC),
+}, {
+    CustomerID: 1,
+    OrderDate:  time.Date(2024, time.September, 20, 0, 0, 0, 0, time.UTC),
+}, {
+    CustomerID: 2,
+    OrderDate:  time.Date(2024, time.August, 23, 0, 0, 0, 0, time.UTC),
+}, {
+    CustomerID: 3,
+    OrderDate:  time.Date(2024, time.January, 3, 0, 0, 0, 0, time.UTC),
+}, {
+    CustomerID: 3,
+    OrderDate:  time.Date(2024, time.April, 11, 0, 0, 0, 0, time.UTC),
+}, {
+    CustomerID: 3,
+    OrderDate:  time.Date(2024, time.June, 8, 0, 0, 0, 0, time.UTC),
+}}
 
-If you have any more in depth questions or issues please use see our [GitHub](https://github.com/canonical/sqlair). Contributions are always welcome! Hopefully this has been of some use, enjoy using the library.
+insertOrdersStmt, err := sqlair.Prepare(
+    "INSERT INTO orders (*) VALUES ($Order.*)",
+    Order{},
+)
+if err != nil {
+    return fmt.Errorf("preparing insert orders statement: %w", err)
+}
+
+err = db.Query(context.Background(), insertOrdersStmt, orders).Run()
+if err != nil {
+    return fmt.Errorf("inserting initial orders: %w", err)
+}
+```
+## Get structs from the database
+
+Now that we have the customer and order data it is time to query it.
+
+### Get a customer
+Somebody has asked you get all the information you have about the customer with
+the name `"Joe"`. You need to put all his information in a `Customer` struct and
+return this to the user.
+
+In `main.go`, in the `tutorial` function under the call to `populateDB`, add the
+code below.
+```go
+stmt, err = sqlair.Prepare(`
+    SELECT &Customer.* 
+    FROM customers
+    WHERE name = $Customer.name
+`, Customer{})
+if err != nil {
+    return Customer{}, fmt.Errorf("preparing select customer statement: %w", err)
+}
+```
+The special syntax in the query, `&Customer.*`, is an output expression. The
+ampersand (`&`) marks output expressions. This tells SQLair that you want to
+fetch all columns given in the tags of the `Customer` struct and use them to
+fill the struct in.
+
+In the `WHERE` clause at the bottom, there is an input expression. This is
+telling SQLair to pass the value in the field tagged with `name` in `Customer`
+as an argument to the database.
+
+```{note}
+The column name from the tag rather than the field name is used when specifying
+a value in a struct e.g. `$Customer.name`.
+```
+
+To get the results out, we can use
+[`Query.Get`](https://pkg.go.dev/github.com/canonical/sqlair#Query.Get). In the
+`tutorial` function, below the `sqlair.Prepare`, add the code below:
+```go
+// Define a customer struct with only the name specified. This can be used for 
+// both the input and output of the query.
+joe := Customer{
+    Name: "Joe",
+}
+
+// Get returns the first query result from the database.
+err = db.Query(context.Background(), stmt, joe).Get(&joe)
+if err != nil {
+    return Customer{}, fmt.Errorf(
+        "selecting customer %s from the database: %w", 
+        name, err,
+    )
+}
+
+fmt.Printf("Customer record of Joe: %#v\n", joe)
+```
+
+Run the program, and you should get the output below:
+```bash
+$ go run .
+Customer record of Joe: main.Customer{ID:1, Name:"Joe", Address:"15 Westmeade Road", City:"Hounslow", PostalCode:"TW4 7EY", Country:"England"}
+Finished without errors!
+```
+
+> See more {ref}`output-expressions`, {ref}`output-expression-syntax`, {ref}`input-expression-syntax`, [`Query.Get`](https://pkg.go.dev/github.com/canonical/sqlair#Query.Get)
+
+### Get all the orders
+
+You've just been asked to get all the orders ever made from the
+database. They want a slice of `Order` structs representing this information.
+Luckily, SQLair has your back with the `Query.GetAll` function.
+
+Let's first prepare a query to select the orders. In the `tutorial` function,
+copy the code below:
+```go
+stmt, err := sqlair.Prepare(`
+    SELECT &Order.*
+    FROM Orders
+`, Order{})
+if err != nil {
+    return fmt.Errorf("preparing select orders statement: %w", err)
+}
+
+// Define a slice of orders to hold all the orders from the database.
+var orders []Order
+// Get all the orders.
+err = db.Query(context.Background(), stmt).GetAll(&orders)
+if err != nil {
+    return fmt.Errorf("getting all orders from the database: %w", err)
+}
+// Print out the orders.
+for i, order := range orders {
+    fmt.Printf("Order %d: %#v\n", i, order)
+}
+
+```
+Now run the program and you should get the output below.
+```bash
+go run .
+```
+```bash
+Order 0: main.Order{ID:1, CustomerID:1, OrderDate:time.Date(2024, time.January, 10, 0, 0, 0, 0, time.UTC)}
+Order 1: main.Order{ID:2, CustomerID:1, OrderDate:time.Date(2024, time.September, 20, 0, 0, 0, 0, time.UTC)}
+Order 2: main.Order{ID:3, CustomerID:2, OrderDate:time.Date(2024, time.August, 23, 0, 0, 0, 0, time.UTC)}
+Order 3: main.Order{ID:4, CustomerID:3, OrderDate:time.Date(2024, time.January, 3, 0, 0, 0, 0, time.UTC)}
+Order 4: main.Order{ID:5, CustomerID:3, OrderDate:time.Date(2024, time.April, 11, 0, 0, 0, 0, time.UTC)}
+Order 5: main.Order{ID:6, CustomerID:3, OrderDate:time.Date(2024, time.June, 8, 0, 0, 0, 0, time.UTC)}
+Finished without errors!
+```
+You have all the orders. Congratulations! You have learnt the basics of SQLair!
+
+> See more: [`Query.GetAll`](https://pkg.go.dev/github.com/canonical/sqlair#Query.GetAll)
+
+## Cleanup
+Getting rid of the tutorial is as simple as deleting the directory! No further
+steps required.
+```bash
+cd ..
+rm -r tutorial
+```
+## Next steps
+This tutorial has introduced you to the basics, but there is a lot more to
+explore!
+> See more {ref}`howto`, {ref}`reference`,
+[pkg.go.dev](https://pkg.go.dev/github.com/canonical/sqlair)
