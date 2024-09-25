@@ -25,6 +25,7 @@ WHERE manager_name = $Manager.name`,
 
 `Manager` is a struct and `name` is the "db" tag on one of its fields.
 
+(slice-inputs)=
 ## Input a slice
 
 A slice of values can be input via the syntax below. The slice name must be a
@@ -40,6 +41,7 @@ For example, the slice can be used with an `IN` clause:
 ...
 WHERE name IN ($Names[:])
 ```
+(insert-statements)=
 ## Insert statements
 
 To insert values from a type into the database SQLair provides specialised
