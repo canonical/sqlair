@@ -12,3 +12,7 @@ variadic
 Alastair
 prepends
 deserialise
+sql
+ErrNoRows
+sqlair
+mattn
