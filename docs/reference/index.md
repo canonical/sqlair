@@ -11,4 +11,5 @@ For more information about the specifics of the DSL see the following:
 
 output-expression-syntax
 input-expression-syntax
+types
 ```

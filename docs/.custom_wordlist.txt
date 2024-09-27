@@ -16,3 +16,4 @@ sql
 ErrNoRows
 sqlair
 mattn
+omitempty
