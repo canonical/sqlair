@@ -20,3 +20,6 @@ omitempty
 Naur
 prepended
 prepend
+TXOptions
+ErrTXDone
+boolean

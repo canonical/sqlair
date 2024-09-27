@@ -1,7 +1,7 @@
 (query)=
 # How to query the database
 
-## 1. Create/Make your types usable by SQLair
+## SQLair-proof your types
 The first step in building your query is to decide what you would like to put
 into/get out of the database. Identify the types in your Go program that hold
 this information or create them if they don't already exist.
@@ -22,10 +22,10 @@ type Location struct {
 
 > See more: {ref}`types` 
 
-## 2. Write your query string using the types
+## Write your query string using the types
 
 SQLair queries are regular SQL queries with special input and output expressions
-which allow you to reference the Go types directly from the SQL.
+that enable you to reference the Go types directly from SQL.
 
 Write your SQL query with SQLair input expressions instead of query parameters
 and SQLair output expressions instead of columns to select.
@@ -41,7 +41,7 @@ query := `
 
 > See more {ref}`input-expression-syntax`, {ref}`output-expression-syntax`.
 
-## 3. Prepare your query string to get a Statement
+## Prepare your query string to get a statement
 
 Now you have your query string, you need to pass it to `sqlair.Prepare` along
 with samples of all the types mentioned in the input and output expressions.
@@ -52,6 +52,11 @@ the query, this will not catch it. The returned `Statement` holds the parsed and
 verified query.
 
 
+```{note}
+SQLair also provides the `sqlair.MustPrepare` method which panics on error
+instead of returning.
+```
+
 For example:
 ```go
 stmt, err := sqlair.Prepare(ctx, query, Employee{}, Location{})
@@ -60,12 +65,14 @@ if err != nil {
 }
 ```
 
-> See more [`sqlair.Prepare`](https://pkg.go.dev/github.com/canonical/sqlair#Prepare)
+> See more:
+[`sqlair.Prepare`](https://pkg.go.dev/github.com/canonical/sqlair#Prepare),
+[`sqlair.MustPrepare`](https://pkg.go.dev/github.com/canonical/sqlair#MustPrepare)
 
-## 4. Execute the statement on the database
+## Execute the statement on the database
 
 To execute the statement on a SQLair wrapped `DB` or a `TX`, use the `Query`
-method passing as parameters the `Statement` and all the input arguments
+method, passing as parameters the `Statement` and all the input arguments
 specified in the input expressions. This returns a `Query` object that can then
 be run with one of four methods below.
 
@@ -120,7 +127,7 @@ if err != nil {
 [`Query.GetAll`](https://pkg.go.dev/github.com/canonical/sqlair#Query.GetAll)
 
 ### Iterate over the rows
-To iterate over the rows returned from the query, get an `Iterator` with use
+To iterate over the rows returned from the query, get an `Iterator` with
 `Query.Iter`.
 
 `Iterator.Next` prepares the next row for `Iterator.Get`. It will return false
@@ -189,11 +196,11 @@ if err != nil {
 [`Query.Run`](https://pkg.go.dev/github.com/canonical/sqlair#Query.Run)
 
 
-## 5. (Optional) Get the query outcome
+## (Optional) Get the query outcome
 
-To get the outcome, provide a pointer to a `sqlair.Outcome` as the first
-argument to any of the `Get` methods. This will fill the `sqlair.Outcome` with
-information about the outcome of the query.
+To get the query outcome, use any of the `Get` methods, providing as a first
+argument a pointer to a `sqlair.Outcome` object. This will fill the
+`sqlair.Outcome` with information about the outcome of the query.
 
 ```{note}
 The query outcome contains metadata about the execution of a query. Currently,
