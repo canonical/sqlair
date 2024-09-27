@@ -195,7 +195,7 @@ func populateDB(db *sqlair.DB) error {
 }
 ```
 
-> See more {ref}`input-expression-syntax`, {ref}`prepare-and-run`
+> See more {ref}`input-expression-syntax`, {ref}`query`
 
 To insert the data into the database, create a `Query` on the database using the
 [`DB.Query`](https://pkg.go.dev/github.com/canonical/sqlair#Query) method and
@@ -432,7 +432,7 @@ Customer record of Joe: main.Customer{ID:1, Name:"Joe", Address:"15 Westmeade Ro
 Finished without errors!
 ```
 
-> See more {ref}`output-expressions`, {ref}`output-expression-syntax`, {ref}`input-expression-syntax`, [`Query.Get`](https://pkg.go.dev/github.com/canonical/sqlair#Query.Get)
+> See more: {ref}`output-expression-syntax`, {ref}`input-expression-syntax`, [`Query.Get`](https://pkg.go.dev/github.com/canonical/sqlair#Query.Get)
 
 ### Get all the orders
 

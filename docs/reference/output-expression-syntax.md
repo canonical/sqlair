@@ -1,20 +1,34 @@
 (output-expression-syntax)=
 # Output expression syntax
 
-
-SQLair expressions can be either input expressions or output expressions. The
-output expressions specify how SQLair will scan the query results into the
+Output expressions specify how SQLair will write the query results into the
 provided structs/maps. Output expressions are designed to replace the column
 selection part of a SQL query.
 
 There are several types of output expression though all use an ampersand (`&`)
 in front of the types.
 
-## Output a single column
-The syntax `&<type-name>.<column-name>` with fetch the column `<column-name>`
-from the database and set it in a struct/map. If setting it in struct, it will
-set the field with the `db` tag `<column-name>` and if setting a value in a map
-it will use the key `<column-name>`.
+The output expression syntax is given in [Backus Naur
+form](https://en.wikipedia.org/wiki/Backus%E2%80%93Naur_form). In the syntax
+definitions, the following symbols have the given meanings:
+- `<column-name>` - Any valid SQL column name.
+- `<table-name>` - Any valid SQL table name.
+- `<struct-name>` - Any valid Golang struct name.
+- `<map-name>` - Any valid Golang map name.
+- `<slice-name>` - Any valid Golang slice name.
+
+
+## Single column syntax
+A column can be fetched from the database and written into a map or struct via
+the syntax below:
+```bnf
+<column-output> ::= "&" <type-name> "." <column-name>
+<type-name> ::= <struct-name> | <map-name>
+```
+This will fetch the column `<column-name>` from the database and set it in the
+type `<type-name>`. If setting it in struct, it will set the field with the `db`
+tag `<column-name>` and if setting a value in a map it will use the key
+`<column-name>`.
 
 Multiple output expressions can be used in a single query. For example:
 ```sql
@@ -27,87 +41,109 @@ tagged with `name` to the value for the `name` column from the database and the
 key `age` in the map `MyMap` to the value from the database for the `age`
 column.
 
-
-## Output a whole struct
-The syntax `&<struct-name>.*` fetches and sets all the structs tagged fields.
-SQLair will expand the type into all the tagged column names and insert the
-results into the struct.
+## Whole struct syntax
+All the tagged fields in a struct can be fetched from the database and written
+into a struct via the syntax:
+```bnf
+<asterisk-output> ::= "&" <struct-name> ".*"
+```
+SQLair will expand the type `<struct-name>` into a comma separated list of the
+column names in its tags and write the results into the struct.
 For example:
 ```sql
 SELECT &Person.*
 FROM   people
 ```
-## Output a whole struct from a particular table
-The syntax `table.* AS &<struct-name>.*` does the same as getting all the fields
-of a struct (above) but prepends all columns with the table name. The tags on
-the struct should not include the table name.
+## Struct from table syntax
+Columns from particular tables can be selected into specified structs using the
+syntax below:
+```bnf
+<table-asterisk> ::= <table-asterisk-multiple> | <table-asterisk-single>
+<table-asterisk-multiple> ::= "(" <table-name> ".*) AS (" <output-types> ")"
+<table-asterisk-single> ::= <table-name> ".* AS " <output-type>
+
+<output-types> ::= <output-type> | ", " <output-types>
+<output-type> ::= <asterisk-output> | <column-output>
+```
+The `<asterisk-output>` and `<column-output>` reference the syntax above. All
+the columns of the `<output-types>` will be prepended with the table name in the
+generated SQL. The resulting columns will then be written into the maps/structs
+of the `<output-types>`
+
+```{note}
+The output expression will always be replaced with a list of columns, a SQLair
+output expression will never generate a SQL wildcard (*). For example, `p.* AS
+$Person.*` is replaced with a comma separated list of all db tags on the field
+of the `Person` struct.
+```
 
 For example:
 ```sql
 SELECT     p.* AS &Person.*,
-           a.* AS &Address.*
+           (a.*) AS (&Address.*, &Country.country_name)
 FROM       p
 INNER JOIN a
 ```
 
-## Output specific columns into a type
-The syntax `(<table-name>.<column-name>, ...) AS &<type-name>.*` fetches and
-sets only the specified columns. This type name can be a struct or a map. The
-table names are optional. If a table name is included the map key or the struct
-tag do not include the table name, it is only mentioned in the query.
+This query will select all the column names specified on the db tags on the
+fields in `Person` and `Address` as well as the column `country_name`. It will
+prepend the columns from `Person` with `p.` and prepend `Address` and
+`country_name` with `a.`
+
+## Columns from table syntax
+Specific columns from a table can be selected into the types on the right using
+the syntax below:
+```bnf
+<columns-output> ::= "(" <columns> ") AS (&" <type-name> ".*)"
+
+<columns> ::= <column> | ", " <columns>
+<column> ::= <column-name> | <table-name> "." <column-name>
+
+<type-name> ::= <struct-name> | <map-name>
+```
+The columns on are selected into the type on the right. If the type is a struct,
+they are written to the fields with the matching tag and if it is a map the
+result values are set with the column names as keys. The table name is not
+included in the map key or the struct tag.
 
 For example:
 ```sql
 SELECT     (p.name, a.address_id) AS (&Person.*), 
-           (a.postcode, p.person_id) AS (&Address.*)
+           (a.postcode, p.person_id) AS (&M.*)
 FROM       p
 INNER JOIN a
 ```
 
-## Output specific columns into specific places
-The syntax `(<column-name>, ...) AS (&<type-name>.<column-name>, ...)` will
-fetch the specified columns and put them in the structs/maps.
+This will set the fields tagged `name` and `address_id` in the struct `Person`
+and set the keys `postcode` and `person_id` in the map `M`.
 
-This form should only be used if selecting from a different to the one the
-struct normally maps to. The tags on the fields of the struct should generally
-match the columns in the database.
-
-For example
-```sql
-SELECT (other_person_name, other_person_id) AS (&Person.name, &Person.id)
-FROM   other_people
-```
-
-# Formal BNF specification of output syntax
-
-This is the [BNF](https://en.wikipedia.org/wiki/Backus%E2%80%93Naur_form) description of the syntax of output expressions:
-
+## Columns into specific struct tags/map keys syntax
+Columns can be written into fields that are tagged with a different tag name to
+the column using the syntax below:
 ```bnf
-<output-expression> ::= <as-expression> | <output-type>
+<columns-output> ::= <columns-output-single> | <columns-output-multiple>
+<columns-output-multiple> ::= "(" <columns> ") AS (" <output-types> ")"
+<columns-output-single> ::= <column> AS <output-type>
 
-<as-expression> ::= <as-expression-multiple> | <as-expression-single> 
-<as-columns> ::= <as-columns-multiple> | <as-columns-single>
-<as-columns-multiple> ::= "(" <columns> ") AS (" <output-types> ")"
-<as-columns-single> ::= <column> AS <output-type>
-<as-asterisk> ::= <as-asterisk-multiple> | <as-asterisk-single>
-<as-asterisk-multiple> ::= "(" <asterisk> ") AS (" <output-types> ")"
-<as-asterisk-single> ::= <asterisk> AS <output-type>
-
-<output-types> ::= <output-type> | ", " <output-types>
-<output-type> ::= <asterisk-output-type> | <member-output-type>
-<member-output-type> ::= "&" <type-name> ".*" <type-member>
-<asterisk-output-type> ::= "&" <struct-name> ".*"
-
+<column-outputs> ::= <column-outputs> | ", " <column-output>
+<column-output> ::= "&" <type-name> "." <column-name>
 <type-name> ::= <struct-name> | <map-name>
-
-<asterisk> ::= <table-name> ".*" | "*"
 
 <columns> ::= <column> | ", " <columns>
 <column> ::= <column-name> | <table-name> "." <column-name>
 ```
 
-The syntax for the symbols that are not fully expanded above are as follows:
-- `<column-name>` - Any valid SQL column name.
-- `<table-name>` - Any valid SQL table name.
-- `<struct-name>` - Any valid Golang struct name.
-- `<map-name>` - Any valid Golang map name.
+This form should only be used if selecting from a different to the one the
+struct normally maps to. The tags on the fields of the struct should generally
+match the columns in the database.
+
+For example:
+```sql
+SELECT (other_person_name, other_person_id) AS (&Person.name, &Person.id),
+       other_city AS &M.city
+FROM   other_people
+```
+In `Person`, this will set the `name` field with the content of the column
+`other_person_name` and the `id` field with the content of `other_person_id`. In
+the map `M`, it will set the key `city` to the value from the column
+`other_city`.

@@ -17,3 +17,6 @@ ErrNoRows
 sqlair
 mattn
 omitempty
+Naur
+prepended
+prepend
