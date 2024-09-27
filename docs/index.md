@@ -15,7 +15,7 @@ the database.
 
 When interacting with a SQL database in Go, mapping between the database tables
 and the Go types is an issue. Convenience layers can be either too little (e.g.,
-`database/sql`, where you can write any SQL you want but you have to manually
+`database/sql`, where you can write any SQL you want, but you have to manually
 iterate over each row) or too much (e.g., Object-Relational Mapping (ORM)
 libraries where you get automatic mapping but lose the ability to write the
 SQL). With SQLair you get just the right balance – automatic mapping plus the
