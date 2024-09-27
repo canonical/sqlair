@@ -6,22 +6,22 @@ The project is still under development and there may be still be major changes
 to the API.
 ```
 
-SQLair is a Go package that maps between Go types and SQL queries.
+SQLair is a Go package and an extension to SQL that makes it easy to map between
+Go types and a SQL database.
 
-SQLair provides an API for interacting with SQL databases from within Go
-programs. It prepares and runs SQL queries containing special SQLair syntax.
-The syntax that tells SQLair which values to use as query arguments and which
-Go objects map the results into.
+With SQLair, once you’ve SQLair-proofed your types and SQLair-wrapped your
+database, you can jump straight to writing, parsing, and running queries against
+the database.
 
-When interacting with a database in Go, the tables of the database are often
-very similar to the structs in Go program. SQLair allow seamless mapping from
-the tables to Go structs without the overhead of an Object-Relational Mapping
-library (ORM). SQLair concerns itself only with the mapping from the Go objects
-to the database tables. It allows you to run any SQL you wish.
+When interacting with a SQL database in Go, mapping between the database tables
+and the Go types is an issue. Convenience layers can be either too little (e.g.,
+`database/sql`, where you can write any SQL you want but you have to manually
+iterate over each row) or too much (e.g., Object-Relational Mapping (ORM)
+libraries where you get automatic mapping but lose the ability to write the
+SQL). With SQLair you get just the right balance – automatic mapping plus the
+ability to write any SQL you want.
 
-The library is perfect for anyone who is looking for the convenience of
-automatic mapping between database tables to Go types and who just wants to
-write SQL instead of dealing with an ORM.
+If you’re looking to streamline your Go game, `go get` SQLair today.
 
 ```{toctree}
 :maxdepth: 2

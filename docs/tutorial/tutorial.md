@@ -195,7 +195,7 @@ func populateDB(db *sqlair.DB) error {
 }
 ```
 
-> See more {ref}`input-expression-syntax`, {ref}`prepare-and-run`
+> See more {ref}`input-expression-syntax`, {ref}`query`
 
 To insert the data into the database, create a `Query` on the database using the
 [`DB.Query`](https://pkg.go.dev/github.com/canonical/sqlair#Query) method and
