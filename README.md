@@ -21,8 +21,8 @@ Go types and a SQL database.
 Reading and writing to a database in Go can be hard. The solutions out there are
 often either too prescriptive (e.g., Object-Relational Mapping (ORM) libraries
 where you lose the ability to write your own SQL) or too basic (e.g.,
-database/sql, where you have to manually iterate over each row you get back from
-the database).
+`database/sql`, where you have to manually iterate over each row you get back
+from the database).
 
 SQLair fills the gap in the middle – automatic type mapping plus the ability to
 write any SQL you wish. Write your types directly into the query with _SQLair
@@ -45,9 +45,8 @@ tutorial](https://canonical-sqlair.readthedocs-hosted.com/en/latest/tutorial/tut
 
 ## :open_book: Documentation
 
-See the
-[Project Documentation](https://canonical-sqlair.readthedocs-hosted.com/en/latest/) and
-the [Go Package Reference](https://pkg.go.dev/github.com/canonical/sqlair).
+See the documentation on [Read the Docs](https://canonical-sqlair.readthedocs-hosted.com/en/latest/) and
+in the [Go Package Reference](https://pkg.go.dev/github.com/canonical/sqlair).
 
 ## :dizzy: Contributing
 

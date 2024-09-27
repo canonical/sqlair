@@ -1,11 +1,6 @@
 (SQLair documentation root file)=
 # SQLair
 
-```{note}
-The project is still under development and there may be still be major changes
-to the API.
-```
-
 SQLair is a Go package and an extension to SQL that makes it easy to map between
 Go types and a SQL database.
 
@@ -23,6 +18,11 @@ ability to write any SQL you want.
 
 If you’re looking to streamline your Go game, `go get` SQLair today.
 
+```{note}
+The project is pre-release and there may still be major changes to the API.
+```
+
+## In this documentation
 ```{toctree}
 :maxdepth: 2
 :hidden:
