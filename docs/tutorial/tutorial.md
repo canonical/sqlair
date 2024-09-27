@@ -128,7 +128,7 @@ go run .
 ```
 Again, you should get the output: `"Finished without errors!"`.
 
-## SQL-air proof your types
+## SQLair-proof your types
 
 Next, define structs to represent customers and orders. These correspond to the
 rows of the tables in the database. 
