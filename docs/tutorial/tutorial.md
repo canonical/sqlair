@@ -8,14 +8,17 @@ SQLair makes it to map between the database and the Go program.
 Let's get started!
 
 
-## Set up
-For this tutorial you will need Go version 1.18. To use SQLair you will need and
-a Go project that sets up a database. To create the project run:
+## Set things up
+For this tutorial you will need Go version 1.18. To use SQLair you will need a
+Go project that sets up a database. 
+
+To create the project run:
 ```bash
 mkdir tutorial 
 cd tutorial
 go mod init sqlair-tutorial
 ```
+
 To set up the database, in the tutorial folder, create a new `main.go` file,
 open it in your favourite editor and copy in the code below:
 ```go
@@ -97,8 +100,17 @@ You should get the output: `"Finished without errors!"`.
 
 ## Wrap the database with SQLair
 
-To get started with SQLair, wrap your `database/sql` database with SQLair. In
-`main.go`, replace the `tutorial` function with the new version below:
+To get started with SQLair, wrap your `database/sql` database with SQLair. 
+
+In `main.go`, at the top of the file, add SQLair to the imported functions.
+```go
+import (
+    ...
+    "github.com/canonical/sqlair"
+    ...
+)
+```
+In `main.go`, replace the `tutorial` function with the new version below:
 ```go
 func tutorial() error {
     // Create the database.
@@ -112,14 +124,6 @@ func tutorial() error {
 
     return nil
 }
-```
-In `main.go`, at the top of the file, add SQLair to the imported functions.
-```go
-import (
-    ...
-    "github.com/canonical/sqlair"
-    ...
-)
 ```
 Install the dependencies and run:
 ```bash
@@ -481,7 +485,7 @@ You have all the orders. Congratulations! You have learnt the basics of SQLair!
 
 > See more: [`Query.GetAll`](https://pkg.go.dev/github.com/canonical/sqlair#Query.GetAll)
 
-## Cleanup
+## Tear things down
 Getting rid of the tutorial is as simple as deleting the directory! No further
 steps required.
 ```bash
