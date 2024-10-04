@@ -17,7 +17,7 @@ a `sqlair.DB`.
 
 ## Query a SQLair database
 
-See {ref}`query` and {ref}`tx`.
+See: {ref}`query`.
 
 ## Unwrap a SQLair database
 
@@ -26,4 +26,4 @@ does not handle closing the database -- this should be done through the
 `database/sql` package.
 
 > See more:
-[`DB.PlainDB`](https://pkg.go.dev/github.com/canonical/sqlair#DB.PlainDB),
+[`DB.PlainDB`](https://pkg.go.dev/github.com/canonical/sqlair#DB.PlainDB)
