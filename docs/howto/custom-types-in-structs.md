@@ -1,5 +1,5 @@
 (custom-types)=
-# How to use custom types in structs
+# Use custom types in structs
 SQLair makes it very easy to serialise to and from structs. But one case that may cause issues, is when you have a user defined type in your struct. For example:
 ```go
 type MyModel struct {

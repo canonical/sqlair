@@ -1,5 +1,5 @@
 (query)=
-# How to query the database
+# Query the database
 
 ## SQLair-proof your types
 The first step in building your query is to decide what you would like to put
