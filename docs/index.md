@@ -68,6 +68,7 @@ guide if you would like to get involved!
 
 - [SQLair GitHub page](https://github.com/canonical/sqlair)
 - [SQLair contributing guide](https://github.com/canonical/sqlair/blob/main/CONTRIBUTING.md)
+- [Ubuntu code of conduct](https://ubuntu.com/community/ethos/code-of-conduct)
 
 The SQLair project is currently under the care of the Juju team at Canonical. If
 you have any questions or would just like to say hi you can find us on the

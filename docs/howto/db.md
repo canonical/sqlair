@@ -10,10 +10,11 @@ through `database/sql`.
 To wrap a `sql.DB` with SQLair, use the `sqlair.NewDB` method. This will return
 a `sqlair.DB`.
 
-> See more:
+```{seealso}
 [`sqlair.NewDB`](https://pkg.go.dev/github.com/canonical/sqlair#NewDB),
 [`sqlair.DB`](https://pkg.go.dev/github.com/canonical/sqlair#DB),
 [`database/sql.DB`](https://pkg.go.dev/database/sql#DB)
+```
 
 ## Query a SQLair database
 
@@ -25,5 +26,6 @@ To unwrap a SQLair database and get out the `sql.DB`, use `DB.PlainDB`. SQLair
 does not handle closing the database -- this should be done through the
 `database/sql` package.
 
-> See more:
+```{seealso}
 [`DB.PlainDB`](https://pkg.go.dev/github.com/canonical/sqlair#DB.PlainDB)
+```

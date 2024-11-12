@@ -2,7 +2,9 @@
 # Manage SQLair transactions
 SQLair transactions are created on a `sqlair.DB`.
 
-> See more: {ref}`db`.
+```{seealso}
+{ref}`db`.
+```
 ## Begin a SQLair transaction
 
 To begin a transaction, on your database, call `DB.Begin`, passing a context and
@@ -24,8 +26,10 @@ if err != nil {
 }
 ```
 
-> See more: [DB.Begin](https://pkg.go.dev/github.com/canonical/sqlair#DB.Begin),
+```{seealso}
+[DB.Begin](https://pkg.go.dev/github.com/canonical/sqlair#DB.Begin),
 [sqlair.TXOptions](https://pkg.go.dev/github.com/canonical/sqlair#TXOptions)
+```
 
 ## Query a SQLair transaction
 See {ref}`query`.
@@ -44,7 +48,8 @@ if err != nil {
 }
 ```
 
-> See more:
+```{seealso}
 [TX.Commit](https://pkg.go.dev/github.com/canonical/sqlair#TX.Commit),
 [TX.Rollback](https://pkg.go.dev/github.com/canonical/sqlair#TX.Rollback),
 [sqlair.ErrTXDone](https://pkg.go.dev/github.com/canonical/sqlair#ErrTXDone)
+```
