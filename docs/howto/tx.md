@@ -1,5 +1,5 @@
 (tx)=
-# How to manage SQLair transactions
+# Manage SQLair transactions
 SQLair transactions are created on a `sqlair.DB`.
 
 > See more: {ref}`db`.

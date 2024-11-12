@@ -1,5 +1,5 @@
 (db)=
-# How to use a SQLair database
+# Use a SQLair database
 To create a SQLair database and run SQLair queries on it, you need to wrap a
 `sql.DB` database object from the `database/sql` package. SQLair is a
 convenience wrapper around the database, it does not create the DB itself.
