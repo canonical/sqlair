@@ -19,7 +19,8 @@ type Location struct {
     City string `db:"city"`
 }
 ```
-```{seealso}```
+```{admonition} See more
+:class: tip```
 {ref}`types` 
 ```
 ## Write your query string using the types
@@ -39,7 +40,8 @@ query := `
 `
 ```
 
-```{seealso}
+```{admonition} See more
+:class: tip
 {ref}`input-expression-syntax`, {ref}`output-expression-syntax`.
 ```
 ## Prepare your query string to get a statement
@@ -66,7 +68,8 @@ if err != nil {
 }
 ```
 
-```{seealso}
+```{admonition} See more
+:class: tip
 [`sqlair.Prepare`](https://pkg.go.dev/github.com/canonical/sqlair#Prepare),
 [`sqlair.MustPrepare`](https://pkg.go.dev/github.com/canonical/sqlair#MustPrepare)
 ```
@@ -84,7 +87,8 @@ reused. One of the methods on `Query` should immediately be called. It should
 not be saved as variable.
 ```
 
-```{seealso}
+```{admonition} See more
+:class: tip
 [`DB.Query`](https://pkg.go.dev/github.com/canonical/sqlair#DB.Query),
 [`TX.Query`](https://pkg.go.dev/github.com/canonical/sqlair#TX.Query),
 [`sqlair.Query`](https://pkg.go.dev/github.com/canonical/sqlair#Query)
@@ -107,7 +111,8 @@ if err != nil {
 // employee now contains the first employee returned from the database.
 ```
 
-```{seealso}
+```{admonition} See more
+:class: tip
 [`Query.Get`](https://pkg.go.dev/github.com/canonical/sqlair#Query.Get)
 ```
 
@@ -128,7 +133,8 @@ if err != nil {
 // employees now contains all the employees returned from the database.
 ```
 
-```{seealso}
+```{admonition} See more
+:class: tip
 [`Query.GetAll`](https://pkg.go.dev/github.com/canonical/sqlair#Query.GetAll)
 ```
 
@@ -169,7 +175,8 @@ for iter.Next() {
 }
 ```
 
-```{seealso}
+```{admonition} See more
+:class: tip
 [`Query.Iter`](https://pkg.go.dev/github.com/canonical/sqlair#Query.Iter),
 [`sqlair.Iterator`](https://pkg.go.dev/github.com/canonical/sqlair#Iterator),
 [`Iterator.Next`](https://pkg.go.dev/github.com/canonical/sqlair#Iterator.Next),
@@ -199,7 +206,8 @@ if err != nil {
 // employee has been inserted into the database.
 ```
 
-```{seealso}
+```{admonition} See more
+:class: tip
 [`Query.Run`](https://pkg.go.dev/github.com/canonical/sqlair#Query.Run)
 ```
 
@@ -237,7 +245,8 @@ if err != nil {
 }
 ```
 
-```{seealso}
+```{admonition} See more
+:class: tip
 [`sqlair.Outcome`](https://pkg.go.dev/github.com/canonical/sqlair#Outcome),
 [`sql.Result`](https://pkg.go.dev/database/sql#Result)
 ```

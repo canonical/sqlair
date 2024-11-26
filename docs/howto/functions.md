@@ -1,6 +1,6 @@
 (functions)=
 # Get SQL function results
-funcs
+
 To output the result of a SQL function such as `COUNT`, `MAX` or `SUM`, use the
 `AS` keyword to select the function result into an output variable, then run
 the query.
@@ -29,6 +29,7 @@ if err != nil {
 fmt.Printf("Number of employees: %d", count.Num)
 ```
 
-```{seealso}
+```{admonition} See more
+:class: tip
 {ref}`output-expression-syntax`
 ```

@@ -55,7 +55,8 @@ type Address struct {
 }
 ```
 
-```{seealso}
+```{admonition} See more
+:class: tip
 {ref}`insert-statements`
 ```
 ### Maps

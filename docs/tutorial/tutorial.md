@@ -157,7 +157,8 @@ type Order struct {
 }
 ```
 
-```{seealso}
+```{admonition} See more
+:class: tip
 {ref}`types`, [Go | Struct Tags](https://go.dev/wiki/Well-known-struct-tags)
 ```
 
@@ -201,7 +202,8 @@ func populateDB(db *sqlair.DB) error {
 }
 ```
 
-```{seealso}
+```{admonition} See more
+:class: tip
 {ref}`input-expression-syntax`, {ref}`query`
 ```
 
@@ -440,7 +442,8 @@ Customer record of Joe: main.Customer{ID:1, Name:"Joe", Address:"15 Westmeade Ro
 Finished without errors!
 ```
 
-```{seealso}
+```{admonition} See more
+:class: tip
 {ref}`output-expression-syntax`, {ref}`input-expression-syntax`, [`Query.Get`](https://pkg.go.dev/github.com/canonical/sqlair#Query.Get)
 ```
 
@@ -489,7 +492,8 @@ Finished without errors!
 ```
 You have all the orders. Congratulations! You have learnt the basics of SQLair!
 
-```{seealso}
+```{admonition} See more
+:class: tip
 [`Query.GetAll`](https://pkg.go.dev/github.com/canonical/sqlair#Query.GetAll)
 ```
 
@@ -503,7 +507,8 @@ rm -r tutorial
 ## Next steps
 This tutorial has introduced you to the basics, but there is a lot more to
 explore!
-```{seealso}
+```{admonition} See more
+:class: tip
 {ref}`howto`, {ref}`reference`,
 [pkg.go.dev](https://pkg.go.dev/github.com/canonical/sqlair)
 ```
