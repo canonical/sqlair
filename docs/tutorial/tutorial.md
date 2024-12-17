@@ -498,8 +498,8 @@ You have all the orders. Congratulations! You have learnt the basics of SQLair!
 ```
 
 ## Tear things down
-Getting rid of the tutorial is as simple as deleting the directory! No further
-steps required.
+To restore your machine to the state it had before you started this tutorial,
+simply delete the directory. No further steps required.
 ```bash
 cd ..
 rm -r tutorial

@@ -1,7 +1,7 @@
 (custom-types)=
 # Use custom types in structs
 SQLair makes it very easy to serialise to and from structs. But one case that
-may cause issue, is when you have a user-defined type in your struct. For
+may cause issues is when you have a user-defined type in your struct. For
 example:
 ```go
 type MyModel struct {
