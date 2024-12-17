@@ -19,9 +19,10 @@ type Location struct {
     City string `db:"city"`
 }
 ```
-
-> See more: {ref}`types` 
-
+```{admonition} See more
+:class: tip```
+{ref}`types` 
+```
 ## Write your query string using the types
 
 SQLair queries are regular SQL queries with special input and output expressions
@@ -31,7 +32,7 @@ Write your SQL query with SQLair input expressions instead of query parameters
 and SQLair output expressions instead of columns to select.
 
 For example:
-```
+```go
 query := `
     SELECT &Employee.*
     FROM employee
@@ -39,8 +40,10 @@ query := `
 `
 ```
 
-> See more {ref}`input-expression-syntax`, {ref}`output-expression-syntax`.
-
+```{admonition} See more
+:class: tip
+{ref}`input-expression-syntax`, {ref}`output-expression-syntax`.
+```
 ## Prepare your query string to get a statement
 
 Now you have your query string, you need to pass it to `sqlair.Prepare` along
@@ -65,9 +68,11 @@ if err != nil {
 }
 ```
 
-> See more:
+```{admonition} See more
+:class: tip
 [`sqlair.Prepare`](https://pkg.go.dev/github.com/canonical/sqlair#Prepare),
 [`sqlair.MustPrepare`](https://pkg.go.dev/github.com/canonical/sqlair#MustPrepare)
+```
 
 ## Execute the statement on the database
 
@@ -82,10 +87,12 @@ reused. One of the methods on `Query` should immediately be called. It should
 not be saved as variable.
 ```
 
-> See more:
+```{admonition} See more
+:class: tip
 [`DB.Query`](https://pkg.go.dev/github.com/canonical/sqlair#DB.Query),
 [`TX.Query`](https://pkg.go.dev/github.com/canonical/sqlair#TX.Query),
 [`sqlair.Query`](https://pkg.go.dev/github.com/canonical/sqlair#Query)
+```
 
 ### Get one row
 To get only the first row returned from the database use `Query.Get`, passing
@@ -104,7 +111,10 @@ if err != nil {
 // employee now contains the first employee returned from the database.
 ```
 
-> See more: [`Query.Get`](https://pkg.go.dev/github.com/canonical/sqlair#Query.Get)
+```{admonition} See more
+:class: tip
+[`Query.Get`](https://pkg.go.dev/github.com/canonical/sqlair#Query.Get)
+```
 
 ### Get all the rows
 To get all the rows returned from the database use `Query.GetAll`, passing
@@ -123,8 +133,10 @@ if err != nil {
 // employees now contains all the employees returned from the database.
 ```
 
-> See more:
+```{admonition} See more
+:class: tip
 [`Query.GetAll`](https://pkg.go.dev/github.com/canonical/sqlair#Query.GetAll)
+```
 
 ### Iterate over the rows
 To iterate over the rows returned from the query, get an `Iterator` with
@@ -163,12 +175,14 @@ for iter.Next() {
 }
 ```
 
-> See more:
+```{admonition} See more
+:class: tip
 [`Query.Iter`](https://pkg.go.dev/github.com/canonical/sqlair#Query.Iter),
 [`sqlair.Iterator`](https://pkg.go.dev/github.com/canonical/sqlair#Iterator),
 [`Iterator.Next`](https://pkg.go.dev/github.com/canonical/sqlair#Iterator.Next),
 [`Iterator.Get`](https://pkg.go.dev/github.com/canonical/sqlair#Iterator.Get),
 [`Iterator.Close`](https://pkg.go.dev/github.com/canonical/sqlair#Iterator.Close)
+```
 ### Just run 
 To run a query that does not return any rows, use `Query.Run`. This is useful
 when doing operations that are not expected to return anything.
@@ -192,8 +206,10 @@ if err != nil {
 // employee has been inserted into the database.
 ```
 
-> See more:
+```{admonition} See more
+:class: tip
 [`Query.Run`](https://pkg.go.dev/github.com/canonical/sqlair#Query.Run)
+```
 
 
 ## (Optional) Get the query outcome
@@ -229,6 +245,8 @@ if err != nil {
 }
 ```
 
-> See more:
+```{admonition} See more
+:class: tip
 [`sqlair.Outcome`](https://pkg.go.dev/github.com/canonical/sqlair#Outcome),
 [`sql.Result`](https://pkg.go.dev/database/sql#Result)
+```

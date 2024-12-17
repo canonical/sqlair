@@ -157,7 +157,10 @@ type Order struct {
 }
 ```
 
-> See more {ref}`types`, [Go | Struct Tags](https://go.dev/wiki/Well-known-struct-tags)
+```{admonition} See more
+:class: tip
+{ref}`types`, [Go | Struct Tags](https://go.dev/wiki/Well-known-struct-tags)
+```
 
 ## Put your struct in the database
 
@@ -199,7 +202,10 @@ func populateDB(db *sqlair.DB) error {
 }
 ```
 
-> See more {ref}`input-expression-syntax`, {ref}`query`
+```{admonition} See more
+:class: tip
+{ref}`input-expression-syntax`, {ref}`query`
+```
 
 To insert the data into the database, create a `Query` on the database using the
 [`DB.Query`](https://pkg.go.dev/github.com/canonical/sqlair#Query) method and
@@ -436,7 +442,10 @@ Customer record of Joe: main.Customer{ID:1, Name:"Joe", Address:"15 Westmeade Ro
 Finished without errors!
 ```
 
-> See more: {ref}`output-expression-syntax`, {ref}`input-expression-syntax`, [`Query.Get`](https://pkg.go.dev/github.com/canonical/sqlair#Query.Get)
+```{admonition} See more
+:class: tip
+{ref}`output-expression-syntax`, {ref}`input-expression-syntax`, [`Query.Get`](https://pkg.go.dev/github.com/canonical/sqlair#Query.Get)
+```
 
 ### Get all the orders
 
@@ -483,11 +492,14 @@ Finished without errors!
 ```
 You have all the orders. Congratulations! You have learnt the basics of SQLair!
 
-> See more: [`Query.GetAll`](https://pkg.go.dev/github.com/canonical/sqlair#Query.GetAll)
+```{admonition} See more
+:class: tip
+[`Query.GetAll`](https://pkg.go.dev/github.com/canonical/sqlair#Query.GetAll)
+```
 
 ## Tear things down
-Getting rid of the tutorial is as simple as deleting the directory! No further
-steps required.
+To restore your machine to the state it had before you started this tutorial,
+simply delete the directory. No further steps required.
 ```bash
 cd ..
 rm -r tutorial
@@ -495,5 +507,8 @@ rm -r tutorial
 ## Next steps
 This tutorial has introduced you to the basics, but there is a lot more to
 explore!
-> See more {ref}`howto`, {ref}`reference`,
+```{admonition} See more
+:class: tip
+{ref}`howto`, {ref}`reference`,
 [pkg.go.dev](https://pkg.go.dev/github.com/canonical/sqlair)
+```

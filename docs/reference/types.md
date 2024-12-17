@@ -55,8 +55,10 @@ type Address struct {
 }
 ```
 
-> See more: {ref}`insert-statements`
-
+```{admonition} See more
+:class: tip
+{ref}`insert-statements`
+```
 ### Maps
 
 Named maps can be used with SQLair and must have a key with a base type of
