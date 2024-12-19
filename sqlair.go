@@ -105,8 +105,10 @@ func (db *DB) PlainDB() *sql.DB {
 // Query represents a query on a database. It is designed to be run once and
 // used immediately since it contains the query context.
 type Query struct {
-	// run executes the Query against the DB or the TX.
-	run func(context.Context) (*sql.Rows, sql.Result, error)
+	// run executes the Query against the DB or the TX. It returns the results
+	// and a pointer to the driverStmt used to run the query if it needs to be
+	// kept in memory.
+	run func(context.Context) (*sql.Rows, sql.Result, *driverStmt, error)
 	ctx context.Context
 	err error
 	pq  *expr.PrimedQuery
@@ -120,6 +122,10 @@ type Iterator struct {
 	err     error
 	result  sql.Result
 	started bool
+	// ds is the driverStmt used to run the query. The Iterator holds onto this
+	// so that it cannot be closed by finalizer while the rows are being
+	// iterated over. This finalizer can be set in the cache.
+	ds *driverStmt
 }
 
 // Query builds a new query from a context, a [Statement] and the input
@@ -138,22 +144,22 @@ func (db *DB) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: err}
 	}
 
-	run := func(innerCtx context.Context) (rows *sql.Rows, result sql.Result, err error) {
+	run := func(innerCtx context.Context) (rows *sql.Rows, result sql.Result, ds *driverStmt, err error) {
 		primedSQL := pq.SQL()
-		sqlstmt, ok := stmtCache.lookupStmt(db, s, primedSQL)
+		ds, ok := stmtCache.lookupStmt(db, s, primedSQL)
 		if !ok {
-			sqlstmt, err = stmtCache.driverPrepareStmt(ctx, db, s, primedSQL)
+			ds, err = stmtCache.driverPrepareStmt(ctx, db, s, primedSQL)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, ds, err
 			}
 		}
 
 		if pq.HasOutputs() {
-			rows, err = sqlstmt.QueryContext(innerCtx, pq.Params()...)
+			rows, err = ds.stmt.QueryContext(innerCtx, pq.Params()...)
 		} else {
-			result, err = sqlstmt.ExecContext(innerCtx, pq.Params()...)
+			result, err = ds.stmt.ExecContext(innerCtx, pq.Params()...)
 		}
-		return rows, result, err
+		return rows, result, ds, err
 	}
 
 	return &Query{pq: pq, run: run, ctx: ctx, err: nil}
@@ -215,7 +221,7 @@ func (q *Query) Iter() *Iterator {
 	}
 
 	var cols []string
-	rows, result, err := q.run(q.ctx)
+	rows, result, ds, err := q.run(q.ctx)
 	if q.pq.HasOutputs() {
 		if err == nil { // if err IS nil
 			cols, err = rows.Columns()
@@ -225,7 +231,7 @@ func (q *Query) Iter() *Iterator {
 		return &Iterator{pq: q.pq, err: err}
 	}
 
-	return &Iterator{pq: q.pq, rows: rows, cols: cols, err: err, result: result}
+	return &Iterator{pq: q.pq, rows: rows, cols: cols, err: err, result: result, ds: ds}
 }
 
 // Next prepares the next row for [Iterator.Get]. If an error occurs during
@@ -486,20 +492,20 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		return &Query{ctx: ctx, err: err}
 	}
 
-	run := func(innerCtx context.Context) (rows *sql.Rows, result sql.Result, err error) {
-		sqlstmt, ok := stmtCache.lookupStmt(tx.db, s, pq.SQL())
+	run := func(innerCtx context.Context) (rows *sql.Rows, result sql.Result, ds *driverStmt, err error) {
+		ds, ok := stmtCache.lookupStmt(tx.db, s, pq.SQL())
 		if ok {
 			// Register the prepared statement on the transaction. This function
 			// does not resend the prepare request to the database.
 			// The txstmt is closed by database/sql when the transaction is
 			// commited or rolled back.
-			txstmt := tx.sqltx.Stmt(sqlstmt)
+			txstmt := tx.sqltx.Stmt(ds.stmt)
 			if pq.HasOutputs() {
 				rows, err = txstmt.QueryContext(innerCtx, pq.Params()...)
 			} else {
 				result, err = txstmt.ExecContext(innerCtx, pq.Params()...)
 			}
-			return rows, result, err
+			return rows, result, ds, err
 		}
 
 		if pq.HasOutputs() {
@@ -507,7 +513,7 @@ func (tx *TX) Query(ctx context.Context, s *Statement, inputArgs ...any) *Query 
 		} else {
 			result, err = tx.sqltx.ExecContext(innerCtx, pq.SQL(), pq.Params()...)
 		}
-		return rows, result, err
+		return rows, result, nil, err
 	}
 
 	return &Query{pq: pq, ctx: ctx, run: run, err: nil}
