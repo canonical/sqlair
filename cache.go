@@ -153,8 +153,7 @@ func (sc *statementCache) removeAndCloseStmtFunc(s *Statement) {
 }
 
 // removeAndCloseDBFunc closes and removes from the cache all sql.Stmt objects
-// prepared on the database, removes the database from then cache, then closes
-// the sql.DB.
+// prepared on the database, removes the database from then cache.
 func (sc *statementCache) removeAndCloseDBFunc(db *DB) {
 	sc.mutex.Lock()
 	defer sc.mutex.Unlock()
@@ -165,5 +164,4 @@ func (sc *statementCache) removeAndCloseDBFunc(db *DB) {
 		delete(dbCache, db.cacheID)
 	}
 	delete(sc.dbStmtCache, db.cacheID)
-	db.sqldb.Close()
 }
