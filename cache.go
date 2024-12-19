@@ -103,8 +103,8 @@ func (sc *statementCache) newDB(sqldb *sql.DB) *DB {
 }
 
 // lookupStmt checks if a Statement has been prepared on the db driver with the
-// given primedSQL. If it has, the driver-prepared sql.Stmt is returned.
-func (sc *statementCache) lookupStmt(db *DB, s *Statement, primedSQL string) (stmt *sql.Stmt, ok bool) {
+// given primedSQL. If it has, the driverStmt is returned.
+func (sc *statementCache) lookupStmt(db *DB, s *Statement, primedSQL string) (dStmt *driverStmt, ok bool) {
 	// The Statement cache ID is only removed from stmtDBCache when the
 	// finalizer is run. The Statement's cache ID must be in the stmtDBCache
 	// since we hold a reference to the Statement. It is therefore safe to
@@ -116,27 +116,32 @@ func (sc *statementCache) lookupStmt(db *DB, s *Statement, primedSQL string) (st
 	if !ok || ds.sql != primedSQL {
 		return nil, false
 	}
-	return ds.stmt, ok
+	return ds, ok
 }
 
 // driverPrepareStatement prepares a statement on the database and then stores
 // the prepared *sql.Stmt in the cache.
-func (sc *statementCache) driverPrepareStmt(ctx context.Context, db *DB, s *Statement, primedSQL string) (*sql.Stmt, error) {
+func (sc *statementCache) driverPrepareStmt(ctx context.Context, db *DB, s *Statement, primedSQL string) (*driverStmt, error) {
 	sqlstmt, err := db.sqldb.PrepareContext(ctx, primedSQL)
 	if err != nil {
 		return nil, err
 	}
+
 	sc.mutex.Lock()
 	defer sc.mutex.Unlock()
-	// If there is already a statement in the cache, replace it with ours.
-	if driverStmt, ok := sc.stmtDBCache[s.cacheID][db.cacheID]; ok {
-		// Set a finalizer on the statement we evict from the cache to close it
-		// once current users have finished with it.
-		runtime.SetFinalizer(driverStmt.stmt, (*sql.Stmt).Close)
+
+	// If there is already a statement in the cache, set a finalizer on it to
+	// close it once concurrent users have finished with it and replace it with
+	// ours.
+	if ds, ok := sc.stmtDBCache[s.cacheID][db.cacheID]; ok {
+		runtime.SetFinalizer(ds, func(ds *driverStmt) {
+			ds.stmt.Close()
+		})
 	}
-	sc.stmtDBCache[s.cacheID][db.cacheID] = &driverStmt{sql: primedSQL, stmt: sqlstmt}
+	ds := &driverStmt{sql: primedSQL, stmt: sqlstmt}
+	sc.stmtDBCache[s.cacheID][db.cacheID] = ds
 	sc.dbStmtCache[db.cacheID][s.cacheID] = true
-	return sqlstmt, nil
+	return ds, nil
 }
 
 // removeAndCloseStmtFunc removes and closes all sql.Stmt objects associated
