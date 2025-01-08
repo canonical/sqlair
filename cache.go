@@ -120,7 +120,7 @@ func (sc *statementCache) lookupStmt(db *DB, s *Statement, primedSQL string) (dS
 }
 
 // driverPrepareStatement prepares a statement on the database and then stores
-// the prepared *sql.Stmt in the cache.
+// the prepared driverStmt in the cache.
 func (sc *statementCache) driverPrepareStmt(ctx context.Context, db *DB, s *Statement, primedSQL string) (*driverStmt, error) {
 	sqlstmt, err := db.sqldb.PrepareContext(ctx, primedSQL)
 	if err != nil {
