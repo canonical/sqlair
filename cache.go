@@ -130,13 +130,13 @@ func (sc *statementCache) driverPrepareStmt(ctx context.Context, db *DB, s *Stat
 	sc.mutex.Lock()
 	defer sc.mutex.Unlock()
 
-	// If there is already a statement in the cache, set a finalizer on it to
-	// close it once concurrent users have finished with it and replace it with
-	// ours.
+	// If there is already a driver statement in the cache for this Statement's
+	// cache ID, set a finalizer on the driverStmt and evict it from the cache,
+	// replacing it with the newly generated driverStmt. The finalizer ensures
+	// that the sql.Stmt in the driverStmt is closed once concurrent users have
+	// finished with it.
 	if ds, ok := sc.stmtDBCache[s.cacheID][db.cacheID]; ok {
-		runtime.SetFinalizer(ds, func(ds *driverStmt) {
-			ds.stmt.Close()
-		})
+		runtime.SetFinalizer(ds, closeDriverStmt)
 	}
 	ds := &driverStmt{sql: primedSQL, stmt: sqlstmt}
 	sc.stmtDBCache[s.cacheID][db.cacheID] = ds
@@ -169,4 +169,9 @@ func (sc *statementCache) removeAndCloseDBFunc(db *DB) {
 		delete(dbCache, db.cacheID)
 	}
 	delete(sc.dbStmtCache, db.cacheID)
+}
+
+// closeDriverStmt closes the underlying sql.Stmt of the driverStmt.
+func closeDriverStmt(ds *driverStmt) {
+	ds.stmt.Close()
 }
