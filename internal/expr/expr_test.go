@@ -733,6 +733,12 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	inputArgs:      []any{[]Address{{Street: "Wallaby Way"}, {Street: "Platypus Place"}}, []Person{{PostalCode: 11111}, {PostalCode: 22222}}},
 	expectedParams: []any{11111, 22222, "Wallaby Way", "Platypus Place"},
 	expectedSQL:    `INSERT INTO person (id, random_string, random_thing, number, street) VALUES (@sqlair_0, "random string", rand(), 1000, @sqlair_2), (@sqlair_1, "random string", rand(), 1000, @sqlair_3)`,
+}, {
+	summary:        "ending in multiple semicolons",
+	query:          "SELECT p.*	AS &Person.*;;;;;;",
+	expectedParsed: "[Bypass[SELECT ] Output[[p.*] [Person.*]] Bypass[;;;;;;]]",
+	typeSamples:    []any{Person{}},
+	expectedSQL:    "SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2;;;;;;",
 }}
 
 func (s *ExprSuite) TestExprPkg(c *C) {
@@ -1371,6 +1377,65 @@ func (s *ExprSuite) TestBindInputsError(c *C) {
 		c.Assert(err, IsNil)
 
 		_, err = typedExpr.BindInputs(t.inputArgs...)
+		if err != nil {
+			c.Check(err.Error(), Equals, t.err,
+				Commentf("test %d failed:\nquery: %s", i, t.query))
+		} else {
+			c.Errorf("test %d failed:\nexpected err: %q but got nil\nquery: %q", i, t.err, t.query)
+		}
+	}
+}
+
+func (s *ExprSuite) TestScanArgsErrors(c *C) {
+	tests := []struct {
+		query       string
+		typeSamples []any
+		inputArgs   []any
+		columnNames []string
+		outputArgs  []any
+		err         string
+	}{{
+		query:       "SELECT &Address.* FROM t",
+		typeSamples: []any{Address{}},
+		inputArgs:   []any{},
+		columnNames: []string{},
+		outputArgs:  []any{&Address{}},
+		err:         `expected 3 column(s) in the query results, got 0`,
+	}, {
+		query:       "SELECT &Address.* FROM t",
+		typeSamples: []any{Address{}},
+		inputArgs:   []any{},
+		columnNames: []string{"sqlair_0"},
+		outputArgs:  []any{&Address{}},
+		err:         `expected 3 column(s) in the query results, got 1`,
+	}, {
+		query:       "SELECT &Address.* FROM t",
+		typeSamples: []any{Address{}},
+		inputArgs:   []any{},
+		columnNames: []string{"_sqlair_0", "_sqlair_1", "_sqlair_2"},
+		outputArgs:  []any{},
+		err:         `parameter with type "Address" missing`,
+	}, {
+		query:       "SELECT &Address.id FROM t",
+		typeSamples: []any{Address{}},
+		inputArgs:   []any{},
+		columnNames: []string{"wrong_column_name"},
+		outputArgs:  []any{&Address{}},
+		err:         `column(s) for output "&Address" not found in query results`,
+	}}
+
+	for i, t := range tests {
+		parser := expr.NewParser()
+		parsedExpr, err := parser.Parse(t.query)
+		c.Assert(err, IsNil)
+
+		typedExpr, err := parsedExpr.BindTypes(t.typeSamples...)
+		c.Assert(err, IsNil)
+
+		pq, err := typedExpr.BindInputs(t.inputArgs...)
+		c.Assert(err, IsNil)
+
+		_, _, err = pq.ScanArgs(t.columnNames, t.outputArgs)
 		if err != nil {
 			c.Check(err.Error(), Equals, t.err,
 				Commentf("test %d failed:\nquery: %s", i, t.query))
