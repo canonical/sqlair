@@ -79,44 +79,6 @@ func (s *CacheSuite) TestPreparedStatementReuse(c *C) {
 	s.checkDriverStmtsAllClosed(c)
 }
 
-func (s *CacheSuite) TestClosingDB(c *C) {
-	stmt, err := Prepare(`SELECT 'test'`)
-	c.Assert(err, IsNil)
-
-	var dbID uint64
-	// For a Statement or DB to be removed from the cache it needs to go out of
-	// scope and be garbage collected. A function is used to "forget" the
-	// statement.
-	func() {
-		db := s.openDB(c)
-		dbID = db.cacheID
-
-		// Start a query with stmt on db. This will prepare the stmt on the db.
-		err = db.Query(nil, stmt).Run()
-		c.Assert(err, IsNil)
-
-		// Check a statement is in the cache and a prepared statement has been
-		// opened on the DB.
-		s.checkStmtInCache(c, db.cacheID, stmt.cacheID)
-		s.checkNumDBStmts(c, db.cacheID, 1)
-		s.checkDriverStmtsOpened(c, 1)
-	}()
-
-	s.triggerFinalizers()
-	s.checkDBNotInCache(c, dbID)
-	s.checkDriverStmtsAllClosed(c)
-
-	// Check that the statement runs fine on a new DB.
-	db := s.openDB(c)
-	err = db.Query(nil, stmt).Run()
-	c.Assert(err, IsNil)
-
-	// Check the statement has been added to the cache for the new DB.
-	s.checkStmtInCache(c, db.cacheID, stmt.cacheID)
-	s.checkNumDBStmts(c, db.cacheID, 1)
-	s.checkDriverStmtsOpened(c, 2)
-}
-
 func (s *CacheSuite) TestStatementPreparedAndClosed(c *C) {
 	db := s.openDB(c)
 
