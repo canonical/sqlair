@@ -416,7 +416,7 @@ func (s *PackageSuite) TestIterGetErrors(c *C) {
 		types:   []any{Person{}},
 		inputs:  []any{},
 		outputs: []any{&Person{}},
-		err:     `cannot get result: query uses "&Person" outside of result context`,
+		err:     `cannot get result: column\(s\) for output "&Person" not found in query results`,
 	}}
 
 	db, tables := s.personAndAddressDB(c)
@@ -484,6 +484,16 @@ func (s *PackageSuite) TestValidGet(c *C) {
 		inputs:   []any{},
 		outputs:  []any{sqlair.M{}},
 		expected: []any{sqlair.M{"avg": float64(2625), "name": "Fred"}},
+	}, {
+		summary: "multiple semicolons at end",
+		query: `UPDATE person
+SET id = id + 1
+WHERE name = $Person.name
+RETURNING person.id AS &Person.*;;`,
+		types:    []any{Person{}},
+		inputs:   []any{Person{Name: "Fred"}},
+		outputs:  []any{&Person{}},
+		expected: []any{&Person{ID: 31}},
 	}}
 
 	db, tables := s.personAndAddressDB(c)

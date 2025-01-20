@@ -41,16 +41,23 @@ func (pq *PrimedQuery) SQL() string {
 // be populated with the query results. All the structs/maps/slices mentioned in
 // the query must be in outputArgs.
 func (pq *PrimedQuery) ScanArgs(columnNames []string, outputArgs []any) (scanArgs []any, onSuccess func(), err error) {
-
 	typeToValue, err := typeinfo.ValidateOutputs(outputArgs)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	if len(columnNames) < len(pq.outputs) {
+		return nil, nil, fmt.Errorf(
+			"expected %d column(s) in the query results, got %d",
+			len(pq.outputs),
+			len(columnNames),
+		)
+	}
+
 	// Generate the pointers.
 	var ptrs []any
 	var scanProxies []typeinfo.ScanProxy
-	var columnInResult = make([]bool, len(columnNames))
+	var columnInResult = make([]bool, len(pq.outputs))
 	argTypeUsed := map[reflect.Type]bool{}
 	for _, column := range columnNames {
 		idx, ok := markerIndex(column)
@@ -79,7 +86,10 @@ func (pq *PrimedQuery) ScanArgs(columnNames []string, outputArgs []any) (scanArg
 
 	for i := 0; i < len(pq.outputs); i++ {
 		if !columnInResult[i] {
-			return nil, nil, fmt.Errorf(`query uses "&%s" outside of result context`, pq.outputs[i].ArgType().Name())
+			return nil, nil, fmt.Errorf(
+				`column(s) for output "&%s" not found in query results`,
+				pq.outputs[i].ArgType().Name(),
+			)
 		}
 	}
 
