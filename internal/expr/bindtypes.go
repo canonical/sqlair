@@ -209,7 +209,8 @@ func (e *columnsInsertExpr) bindTypes(teb *typedExprBuilder) (err error) {
 				if remainingMap != nil {
 					return fmt.Errorf("cannot use more than one map with asterisk")
 				}
-				remainingMap = &source.typeName
+				remainingMapTypeName := source.typeName
+				remainingMap = &remainingMapTypeName
 				continue
 			}
 			inps, tags, err := teb.AllStructInputs(source.typeName)
