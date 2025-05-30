@@ -30,6 +30,7 @@ The project is pre-release and there may still be major changes to the API.
 tutorial/tutorial
 howto/index
 reference/index
+explanation/security
 ```
 
 ````{grid} 1 1 2 2 
@@ -48,12 +49,17 @@ reference/index
 
 ````
 
-````{grid} 1 1 1 1
-:reverse:
+````{grid} 1 1 2 2
 
 ```{grid-item-card} [Reference](reference/index)
 
 **Technical information** about SQLair
+
+```
+
+```{grid-item-card} [Security](explanation/security)
+
+**Security** information about SQLair
 
 ```
 
