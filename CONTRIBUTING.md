@@ -63,8 +63,8 @@ passed to SQLair. For more info, see
 
 ### Environment setup
 
-SQLair is written in Go version 1.18. Make sure you have this, or a higher
-version installed. The choice to use 1.18 was made to maximize compatibility.
+SQLair is written in Go version 1.24. Make sure you have this, or a higher
+version installed.
 
 ### Building and testing
 
