@@ -1,6 +1,6 @@
 module github.com/canonical/sqlair
 
-go 1.18
+go 1.24
 
 require (
 	github.com/mattn/go-sqlite3 v1.14.16

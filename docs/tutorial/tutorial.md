@@ -9,7 +9,7 @@ Let's get started!
 
 
 ## Set things up
-For this tutorial you will need Go version 1.18. To use SQLair you will need a
+For this tutorial you will need Go version 1.24. To use SQLair you will need a
 Go project that sets up a database. 
 
 To create the project run:
