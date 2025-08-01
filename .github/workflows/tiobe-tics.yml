@@ -1,0 +1,23 @@
+name: TIOBE Quality Checks
+on:
+  [push]
+#  workflow_dispatch:
+#  schedule:
+#    - cron: '0 7 1 * *'
+
+jobs:
+  build:
+    runs-on: [self-hosted, amd64, tiobe, noble]
+    steps:
+      - name: Checkout the project
+        uses: actions/checkout@v4
+
+      - name: Run TICS analysis with github-action
+        uses: tiobe/tics-github-action@v3
+        with:
+          mode: qserver
+          project: sqlair
+          branchdir: .
+          viewerUrl: https://canonical.tiobe.com/tiobeweb/TICS/api/cfg?name=GoProjects
+          ticsAuthToken: ${{ secrets.TICSAUTHTOKEN }}
+          installTics: true
