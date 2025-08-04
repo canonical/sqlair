@@ -1,0 +1,41 @@
+name: TIOBE Quality Checks
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 7 1 * *'
+
+jobs:
+  build:
+    runs-on: [self-hosted, amd64, tiobe, noble]
+    steps:
+      - name: Checkout the project
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Install dependencies
+        run: |
+          go install github.com/axw/gocov/gocov@v1.1.0
+          go install github.com/AlekSi/gocov-xml@v1.1.0
+
+      # We could store a report from the regular run, but this is cheap to do and keeps this isolated.
+      - name: Test and generate coverage report
+        run: |
+          go test -coverprofile=coverage.out ./...
+          gocov convert coverage.out > coverage.json
+          mkdir .coverage
+          gocov-xml < coverage.json > .coverage/coverage.xml
+
+      - name: Run TICS analysis with github-action
+        uses: tiobe/tics-github-action@v3
+        with:
+          mode: qserver
+          project: sqlair
+          branchdir: .
+          viewerUrl: https://canonical.tiobe.com/tiobeweb/TICS/api/cfg?name=GoProjects
+          ticsAuthToken: ${{ secrets.TICSAUTHTOKEN }}
+          installTics: true
