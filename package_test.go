@@ -1118,18 +1118,11 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 	// Test error when running query after rollback against the public error variable.
 	tx, err = db.Begin(ctx, nil)
 	c.Assert(err, IsNil)
-	// Create Query.
-	q = tx.Query(ctx, insertStmt, &derek)
-	// Rollback.
+	
 	err = tx.Rollback()
 	c.Assert(err, IsNil)
+	
 	err = tx.Query(ctx, insertStmt, &derek).Run()
-	// Check against sqlair package error.
-	if !errors.Is(err, sqlair.ErrTXDone) {
-		c.Errorf("expected %q, got %q", sqlair.ErrTXDone, err)
-	}
-	err = q.Run()
-	// Check against sql package error.
 	if !errors.Is(err, sql.ErrTxDone) {
 		c.Errorf("expected %q, got %q", sql.ErrTxDone, err)
 	}
