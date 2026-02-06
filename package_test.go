@@ -727,6 +727,76 @@ func (s *PackageSuite) TestGetAllErrors(c *C) {
 	}
 }
 
+// TestGetAllMutatesExistingSliceValues is a regression test to assert a
+// behaviour change made to [Query.GetAll]. Prior to this calling [Query.GetAll]
+// with one or more slice values that had pre existing elements len(s) > 0 would
+// maintain the existing elements in the slice.
+//
+// This is a problem for transaction closures that are retried due to failures
+// and may have had a successful read into a slice prior to a transaction
+// failure.
+func (s *PackageSuite) TestGetAllMutatesExistingSliceValues(c *C) {
+	db, tables := s.personAndAddressDB(c)
+	defer dropTables(c, db, tables...)
+
+	stmt, err := sqlair.Prepare("SELECT &Person.* FROM person", Person{})
+	c.Assert(err, IsNil)
+
+	var dbVals []Person
+	err = db.Query(nil, stmt).GetAll(&dbVals)
+	c.Assert(err, IsNil)
+
+	initialLen := len(dbVals)
+	c.Check(initialLen >= 0, Equals, true,
+		Commentf("expected at least one or more person records"))
+
+	err = db.Query(nil, stmt).GetAll(&dbVals)
+	c.Assert(err, IsNil)
+
+	c.Check(len(dbVals), Equals, initialLen)
+}
+
+// TestGetAllMutatesMultipleExistingSliceValues is a regression test to assert a
+// behaviour change made to [Query.GetAll]. Prior to this calling [Query.GetAll]
+// with one or more slice values that had pre existing elements len(s) > 0 would
+// maintain the existing elements in the slice.
+//
+// This is a problem for transaction closures that are retried due to failures
+// and may have had a successful read into a slice prior to a transaction
+// failure.
+func (s *PackageSuite) TestGetAllMutatesMultipleExistingSliceValues(c *C) {
+	db, tables := s.personAndAddressDB(c)
+	defer dropTables(c, db, tables...)
+
+	stmt, err := sqlair.Prepare(`
+SELECT person.* AS &Person.*,
+       address.* AS &Address.*
+FROM   person
+INNER JOIN address ON person.address_id = address.id
+`, Address{}, Person{})
+	c.Assert(err, IsNil)
+
+	var (
+		addressDBVals []Address
+		personDBVals  []Person
+	)
+	err = db.Query(nil, stmt).GetAll(&personDBVals, &addressDBVals)
+	c.Assert(err, IsNil)
+
+	initialAddressLen := len(personDBVals)
+	c.Check(initialAddressLen >= 0, Equals, true,
+		Commentf("expected at least one or more address records"))
+	initialPersonLen := len(personDBVals)
+	c.Check(initialPersonLen >= 0, Equals, true,
+		Commentf("expected at least one or more person records"))
+
+	err = db.Query(nil, stmt).GetAll(&personDBVals, &addressDBVals)
+	c.Assert(err, IsNil)
+
+	c.Check(len(addressDBVals), Equals, initialAddressLen)
+	c.Check(len(personDBVals), Equals, initialPersonLen)
+}
+
 func (s *PackageSuite) TestRun(c *C) {
 	db, tables := s.personAndAddressDB(c)
 	defer dropTables(c, db, tables...)
@@ -1118,10 +1188,10 @@ func (s *PackageSuite) TestTransactionErrors(c *C) {
 	// Test error when running query after rollback against the public error variable.
 	tx, err = db.Begin(ctx, nil)
 	c.Assert(err, IsNil)
-	
+
 	err = tx.Rollback()
 	c.Assert(err, IsNil)
-	
+
 	err = tx.Query(ctx, insertStmt, &derek).Run()
 	if !errors.Is(err, sql.ErrTxDone) {
 		c.Errorf("expected %q, got %q", sql.ErrTxDone, err)
