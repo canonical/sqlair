@@ -351,8 +351,8 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 		if sliceVal.Kind() != reflect.Slice {
 			return fmt.Errorf("need pointer to slice, got pointer to %s", sliceVal.Kind())
 		}
-		// Set the length of the slice value back to zero maintaing any existing
-		// allocated capacity.
+		// Set the length of the slice value back to zero maintaining any
+		// existing capacity.
 		sliceVal.SetLen(0)
 		sliceVals = append(sliceVals, sliceVal)
 	}
