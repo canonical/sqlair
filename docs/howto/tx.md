@@ -54,5 +54,5 @@ if err != nil {
 :class: tip
 [TX.Commit](https://pkg.go.dev/github.com/canonical/sqlair#TX.Commit),
 [TX.Rollback](https://pkg.go.dev/github.com/canonical/sqlair#TX.Rollback),
-[sqlair.ErrTXDone](https://pkg.go.dev/github.com/canonical/sqlair#ErrTXDone)
+[sql.ErrTXDone](https://pkg.go.dev/database/sql#ErrTxDone)
 ```

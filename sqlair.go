@@ -317,6 +317,9 @@ func (o *Outcome) Result() sql.Result {
 // A pointer to an empty [Outcome] struct may be provided as the first output
 // variable to get information about query execution.
 //
+// A provided slice that already contains one or more values will have its
+// length reset to 0 before scanning into the slice.
+//
 // [ErrNoRows] will be returned if no rows are found.
 func (q *Query) GetAll(sliceArgs ...any) (err error) {
 	if q.err != nil {
@@ -348,6 +351,9 @@ func (q *Query) GetAll(sliceArgs ...any) (err error) {
 		if sliceVal.Kind() != reflect.Slice {
 			return fmt.Errorf("need pointer to slice, got pointer to %s", sliceVal.Kind())
 		}
+		// Set the length of the slice value back to zero maintaining any
+		// existing capacity.
+		sliceVal.SetLen(0)
 		sliceVals = append(sliceVals, sliceVal)
 	}
 
