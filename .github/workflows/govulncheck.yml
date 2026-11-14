@@ -3,7 +3,13 @@ on: [push, pull_request]
 
 jobs:
   build:
+    strategy:
+      matrix:
+        # tests/postgresql is a separate module with its own dependencies.
+        work-dir: [., tests/postgresql]
     runs-on: ubuntu-latest
     steps:
       - id: govulncheck
         uses: golang/govulncheck-action@v1
+        with:
+          work-dir: ${{ matrix.work-dir }}
