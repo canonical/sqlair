@@ -23,4 +23,7 @@ prepend
 TXOptions
 ErrTXDone
 boolean
-sanitization
+sanitisation
+cryptographic
+Cryptographic
+TLS
