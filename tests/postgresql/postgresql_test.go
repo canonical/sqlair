@@ -53,3 +53,53 @@ func TestOutputs(t *testing.T) {
 		t.Errorf("got %v, want %v", people, want)
 	}
 }
+
+type IDs []int
+
+func TestInputs(t *testing.T) {
+	sqldb := postgresql.NewDB(t)
+	createPersonTable(t, sqldb)
+	db := sqlair.NewDB(sqldb)
+	ctx := t.Context()
+
+	// The name column has a single value that is reused in every row.
+	insertStmt := sqlair.MustPrepare(`INSERT INTO person (id, name) VALUES ($Person.id, $M.name)`, Person{}, sqlair.M{})
+	err := db.Query(ctx, insertStmt, []Person{{ID: 1}, {ID: 2}}, sqlair.M{"name": "Fred"}).Run()
+	if err != nil {
+		t.Fatalf("cannot bulk insert: %v", err)
+	}
+
+	tx, err := db.Begin(ctx, nil)
+	if err != nil {
+		t.Fatalf("cannot begin transaction: %v", err)
+	}
+	// Release locks held by the transaction if the test fails before Commit.
+	defer tx.Rollback()
+	insertOne := sqlair.MustPrepare(`INSERT INTO person (*) VALUES ($Person.*)`, Person{})
+	if err := tx.Query(ctx, insertOne, Person{ID: 3, Name: "Mark"}).Run(); err != nil {
+		t.Fatalf("cannot insert in transaction: %v", err)
+	}
+	getOne := sqlair.MustPrepare(`SELECT &Person.* FROM person WHERE id = $Person.id`, Person{})
+	mark := Person{ID: 3}
+	if err := tx.Query(ctx, getOne, mark).Get(&mark); err != nil {
+		t.Fatalf("cannot get person in transaction: %v", err)
+	}
+	if mark.Name != "Mark" {
+		t.Errorf("got %v in transaction, want name Mark", mark)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("cannot commit: %v", err)
+	}
+
+	// A slice expands to several placeholders before the next input.
+	selectStmt := sqlair.MustPrepare(`SELECT &Person.* FROM person WHERE id IN ($IDs[:]) AND name = $M.name ORDER BY id`, Person{}, IDs{}, sqlair.M{})
+	var people []Person
+	err = db.Query(ctx, selectStmt, IDs{1, 2, 3}, sqlair.M{"name": "Fred"}).GetAll(&people)
+	if err != nil {
+		t.Fatalf("cannot get people: %v", err)
+	}
+	want := []Person{{ID: 1, Name: "Fred"}, {ID: 2, Name: "Fred"}}
+	if !reflect.DeepEqual(people, want) {
+		t.Errorf("got %v, want %v", people, want)
+	}
+}

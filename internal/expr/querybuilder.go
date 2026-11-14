@@ -5,7 +5,6 @@ package expr
 
 import (
 	"bytes"
-	"database/sql"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -26,8 +25,7 @@ type queryBuilder struct {
 	// sqlBuilder is used to accumulate the generated SQL.
 	sqlBuilder sqlBuilder
 	// params are the query parameters that will be passed to the database at
-	// query time. They are numbered in the order they are added, so the
-	// parameter numbers follow the order of the arguments.
+	// query time. The placeholder for params[i] is $(i+1).
 	params []any
 	// outputs are the output value locators to be used when the SQL is scanned.
 	outputs []typeinfo.Output
@@ -49,12 +47,11 @@ func (qb *queryBuilder) markArgUsed(t reflect.Type) {
 	qb.argUsed[t] = true
 }
 
-// addParam adds a query parameter and returns the placeholder that refers to
-// it in the generated SQL.
+// addParam adds a query parameter and returns the numbered placeholder that
+// refers to it in the generated SQL.
 func (qb *queryBuilder) addParam(val any) string {
-	name := "sqlair_" + strconv.Itoa(len(qb.params))
-	qb.params = append(qb.params, sql.Named(name, val))
-	return "@" + name
+	qb.params = append(qb.params, val)
+	return "$" + strconv.Itoa(len(qb.params))
 }
 
 // addInputs adds input placeholders and argument values to the query.

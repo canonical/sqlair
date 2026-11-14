@@ -4,9 +4,7 @@
 package expr_test
 
 import (
-	"database/sql"
 	"database/sql/driver"
-	"strconv"
 	"testing"
 
 	"github.com/canonical/sqlair"
@@ -192,7 +190,7 @@ FROM person /* The start of a multi line comment
 It keeps going here with some weird chars /-*"/
 And now it stops */ WHERE "x" = /-*'' -- The "WHERE" line
 AND y =/* And now we have " */ "-- /* */" /* " some comments strings */
-AND z = @sqlair_0 -- The line with $Person.id on it
+AND z = $1 -- The line with $Person.id on it
 `,
 }, {
 	summary:        "comments v2",
@@ -213,7 +211,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Person{}},
 	inputArgs:      []any{Person{ID: 1}},
 	expectedParams: []any{1},
-	expectedSQL:    `SELECT "col$1", '$2' FROM t /* $3 */ WHERE x = @sqlair_0 -- $4`,
+	expectedSQL:    `SELECT "col$1", '$2' FROM t /* $3 */ WHERE x = $1 -- $4`,
 }, {
 	summary:        "star as output",
 	query:          "SELECT * AS &Person.* FROM t",
@@ -239,7 +237,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Person{}, Address{}},
 	inputArgs:      []any{Person{Fullname: "Foo"}, Address{ID: 1}},
 	expectedParams: []any{1, "Foo"},
-	expectedSQL:    `SELECT p.*, a.district FROM person AS p JOIN address AS a ON p.address_id=@sqlair_0 WHERE p.name = @sqlair_1`,
+	expectedSQL:    `SELECT p.*, a.district FROM person AS p JOIN address AS a ON p.address_id=$1 WHERE p.name = $2`,
 }, {
 	summary:        "pointer input",
 	query:          "SELECT foo FROM bar WHERE a=$Address.id AND b=$Person.name",
@@ -247,7 +245,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Person{}, Address{}},
 	inputArgs:      []any{&Person{Fullname: "Foo"}, &Address{ID: 1}},
 	expectedParams: []any{1, "Foo"},
-	expectedSQL:    `SELECT foo FROM bar WHERE a=@sqlair_0 AND b=@sqlair_1`,
+	expectedSQL:    `SELECT foo FROM bar WHERE a=$1 AND b=$2`,
 }, {
 	summary:        "output and input",
 	query:          "SELECT &Person.* FROM table WHERE foo = $Address.id",
@@ -255,7 +253,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Person{}, Address{}},
 	inputArgs:      []any{Address{ID: 1}},
 	expectedParams: []any{1},
-	expectedSQL:    `SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM table WHERE foo = @sqlair_0`,
+	expectedSQL:    `SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM table WHERE foo = $1`,
 }, {
 	summary:        "outputs and quote",
 	query:          "SELECT foo, &Person.id, bar, baz, &Manager.name FROM table WHERE foo = 'xx'",
@@ -281,7 +279,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{sqlair.M{}, IntMap{}, StringMap{}},
 	inputArgs:      []any{sqlair.M{"name": "Foo"}},
 	expectedParams: []any{"Foo"},
-	expectedSQL:    "SELECT p.name AS _sqlair_0, a.id AS _sqlair_1, street AS _sqlair_2, id AS _sqlair_3 FROM person, address a WHERE name = @sqlair_0",
+	expectedSQL:    "SELECT p.name AS _sqlair_0, a.id AS _sqlair_1, street AS _sqlair_2, id AS _sqlair_3 FROM person, address a WHERE name = $1",
 }, {
 	summary:        "multicolumn output v1",
 	query:          "SELECT (a.district, a.street) AS (&Address.district, &Address.street), a.id AS &Person.id FROM address AS a",
@@ -331,7 +329,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Person{}, Address{}},
 	inputArgs:      []any{Person{Fullname: "Foo"}},
 	expectedParams: []any{"Foo"},
-	expectedSQL:    `SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, a.district AS _sqlair_3, a.street AS _sqlair_4 FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name IN (SELECT name FROM table WHERE table.n = @sqlair_0)`,
+	expectedSQL:    `SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, a.district AS _sqlair_3, a.street AS _sqlair_4 FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name IN (SELECT name FROM table WHERE table.n = $1)`,
 }, {
 	summary:        "complex query v4",
 	query:          "SELECT p.* AS &Person.* FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name) UNION SELECT (a.district, a.street) AS (&Address.*) FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = $Person.name)",
@@ -339,7 +337,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Person{}, Address{}},
 	inputArgs:      []any{Person{Fullname: "Foo"}},
 	expectedParams: []any{"Foo", "Foo"},
-	expectedSQL:    `SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2 FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = @sqlair_0) UNION SELECT a.district AS _sqlair_3, a.street AS _sqlair_4 FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = @sqlair_1)`,
+	expectedSQL:    `SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2 FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = $1) UNION SELECT a.district AS _sqlair_3, a.street AS _sqlair_4 FROM person WHERE p.name IN (SELECT name FROM table WHERE table.n = $2)`,
 }, {
 	summary:        "complex query v5",
 	query:          "SELECT p.* AS &Person.* FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
@@ -347,7 +345,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Person{}},
 	inputArgs:      []any{Person{Fullname: "Foo", PostalCode: 1}},
 	expectedParams: []any{"Foo", 1},
-	expectedSQL:    `SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2 FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = @sqlair_0 AND p.address_id = @sqlair_1`,
+	expectedSQL:    `SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2 FROM person AS p JOIN address AS a ON p.address_id = a.id WHERE p.name = $1 AND p.address_id = $2`,
 }, {
 	summary:        "complex query v6",
 	query:          "SELECT p.* AS &Person.*, FROM person AS p INNER JOIN address AS a ON p.address_id = $Address.id WHERE p.name = $Person.name AND p.address_id = $Person.address_id",
@@ -355,7 +353,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Person{}, Address{}},
 	inputArgs:      []any{Person{Fullname: "Foo", PostalCode: 1}, Address{ID: 2}},
 	expectedParams: []any{2, "Foo", 1},
-	expectedSQL:    `SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, FROM person AS p INNER JOIN address AS a ON p.address_id = @sqlair_0 WHERE p.name = @sqlair_1 AND p.address_id = @sqlair_2`,
+	expectedSQL:    `SELECT p.address_id AS _sqlair_0, p.id AS _sqlair_1, p.name AS _sqlair_2, FROM person AS p INNER JOIN address AS a ON p.address_id = $1 WHERE p.name = $2 AND p.address_id = $3`,
 }, {
 	summary:        "join v1",
 	query:          "SELECT p.* AS &Person.*, m.* AS &Manager.* FROM person AS p JOIN person AS m ON p.id = m.id WHERE p.name = 'Fred'",
@@ -399,7 +397,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Person{}, Address{}},
 	inputArgs:      []any{Person{ID: 1}, Address{ID: 2}},
 	expectedParams: []any{2, 1},
-	expectedSQL:    `UPDATE person SET person.address_id = @sqlair_0 WHERE person.id = @sqlair_1`,
+	expectedSQL:    `UPDATE person SET person.address_id = $1 WHERE person.id = $2`,
 }, {
 	summary: "mathmatical operations",
 	query: `SELECT name FROM person WHERE id =$HardMaths.x+$HardMaths.y/$HardMaths.z-
@@ -409,8 +407,8 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{HardMaths{}},
 	inputArgs:      []any{HardMaths{X: 1, Y: 2, Z: 3, Coef: 4}},
 	expectedParams: []any{1, 2, 3, 4, 1, 2, 3, 3, 1},
-	expectedSQL: `SELECT name FROM person WHERE id =@sqlair_0+@sqlair_1/@sqlair_2-
-	(@sqlair_3%@sqlair_4)-@sqlair_5|@sqlair_6<@sqlair_7<>@sqlair_8`,
+	expectedSQL: `SELECT name FROM person WHERE id =$1+$2/$3-
+	($4%$5)-$6|$7<$8<>$9`,
 }, {
 	summary:        "insert array",
 	query:          "INSERT INTO arr VALUES (ARRAY[[1,2],[$HardMaths.x,4]], ARRAY[[5,6],[$HardMaths.y,8]]);",
@@ -418,7 +416,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{HardMaths{}},
 	inputArgs:      []any{HardMaths{X: 1, Y: 2}},
 	expectedParams: []any{1, 2},
-	expectedSQL:    "INSERT INTO arr VALUES (ARRAY[[1,2],[@sqlair_0,4]], ARRAY[[5,6],[@sqlair_1,8]]);",
+	expectedSQL:    "INSERT INTO arr VALUES (ARRAY[[1,2],[$1,4]], ARRAY[[5,6],[$2,8]]);",
 }, {
 	summary:        "functions",
 	query:          `SELECT (max(AVG(id), AVG(address_id), length("((((''""((")), IFNULL(name, "Mr &Person.id of $M.name")) AS (&M.avg, &M.name), random() AS &M.random FROM person`,
@@ -434,7 +432,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{sqlair.S{}},
 	inputArgs:      []any{sqlair.S{1, 2, 3}},
 	expectedParams: []any{1, 2, 3},
-	expectedSQL:    "SELECT name FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2)",
+	expectedSQL:    "SELECT name FROM person WHERE id IN ($1, $2, $3)",
 }, {
 	summary:        "many slices",
 	query:          "SELECT * AS &Person.* FROM person WHERE id IN ($Person.id, $S[:], $Manager.id, $IntSlice[:], $StringSlice[:])",
@@ -442,7 +440,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{sqlair.S{}, Person{}, Manager{}, IntSlice{}, StringSlice{}},
 	inputArgs:      []any{sqlair.S{2, 3, 4}, Person{ID: 1}, Manager{ID: 5}, IntSlice{6, 7, 8}, StringSlice{"9", "10", "11"}},
 	expectedParams: []any{1, 2, 3, 4, 5, 6, 7, 8, "9", "10", "11"},
-	expectedSQL:    "SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7, @sqlair_8, @sqlair_9, @sqlair_10)",
+	expectedSQL:    "SELECT address_id AS _sqlair_0, id AS _sqlair_1, name AS _sqlair_2 FROM person WHERE id IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
 }, {
 	summary:        "slices and other expressions in IN statement",
 	query:          `SELECT name FROM person WHERE id IN ($S[:], func(1,2), "one", $IntSlice[:])`,
@@ -450,7 +448,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{sqlair.S{}, IntSlice{}},
 	inputArgs:      []any{sqlair.S{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, IntSlice{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}},
 	expectedParams: []any{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
-	expectedSQL:    `SELECT name FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4, @sqlair_5, @sqlair_6, @sqlair_7, @sqlair_8, @sqlair_9, func(1,2), "one", @sqlair_10, @sqlair_11, @sqlair_12, @sqlair_13, @sqlair_14, @sqlair_15, @sqlair_16, @sqlair_17, @sqlair_18, @sqlair_19)`,
+	expectedSQL:    `SELECT name FROM person WHERE id IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, func(1,2), "one", $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
 }, {
 	summary:        "slice of mixed types",
 	query:          "SELECT name FROM person WHERE id IN ($S[:])",
@@ -458,7 +456,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{sqlair.S{}},
 	inputArgs:      []any{sqlair.S{1, "two", 3.0}},
 	expectedParams: []any{1, "two", 3.0},
-	expectedSQL:    "SELECT name FROM person WHERE id IN (@sqlair_0, @sqlair_1, @sqlair_2)",
+	expectedSQL:    "SELECT name FROM person WHERE id IN ($1, $2, $3)",
 }, {
 	// No error is throw for when the user passes an empty slice because we do
 	// not want to limit the use of slices to only the cases we have foreseen.
@@ -488,7 +486,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Address{}, Person{}, sqlair.M{}},
 	inputArgs:      []any{Address{Street: "Wallaby Way"}, Person{ID: 34, Fullname: "Dory", PostalCode: 11111}, sqlair.M{"team": "OCTO"}},
 	expectedParams: []any{"Wallaby Way", 11111, 34, "Dory", "OCTO"},
-	expectedSQL:    "INSERT INTO person (street, address_id, id, name, team) VALUES (@sqlair_0, @sqlair_1, @sqlair_2, @sqlair_3, @sqlair_4)",
+	expectedSQL:    "INSERT INTO person (street, address_id, id, name, team) VALUES ($1, $2, $3, $4, $5)",
 }, {
 	summary:        "insert specified columns to single struct",
 	query:          "INSERT INTO person (id, street) VALUES ($Address.*)",
@@ -496,7 +494,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Address{}},
 	inputArgs:      []any{Address{ID: 34, Street: "Wallaby Way"}},
 	expectedParams: []any{34, "Wallaby Way"},
-	expectedSQL:    "INSERT INTO person (id, street) VALUES (@sqlair_0, @sqlair_1)",
+	expectedSQL:    "INSERT INTO person (id, street) VALUES ($1, $2)",
 }, {
 	summary:        "insert specified columns to single map",
 	query:          "INSERT INTO person (id, street) VALUES ($M.*)",
@@ -504,7 +502,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{sqlair.M{}},
 	inputArgs:      []any{sqlair.M{"id": 34, "street": "Wallaby Way"}},
 	expectedParams: []any{34, "Wallaby Way"},
-	expectedSQL:    "INSERT INTO person (id, street) VALUES (@sqlair_0, @sqlair_1)",
+	expectedSQL:    "INSERT INTO person (id, street) VALUES ($1, $2)",
 }, {
 	summary:        "insert specified columns from multiple types",
 	query:          "INSERT INTO person (id, street) VALUES ($Address.*, $M.street)",
@@ -512,7 +510,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Address{}, sqlair.M{}},
 	inputArgs:      []any{Address{ID: 34}, sqlair.M{"street": "Wallaby Way"}},
 	expectedParams: []any{34, "Wallaby Way"},
-	expectedSQL:    "INSERT INTO person (id, street) VALUES (@sqlair_0, @sqlair_1)",
+	expectedSQL:    "INSERT INTO person (id, street) VALUES ($1, $2)",
 }, {
 	summary:        "insert specified columns from multiple structs",
 	query:          "INSERT INTO person (name, street) VALUES ($Address.*, $Person.*)",
@@ -520,7 +518,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Address{}, Person{}},
 	inputArgs:      []any{Address{Street: "Wallaby Way"}, Person{Fullname: "John Doe"}},
 	expectedParams: []any{"John Doe", "Wallaby Way"},
-	expectedSQL:    "INSERT INTO person (name, street) VALUES (@sqlair_0, @sqlair_1)",
+	expectedSQL:    "INSERT INTO person (name, street) VALUES ($1, $2)",
 }, {
 	summary:        "insert specified columns from struct and map",
 	query:          "INSERT INTO person (name, street) VALUES ($Address.*, $M.*)",
@@ -528,7 +526,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Address{}, sqlair.M{}},
 	inputArgs:      []any{Address{Street: "Wallaby Way"}, sqlair.M{"name": "John Doe"}},
 	expectedParams: []any{"John Doe", "Wallaby Way"},
-	expectedSQL:    "INSERT INTO person (name, street) VALUES (@sqlair_0, @sqlair_1)",
+	expectedSQL:    "INSERT INTO person (name, street) VALUES ($1, $2)",
 }, {
 	summary:        "insert asterisk with comment",
 	query:          "INSERT INTO person (*) VALUES ($Person.address_id, /* rouge comment */$Address.street)",
@@ -536,7 +534,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Person{}, Address{}},
 	inputArgs:      []any{Person{PostalCode: 11111}, Address{Street: "Wallaby Way"}},
 	expectedParams: []any{11111, "Wallaby Way"},
-	expectedSQL:    "INSERT INTO person (address_id, street) VALUES (@sqlair_0, @sqlair_1)",
+	expectedSQL:    "INSERT INTO person (address_id, street) VALUES ($1, $2)",
 }, {
 	summary:        "insert asterisk (no space)",
 	query:          "INSERT INTO person(*) VALUES ($Person.*)ON CONFLICT DO NOTHING",
@@ -544,7 +542,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Person{}},
 	inputArgs:      []any{Person{ID: 34, Fullname: "Dory", PostalCode: 11111}},
 	expectedParams: []any{11111, 34, "Dory"},
-	expectedSQL:    "INSERT INTO person(address_id, id, name) VALUES (@sqlair_0, @sqlair_1, @sqlair_2)ON CONFLICT DO NOTHING",
+	expectedSQL:    "INSERT INTO person(address_id, id, name) VALUES ($1, $2, $3)ON CONFLICT DO NOTHING",
 }, {
 	summary:        "insert asterisk (weird spacing)",
 	query:          "INSERT INTO person ( * )VALUES( $Person.* )ON CONFLICT DO NOTHING",
@@ -552,7 +550,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Person{}},
 	inputArgs:      []any{Person{ID: 34, Fullname: "Dory", PostalCode: 11111}},
 	expectedParams: []any{11111, 34, "Dory"},
-	expectedSQL:    "INSERT INTO person (address_id, id, name) VALUES (@sqlair_0, @sqlair_1, @sqlair_2)ON CONFLICT DO NOTHING",
+	expectedSQL:    "INSERT INTO person (address_id, id, name) VALUES ($1, $2, $3)ON CONFLICT DO NOTHING",
 }, {
 	summary:        "insert with returning clause",
 	query:          "INSERT INTO address(*) VALUES($Address.*) RETURNING (&Address.*)",
@@ -560,7 +558,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Address{}},
 	inputArgs:      []any{Address{ID: 34, Street: "Wallaby Way", District: "Sydney"}},
 	expectedParams: []any{"Sydney", 34, "Wallaby Way"},
-	expectedSQL:    "INSERT INTO address(district, id, street) VALUES (@sqlair_0, @sqlair_1, @sqlair_2) RETURNING (district AS _sqlair_0, id AS _sqlair_1, street AS _sqlair_2)",
+	expectedSQL:    "INSERT INTO address(district, id, street) VALUES ($1, $2, $3) RETURNING (district AS _sqlair_0, id AS _sqlair_1, street AS _sqlair_2)",
 }, {
 	summary: "insert rename columns with standalone inputs",
 	query: `INSERT INTO person (id, random_string, random_thing, number, equation, street) VALUES ($Person.address_id, "random string", rand(), 1000, 
@@ -569,7 +567,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Address{}, Person{}},
 	inputArgs:      []any{Address{Street: "Wallaby Way"}, Person{PostalCode: 11111}},
 	expectedParams: []any{11111, "Wallaby Way"},
-	expectedSQL:    `INSERT INTO person (id, random_string, random_thing, number, equation, street) VALUES (@sqlair_0, "random string", rand(), 1000, 1+2+3, @sqlair_1)`,
+	expectedSQL:    `INSERT INTO person (id, random_string, random_thing, number, equation, street) VALUES ($1, "random string", rand(), 1000, 1+2+3, $2)`,
 }, {
 	summary:        "insert single value",
 	query:          "INSERT INTO person (name) VALUES ($Person.name)",
@@ -577,7 +575,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Person{}},
 	inputArgs:      []any{Person{Fullname: "John Doe"}},
 	expectedParams: []any{"John Doe"},
-	expectedSQL:    "INSERT INTO person (name) VALUES (@sqlair_0)",
+	expectedSQL:    "INSERT INTO person (name) VALUES ($1)",
 }, {
 	summary:        "insert with standalone input expressions",
 	query:          `INSERT INTO person VALUES ($Person.name, "random string", $Person.id)`,
@@ -585,7 +583,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Person{}},
 	inputArgs:      []any{Person{ID: 34, Fullname: "John Doe"}},
 	expectedParams: []any{"John Doe", 34},
-	expectedSQL:    `INSERT INTO person VALUES (@sqlair_0, "random string", @sqlair_1)`,
+	expectedSQL:    `INSERT INTO person VALUES ($1, "random string", $2)`,
 }, {
 	summary:        "insert sql array",
 	query:          "INSERT INTO arr VALUES (ARRAY[[1,2],[$HardMaths.x,4]], ARRAY[[5,6],[$HardMaths.y,8]]);",
@@ -593,7 +591,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{HardMaths{}},
 	inputArgs:      []any{HardMaths{X: 1, Y: 2}},
 	expectedParams: []any{1, 2},
-	expectedSQL:    "INSERT INTO arr VALUES (ARRAY[[1,2],[@sqlair_0,4]], ARRAY[[5,6],[@sqlair_1,8]]);",
+	expectedSQL:    "INSERT INTO arr VALUES (ARRAY[[1,2],[$1,4]], ARRAY[[5,6],[$2,8]]);",
 }, {
 	summary:        "lower case struct",
 	query:          "SELECT &unexportedMap.x FROM person",
@@ -613,7 +611,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Unicode我Struct{}},
 	inputArgs:      []any{Unicode我Struct{X这: "საფოსტო"}},
 	expectedParams: []any{"საფოსტო"},
-	expectedSQL:    "SELECT საფოსტო AS _sqlair_0, 住所 AS _sqlair_1, 鑑別 AS _sqlair_2 FROM person WHERE id = @sqlair_0",
+	expectedSQL:    "SELECT საფოსტო AS _sqlair_0, 住所 AS _sqlair_1, 鑑別 AS _sqlair_2 FROM person WHERE id = $1",
 }, {
 	summary:        "unicode rename",
 	query:          "SELECT (鑑別, мяч) AS (&Unicode我Struct.საფოსტო, &Unicode我Struct.鑑別) FROM person WHERE id = 30",
@@ -645,7 +643,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{OmitEmptyPerson{}},
 	inputArgs:      []any{OmitEmptyPerson{ID: 0, Fullname: "John Doe", PostalCode: 42}},
 	expectedParams: []any{42, "John Doe"},
-	expectedSQL:    `INSERT INTO person (address_id, name) VALUES (@sqlair_0, @sqlair_1)`,
+	expectedSQL:    `INSERT INTO person (address_id, name) VALUES ($1, $2)`,
 }, {
 	summary:        "select into field containing struct with scanner and valuer interfaces",
 	query:          "SELECT &ScannerValuerStruct.* FROM person WHERE id = $ScannerValuerStruct.col1",
@@ -653,7 +651,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{ScannerValuerStruct{}},
 	inputArgs:      []any{ScannerValuerStruct{ScannerValuer: ScannerValuer{F: 42}}},
 	expectedParams: []any{ScannerValuer{F: 42}},
-	expectedSQL:    "SELECT col1 AS _sqlair_0 FROM person WHERE id = @sqlair_0",
+	expectedSQL:    "SELECT col1 AS _sqlair_0 FROM person WHERE id = $1",
 }, {
 	summary:        "embedded struct asterisk output and inputs",
 	query:          "SELECT &Embeddings.* FROM address WHERE id = $Embeddings.col1 AND district = $Embeddings.col2 AND street = $Embeddings.col3 AND postcode = $Embeddings.col4",
@@ -661,7 +659,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Embeddings{}},
 	inputArgs:      []any{Embeddings{F0: 0, Embedded1: Embedded1{F1: 1}, Embedded2: Embedded2{F2: 2, Embedded3: Embedded3{F3: 3, ScannerValuer: ScannerValuer{F: 4}}}}},
 	expectedParams: []any{1, 2, 3, ScannerValuer{F: 4}},
-	expectedSQL:    "SELECT col0 AS _sqlair_0, col1 AS _sqlair_1, col2 AS _sqlair_2, col3 AS _sqlair_3, col4 AS _sqlair_4 FROM address WHERE id = @sqlair_0 AND district = @sqlair_1 AND street = @sqlair_2 AND postcode = @sqlair_3",
+	expectedSQL:    "SELECT col0 AS _sqlair_0, col1 AS _sqlair_1, col2 AS _sqlair_2, col3 AS _sqlair_3, col4 AS _sqlair_4 FROM address WHERE id = $1 AND district = $2 AND street = $3 AND postcode = $4",
 }, {
 	summary:        "embedded struct columns output",
 	query:          "SELECT &Embeddings.col1, &Embeddings.col2, &Embeddings.col3, &Embeddings.col4 FROM address WHERE id = 1000",
@@ -675,7 +673,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Person{}},
 	inputArgs:      []any{[]Person{{ID: 0, Fullname: "Al", PostalCode: 1000}, {ID: 1, Fullname: "Albert", PostalCode: 2000}, {ID: 2, Fullname: "Joe", PostalCode: 3000}}},
 	expectedParams: []any{1000, 0, "Al", 2000, 1, "Albert", 3000, 2, "Joe"},
-	expectedSQL:    `INSERT INTO person (address_id, id, name) VALUES (@sqlair_0, @sqlair_1, @sqlair_2), (@sqlair_3, @sqlair_4, @sqlair_5), (@sqlair_6, @sqlair_7, @sqlair_8)`,
+	expectedSQL:    `INSERT INTO person (address_id, id, name) VALUES ($1, $2, $3), ($4, $5, $6), ($7, $8, $9)`,
 }, {
 	summary:        "bulk insert with explicit columns and constants",
 	query:          `INSERT INTO person (name, mapKey, street) VALUES ($Person.*, $Address.*, $M.*)`,
@@ -683,7 +681,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Person{}, Address{}, M{}},
 	inputArgs:      []any{[]Person{{Fullname: "Al"}, {Fullname: "Albert"}}, M{"mapKey": "const map"}, Address{Street: "const street"}},
 	expectedParams: []any{"Al", "const map", "const street", "Albert"},
-	expectedSQL:    `INSERT INTO person (name, mapKey, street) VALUES (@sqlair_0, @sqlair_1, @sqlair_2), (@sqlair_3, @sqlair_1, @sqlair_2)`,
+	expectedSQL:    `INSERT INTO person (name, mapKey, street) VALUES ($1, $2, $3), ($4, $2, $3)`,
 }, {
 	summary:        "bulk insert with omit empty struct not inserted at all",
 	query:          `INSERT INTO person (*) VALUES ($OmitEmptyID.*, $M.key)`,
@@ -691,7 +689,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{OmitEmptyID{}, M{}},
 	inputArgs:      []any{[]OmitEmptyID{{ID: 0}, {ID: 0}}, M{"key": "val"}},
 	expectedParams: []any{"val"},
-	expectedSQL:    `INSERT INTO person (key) VALUES (@sqlair_0), (@sqlair_0)`,
+	expectedSQL:    `INSERT INTO person (key) VALUES ($1), ($1)`,
 }, {
 	summary:        "bulk insert with inserted omit empty struct",
 	query:          `INSERT INTO person (*) VALUES ($OmitEmptyID.*, $M.key)`,
@@ -699,7 +697,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{OmitEmptyID{}, M{}},
 	inputArgs:      []any{[]OmitEmptyID{{ID: 1}, {ID: 2}}, M{"key": "val"}},
 	expectedParams: []any{1, "val", 2},
-	expectedSQL:    `INSERT INTO person (id, key) VALUES (@sqlair_0, @sqlair_1), (@sqlair_2, @sqlair_1)`,
+	expectedSQL:    `INSERT INTO person (id, key) VALUES ($1, $2), ($3, $2)`,
 }, {
 	summary:        "bulk insert with multiple bulk inputs",
 	query:          `INSERT INTO person (*) VALUES ($Person.id, $M.key, $Address.street)`,
@@ -707,7 +705,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Person{}, M{}, Address{}},
 	inputArgs:      []any{[]Person{{ID: 1}, {ID: 2}}, M{"key": "val"}, []Address{{Street: "Main Street"}, {Street: "Church Road"}}},
 	expectedParams: []any{1, "val", "Main Street", 2, "Church Road"},
-	expectedSQL:    `INSERT INTO person (id, key, street) VALUES (@sqlair_0, @sqlair_1, @sqlair_2), (@sqlair_3, @sqlair_1, @sqlair_4)`,
+	expectedSQL:    `INSERT INTO person (id, key, street) VALUES ($1, $2, $3), ($4, $2, $5)`,
 }, {
 	summary:        "bulk insert with pointers",
 	query:          `INSERT INTO person (*) VALUES ($Person.id, $M.key)`,
@@ -715,7 +713,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Person{}, M{}},
 	inputArgs:      []any{[]*Person{{ID: 1}, {ID: 2}}, []*M{{"key": "val1"}, {"key": "val2"}}},
 	expectedParams: []any{1, "val1", 2, "val2"},
-	expectedSQL:    `INSERT INTO person (id, key) VALUES (@sqlair_0, @sqlair_1), (@sqlair_2, @sqlair_3)`,
+	expectedSQL:    `INSERT INTO person (id, key) VALUES ($1, $2), ($3, $4)`,
 }, {
 	summary:        "bulk insert with slices of length 1",
 	query:          `INSERT INTO person (*) VALUES ($Person.id, $M.key, $Address.street)`,
@@ -723,7 +721,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Person{}, M{}, Address{}},
 	inputArgs:      []any{[]Person{{ID: 1}}, M{"key": "val"}, []Address{{Street: "Church Road"}}},
 	expectedParams: []any{1, "val", "Church Road"},
-	expectedSQL:    `INSERT INTO person (id, key, street) VALUES (@sqlair_0, @sqlair_1, @sqlair_2)`,
+	expectedSQL:    `INSERT INTO person (id, key, street) VALUES ($1, $2, $3)`,
 }, {
 	summary:        "bulk insert with explicit columns and literal",
 	query:          `INSERT INTO person (col1, col2) VALUES ($Person.name, "literally")`,
@@ -731,7 +729,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Person{}},
 	inputArgs:      []any{[]Person{{Fullname: "Al"}, {Fullname: "Albert"}}},
 	expectedParams: []any{"Al", "Albert"},
-	expectedSQL:    `INSERT INTO person (col1, col2) VALUES (@sqlair_0, "literally"), (@sqlair_1, "literally")`,
+	expectedSQL:    `INSERT INTO person (col1, col2) VALUES ($1, "literally"), ($2, "literally")`,
 }, {
 	summary:        "bulk insert rename columns with standalone inputs",
 	query:          `INSERT INTO person (id, random_string, random_thing, number, street) VALUES ($Person.address_id, "random string", rand(), 1000, $Address.street)`,
@@ -739,7 +737,7 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{Address{}, Person{}},
 	inputArgs:      []any{[]Address{{Street: "Wallaby Way"}, {Street: "Platypus Place"}}, []Person{{PostalCode: 11111}, {PostalCode: 22222}}},
 	expectedParams: []any{11111, "Wallaby Way", 22222, "Platypus Place"},
-	expectedSQL:    `INSERT INTO person (id, random_string, random_thing, number, street) VALUES (@sqlair_0, "random string", rand(), 1000, @sqlair_1), (@sqlair_2, "random string", rand(), 1000, @sqlair_3)`,
+	expectedSQL:    `INSERT INTO person (id, random_string, random_thing, number, street) VALUES ($1, "random string", rand(), 1000, $2), ($3, "random string", rand(), 1000, $4)`,
 }, {
 	summary: "bulk insert between standalone inputs",
 	query: `WITH x AS (SELECT $M.seed)
@@ -751,9 +749,9 @@ RETURNING ] Input[M.seed]]`,
 	typeSamples:    []any{Person{}, Address{}, M{}},
 	inputArgs:      []any{[]Person{{ID: 1}, {ID: 2}}, []Address{{Street: "first"}, {Street: "second"}}, M{"seed": 9, "name": "shared"}},
 	expectedParams: []any{9, 1, "shared", "first", 2, "second", 9},
-	expectedSQL: `WITH x AS (SELECT @sqlair_0)
-INSERT INTO person (id, name, street) VALUES (@sqlair_1, @sqlair_2, @sqlair_3), (@sqlair_4, @sqlair_2, @sqlair_5)
-RETURNING @sqlair_6`,
+	expectedSQL: `WITH x AS (SELECT $1)
+INSERT INTO person (id, name, street) VALUES ($2, $3, $4), ($5, $3, $6)
+RETURNING $7`,
 }, {
 	summary:        "ending in multiple semicolons",
 	query:          "SELECT p.*	AS &Person.*;;;;;;",
@@ -796,10 +794,7 @@ func (s *ExprSuite) TestExprPkg(c *C) {
 			c.Assert(params, HasLen, len(t.expectedParams),
 				Commentf("test %d failed (Query Params):\nsummary: %s\nquery: %s\n", i, t.summary, t.query))
 			for j, param := range params {
-				param := param.(sql.NamedArg)
-				c.Check(param.Name, Equals, "sqlair_"+strconv.Itoa(j),
-					Commentf("test %d failed (Query Params):\nsummary: %s\nquery: %s\n", i, t.summary, t.query))
-				c.Check(param.Value, Equals, t.expectedParams[j],
+				c.Check(param, Equals, t.expectedParams[j],
 					Commentf("test %d failed (Query Params):\nsummary: %s\nquery: %s\n", i, t.summary, t.query))
 			}
 		}
