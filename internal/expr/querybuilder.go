@@ -17,8 +17,6 @@ import (
 // queryBuilder is used to build up a query to be passed to the database from a
 // type bound expression
 type queryBuilder struct {
-	// inputCount tracks the number of query inputs.
-	inputAssigner *inputAssigner
 	// outputCount tracks the number of query outputs.
 	outputCount int
 	// argUsed is used to check that all the arguments provided by the caller of
@@ -27,9 +25,10 @@ type queryBuilder struct {
 
 	// sqlBuilder is used to accumulate the generated SQL.
 	sqlBuilder sqlBuilder
-	// namedInputs are the named input values corresponding to the placeholders
-	// in the SQL. They will be passed to the database at query time.
-	namedInputs []any
+	// params are the query parameters that will be passed to the database at
+	// query time. They are numbered in the order they are added, so the
+	// parameter numbers follow the order of the arguments.
+	params []any
 	// outputs are the output value locators to be used when the SQL is scanned.
 	outputs []typeinfo.Output
 }
@@ -37,12 +36,11 @@ type queryBuilder struct {
 // newQueryBuilder builds a new queryBuilder with the inputs in typeToValue.
 func newQueryBuilder() *queryBuilder {
 	return &queryBuilder{
-		sqlBuilder:    sqlBuilder{},
-		inputAssigner: &inputAssigner{},
-		outputCount:   0,
-		argUsed:       map[reflect.Type]bool{},
-		namedInputs:   []any{},
-		outputs:       []typeinfo.Output{},
+		sqlBuilder:  sqlBuilder{},
+		outputCount: 0,
+		argUsed:     map[reflect.Type]bool{},
+		params:      []any{},
+		outputs:     []typeinfo.Output{},
 	}
 }
 
@@ -51,14 +49,21 @@ func (qb *queryBuilder) markArgUsed(t reflect.Type) {
 	qb.argUsed[t] = true
 }
 
+// addParam adds a query parameter and returns the placeholder that refers to
+// it in the generated SQL.
+func (qb *queryBuilder) addParam(val any) string {
+	name := "sqlair_" + strconv.Itoa(len(qb.params))
+	qb.params = append(qb.params, sql.Named(name, val))
+	return "@" + name
+}
+
 // addInputs adds input placeholders and argument values to the query.
 func (qb *queryBuilder) addInputs(inputVals []any) {
-	firstInputNum := qb.inputAssigner.assignInputs(len(inputVals))
+	placeholders := make([]string, len(inputVals))
 	for i, val := range inputVals {
-		namedInput := sql.Named("sqlair_"+strconv.Itoa(firstInputNum+i), val)
-		qb.namedInputs = append(qb.namedInputs, namedInput)
+		placeholders[i] = qb.addParam(val)
 	}
-	qb.sqlBuilder.writeInputs(firstInputNum, len(inputVals))
+	qb.sqlBuilder.writeInputs(placeholders)
 }
 
 // addInsert adds a typedInsertExpr to the queryBuilder
@@ -69,14 +74,11 @@ func (qb *queryBuilder) addInsert(boundColumns []*boundInsertColumn, numRows int
 		var rowSQL []string
 		for _, bc := range boundColumns {
 			if !bc.omit {
-				valueSQL, namedInput, newParam, err := bc.parameter(rowNum)
+				valueSQL, err := bc.parameter(rowNum, qb)
 				if err != nil {
 					return err
 				}
 				rowSQL = append(rowSQL, valueSQL)
-				if newParam {
-					qb.namedInputs = append(qb.namedInputs, namedInput)
-				}
 			}
 		}
 		rowsSQL = append(rowsSQL, rowSQL)
@@ -114,31 +116,15 @@ func (qb *queryBuilder) checkAllArgsUsed(typeToValue typeinfo.TypeToValue) error
 	return nil
 }
 
-// inputAssigner assigns input numbers to input expressions. SQLair query inputs
-// are assigned unique number to use in their name. The inputAssigner keeps
-// track of which inputs have already been used in the query.
-type inputAssigner struct {
-	// inputCount stores the next unused input number.
-	inputCount int
-}
-
-// assignInputs assigns the next n inputs to the caller. The number of the first
-// of these inputs is returned.
-func (ia *inputAssigner) assignInputs(n int) int {
-	ia.inputCount += n
-	return ia.inputCount - n
-}
-
 // boundInsertColumn represents a column in an insert statement along with the values
 // to be inserted into it.
 type boundInsertColumn struct {
 	// vals contains the query parameters. There may be multiple for a bulk
 	// insert, or none for a literal.
 	vals []any
-	// inputNum is the number associated with the first named input for this
-	// column. The numbers firstInputNum to firstInputNum + len(vals) can be
-	// used by this boundInsertColumn.
-	firstInputNum int
+	// placeholder refers to the parameter of a single value column. It is set
+	// when the column is first added to the query and reused in later rows.
+	placeholder string
 	// omit indicates if the column and values should be omitted.
 	omit bool
 	// bulk is true if the list of values should be inserted in a bulk insert
@@ -155,24 +141,21 @@ type boundInsertColumn struct {
 	column string
 }
 
-// parameter returns the value to be inserted into the boundInsertColumn in the given
-// row. The inputCount it used to generate the parameter name.
-func (bc *boundInsertColumn) parameter(row int) (name string, v any, newParam bool, err error) {
+// parameter returns the SQL for the value to be inserted into the
+// boundInsertColumn in the given row. New query parameters are added to qb.
+func (bc *boundInsertColumn) parameter(row int, qb *queryBuilder) (string, error) {
 	switch {
 	case len(bc.vals) == 0:
-		return bc.literal, nil, false, nil
+		return bc.literal, nil
 	case len(bc.vals) == 1:
-		name = "sqlair_" + strconv.Itoa(bc.firstInputNum)
-		newParam = false
-		if row == 0 {
-			newParam = true
+		if bc.placeholder == "" {
+			bc.placeholder = qb.addParam(bc.vals[0])
 		}
-		return "@" + name, sql.Named(name, bc.vals[0]), newParam, nil
+		return bc.placeholder, nil
 	case row < len(bc.vals):
-		name = "sqlair_" + strconv.Itoa(bc.firstInputNum+row)
-		return "@" + name, sql.Named(name, bc.vals[row]), true, nil
+		return qb.addParam(bc.vals[row]), nil
 	default:
-		return "", nil, false, fmt.Errorf("internal error: no bulk insert value for row %d, only have %d values", row, len(bc.vals))
+		return "", fmt.Errorf("internal error: no bulk insert value for row %d, only have %d values", row, len(bc.vals))
 	}
 }
 
@@ -204,9 +187,9 @@ func (b *sqlBuilder) writeInsert(columns []string, rows [][]string) {
 }
 
 // writeInputs writes the SQL for input placeholders to the sqlBuilder.
-func (b *sqlBuilder) writeInputs(inputCount, num int) {
-	b.writeCommaSeparatedList(make([]string, num), func(i int, column string) string {
-		return "@sqlair_" + strconv.Itoa(inputCount+i)
+func (b *sqlBuilder) writeInputs(placeholders []string) {
+	b.writeCommaSeparatedList(placeholders, func(_ int, placeholder string) string {
+		return placeholder
 	})
 }
 

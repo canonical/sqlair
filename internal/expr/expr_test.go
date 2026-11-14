@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/canonical/sqlair"
@@ -667,16 +666,16 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	expectedParsed: `[Bypass[INSERT INTO person ] AsteriskInsert[[*] [Person.*]]]`,
 	typeSamples:    []any{Person{}},
 	inputArgs:      []any{[]Person{{ID: 0, Fullname: "Al", PostalCode: 1000}, {ID: 1, Fullname: "Albert", PostalCode: 2000}, {ID: 2, Fullname: "Joe", PostalCode: 3000}}},
-	expectedParams: []any{1000, 2000, 3000, 0, 1, 2, "Al", "Albert", "Joe"},
-	expectedSQL:    `INSERT INTO person (address_id, id, name) VALUES (@sqlair_0, @sqlair_3, @sqlair_6), (@sqlair_1, @sqlair_4, @sqlair_7), (@sqlair_2, @sqlair_5, @sqlair_8)`,
+	expectedParams: []any{1000, 0, "Al", 2000, 1, "Albert", 3000, 2, "Joe"},
+	expectedSQL:    `INSERT INTO person (address_id, id, name) VALUES (@sqlair_0, @sqlair_1, @sqlair_2), (@sqlair_3, @sqlair_4, @sqlair_5), (@sqlair_6, @sqlair_7, @sqlair_8)`,
 }, {
 	summary:        "bulk insert with explicit columns and constants",
 	query:          `INSERT INTO person (name, mapKey, street) VALUES ($Person.*, $Address.*, $M.*)`,
 	expectedParsed: `[Bypass[INSERT INTO person ] ColumnInsert[[name mapKey street] [Person.* Address.* M.*]]]`,
 	typeSamples:    []any{Person{}, Address{}, M{}},
 	inputArgs:      []any{[]Person{{Fullname: "Al"}, {Fullname: "Albert"}}, M{"mapKey": "const map"}, Address{Street: "const street"}},
-	expectedParams: []any{"Al", "Albert", "const map", "const street"},
-	expectedSQL:    `INSERT INTO person (name, mapKey, street) VALUES (@sqlair_0, @sqlair_2, @sqlair_3), (@sqlair_1, @sqlair_2, @sqlair_3)`,
+	expectedParams: []any{"Al", "const map", "const street", "Albert"},
+	expectedSQL:    `INSERT INTO person (name, mapKey, street) VALUES (@sqlair_0, @sqlair_1, @sqlair_2), (@sqlair_3, @sqlair_1, @sqlair_2)`,
 }, {
 	summary:        "bulk insert with omit empty struct not inserted at all",
 	query:          `INSERT INTO person (*) VALUES ($OmitEmptyID.*, $M.key)`,
@@ -691,24 +690,24 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	expectedParsed: `[Bypass[INSERT INTO person ] AsteriskInsert[[*] [OmitEmptyID.* M.key]]]`,
 	typeSamples:    []any{OmitEmptyID{}, M{}},
 	inputArgs:      []any{[]OmitEmptyID{{ID: 1}, {ID: 2}}, M{"key": "val"}},
-	expectedParams: []any{1, 2, "val"},
-	expectedSQL:    `INSERT INTO person (id, key) VALUES (@sqlair_0, @sqlair_2), (@sqlair_1, @sqlair_2)`,
+	expectedParams: []any{1, "val", 2},
+	expectedSQL:    `INSERT INTO person (id, key) VALUES (@sqlair_0, @sqlair_1), (@sqlair_2, @sqlair_1)`,
 }, {
 	summary:        "bulk insert with multiple bulk inputs",
 	query:          `INSERT INTO person (*) VALUES ($Person.id, $M.key, $Address.street)`,
 	expectedParsed: `[Bypass[INSERT INTO person ] AsteriskInsert[[*] [Person.id M.key Address.street]]]`,
 	typeSamples:    []any{Person{}, M{}, Address{}},
 	inputArgs:      []any{[]Person{{ID: 1}, {ID: 2}}, M{"key": "val"}, []Address{{Street: "Main Street"}, {Street: "Church Road"}}},
-	expectedParams: []any{1, 2, "val", "Main Street", "Church Road"},
-	expectedSQL:    `INSERT INTO person (id, key, street) VALUES (@sqlair_0, @sqlair_2, @sqlair_3), (@sqlair_1, @sqlair_2, @sqlair_4)`,
+	expectedParams: []any{1, "val", "Main Street", 2, "Church Road"},
+	expectedSQL:    `INSERT INTO person (id, key, street) VALUES (@sqlair_0, @sqlair_1, @sqlair_2), (@sqlair_3, @sqlair_1, @sqlair_4)`,
 }, {
 	summary:        "bulk insert with pointers",
 	query:          `INSERT INTO person (*) VALUES ($Person.id, $M.key)`,
 	expectedParsed: `[Bypass[INSERT INTO person ] AsteriskInsert[[*] [Person.id M.key]]]`,
 	typeSamples:    []any{Person{}, M{}},
 	inputArgs:      []any{[]*Person{{ID: 1}, {ID: 2}}, []*M{{"key": "val1"}, {"key": "val2"}}},
-	expectedParams: []any{1, 2, "val1", "val2"},
-	expectedSQL:    `INSERT INTO person (id, key) VALUES (@sqlair_0, @sqlair_2), (@sqlair_1, @sqlair_3)`,
+	expectedParams: []any{1, "val1", 2, "val2"},
+	expectedSQL:    `INSERT INTO person (id, key) VALUES (@sqlair_0, @sqlair_1), (@sqlair_2, @sqlair_3)`,
 }, {
 	summary:        "bulk insert with slices of length 1",
 	query:          `INSERT INTO person (*) VALUES ($Person.id, $M.key, $Address.street)`,
@@ -731,8 +730,22 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	expectedParsed: `[Bypass[INSERT INTO person ] BasicInsert[[id random_string random_thing number street] [Person.address_id "random string" rand() 1000 Address.street]]]`,
 	typeSamples:    []any{Address{}, Person{}},
 	inputArgs:      []any{[]Address{{Street: "Wallaby Way"}, {Street: "Platypus Place"}}, []Person{{PostalCode: 11111}, {PostalCode: 22222}}},
-	expectedParams: []any{11111, 22222, "Wallaby Way", "Platypus Place"},
-	expectedSQL:    `INSERT INTO person (id, random_string, random_thing, number, street) VALUES (@sqlair_0, "random string", rand(), 1000, @sqlair_2), (@sqlair_1, "random string", rand(), 1000, @sqlair_3)`,
+	expectedParams: []any{11111, "Wallaby Way", 22222, "Platypus Place"},
+	expectedSQL:    `INSERT INTO person (id, random_string, random_thing, number, street) VALUES (@sqlair_0, "random string", rand(), 1000, @sqlair_1), (@sqlair_2, "random string", rand(), 1000, @sqlair_3)`,
+}, {
+	summary: "bulk insert between standalone inputs",
+	query: `WITH x AS (SELECT $M.seed)
+INSERT INTO person (id, name, street) VALUES ($Person.id, $M.name, $Address.street)
+RETURNING $M.seed`,
+	expectedParsed: `[Bypass[WITH x AS (SELECT ] Input[M.seed] Bypass[)
+INSERT INTO person ] BasicInsert[[id name street] [Person.id M.name Address.street]] Bypass[
+RETURNING ] Input[M.seed]]`,
+	typeSamples:    []any{Person{}, Address{}, M{}},
+	inputArgs:      []any{[]Person{{ID: 1}, {ID: 2}}, []Address{{Street: "first"}, {Street: "second"}}, M{"seed": 9, "name": "shared"}},
+	expectedParams: []any{9, 1, "shared", "first", 2, "second", 9},
+	expectedSQL: `WITH x AS (SELECT @sqlair_0)
+INSERT INTO person (id, name, street) VALUES (@sqlair_1, @sqlair_2, @sqlair_3), (@sqlair_4, @sqlair_2, @sqlair_5)
+RETURNING @sqlair_6`,
 }, {
 	summary:        "ending in multiple semicolons",
 	query:          "SELECT p.*	AS &Person.*;;;;;;",
@@ -774,15 +787,11 @@ func (s *ExprSuite) TestExprPkg(c *C) {
 			params := primedQuery.Params()
 			c.Assert(params, HasLen, len(t.expectedParams),
 				Commentf("test %d failed (Query Params):\nsummary: %s\nquery: %s\n", i, t.summary, t.query))
-			for _, param := range params {
+			for j, param := range params {
 				param := param.(sql.NamedArg)
-				name := param.Name
-				var n int
-				if strings.HasPrefix(name, "sqlair_") {
-					n, err = strconv.Atoi(name[len("sqlair_"):])
-					c.Assert(err, IsNil)
-				}
-				c.Check(param.Value, Equals, t.expectedParams[n],
+				c.Check(param.Name, Equals, "sqlair_"+strconv.Itoa(j),
+					Commentf("test %d failed (Query Params):\nsummary: %s\nquery: %s\n", i, t.summary, t.query))
+				c.Check(param.Value, Equals, t.expectedParams[j],
 					Commentf("test %d failed (Query Params):\nsummary: %s\nquery: %s\n", i, t.summary, t.query))
 			}
 		}
