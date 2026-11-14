@@ -2,7 +2,7 @@
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) for the CLA, style, commit and review
 requirements. Keep changes focused and independently reviewable; discuss public
-API or behavior changes with maintainers before making them.
+API or behaviour changes with maintainers before making them.
 
 ## Code map and invariants
 
@@ -11,7 +11,7 @@ API or behavior changes with maintainers before making them.
   `internal/expr`.
 - Read [internal/expr/doc.go](internal/expr/doc.go) before changing expressions:
   parsing builds an AST, type binding uses types rather than runtime values,
-  and input binding/query building uses values without analyzing new types.
+  and input binding/query building uses values without analysing new types.
 - [internal/typeinfo/doc.go](internal/typeinfo/doc.go) describes type
   validation, reflection and scanning; keep reflection there where practical.
 - Generated output aliases (`_sqlair_N`) and input placeholders link query
@@ -19,8 +19,8 @@ API or behavior changes with maintainers before making them.
   and cover changes with expression and integration tests.
 - The cache holds one driver statement per `Statement`/`DB` pair, reusing it
   only when generated SQL matches. Preserve locking, replacement and statement
-  cleanup behavior; changes need cache and statement-leak tests.
-- Preserve existing error context and wrapping behavior: preparation uses
+  cleanup behaviour; changes need cache and statement-leak tests.
+- Preserve existing error context and wrapping behaviour: preparation uses
   `cannot prepare statement:` and expression-specific prefixes; internal
   failures use `internal error:`. Some paths use `%w`, others format with
   `%s`; do not change error identity or text incidentally.
@@ -56,14 +56,16 @@ CI tests Go 1.24.x and the latest stable Go; it also runs govulncheck.
 - `docs/` uses the Canonical Sphinx starter pack and Diátaxis: put tutorials,
   how-to guides, reference and explanation in their respective directories.
   Link new pages into the documentation; Sphinx builds with warnings as errors.
-- The spelling checker uses `en_GB` and `docs/.custom_wordlist.txt`; use its
-  configured spelling rather than assuming US English. From `docs/`, relevant
-  checks include `make spelling`, `make woke` and `make linkcheck`.
+- Write documentation in British English, using British spellings such as
+  `behaviour`, `analyse` and `cancelled`. Preserve identifiers and quoted text.
+  The spelling checker uses `en_GB` and `docs/.custom_wordlist.txt`. From
+  `docs/`, relevant checks include `make spelling`, `make woke` and
+  `make linkcheck`.
   Distinguish pre-existing CI failures from regressions; don't add words merely
   to hide errors.
 - Follow CONTRIBUTING's conventional commit format: lowercase `type`, optional
   scope, concise description, and a body explaining what and why, including
-  behavior before/after when relevant. PR descriptions may become squash commit
+  behaviour before/after when relevant. PR descriptions may become squash commit
   messages. Include breaking changes and issue references in footers as needed.
 - Follow existing Go file header conventions, but do not silently reconcile the
   inconsistent Apache 2.0 and AGPLv3 headers; raise licensing questions

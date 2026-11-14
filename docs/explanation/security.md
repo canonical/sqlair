@@ -7,12 +7,12 @@ takes a variety of measures to protect users against these attack vectors.
 
 ## Security features
 
-### Argument sanitization
+### Argument sanitisation
 The contents of query arguments extracted by SQLair are passed as parameters to
 the database rather than injected into the query as strings. This mitigates
 against SQL injection as data passed as an argument cannot be executed as SQL.
 
-### Struct tag sanitization
+### Struct tag sanitisation
 Struct tags which are injected into the query as column names are validated
 to ensure that they only contain alphanumeric characters and do not contain
 spaces. This mitigates against SQL injection.
@@ -88,7 +88,7 @@ tasks to the underlying database drivers.
 
 Users are responsible for configuring their database and database drivers to 
 ensure data is handled securely. This includes, but is not limited to, 
-enabling Transport Layer Security (TLS) for data in transit and utilizing 
+enabling Transport Layer Security (TLS) for data in transit and using
 database-level encryption for data at rest.
 
 For detailed instructions on implementing these security measures, please 
