@@ -57,7 +57,7 @@ func NewDB(t testing.TB) *sql.DB {
 	}
 	t.Cleanup(func() {
 		defer db.Close()
-		// The test context is canceled before cleanup functions run.
+		// The test context is cancelled before cleanup functions run.
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
 		_, err := db.ExecContext(ctx, "DROP SCHEMA "+schema)

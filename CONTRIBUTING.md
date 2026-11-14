@@ -82,19 +82,16 @@ go test ./... -check.f TestExpr
 
 The `tests/postgresql` directory is a separate Go module that runs SQLair
 against a PostgreSQL server. Keeping it separate means SQLair itself does not
-depend on a PostgreSQL driver. The module requires Go 1.25 or later.
+depend on a PostgreSQL driver. The module requires Go 1.26 or later.
 
 The tests are skipped unless `SQLAIR_POSTGRESQL_TEST_URL` is set. Each test
 runs in a new schema that is dropped when the test finishes, so a shared
-server can be used. To run the tests against a local server:
+server can be used. Set the URL to a PostgreSQL database whose user can create
+schemas, then run:
 
 ```bash
-docker run --rm --detach --name sqlair-postgres \
-    --publish 127.0.0.1:5432:5432 \
-    --env POSTGRES_HOST_AUTH_METHOD=trust postgres:16
 cd tests/postgresql
-SQLAIR_POSTGRESQL_TEST_URL='postgres://postgres@localhost:5432/postgres?sslmode=disable' \
-    go test ./...
+SQLAIR_POSTGRESQL_TEST_URL='<PostgreSQL connection URL>' go test ./...
 ```
 
 An interrupted test run can leave schemas behind. When no tests are running,
