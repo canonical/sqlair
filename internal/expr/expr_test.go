@@ -966,6 +966,44 @@ of three lines' AND id = $Person.*`,
 	}
 }
 
+func (s *ExprSuite) TestRejectAmbiguousSQL(c *C) {
+	tests := []struct {
+		query string
+		err   string
+	}{{
+		query: `SELECT $M.id, E'foo\'bar', $1 -- '`,
+		err:   "backslash before a quote is not supported in string literals",
+	}, {
+		query: `SELECT 'C:\'`,
+		err:   "backslash before a quote is not supported in string literals",
+	}, {
+		query: `SELECT $M.id, $$'$$, $1 -- '`,
+		err:   "dollar-quoted strings are not supported",
+	}, {
+		query: `SELECT $tag$hello$tag$`,
+		err:   "dollar-quoted strings are not supported",
+	}, {
+		query: `SELECT $💡$hello$💡$`,
+		err:   "dollar-quoted strings are not supported",
+	}, {
+		query: `SELECT $M.id, /* outer /* inner */ ' */ $1 -- '`,
+		err:   "nested block comments are not supported",
+	}}
+	for _, test := range tests {
+		_, err := expr.NewParser().Parse(test.query)
+		c.Check(err, ErrorMatches, "cannot parse expression: .*: "+test.err, Commentf("query: %s", test.query))
+	}
+
+	for _, query := range []string{
+		`SELECT '$tag$', '$1', '$$', 'a\b' -- /* $tag$`,
+		`SELECT "col$1", '$1' /* $2 */ WHERE x = $M.id`,
+		`SELECT '/* /* */', 'O''Flan'`,
+	} {
+		_, err := expr.NewParser().Parse(query)
+		c.Check(err, IsNil, Commentf("query: %s", query))
+	}
+}
+
 func FuzzParser(f *testing.F) {
 	// Add some values to the corpus.
 	for _, test := range tests {

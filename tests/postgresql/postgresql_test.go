@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -55,6 +56,43 @@ func TestOutputs(t *testing.T) {
 }
 
 type IDs []int
+
+func TestRejectAmbiguousPostgreSQLSyntax(t *testing.T) {
+	db := postgresql.NewDB(t)
+	tests := []struct {
+		name, query, postgresQuery, message string
+	}{
+		{
+			"escape string",
+			`SELECT $M.id, E'foo\'bar', $1 -- '`,
+			`SELECT $1, E'foo\'bar', $1 -- '`,
+			"backslash before a quote is not supported",
+		},
+		{
+			"dollar quote",
+			`SELECT $M.id, $$'$$, $1 -- '`,
+			`SELECT $1, $$'$$, $1 -- '`,
+			"dollar-quoted strings are not supported",
+		},
+		{
+			"nested comment",
+			`SELECT $M.id, /* outer /* inner */ ' */ $1 -- '`,
+			`SELECT $1, /* outer /* inner */ ' */ $1 -- '`,
+			"nested block comments are not supported",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := db.ExecContext(t.Context(), test.postgresQuery, "proof"); err != nil {
+				t.Fatalf("PostgreSQL did not accept the query: %v", err)
+			}
+			_, err := sqlair.Prepare(test.query, sqlair.M{})
+			if err == nil || !strings.Contains(err.Error(), test.message) {
+				t.Fatalf("Prepare error = %v, want %q", err, test.message)
+			}
+		})
+	}
+}
 
 func TestInputs(t *testing.T) {
 	sqldb := postgresql.NewDB(t)

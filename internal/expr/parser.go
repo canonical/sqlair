@@ -87,18 +87,29 @@ func (p *Parser) Parse(input string) (pe *ParsedExpr, err error) {
 	return &ParsedExpr{exprs: p.exprs}, nil
 }
 
-// checkNoRawPlaceholders returns an error if the input contains a numbered
-// placeholder such as $1 outside of string literals, quoted identifiers and
-// comments. SQLair generates the query placeholders, so a raw placeholder
-// cannot be bound to the value the caller intended. The whole input is
-// scanned, including SQL that expression parsing passes over, such as
-// function calls in output and insert expressions.
+// checkNoRawPlaceholders checks for numbered placeholders such as $1 outside
+// string literals, double-quoted identifiers and comments. SQLair generates
+// the query placeholders, so a raw placeholder cannot be bound to the value
+// the caller intended. The whole input is scanned, including SQL that
+// expression parsing passes over, such as function calls in output and insert
+// expressions. Other forms of identifier quoting are not parsed.
 func (p *Parser) checkNoRawPlaceholders() error {
 	for p.pos < len(p.input) {
+		start, line, column := p.pos, p.lineNum, p.colNum()
 		if ok, err := p.skipStringLiteral(); err != nil {
 			return err
 		} else if ok {
+			if p.input[start] == '\'' && strings.Contains(p.input[start:p.pos], `\'`) {
+				return errorAt(fmt.Errorf("backslash before a quote is not supported in string literals"), line, column, p.input)
+			}
 			continue
+		}
+		if strings.HasPrefix(p.input[p.pos:], "/*") {
+			comment := p.input[p.pos+2:]
+			nested, end := strings.Index(comment, "/*"), strings.Index(comment, "*/")
+			if nested >= 0 && (end < 0 || nested < end) {
+				return errorAt(fmt.Errorf("nested block comments are not supported"), p.lineNum, p.colNum(), p.input)
+			}
 		}
 		if p.skipComment() {
 			continue
@@ -110,9 +121,29 @@ func (p *Parser) checkNoRawPlaceholders() error {
 			}
 			return errorAt(fmt.Errorf("raw placeholder %q not supported, use SQLair input expressions", p.input[p.pos:end]), p.lineNum, p.colNum(), p.input)
 		}
+		if p.startsDollarQuote() {
+			return errorAt(fmt.Errorf("dollar-quoted strings are not supported"), p.lineNum, p.colNum(), p.input)
+		}
 		p.advanceChar()
 	}
 	return nil
+}
+
+func (p *Parser) startsDollarQuote() bool {
+	if p.char != '$' {
+		return false
+	}
+	for i := p.nextPos; i < len(p.input); i++ {
+		c := p.input[i]
+		if c == '$' {
+			return true
+		}
+		if c != '_' && !isASCIIDigit(c) && !(c >= 'A' && c <= 'Z') &&
+			!(c >= 'a' && c <= 'z') && c < utf8.RuneSelf {
+			return false
+		}
+	}
+	return false
 }
 
 func isASCIIDigit(c byte) bool {
