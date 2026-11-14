@@ -207,6 +207,14 @@ AND z = @sqlair_0 -- The line with $Person.id on it
 	typeSamples:    []any{},
 	expectedSQL:    `SELECT "&notAnOutput.Expression" '&notAnotherOutputExpresion.*' AS literal FROM t WHERE bar = '$NotAn.Input' AND baz = "$NotAnother.Input"`,
 }, {
+	summary:        "dollar digits in quoted identifiers, strings and comments",
+	query:          `SELECT "col$1", '$2' FROM t /* $3 */ WHERE x = $Person.id -- $4`,
+	expectedParsed: `[Bypass[SELECT "col$1", '$2' FROM t /* $3 */ WHERE x = ] Input[Person.id] Bypass[ -- $4]]`,
+	typeSamples:    []any{Person{}},
+	inputArgs:      []any{Person{ID: 1}},
+	expectedParams: []any{1},
+	expectedSQL:    `SELECT "col$1", '$2' FROM t /* $3 */ WHERE x = @sqlair_0 -- $4`,
+}, {
 	summary:        "star as output",
 	query:          "SELECT * AS &Person.* FROM t",
 	expectedParsed: "[Bypass[SELECT ] Output[[*] [Person.*]] Bypass[ FROM t]]",
@@ -934,6 +942,21 @@ of three lines' AND id = $Person.*`,
 	}, {
 		query: "INSERT INTO person VALUES ($Address.*)",
 		err:   `cannot parse expression: column 28: invalid asterisk placement in input "$Address.*"`,
+	}, {
+		query: "SELECT name FROM t WHERE id = $1",
+		err:   `cannot parse expression: column 31: raw placeholder "$1" not supported, use SQLair input expressions`,
+	}, {
+		query: "SELECT col$12 FROM t",
+		err:   `cannot parse expression: column 11: raw placeholder "$12" not supported, use SQLair input expressions`,
+	}, {
+		query: "SELECT name\nFROM t\nWHERE id = $1",
+		err:   `cannot parse expression: line 3, column 12: raw placeholder "$1" not supported, use SQLair input expressions`,
+	}, {
+		query: "SELECT (max(id, $2)) AS (&M.max) FROM t",
+		err:   `cannot parse expression: column 17: raw placeholder "$2" not supported, use SQLair input expressions`,
+	}, {
+		query: "INSERT INTO person (id, name) VALUES ($Person.id, $1)",
+		err:   `cannot parse expression: column 51: raw placeholder "$1" not supported, use SQLair input expressions`,
 	}}
 
 	for _, t := range tests {

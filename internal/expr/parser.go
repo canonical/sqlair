@@ -47,6 +47,10 @@ func (p *Parser) Parse(input string) (pe *ParsedExpr, err error) {
 	}()
 
 	p.init(input)
+	if err := p.checkNoRawPlaceholders(); err != nil {
+		return nil, err
+	}
+	p.init(input)
 
 	for {
 		if err := p.advanceToNextExpression(); err != nil {
@@ -81,6 +85,38 @@ func (p *Parser) Parse(input string) (pe *ParsedExpr, err error) {
 	// Add any remaining unparsed string input to the parser.
 	p.add(nil)
 	return &ParsedExpr{exprs: p.exprs}, nil
+}
+
+// checkNoRawPlaceholders returns an error if the input contains a numbered
+// placeholder such as $1 outside of string literals, quoted identifiers and
+// comments. SQLair generates the query placeholders, so a raw placeholder
+// cannot be bound to the value the caller intended. The whole input is
+// scanned, including SQL that expression parsing passes over, such as
+// function calls in output and insert expressions.
+func (p *Parser) checkNoRawPlaceholders() error {
+	for p.pos < len(p.input) {
+		if ok, err := p.skipStringLiteral(); err != nil {
+			return err
+		} else if ok {
+			continue
+		}
+		if p.skipComment() {
+			continue
+		}
+		if p.char == '$' && p.nextPos < len(p.input) && isASCIIDigit(p.input[p.nextPos]) {
+			end := p.nextPos
+			for end < len(p.input) && isASCIIDigit(p.input[end]) {
+				end++
+			}
+			return errorAt(fmt.Errorf("raw placeholder %q not supported, use SQLair input expressions", p.input[p.pos:end]), p.lineNum, p.colNum(), p.input)
+		}
+		p.advanceChar()
+	}
+	return nil
+}
+
+func isASCIIDigit(c byte) bool {
+	return '0' <= c && c <= '9'
 }
 
 type columnAccessor interface {
