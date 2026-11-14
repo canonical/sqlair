@@ -47,7 +47,7 @@ func (tbe *TypeBoundExpr) BindInputs(args ...any) (pq *PrimedQuery, err error) {
 		return nil, err
 	}
 
-	return &PrimedQuery{outputs: qb.outputs, sql: qb.sqlBuilder.getSQL(), params: qb.namedInputs}, nil
+	return &PrimedQuery{outputs: qb.outputs, sql: qb.sqlBuilder.getSQL(), params: qb.params}, nil
 }
 
 // typedInputExpr stores information about a Go value to use as a standalone query
@@ -78,7 +78,7 @@ func (te *typedInputExpr) addToQuery(qb *queryBuilder, typeToValue typeinfo.Type
 type typedColumn interface {
 	// bindInputs binds a concrete value to a typedColumn to generate a
 	// boundInsertColumn.
-	bindInputs(tv typeinfo.TypeToValue, ia *inputAssigner) (*boundInsertColumn, error)
+	bindInputs(tv typeinfo.TypeToValue) (*boundInsertColumn, error)
 }
 
 // typedInsertExpr stores information about the Go values to use as inputs inside
@@ -96,7 +96,7 @@ func (te *typedInsertExpr) addToQuery(qb *queryBuilder, typeToValue typeinfo.Typ
 	// a bulk insert. This is used for error messages.
 	var firstBulkColumn string
 	for _, ic := range te.insertColumns {
-		bc, err := ic.bindInputs(typeToValue, qb.inputAssigner)
+		bc, err := ic.bindInputs(typeToValue)
 		if err != nil {
 			return err
 		}
@@ -160,7 +160,7 @@ func newInsertColumn(input typeinfo.Input, column string, explicit bool) insertC
 
 // bindInputs generates and verifies the query parameters corresponding to the
 // insertColumn and returns them as a boundInsertColumn.
-func (ic insertColumn) bindInputs(tv typeinfo.TypeToValue, ia *inputAssigner) (*boundInsertColumn, error) {
+func (ic insertColumn) bindInputs(tv typeinfo.TypeToValue) (*boundInsertColumn, error) {
 	params, err := ic.input.LocateParams(tv)
 	if err != nil {
 		return nil, err
@@ -173,21 +173,14 @@ func (ic insertColumn) bindInputs(tv typeinfo.TypeToValue, ia *inputAssigner) (*
 	if params.Omit && ic.explicit {
 		return nil, omitEmptyInputError(ic.input.Desc())
 	}
-	var firstInputNum int
-	if !params.Omit {
-		// Reserve input numbers for all values that are getting inserted in the
-		// boundColumn.
-		firstInputNum = ia.assignInputs(len(params.Vals))
-	}
 	bc := &boundInsertColumn{
-		vals:          params.Vals,
-		firstInputNum: firstInputNum,
-		omit:          params.Omit,
-		bulk:          params.Bulk,
-		argType:       params.ArgTypeUsed,
-		inputName:     ic.input.ArgType().Name(),
-		literal:       "",
-		column:        ic.column,
+		vals:      params.Vals,
+		omit:      params.Omit,
+		bulk:      params.Bulk,
+		argType:   params.ArgTypeUsed,
+		inputName: ic.input.ArgType().Name(),
+		literal:   "",
+		column:    ic.column,
 	}
 	return bc, nil
 }
@@ -201,16 +194,15 @@ type literalColumn struct {
 
 // bindInputs creates a boundInsertColumn from a literalColumn. It is part of the
 // typedColumn interface.
-func (lc literalColumn) bindInputs(_ typeinfo.TypeToValue, _ *inputAssigner) (*boundInsertColumn, error) {
+func (lc literalColumn) bindInputs(_ typeinfo.TypeToValue) (*boundInsertColumn, error) {
 	bc := &boundInsertColumn{
-		column:        lc.column,
-		vals:          []any{},
-		firstInputNum: 0,
-		omit:          false,
-		bulk:          false,
-		literal:       lc.literal,
-		inputName:     "",
-		argType:       nil,
+		column:    lc.column,
+		vals:      []any{},
+		omit:      false,
+		bulk:      false,
+		literal:   lc.literal,
+		inputName: "",
+		argType:   nil,
 	}
 	return bc, nil
 }

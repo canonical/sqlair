@@ -78,6 +78,31 @@ expression specifying the names of the test(s) you wish to run. For example:
 go test ./... -check.f TestExpr
 ```
 
+### Testing with PostgreSQL
+
+The `tests/postgresql` directory is a separate Go module that runs SQLair
+against a PostgreSQL server. Keeping it separate means SQLair itself does not
+depend on a PostgreSQL driver. The module requires Go 1.26 or later.
+
+The tests are skipped unless `SQLAIR_POSTGRESQL_TEST_URL` is set. Each test
+runs in a new schema that is dropped when the test finishes, so a shared
+server can be used. Set the URL to a PostgreSQL database whose user can create
+schemas, then run:
+
+```bash
+cd tests/postgresql
+SQLAIR_POSTGRESQL_TEST_URL='<PostgreSQL connection URL>' go test ./...
+```
+
+An interrupted test run can leave schemas behind. When no tests are running,
+drop them from `psql` with:
+
+```sql
+SELECT format('DROP SCHEMA %I CASCADE', nspname)
+FROM pg_namespace WHERE nspname LIKE 'sqlair\_test\_%'
+\gexec
+```
+
 ### Code formatting
 
 Code should generally be formatted according to the Google Go [style

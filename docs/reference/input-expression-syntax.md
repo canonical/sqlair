@@ -5,6 +5,23 @@ Input expressions specify how SQLair will read values from the objects passed
 to the `Query` method to pass to the database as the query arguments. Input
 expressions replace SQL input placeholders (such as `?` or `$1`).
 
+SQLair generates the placeholders passed to the database, so a query must not
+contain its own numbered placeholders. SQLair normally rejects a raw
+placeholder such as `$1` when it is prepared. A dollar sign followed by a
+digit is allowed in string literals, comments and double-quoted identifiers
+such as `"col$1"`. SQLair rejects dollar-quote delimiters such as `$$` and
+`$tag$`, nested block comments, and a backslash immediately before a single
+quote in a string literal. Their meaning can differ between databases, so
+SQLair cannot reliably distinguish their contents from raw placeholders. Use
+query parameters instead of these string literal forms. Dollar-quote-like text
+in unquoted identifiers can also be rejected.
+
+SQLair does not parse SQLite identifiers quoted with square brackets or
+`` ` `` characters. Quotes or comment markers inside them can confuse the
+placeholder check, so a raw placeholder might be accepted and silently bound
+to a SQLair argument. Use double-quoted identifiers instead, and never write
+raw placeholders.
+
 There are several different types of input expression though all use a dollar
 sign ($) in front of the types.
 

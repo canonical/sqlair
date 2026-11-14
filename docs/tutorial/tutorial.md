@@ -31,8 +31,8 @@ import (
 
     // go-sqlite3 provides the SQLite driver. Importing it registers the driver 
     // so that sql.Open can find it.
-    // SQLair can be used with any database/driver that works with the 
-    // database/sql package.
+    // SQLair can be used with database/sql drivers that accept numbered
+    // placeholders such as $1, including SQLite and PostgreSQL drivers.
     _ "github.com/mattn/go-sqlite3"
 )
 

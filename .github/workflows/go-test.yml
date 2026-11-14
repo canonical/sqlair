@@ -8,10 +8,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ matrix.go-version }}
 
@@ -20,6 +20,51 @@ jobs:
 
       - name: Build
         run: go build -v ./...
+
+      - name: Test
+        run: go test -v ./...
+
+  postgresql:
+    strategy:
+      matrix:
+        go: [minimum, latest]
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          # The server is only reachable from this job and holds no data
+          # beyond the test run.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      SQLAIR_POSTGRESQL_TEST_URL: postgres://postgres@localhost:5432/postgres?sslmode=disable
+    defaults:
+      run:
+        working-directory: tests/postgresql
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install minimum Go
+        if: matrix.go == 'minimum'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: tests/postgresql/go.mod
+          cache-dependency-path: tests/postgresql/go.sum
+
+      - name: Install latest Go
+        if: matrix.go == 'latest'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: 1.x
+          cache-dependency-path: tests/postgresql/go.sum
 
       - name: Test
         run: go test -v ./...
